@@ -512,7 +512,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S6';
+const APP_VERSION = 'S7';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -597,10 +597,19 @@ async function req(caminho, opts = {}, tentativas = 2){
 
         // token vencido não é erro de negócio nem de rede: é sessão velha.
         // Renova UMA vez e repete a chamada — o usuário não percebe nada.
-        if (tokenVencido(err) && !jaRenovou && sessao.refresh){
-          jaRenovou = true;
-          if (await renovarToken()){ i--; continue; }
+        // Sessão vencida. A ordem importa: tenta renovar UMA vez; se não der —
+        // ou se nem existe refresh_token guardado (sessão antiga, de antes da
+        // renovação automática) — manda para o login com recado claro. Antes,
+        // este caso caía direto no `throw` e a pessoa ficava com o quadro vazio
+        // e um "JWT expired" vermelho na tela: parece perda de dados, e não é.
+        if (tokenVencido(err)){
+          if (!jaRenovou && sessao.refresh){
+            jaRenovou = true;
+            if (await renovarToken()){ i--; continue; }
+          }
           sessaoExpirou();
+          throw Object.assign(new Error('Sua sessão expirou. Entre de novo — nada se perdeu.'),
+                              { negocio:true, sessaoMorta:true });
         }
         throw err;
       }
