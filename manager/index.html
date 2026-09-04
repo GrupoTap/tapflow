@@ -387,6 +387,12 @@ button.mini{padding:6px 12px;font-weight:600}
   border-radius:3px;font-size:14px;background:var(--surface);font-family:inherit}
 .campo input:focus,.campo select:focus,.campo textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
 .campo .dica{font-size:11.5px;color:var(--ink-3);margin-top:4px;line-height:1.4}
+.dica{font-size:12px;color:var(--ink-3);margin-top:5px;line-height:1.45}
+.gGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.gGrid .campo label{font-size:11px}
+.gGrid .campo input{padding:7px 9px;font-size:13px}
+.gGrid .campo input.vazio{border-color:var(--warn);background:var(--warn-soft)}
+.gFalta{font-size:12.5px;color:var(--warn);margin:11px 0 0;line-height:1.45;font-weight:600}
 .dupla{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
 /* ── modal ────────────────────────────────────────── */
@@ -427,7 +433,7 @@ button.mini{padding:6px 12px;font-weight:600}
 <header>
   <div>
     <div class="brand">Tap<span>Flow</span></div>
-    <div class="ver mono">MANAGER · S6</div>
+    <div class="ver mono" id="verBadge">MANAGER</div>
   </div>
 
   <div class="switch" id="sw">
@@ -512,7 +518,10 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S7';
+const APP_VERSION = 'S8';
+// o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
+// dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
+try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1475,7 +1484,536 @@ async function pintarItens(){
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ABA PROPOSTA — a proposta é montada FORA; aqui se registra o número
+// ════════════════════════════════════════════════════════════════════════════
+// GERADOR DE PROPOSTA — o motor .docx dentro do TapFlow
+// ----------------------------------------------------------------------------
+// Portado do gerador que você já usava, com duas mudanças que só fazem sentido
+// aqui dentro:
+//
+//  1. Os DADOS DO CLIENTE não são digitados: vêm da OS. Era o passo em que
+//     mais se erra — proposta com o endereço do cliente anterior.
+//  2. A TABELA DE ITENS pode ser reescrita com os itens da OS, e não só
+//     editada linha a linha. O modelo vem com os itens da última proposta que
+//     alguém salvou; hoje isso é apagado à mão toda vez.
+//
+// O motor continua o mesmo por dentro: substitui «Chave» dentro do XML do
+// .docx, achata os campos de mala direta do Word e reescreve a tabela de
+// 5 colunas. Nada sai do navegador — o arquivo é montado aqui e baixado.
+// ════════════════════════════════════════════════════════════════════════════
+
+let _jszip = null;
+function carregarJSZip(){
+  if (_jszip) return _jszip;
+  _jszip = new Promise((ok, err) => {
+    if (window.JSZip) return ok(window.JSZip);
+    const s2 = document.createElement('script');
+    s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    s2.onload  = () => window.JSZip ? ok(window.JSZip)
+      : err(new Error('A biblioteca de .docx carregou, mas não inicializou.'));
+    s2.onerror = () => err(new Error('Não consegui baixar a biblioteca de .docx. Sem internet?'));
+    document.head.appendChild(s2);
+  });
+  return _jszip;
+}
+
+// ── o modelo vem do Storage, e fica na memória ──────────────────────────────
+// 450 KB por modelo. Baixar de novo a cada geração seria desperdício óbvio
+// para quem emite três propostas seguidas do mesmo tipo.
+const _modelosCache = {};
+/** Quantos cabeçalhos deste modelo trazem logomarca de cliente. */
+async function logoDeClienteNoModelo(bytes){
+  const JSZipLib = await carregarJSZip();
+  const zip = await JSZipLib.loadAsync(bytes);
+  let n = 0;
+  for (const nome of Object.keys(zip.files)){
+    if (!/^word\/header\d*\.xml$/.test(nome)) continue;
+    const t = await zip.file(nome).async('string');
+    if ((t.match(/r:embed="/g) || []).length >= 2) n++;
+  }
+  return n;
+}
+
+async function baixarModelo(path){
+  if (_modelosCache[path]) return _modelosCache[path];
+  const url = SUPABASE_URL + '/storage/v1/object/modelos/' + encodeURIComponent(path);
+  const pega = async () => fetch(url, { headers: Object.assign(
+    { apikey: SUPABASE_ANON_KEY },
+    sessao.token ? { Authorization: 'Bearer ' + sessao.token } : {}) });
+  let r = await pega();
+  if (r.status === 401 && sessao.refresh && await renovarToken()) r = await pega();
+  if (r.status === 400 || r.status === 404)
+    throw new Error('O modelo "' + path + '" não está no bucket `modelos`. '
+      + 'Suba o arquivo pelo painel do Supabase (Storage → modelos).');
+  if (r.status === 403)
+    throw new Error('Sem permissão para ler o bucket `modelos`. '
+      + 'Falta a política de leitura — veja o fim do 23_gerador_modelos.sql.');
+  if (!r.ok) throw new Error('Não consegui baixar o modelo (HTTP ' + r.status + ').');
+  const b = await r.arrayBuffer();
+  _modelosCache[path] = b;
+  return b;
+}
+
+// ── utilidades do XML do Word ───────────────────────────────────────────────
+const _xmlEsc = s => String(s == null ? '' : s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const _semAcento = s => String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase();
+
+function _tags(xml, tag){
+  return xml.match(new RegExp('<' + tag + '(?:\\s[^>]*)?>[\\s\\S]*?<\\/' + tag + '>','g')) || [];
+}
+function _textoCelula(tc){
+  return [...tc.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map(m => m[1]).join('').trim();
+}
+/** Escreve no PRIMEIRO <w:t> da célula e esvazia os outros — assim o texto
+ *  novo herda a formatação do primeiro trecho e não sobra resto do antigo. */
+function _escreveCelula(tc, txt){
+  let n = 0;
+  const nova = tc.replace(/(<w:t[^>]*>)([^<]*)(<\/w:t>)/g, (m,a,b,c) => {
+    n++; return n === 1 ? a + _xmlEsc(txt) + c : a + c;
+  });
+  // célula sem nenhum <w:t> (parágrafo vazio): não dá para escrever, devolve como está
+  return n ? nova : tc;
+}
+
+/**
+ * Acha a tabela de itens: 5 colunas, com "Valor Unit..." e "Valor Total" no
+ * cabeçalho. É o mesmo reconhecimento do gerador antigo — os modelos 24, 29 e
+ * 30 têm; os outros não, e isso está registrado em `modelos_proposta.tem_tabela`.
+ */
+function acharTabelaItens(xml){
+  for (const tbl of _tags(xml,'w:tbl')){
+    const linhas = _tags(tbl,'w:tr');
+    if (linhas.length < 2) continue;
+    const cabec = _tags(linhas[0],'w:tc').map(_textoCelula);
+    const n = cabec.map(_semAcento);
+    if (cabec.length === 5
+        && n.some(h => h.includes('valor unit'))
+        && n.some(h => h.includes('valor') && h.includes('total'))){
+      const dados = linhas.slice(1);
+      let linhaTotal = null, linhasItem = dados;
+      if (dados.length && _tags(dados[dados.length-1],'w:tc').length < 5){
+        linhaTotal = dados[dados.length-1];
+        linhasItem = dados.slice(0,-1);
+      }
+      if (!linhasItem.length) continue;
+      return {
+        tabela: tbl,
+        antes: tbl.slice(0, tbl.indexOf(linhas[0])),
+        cabecalho: linhas[0],
+        molde: linhasItem[0],          // a fôrma para as linhas novas
+        linhasItem, linhaTotal,
+        itens: linhasItem.map(tr => {
+          const cs = _tags(tr,'w:tc');
+          return { seq:_textoCelula(cs[0]), descricao:_textoCelula(cs[1]),
+                   qtd:_textoCelula(cs[2]), unitario:_textoCelula(cs[3]),
+                   total:_textoCelula(cs[4]) };
+        })
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Reescreve a tabela com as linhas dadas — quantas forem. O gerador antigo só
+ * conseguia editar as linhas que já existiam no modelo; aqui a primeira linha
+ * vira fôrma e a tabela cresce ou encolhe conforme a OS.
+ */
+function reescreverTabela(t, linhas, totalTexto){
+  const novas = linhas.map((it, i) => {
+    let tr = t.molde;
+    const cs = _tags(tr,'w:tc');
+    const vals = [String(i+1), it.descricao, it.qtd, it.unitario, it.total];
+    cs.forEach((c, idx) => { tr = tr.replace(c, _escreveCelula(c, vals[idx])); });
+    return tr;
+  });
+  let rodape = t.linhaTotal;
+  if (rodape){
+    const cs = _tags(rodape,'w:tc');
+    const ult = cs[cs.length-1];
+    rodape = rodape.replace(ult, _escreveCelula(ult, totalTexto));
+  }
+  return t.antes + t.cabecalho + novas.join('') + (rodape || '') + '</w:tbl>';
+}
+
+// ── A LOGOMARCA DO CLIENTE ANTERIOR ─────────────────────────────────────────
+// Todo modelo .docx da Engetap guarda, no canto direito do cabeçalho, a
+// logomarca do cliente para quem ele foi usado da última vez. Conferi os oito:
+// tem CEFET-MG, Atlas, Sibelco, Setormec, PH e Servitec. Quem gera a proposta
+// hoje precisa lembrar de apagar isso no Word — e uma proposta que sai com a
+// marca de outro cliente é um constrangimento caro.
+//
+// O cabeçalho é [ logo Engetap | texto | logo do cliente ]. A logomarca do
+// cliente é sempre a ÚLTIMA imagem do cabeçalho, e só existe quando o
+// cabeçalho tem duas. Com uma só, é a da Engetap e não se toca em nada.
+
+function contarImagensCabecalho(nome, xml){
+  return (nome.startsWith('word/header') ? (xml.match(/r:embed="/g) || []).length : 0);
+}
+
+/** Tira a última imagem do cabeçalho, apagando o <w:r> inteiro que a contém. */
+function removerLogoCliente(xml){
+  const ult = xml.lastIndexOf('r:embed="');
+  if (ult < 0) return xml;
+  const ini = xml.lastIndexOf('<w:r ', ult) >= 0
+    ? Math.max(xml.lastIndexOf('<w:r ', ult), xml.lastIndexOf('<w:r>', ult))
+    : xml.lastIndexOf('<w:r>', ult);
+  if (ini < 0) return xml;
+  const fim = xml.indexOf('</w:r>', ult);
+  if (fim < 0) return xml;
+  return xml.slice(0, ini) + xml.slice(fim + 6);
+}
+
+
+// ── mala direta do Word ─────────────────────────────────────────────────────
+// Os modelos vieram de mala direta. Se os campos MERGEFIELD ficarem, o Word
+// abre o arquivo tentando reconectar a fonte de dados e pede a planilha antiga.
+function _achatarMailMerge(xml){
+  const re = /<w:r\b[^>]*>[\s\S]*?<\/w:r>/g;
+  let out = [], estado = 'normal', ultimo = 0, m;
+  while ((m = re.exec(xml)) !== null){
+    out.push(xml.slice(ultimo, m.index)); ultimo = re.lastIndex;
+    const run = m[0];
+    if (run.indexOf('fldCharType="begin"') !== -1){ estado = 'codigo'; continue; }
+    if (run.indexOf('fldCharType="separate"') !== -1){ estado = 'valor'; continue; }
+    if (run.indexOf('fldCharType="end"') !== -1){ estado = 'normal'; continue; }
+    if (estado === 'codigo') continue;
+    out.push(run);
+  }
+  out.push(xml.slice(ultimo));
+  return out.join('').replace(
+    /<w:fldSimple\s+w:instr="[^"]*MERGEFIELD[^"]*"[^>]*>([\s\S]*?)<\/w:fldSimple>/g, '$1');
+}
+
+/** O Word quebra «Chave» em vários trechos (corretor, revisões). Junta antes de trocar. */
+function _juntarPlaceholders(xml){
+  return xml.replace(/«([\s\S]{0,600}?)»/g, (todo, dentro) => {
+    if (dentro.indexOf('<') === -1) return todo;
+    if (dentro.indexOf('</w:p>') !== -1) return todo;
+    if (dentro.indexOf('«') !== -1) return todo;
+    return '«' + dentro.replace(/<[^>]+>/g,'') + '»';
+  });
+}
+
+/** Monta o .docx final. Devolve { blob, faltaram } — `faltaram` são as chaves
+ *  que ficaram no papel sem valor, para a tela poder avisar em vez de entregar
+ *  uma proposta com «Cliente» impresso no meio do texto. */
+async function docxGerar({ bytes, valores, tabela, totalTexto, tirarLogoCliente }){
+  const JSZipLib = await carregarJSZip();
+  const zip = await JSZipLib.loadAsync(bytes);
+  const alvos = Object.keys(zip.files).filter(n => /^word\/.*\.xml$/.test(n) && !zip.files[n].dir);
+  const faltaram = new Set();
+  let logosTiradas = 0;
+
+  for (const nome of alvos){
+    let t = await zip.file(nome).async('string');
+    let mexeu = false;
+
+    if (tirarLogoCliente && contarImagensCabecalho(nome, t) >= 2){
+      t = removerLogoCliente(t); mexeu = true; logosTiradas++;
+    }
+
+    if (t.indexOf('«') !== -1){
+      const j = _juntarPlaceholders(t);
+      if (j !== t){ t = j; mexeu = true; }
+      for (const k in valores){
+        const tag = '«' + k + '»';
+        if (t.indexOf(tag) !== -1){ t = t.split(tag).join(_xmlEsc(valores[k] ?? '')); mexeu = true; }
+      }
+      // o que sobrou com « » é chave que ninguém preencheu
+      for (const m of t.matchAll(/«([^«»]{1,60})»/g)) faltaram.add(m[1].trim());
+    }
+    if (t.indexOf('MERGEFIELD') !== -1){ t = _achatarMailMerge(t); mexeu = true; }
+    if (nome === 'word/settings.xml' && t.indexOf('mailMerge') !== -1){
+      t = t.replace(/<w:mailMerge>[\s\S]*?<\/w:mailMerge>/g,''); mexeu = true;
+    }
+    if (nome === 'word/document.xml' && tabela && tabela.length){
+      const achada = acharTabelaItens(t);
+      if (achada){ t = t.replace(achada.tabela, reescreverTabela(achada, tabela, totalTexto)); mexeu = true; }
+    }
+    if (mexeu) zip.file(nome, t);
+  }
+
+  const blob = await zip.generateAsync({ type:'blob',
+    mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  return { blob, faltaram: [...faltaram], logosTiradas };
+}
+
+const nomeSeguro = s => String(s||'').replace(/[/\\:*?"<>|]/g,'').replace(/\s+/g,' ').trim();
+
+function baixarBlob(blob, nome){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nome;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+}
+
+// ── A TELA ──────────────────────────────────────────────────────────────────
+// Fica no topo da aba Proposta, acima do registro manual, que continua ali
+// para a proposta que vier de fora.
+
+let _modelos = null;
+// O resultado da geração precisa sobreviver ao redesenho da aba: sem isto, a
+// mensagem some no mesmo instante em que aparece, junto com o aviso das chaves
+// que ficaram vazias — que é justamente o que a pessoa precisa ler.
+let _msgGerador = null;
+async function listarModelos(){
+  if (_modelos) return _modelos;
+  _modelos = DEMO
+    ? [{id:'24',titulo:'Inspeção NR-13 — básico 2024.2',tem_tabela:true,e_contrato:false,storage_path:'24.docx'},
+       {id:'26',titulo:'Minuta de contrato de inspeção',tem_tabela:false,e_contrato:true,storage_path:'26.docx'}]
+    : await get('modelos_proposta?select=id,titulo,descricao,tem_tabela,e_contrato,storage_path'
+                + '&ativo=eq.true&order=ordem');
+  return _modelos;
+}
+
+// as chaves que, vazias, estragam a proposta na frente do cliente
+const CHAVES_CRITICAS = ['Cliente','Endereço_Cliente','Cidade','Contato'];
+const ROTULO_CHAVE = {
+  'Cliente':'Cliente', 'CNPJ_Cliente':'CNPJ', 'Endereço_Cliente':'Endereço',
+  'Nº_Cliente':'Número', 'Bairro_Cliente':'Bairro', 'Cidade':'Cidade',
+  'CEP_Cliente':'CEP', 'Contato':'Contato', 'Telefone_do_Contato':'Telefone',
+  'Autor':'Autor (quem assina)', 'TítuloNatureza':'Natureza do serviço'
+};
+const CHAVES_NA_TELA = ['Cliente','CNPJ_Cliente','Endereço_Cliente','Nº_Cliente',
+  'Bairro_Cliente','Cidade','CEP_Cliente','Contato','Telefone_do_Contato','Autor'];
+
+async function montarGerador(caixa){
+  const { card } = osAberta;
+  const est = { modelo:null, valores:null, itens:[], fonte:'os', total:0, tirarLogo:true, logos:0 };
+
+  caixa.innerHTML =
+    '<h3 style="font-size:15px;margin:0 0 4px">Gerar proposta</h3>' +
+    '<p style="font-size:12.5px;color:var(--ink-3);margin:0 0 14px;line-height:1.5">' +
+      'O documento sai com os dados desta OS já preenchidos. Confira antes de gerar — ' +
+      'o que estiver vazio aqui sai vazio no papel.</p>' +
+    '<div class="campo"><label for="gM">Modelo</label><select id="gM"></select>' +
+      '<div class="dica" id="gMd"></div></div>' +
+    '<div class="campo"><label for="gNat">Natureza do serviço</label>' +
+      '<input id="gNat" type="text" placeholder="ex.: Inspeção em vasos de pressão"></div>' +
+    '<div id="gVals"></div>' +
+    '<div id="gTab"></div>' +
+    '<div id="gLogo"></div>' +
+    '<button class="btn pri" id="gOk" style="width:100%;padding:11px">Gerar e baixar o .docx</button>' +
+    '<div class="dica" id="gMsg" style="margin-top:8px"></div>';
+
+  if (_msgGerador){
+    const m0 = caixa.querySelector('#gMsg');
+    m0.style.color = _msgGerador.cor; m0.textContent = _msgGerador.texto;
+    _msgGerador = null;
+  }
+
+  const sel = document.getElementById('gM');
+  let modelos = [];
+  try{ modelos = await listarModelos(); }
+  catch(e){ caixa.innerHTML = '<p class="dica">Não consegui ler os modelos: ' + esc(e.message) + '</p>'; return; }
+  if (!modelos.length){
+    caixa.innerHTML = '<h3 style="font-size:15px;margin:0 0 4px">Gerar proposta</h3>' +
+      '<p class="dica">Nenhum modelo cadastrado. Rode o <b>23_gerador_modelos.sql</b> e suba os ' +
+      '.docx no bucket <b>modelos</b>.</p>';
+    return;
+  }
+  sel.innerHTML = modelos.map(m => '<option value="'+m.id+'">'+esc(m.titulo)+'</option>').join('');
+  document.getElementById('gNat').value = card.descricao || '';
+
+  // ── os valores que vão para o documento ──
+  const pintarValores = () => {
+    const el = document.getElementById('gVals');
+    const v = est.valores || {};
+    const faltando = CHAVES_CRITICAS.filter(k => !String(v[k]||'').trim());
+    el.innerHTML =
+      '<div style="border:1px solid var(--rule);border-radius:5px;padding:12px;margin:0 0 14px">' +
+      '<div style="font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;' +
+      'color:var(--ink-3);margin-bottom:9px">Dados que vão no documento</div>' +
+      '<div class="gGrid"></div>' +
+      (faltando.length
+        ? '<p class="gFalta">Vazio: ' + faltando.map(k => ROTULO_CHAVE[k]||k).join(', ') +
+          '. Preencha aqui para esta proposta, e corrija no cadastro do cliente depois.</p>'
+        : '') +
+      '</div>';
+    const g = el.querySelector('.gGrid');
+    CHAVES_NA_TELA.forEach(k => {
+      const d = document.createElement('div'); d.className = 'campo'; d.style.margin = '0';
+      d.innerHTML = '<label></label><input type="text">';
+      d.querySelector('label').textContent = ROTULO_CHAVE[k] || k;
+      const i = d.querySelector('input');
+      i.value = v[k] || '';
+      if (!String(v[k]||'').trim() && CHAVES_CRITICAS.includes(k)) i.classList.add('vazio');
+      i.addEventListener('input', () => {
+        est.valores[k] = i.value;
+        i.classList.toggle('vazio', !i.value.trim() && CHAVES_CRITICAS.includes(k));
+      });
+      g.appendChild(d);
+    });
+  };
+
+  // ── a tabela de itens ──
+  const pintarTabela = () => {
+    const el = document.getElementById('gTab');
+    const m = est.modelo;
+    if (!m || !m.tem_tabela){
+      el.innerHTML = m && m.e_contrato
+        ? '<p class="dica" style="margin:0 0 14px">Minuta de contrato: sem tabela de itens.</p>'
+        : '<p class="dica" style="margin:0 0 14px">Este modelo não tem a tabela de 5 colunas que o ' +
+          'motor reescreve — os valores continuam sendo ajustados no Word, como antes.</p>';
+      return;
+    }
+    const daOS = est.itens || [];
+    el.innerHTML =
+      '<div class="campo"><label>Itens da tabela</label>' +
+      '<div class="tog" id="gFonte">' +
+        '<button type="button" data-v="os">Itens da OS (' + daOS.length + ')</button>' +
+        '<button type="button" data-v="modelo">Itens do modelo</button>' +
+      '</div></div>' +
+      '<div id="gPrev"></div>';
+    const tg = document.getElementById('gFonte');
+    const pinta = () => {
+      [...tg.children].forEach(b => b.classList.toggle('on', b.dataset.v === est.fonte));
+      const p = document.getElementById('gPrev');
+      if (est.fonte === 'modelo'){
+        p.innerHTML = '<p class="dica" style="margin:0 0 14px">A tabela sai como está no modelo — ' +
+          'com os itens da última proposta salva nele. Ajuste no Word depois de baixar.</p>';
+        return;
+      }
+      if (!daOS.length){
+        p.innerHTML = '<p class="dica" style="margin:0 0 14px;color:var(--warn)">Esta OS ainda não tem ' +
+          'itens aprovados. Sem itens, escolha "Itens do modelo".</p>';
+        return;
+      }
+      p.innerHTML = '<div style="overflow-x:auto;margin:0 0 14px"><table class="tbl"><thead><tr>' +
+        '<th>#</th><th>Item</th><th class="num">Qtd</th><th class="num">Unitário</th><th class="num">Total</th>' +
+        '</tr></thead><tbody></tbody><tfoot><tr><td colspan="4" style="text-align:right;font-weight:700">Total</td>' +
+        '<td class="num" style="font-weight:700" id="gTot"></td></tr></tfoot></table></div>';
+      const tb = p.querySelector('tbody');
+      daOS.forEach((it, i) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td class="mono"></td><td class="d"></td><td class="num q"></td>' +
+                       '<td class="num u"></td><td class="num t"></td>';
+        tr.children[0].textContent = i+1;
+        tr.querySelector('.d').textContent = it.descricao;
+        tr.querySelector('.q').textContent = it.qtd;
+        tr.querySelector('.u').textContent = it.unitario;
+        tr.querySelector('.t').textContent = it.total;
+        tb.appendChild(tr);
+      });
+      document.getElementById('gTot').textContent = BRL(est.total);
+    };
+    [...tg.children].forEach(b => b.addEventListener('click', () => { est.fonte = b.dataset.v; pinta(); }));
+    pinta();
+  };
+
+  // ── a logomarca do cliente anterior ──
+  const pintarLogo = () => {
+    const el = document.getElementById('gLogo');
+    if (!est.logos){ el.innerHTML = ''; return; }
+    el.innerHTML =
+      '<div style="background:var(--warn-soft);border-radius:5px;padding:11px 12px;margin:0 0 14px">' +
+      '<p style="font-size:12.5px;color:var(--warn);margin:0 0 9px;line-height:1.45;font-weight:600">' +
+      'Este modelo tem a logomarca de OUTRO cliente no cabeçalho — sobra da última vez ' +
+      'que ele foi usado.</p>' +
+      '<label class="check" style="margin:0"><input type="checkbox" id="gLogoX">' +
+      '<span>Tirar a logomarca do cabeçalho</span></label></div>';
+    const c = document.getElementById('gLogoX');
+    c.checked = est.tirarLogo;
+    c.addEventListener('change', () => { est.tirarLogo = c.checked; });
+  };
+
+  // ── trocar de modelo recarrega tudo ──
+  const trocar = async () => {
+    est.modelo = modelos.find(m => m.id === sel.value);
+    document.getElementById('gMd').textContent = (est.modelo && est.modelo.descricao) || '';
+    const nat = document.getElementById('gNat').value.trim();
+    try{
+      const [v, itens] = DEMO
+        ? [demoValores(card), []]
+        : await Promise.all([
+            rpc('tf_valores_proposta', { p_os_id: card.os_id, p_numero: '(ao gerar)', p_natureza: nat || null }),
+            rpc('tf_itens_proposta',   { p_os_id: card.os_id })
+          ]);
+      est.valores = v || {};
+      est.itens = itens || [];
+      est.total = est.itens.reduce((s,i) => s + (Number(i.valor_total_num)||0), 0);
+      est.fonte = est.itens.length ? 'os' : 'modelo';
+    }catch(e){ toast('Não consegui montar os dados: ' + e.message, 'err'); est.valores = est.valores || {}; }
+    pintarValores(); pintarTabela();
+    // o modelo é baixado aqui só para saber se tem logomarca de cliente. Vale a
+    // pena: é o defeito mais caro de todos, e descobrir depois de enviar não
+    // adianta. Fica em cache para a hora de gerar.
+    est.logos = 0; pintarLogo();
+    try{
+      const b = await baixarModelo(est.modelo.storage_path || (est.modelo.id + '.docx'));
+      est.logos = await logoDeClienteNoModelo(b);
+    }catch(e){ /* se não der para baixar agora, o erro aparece ao gerar */ }
+    pintarLogo();
+  };
+  sel.addEventListener('change', trocar);
+  document.getElementById('gNat').addEventListener('change', () => {
+    if (!est.valores) return;
+    const nat = document.getElementById('gNat').value.trim();
+    est.valores['TítuloNatureza'] = nat;
+    est.valores['Natureza_do_Serviço'] = nat;
+  });
+  await trocar();
+
+  // ── gerar ──
+  document.getElementById('gOk').addEventListener('click', async () => {
+    const b = document.getElementById('gOk');
+    const msg = document.getElementById('gMsg');
+    if (!est.modelo || !est.valores) return;
+    b.disabled = true; msg.style.color = ''; msg.textContent = 'Reservando o número…';
+    let numero = null;
+    try{
+      // 1. o número primeiro: ele precisa ir DENTRO do arquivo
+      numero = DEMO ? 'PROP-2026-0099' : await rpc('tf_reservar_numero_proposta', {});
+      est.valores['Nº_da_Proposta'] = numero;
+
+      msg.textContent = 'Baixando o modelo…';
+      const bytes = await baixarModelo(est.modelo.storage_path || (est.modelo.id + '.docx'));
+
+      msg.textContent = 'Montando o documento…';
+      const usaOS = est.modelo.tem_tabela && est.fonte === 'os' && est.itens.length;
+      const { blob, faltaram, logosTiradas } = await docxGerar({
+        bytes, valores: est.valores,
+        tabela: usaOS ? est.itens : null,
+        totalTexto: BRL(est.total).replace(/ /g,' '),
+        tirarLogoCliente: est.tirarLogo
+      });
+
+      const nome = nomeSeguro(numero + ' - ' + (est.valores['Cliente']||'Cliente')
+        + ' - ' + (document.getElementById('gNat').value.trim() || est.modelo.titulo)) + '.docx';
+      baixarBlob(blob, nome);
+
+      msg.textContent = 'Registrando na OS…';
+      if (!DEMO) await rpc('tf_registrar_documento_gerado', {
+        p_os_id: card.os_id, p_modelo_id: est.modelo.id, p_numero: numero,
+        p_valores: est.valores, p_itens: usaOS ? est.itens : null,
+        p_valor_total: usaOS ? est.total : null,
+        p_nome_arquivo: nome,
+        p_natureza: document.getElementById('gNat').value.trim() || null
+      });
+
+      const antes = card.coluna;
+      if (!DEMO) await carregar({silencioso:true});
+      const novo = cards.find(x => x.os_id === card.os_id);
+      if (novo) osAberta.card = novo;
+
+      _msgGerador = { cor:'var(--ok)', texto: numero + ' gerada e baixada.'
+        + (logosTiradas ? ' Logomarca do cliente anterior removida do cabeçalho.' : '')
+        + (faltaram.length ? ' ⚠ Ficaram sem valor no papel: ' + faltaram.join(', ') + '.' : '')
+        + (novo && novo.coluna !== antes ? ' O card foi para "' + novo.coluna + '".' : '') };
+      toast('Proposta ' + numero + ' gerada.', 'ok');
+      pintarProposta();
+    }catch(e){
+      msg.style.color = 'var(--crit)';
+      msg.textContent = e.message + (numero ? ' (o número ' + numero + ' foi queimado — não é problema.)' : '');
+      b.disabled = false;
+    }
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ABA PROPOSTA — gerar aqui, ou registrar a que veio de fora
 // ════════════════════════════════════════════════════════════════════════════
 async function pintarProposta(){
   const { card } = osAberta;
@@ -1510,11 +2048,20 @@ async function pintarProposta(){
     body.appendChild(w);
   }
 
+  // ── gerar a proposta aqui dentro ──
+  const g = document.createElement('div');
+  g.style.cssText = 'border:1px solid var(--rule);border-radius:6px;padding:15px;margin-bottom:20px';
+  g.innerHTML = '<p class="dica" style="margin:0">Carregando os modelos…</p>';
+  body.appendChild(g);
+  montarGerador(g).catch(e => { g.innerHTML = '<p class="dica"></p>';
+    g.querySelector('p').textContent = 'Gerador indisponível: ' + e.message; });
+
   const f = document.createElement('div');
+  f.style.cssText = 'border-top:1px solid var(--rule-2);padding-top:18px';
   f.innerHTML =
-    '<h3 style="font-size:15px;margin:0 0 4px">Registrar proposta enviada</h3>' +
+    '<h3 style="font-size:15px;margin:0 0 4px">Registrar proposta feita fora</h3>' +
     '<p style="font-size:12.5px;color:var(--ink-3);margin:0 0 14px;line-height:1.5">' +
-      'A proposta é montada no seu sistema. Aqui entra o número dela — e é esse registro ' +
+      'Para a proposta que não saiu daqui — só o número entra, e é esse registro ' +
       'que fecha a etapa e move o card.</p>' +
     '<div class="campo"><label for="pN">Número da proposta</label>' +
       '<input id="pN" type="text" placeholder="ex.: ORC-8842"></div>' +
@@ -3396,6 +3943,15 @@ const demoContatos = id => (demoCad(), D_CT.filter(x => x.cliente_id === id));
 const demoEquips   = id => (demoCad(), D_EQ.filter(x => x.cliente_id === id));
 const demoItens    = os => (demoCad(), D_IT[os] || []);
 const demoPropostas= os => (demoCad(), D_PR[os] || []);
+const demoValores = card => ({
+  'Cliente': card.cliente || 'Cliente de exemplo',
+  'CNPJ_Cliente':'12.345.678/0001-95', 'Endereço_Cliente':'Rua das Indústrias',
+  'Nº_Cliente':'400', 'Bairro_Cliente':'Distrito Industrial', 'Cidade':'Divinópolis',
+  'CEP_Cliente':'35500000', 'Contato':'Responsável da planta',
+  'Telefone_do_Contato':'(37) 90000-0000', 'Autor': sessao.nome || 'Engetap',
+  'Nº_da_Proposta':'(ao gerar)', 'TítuloNatureza': card.descricao || 'Inspeção NR-13',
+  'Natureza_do_Serviço': card.descricao || 'Inspeção NR-13'
+});
 function demoAddCliente(nome,cnpj){ demoCad(); D_CLI.push({id:'c'+Date.now(),nome,cnpj,_contatos:0,_equip:0}); }
 function demoAddContato(o){ demoCad(); D_CT.push(Object.assign({id:'t'+Date.now()},o));
   const c=D_CLI.find(x=>x.id===o.cliente_id); if(c) c._contatos++; }
