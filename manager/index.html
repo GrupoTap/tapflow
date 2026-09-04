@@ -252,6 +252,22 @@ button.mini{padding:6px 12px;font-weight:600}
 .agItem small{display:block;font-size:12px;color:var(--ink-3);margin-top:2px}
 
 
+/* ── pedidos de compra ────────────────────────────── */
+.pedBox{border:1px solid var(--rule);border-radius:5px;padding:12px;margin-bottom:9px}
+.pedBox.semforn{border-color:var(--warn);background:var(--warn-soft)}
+.pedTopo{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.pedTopo .f{font-size:14.5px;font-weight:600}
+.pedTopo .q{font-size:12.5px;color:var(--ink-3);white-space:nowrap}
+.pedSub{font-size:12px;color:var(--ink-3);margin:3px 0 9px}
+.pedBox .btn{margin:0}
+.pedFeito{display:flex;gap:10px;align-items:baseline;padding:7px 2px;
+  border-bottom:1px solid var(--rule-2);font-size:13px}
+.pedFeito .n{font-size:12px;color:var(--accent);font-weight:700;flex:0 0 auto}
+.pedFeito .f{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pedFeito .v{font-variant-numeric:tabular-nums}
+.pedFeito .s{font-size:11.5px;color:var(--ink-3);flex:0 0 auto}
+.painelPed{padding:2px}
+
 /* ── custos e cotações ────────────────────────────── */
 .margemBox{display:grid;grid-template-columns:1fr auto;gap:0;border:1px solid var(--rule);
   border-radius:3px;overflow:hidden;margin-bottom:12px}
@@ -518,7 +534,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S8';
+const APP_VERSION = 'S9';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -2293,6 +2309,266 @@ async function modalNovaOS(){
 // custa entregar. Aqui ele aparece como custo da OS: reduz a margem, entra no
 // resumo interno, e não aparece no documento que vai ao cliente.
 // ════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
+// PEDIDO DE COMPRA — um por fornecedor
+// ----------------------------------------------------------------------------
+// Uma OS quase sempre compra de mais de um lugar: o manômetro na Wika, a
+// válvula na Famabras, o purgador na Proper. Cada um recebe o SEU pedido, com
+// os SEUS itens e o SEU prazo. Emitir um pedido só, com tudo dentro, era o
+// defeito que estava aqui antes — e o fornecedor receberia peça que não vende.
+//
+// A escolha de quem fornece já foi feita na cotação, item a item. Esta tela só
+// agrupa o resultado e emite.
+// ════════════════════════════════════════════════════════════════════════════
+
+/** O PDF que vai para o fornecedor. Sem preço de venda e sem margem: o que ele
+ *  precisa é descrição, quantidade e para onde entregar. */
+async function gerarPDFPedido({ numero, fornecedor, card, itens, obs, prazo }){
+  const jsPDF = await carregarJsPDF();
+  const doc = new jsPDF({ unit:'mm', format:'a4' });
+  const M = 15;
+  let y = M;
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(15);
+  doc.text('ENGETAP ENGENHARIA', M, y); y += 6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10.5);
+  doc.text('Pedido de compra ' + numero, M, y); y += 8;
+  doc.setDrawColor(180); doc.line(M, y, 210-M, y); y += 7;
+
+  doc.setFontSize(10);
+  const linha = (k, v) => { doc.setFont('helvetica','bold'); doc.text(k, M, y);
+    doc.setFont('helvetica','normal'); doc.text(String(v||'—'), M+34, y); y += 5.5; };
+  linha('Fornecedor:', fornecedor);
+  linha('Emitido em:', dataBR());
+  if (prazo) linha('Entrega prevista:', prazo);
+  linha('Nossa OS:', card.numero);
+  linha('Destino:', 'Engetap Engenharia · Divinópolis/MG');
+  y += 4;
+
+  const cols = [{t:'Item',x:M,w:104},{t:'Qtd',x:M+108,w:12,r:1},
+                {t:'Unitário',x:M+128,w:22,r:1},{t:'Total',x:M+156,w:24,r:1}];
+  doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+  cols.forEach(c => doc.text(c.t, c.r ? c.x + c.w : c.x, y, c.r ? {align:'right'} : undefined));
+  y += 2; doc.setDrawColor(210); doc.line(M, y, 210-M, y); y += 4.5;
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  let total = 0;
+  itens.forEach(it => {
+    if (y > 258){ doc.addPage(); y = M; }
+    const q = Number(it.quantidade) || 0;
+    const u = Number(it.custo_unitario) || 0;
+    total += q * u;
+    const nome = doc.splitTextToSize(String(it.descricao||''), cols[0].w).slice(0, 2);
+    doc.text(nome, cols[0].x, y);
+    doc.text(String(q), cols[1].x + cols[1].w, y, {align:'right'});
+    doc.text(u ? BRL(u) : '—', cols[2].x + cols[2].w, y, {align:'right'});
+    doc.text(u ? BRL(q*u) : '—', cols[3].x + cols[3].w, y, {align:'right'});
+    y += 5.4 + (nome.length - 1) * 4.2;
+  });
+
+  y += 2; doc.setDrawColor(180); doc.line(M, y, 210-M, y); y += 6;
+  doc.setFont('helvetica','bold'); doc.setFontSize(10);
+  doc.text('Total do pedido:', M, y);
+  doc.text(total ? BRL(total) : 'a combinar', M+70, y, {align:'right'}); y += 9;
+
+  if (obs){
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    const t = doc.splitTextToSize('Observações: ' + obs, 180);
+    doc.text(t, M, y); y += t.length * 4.4 + 4;
+  }
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(120);
+  doc.text('Confirme o recebimento deste pedido e o prazo de entrega.', M, y);
+
+  return { blob: doc.output('datauristring'), nome: numero + ' - ' + nomeSeguro(fornecedor) + '.pdf' };
+}
+
+/** Bloco "Pedidos de compra" dentro da aba Custos. */
+async function montarPedidos(caixa){
+  const { card } = osAberta;
+  caixa.innerHTML = '<p class="nota">Carregando os pedidos…</p>';
+
+  let pend = [], feitos = [];
+  try{
+    [pend, feitos] = DEMO ? [demoPedPend(), demoPedFeitos()]
+      : await Promise.all([
+          get('v_pedidos_pendentes?select=*&os_id=eq.' + card.os_id + '&order=fornecedor'),
+          get('v_pedidos_compra?select=*&os_id=eq.' + card.os_id + '&order=numero')
+        ]);
+  }catch(e){ caixa.innerHTML = '<p class="nota"></p>';
+             caixa.querySelector('p').textContent = 'Não consegui ler os pedidos: ' + e.message; return; }
+
+  caixa.innerHTML = '<div class="secTit" style="margin-top:0">Pedidos de compra</div>';
+
+  if (!pend.length && !feitos.length){
+    caixa.insertAdjacentHTML('beforeend',
+      '<p class="nota">Nada a pedir nesta OS. Itens entram aqui quando a origem é ' +
+      '“comprar” e o cliente aprovou.</p>');
+    return;
+  }
+
+  // ── o que falta pedir ──
+  pend.forEach(p => {
+    const d = document.createElement('div');
+    d.className = 'pedBox' + (p.sem_fornecedor ? ' semforn' : '');
+    d.innerHTML =
+      '<div class="pedTopo"><b class="f"></b><span class="q"></span></div>' +
+      '<div class="pedSub"></div>' +
+      (p.sem_fornecedor
+        ? '<p class="nota" style="margin:8px 0 0;color:var(--warn)">Estes itens ainda não têm ' +
+          'fornecedor escolhido. Decida a cotação antes de emitir — pedido sem fornecedor ' +
+          'não tem para quem ir.</p>'
+        : '<button class="btn sm" type="button">Emitir pedido</button>');
+    d.querySelector('.f').textContent = p.fornecedor;
+    d.querySelector('.q').textContent = p.itens + ' item(ns) · ' + BRL(p.custo);
+    d.querySelector('.pedSub').textContent =
+      (p.pecas ? Number(p.pecas) + ' peça(s)' : '') +
+      (p.maior_prazo ? ' · prazo de ' + p.maior_prazo + ' dias' : ' · sem prazo informado');
+    caixa.appendChild(d);
+    const b = d.querySelector('button');
+    if (b) b.addEventListener('click', () => emitirPedido(p, caixa));
+  });
+
+  // ── os já emitidos ──
+  if (feitos.length){
+    const h = document.createElement('div');
+    h.className = 'nota'; h.style.cssText = 'margin:14px 0 6px;font-weight:600';
+    h.textContent = 'Emitidos';
+    caixa.appendChild(h);
+    feitos.forEach(p => {
+      const d = document.createElement('div');
+      d.className = 'pedFeito';
+      d.innerHTML = '<span class="n mono"></span><span class="f"></span>' +
+                    '<span class="v num"></span><span class="s"></span>';
+      d.querySelector('.n').textContent = p.numero;
+      d.querySelector('.f').textContent = p.fornecedor || '—';
+      d.querySelector('.v').textContent = BRL(p.valor);
+      d.querySelector('.s').textContent = p.recebidos >= p.itens && p.itens > 0
+        ? 'recebido'
+        : (p.previsto_para ? 'chega ' + dataBR(p.previsto_para) : 'sem previsão');
+      caixa.appendChild(d);
+    });
+  }
+}
+
+async function emitirPedido(p, caixa){
+  const { card } = osAberta;
+  const body = document.getElementById('dBody');
+  const antes = body.innerHTML;
+
+  // ── conferência antes de emitir ──
+  const cx = document.createElement('div');
+  cx.className = 'painelPed';
+  cx.innerHTML =
+    '<div class="secTit" style="margin-top:0">Emitir pedido — ' + esc(p.fornecedor) + '</div>' +
+    '<p class="nota" style="margin:0 0 12px">Vão neste pedido os ' + p.itens + ' item(ns) desta OS ' +
+      'cotados com ' + esc(p.fornecedor) + '. Os outros fornecedores recebem pedidos separados.</p>' +
+    '<div id="pdItens"></div>' +
+    '<div class="campo"><label for="pdObs">Observação para o fornecedor</label>' +
+      '<input id="pdObs" type="text" placeholder="opcional — ex.: entregar aos cuidados do Túlio"></div>' +
+    '<button class="btn pri" id="pdOk" style="width:100%;padding:11px">Emitir e baixar o PDF</button>' +
+    '<button class="btn" id="pdCa" style="width:100%;margin-top:8px">Voltar</button>' +
+    '<div class="nota" id="pdMsg" style="margin-top:8px"></div>';
+  body.innerHTML = ''; body.appendChild(cx);
+
+  let itens = [];
+  try{
+    itens = DEMO ? demoPedItens(p.fornecedor)
+      : await get('os_itens?select=id,descricao,quantidade,custo_unitario,prazo_entrega_dias'
+          + '&os_id=eq.' + card.os_id + '&aprovado=is.true&origem=eq.compra'
+          + '&pedido_numero=is.null'
+          + (p.sem_fornecedor ? '&fornecedor=is.null' : '&fornecedor=eq.' + encodeURIComponent(p.fornecedor))
+          + '&order=descricao');
+  }catch(e){ document.getElementById('pdMsg').textContent = e.message; }
+
+  const el = document.getElementById('pdItens');
+  el.innerHTML = '<div style="overflow-x:auto;margin:0 0 14px"><table class="tbl"><thead><tr>' +
+    '<th>Item</th><th class="num">Qtd</th><th class="num">Unitário</th><th class="num">Total</th>' +
+    '</tr></thead><tbody></tbody></table></div>';
+  const tb = el.querySelector('tbody');
+  let total = 0;
+  itens.forEach(i => {
+    const q = Number(i.quantidade)||0, u = Number(i.custo_unitario)||0;
+    total += q*u;
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td class="d"></td><td class="num q"></td><td class="num u"></td><td class="num t"></td>';
+    tr.querySelector('.d').textContent = i.descricao;
+    tr.querySelector('.q').textContent = q;
+    tr.querySelector('.u').textContent = u ? BRL(u) : '—';
+    tr.querySelector('.t').textContent = u ? BRL(q*u) : '—';
+    tb.appendChild(tr);
+  });
+  if (!itens.some(i => Number(i.custo_unitario) > 0)){
+    el.insertAdjacentHTML('beforeend',
+      '<p class="nota" style="color:var(--warn);margin:0 0 12px">Nenhum item tem custo lançado. ' +
+      'O pedido sai sem valores — o fornecedor cota de novo, e você perde a referência da cotação.</p>');
+  }
+
+  document.getElementById('pdCa').addEventListener('click', () => { body.innerHTML = antes; pintarCustos(); });
+
+  document.getElementById('pdOk').addEventListener('click', async () => {
+    const b = document.getElementById('pdOk'), msg = document.getElementById('pdMsg');
+    b.disabled = true; msg.style.color = ''; msg.textContent = 'Preparando…';
+    try{
+      // A biblioteca de PDF vem ANTES de emitir. Se ela não carregar — rede da
+      // planta, CDN bloqueada — nada foi registrado e a pessoa tenta de novo.
+      // Emitir primeiro deixaria um pedido no sistema sem o papel para enviar,
+      // e o número já queimado.
+      await carregarJsPDF();
+      msg.textContent = 'Emitindo…';
+      const r = DEMO
+        ? { numero:'PC-2026-0099', fornecedor:p.fornecedor, itens:itens.length, valor:total }
+        : await rpc('tf_emitir_pedido_compra', {
+            p_os_id: card.os_id,
+            p_fornecedor: p.sem_fornecedor ? null : p.fornecedor,
+            p_itens: p.sem_fornecedor ? itens.map(i => i.id) : null,
+            p_observacao: document.getElementById('pdObs').value.trim() || null
+          });
+
+      msg.textContent = 'Montando o PDF…';
+      const prazo = p.maior_prazo
+        ? dataBR(new Date(Date.now() + p.maior_prazo*86400000).toISOString().slice(0,10)) : null;
+      const { blob, nome } = await gerarPDFPedido({
+        numero: r.numero, fornecedor: p.fornecedor, card, itens,
+        obs: document.getElementById('pdObs').value.trim(), prazo
+      });
+
+      // o PDF vai para o Drive quando ele estiver ligado; sempre baixa também,
+      // porque quem manda para o fornecedor é a pessoa, do computador dela
+      baixarDataUrl(blob, nome);
+      if (!DEMO && driveLigado()){
+        try{
+          await subirArquivo(blob, { os_id: card.os_id, cliente: card.cliente,
+            os_numero: card.numero, categoria: 'pedido_compra', nome,
+            mime:'application/pdf', client_uid:'pc-' + r.numero });
+        }catch(e){ /* o pedido já existe; o arquivo é o acessório */ }
+      }
+
+      const antesCol = card.coluna;
+      if (!DEMO) await carregar({silencioso:true});
+      const novo = cards.find(x => x.os_id === card.os_id);
+      if (novo) osAberta.card = novo;
+
+      toast(r.numero + ' emitido para ' + p.fornecedor + '.', 'ok');
+      _msgPedido = r.numero + ' emitido — ' + r.itens + ' item(ns), ' + BRL(r.valor) + '.'
+        + (novo && novo.coluna !== antesCol ? ' O card foi para "' + novo.coluna + '".' : '');
+      pintarCustos();
+    }catch(e){
+      msg.style.color = 'var(--crit)'; msg.textContent = e.message;
+      b.disabled = false;
+    }
+  });
+}
+
+let _msgPedido = null;
+
+function baixarDataUrl(dataUrl, nome){
+  const a = document.createElement('a');
+  a.href = dataUrl; a.download = nome;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => a.remove(), 3000);
+}
+
 async function pintarCustos(){
   const b = document.getElementById('dBody');
   const { card } = osAberta;
@@ -2442,6 +2718,20 @@ async function pintarCustos(){
       toast('Custo lançado — a margem já mudou.','ok'); pintarCustos();
     }catch(err){ toast(err.message,'err'); e.target.disabled = false; }
   });
+
+  // ── pedidos de compra, depois das cotações: a ordem é a do trabalho —
+  //    cota, escolhe, pede ──
+  const cxPed = document.createElement('div');
+  cxPed.style.marginTop = '22px';
+  b.appendChild(cxPed);
+  montarPedidos(cxPed).then(() => {
+    if (_msgPedido){
+      const m = document.createElement('p');
+      m.className = 'nota'; m.style.cssText = 'color:var(--ok);font-weight:600;margin-top:10px';
+      m.textContent = _msgPedido; _msgPedido = null;
+      cxPed.appendChild(m);
+    }
+  }).catch(() => {});
 
   document.getElementById('coAdd').addEventListener('click', async (e) => {
     const f = document.getElementById('coF').value.trim();
@@ -3943,6 +4233,18 @@ const demoContatos = id => (demoCad(), D_CT.filter(x => x.cliente_id === id));
 const demoEquips   = id => (demoCad(), D_EQ.filter(x => x.cliente_id === id));
 const demoItens    = os => (demoCad(), D_IT[os] || []);
 const demoPropostas= os => (demoCad(), D_PR[os] || []);
+const demoPedPend = () => ([
+  {fornecedor:'Wika', itens:2, pecas:6, custo:1184, maior_prazo:10, sem_fornecedor:false},
+  {fornecedor:'Famabras', itens:1, pecas:2, custo:840, maior_prazo:20, sem_fornecedor:false}
+]);
+const demoPedFeitos = () => ([
+  {numero:'PC-2026-0004', fornecedor:'Proper Compressores', valor:585, itens:1,
+   recebidos:0, previsto_para:new Date(Date.now()+5*86400000).toISOString().slice(0,10)}
+]);
+const demoPedItens = f => (f === 'Wika'
+  ? [{id:'w1',descricao:'Manômetro 63mm 0-16 bar',quantidade:4,custo_unitario:148,prazo_entrega_dias:10},
+     {id:'w2',descricao:'Manômetro 100mm 0-25 bar',quantidade:2,custo_unitario:296,prazo_entrega_dias:10}]
+  : [{id:'f1',descricao:'Válvula de segurança 1"',quantidade:2,custo_unitario:420,prazo_entrega_dias:20}]);
 const demoValores = card => ({
   'Cliente': card.cliente || 'Cliente de exemplo',
   'CNPJ_Cliente':'12.345.678/0001-95', 'Endereço_Cliente':'Rua das Indústrias',
