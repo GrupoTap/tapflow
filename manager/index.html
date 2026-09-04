@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S10</title>
+<title>TapFlow Manager · S12</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all';this.onload=null">
@@ -689,6 +689,7 @@ th.num .tfThFixo{text-align:right}
     <button class="btn pri" id="btnNovaOS">+ Nova OS</button>
     <div class="conn"><span class="dot" id="dot"></span><span id="connTxt">—</span></div>
     <span class="who" id="who"></span>
+    <button class="btn" id="btnHub" title="Voltar ao TapFlow e trocar de app" hidden>Trocar de app</button>
     <button class="btn" id="btnRefresh" title="Recarregar os dados">Atualizar</button>
   </header>
 
@@ -756,7 +757,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S10';
+const APP_VERSION = 'S12';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -904,8 +905,23 @@ document.addEventListener('visibilitychange', () => {
 // ════════════════════════════════════════════════════════════════════════════
 // SESSÃO
 // ════════════════════════════════════════════════════════════════════════════
-const SESSAO_KEY = 'tapflow_sessao';
-let sessao = { token:null, refresh:null, nome:null, email:null, perfil:null, admin:false };
+// A chave é UMA para os três arquivos. Até o S11 eram duas ('tapflow_sessao'
+// aqui, 'tff_sessao' no Field), o que obrigava o time a logar duas vezes — e
+// nunca foi necessário: o GitHub Pages serve os dois do MESMO endereço, então
+// para o navegador manager/ e field/ são o mesmo lugar. A separação era minha.
+const SESSAO_KEY  = 'tf_sessao';
+const SESSAO_VELHA = 'tapflow_sessao';   // aceita por um tempo, para ninguém cair no dia da virada
+
+// O login agora mora no hub. Só faz sentido mandar para lá quando isto está
+// sendo SERVIDO: aberto por duplo clique (file://) não existe hub nenhum.
+const NO_SERVIDOR = location.protocol === 'http:' || location.protocol === 'https:';
+function irParaHub(recado){
+  try{ sessionStorage.setItem('tf_recado', recado || ''); }catch(e){}
+  location.href = '../?para=manager';
+}
+
+let sessao = { token:null, refresh:null, nome:null, email:null, perfil:null,
+               perfil_nome:null, admin:false, modulos:[], executa_em:null };
 
 // ── RENOVAÇÃO DO TOKEN ──────────────────────────────────────────────────────
 // O token de acesso do Supabase vale cerca de 1 hora. Sem renovar, o app morre
@@ -949,8 +965,10 @@ function salvarSessao(){ try{ localStorage.setItem(SESSAO_KEY, JSON.stringify(se
 // insistir. Volta para o login dizendo o que houve, em vez de deixar a tela
 // vazia parecendo que os dados sumiram.
 function sessaoExpirou(){
-  sessao = { token:null, refresh:null, nome:null, email:null, perfil:null, admin:false };
-  salvarSessao();
+  sessao = { token:null, refresh:null, nome:null, email:null, perfil:null,
+             perfil_nome:null, admin:false, modulos:[], executa_em:null };
+  try{ localStorage.removeItem(SESSAO_KEY); }catch(e){}
+  if (NO_SERVIDOR){ irParaHub('Sua sessão expirou. Entre de novo.'); return; }
   const lg = document.getElementById('login');
   if (lg){
     lg.hidden = false;
@@ -958,7 +976,33 @@ function sessaoExpirou(){
     if (m) m.textContent = 'Sua sessão expirou. Entre de novo.';
   }
 }
-function lerSessao(){ try{ const r = localStorage.getItem(SESSAO_KEY); if(r) sessao = JSON.parse(r); }catch(e){} }
+function lerSessao(){
+  try{
+    let r = localStorage.getItem(SESSAO_KEY);
+    if (!r){
+      // adoção: quem já estava logado no S11 não é expulso pela troca de chave
+      const v = localStorage.getItem(SESSAO_VELHA);
+      if (v){ r = v; localStorage.setItem(SESSAO_KEY, v); localStorage.removeItem(SESSAO_VELHA); }
+    }
+    if (r) sessao = Object.assign(sessao, JSON.parse(r));
+  }catch(e){}
+}
+
+/** Quem sou eu — o SERVIDOR responde (tf_meu_acesso), numa chamada só, e traz
+ *  os módulos junto. Antes era um select com embed e o `modulos` nem vinha:
+ *  cada tela decidia por conta própria o que mostrar, que é como duas telas
+ *  passam a discordar. Ver sql/26_acesso.sql. */
+async function quemSou(){
+  const a = await rpc('tf_meu_acesso', {});
+  if (!a || !a.perfil)
+    throw new Error('Login existe, mas você não está na tabela usuarios — veja o Passo 3b do guia.');
+  Object.assign(sessao, {
+    nome:a.nome, email:a.email, perfil:a.perfil, perfil_nome:a.perfil_nome,
+    admin:!!a.admin, modulos:a.modulos || [], executa_em:a.executa_em
+  });
+  salvarSessao();
+  return a;
+}
 
 async function entrar(email, senha){
   const r = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=password', {
@@ -971,12 +1015,7 @@ async function entrar(email, senha){
   if (!r.ok) throw new Error(j.error_description || j.msg || j.message || 'E-mail ou senha inválidos');
   sessao.token = j.access_token;
   sessao.refresh = j.refresh_token || null;
-  const eu = await get('usuarios?select=nome,email,perfil_id,perfis(is_admin)&limit=1');
-  if (!eu || !eu.length)
-    throw new Error('Login existe, mas você não está na tabela usuarios — veja o Passo 3b do guia.');
-  sessao.nome = eu[0].nome; sessao.email = eu[0].email;
-  sessao.perfil = eu[0].perfil_id; sessao.admin = !!(eu[0].perfis && eu[0].perfis.is_admin);
-  salvarSessao();
+  await quemSou();
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1017,16 +1056,23 @@ async function carregar(opt){
 // Nada é fixo no código — renomear uma fase no banco renomeia a coluna aqui.
 // ════════════════════════════════════════════════════════════════════════════
 
+/** Escreve um contador do menu, se ele estiver no menu desta pessoa. */
+function contador(id, n){
+  const el = document.getElementById(id);
+  if (el) el.textContent = n;
+}
+
 function pintar(){
   const noQuadro = cards.filter(c => c.coluna && (c.quadro === quadro || c.quadro === 'ambos'));
   const q = BUSCA[quadro] || '';
   const doQuadro = !q ? noQuadro : noQuadro.filter(c => casa(
     [c.numero, c.cliente, c.coluna, c.tarefa_atual, c.descricao].join(' '), q));
 
-  document.getElementById('nCampo').textContent =
-    cards.filter(c => c.coluna && (c.quadro === 'campo' || c.quadro === 'ambos')).length;
-  document.getElementById('nAdm').textContent =
-    cards.filter(c => c.coluna && (c.quadro === 'adm' || c.quadro === 'ambos')).length;
+  // Os contadores vivem no menu, e desde os privilégios o menu pode não ter o
+  // item — o perfil comercial não vê Campo. Escrever direto estourava a tela
+  // inteira num TypeError. O contador que não existe simplesmente não é escrito.
+  contador('nCampo', cards.filter(c => c.coluna && (c.quadro === 'campo' || c.quadro === 'ambos')).length);
+  contador('nAdm',   cards.filter(c => c.coluna && (c.quadro === 'adm'   || c.quadro === 'ambos')).length);
 
   const board = document.getElementById('board');
   board.innerHTML = '';
@@ -4653,12 +4699,14 @@ function demoRel(){
   return {
     cli,
     os:[
+      // Os nomes aqui TEM que ser os do banco. Quando eram inventados, a demo passava
+      // verde e o modo real quebrava — foi assim que o relatório foi ao ar quebrado.
       {id:'d1',numero:'OS-2026-0007',status:'aberta',descricao:'Acessórios NR-13',
-       criada_em:hoje+'T09:00:00Z',concluida_em:null,cliente_id:'c3'},
+       data_abertura:hoje,encerrada_em:null,cliente_id:'c3'},
       {id:'d2',numero:'OS-2026-0006',status:'concluida',descricao:'Parada anual',
-       criada_em:hoje+'T09:00:00Z',concluida_em:hoje+'T18:00:00Z',cliente_id:'c2'},
+       data_abertura:hoje,encerrada_em:hoje+'T18:00:00Z',cliente_id:'c2'},
       {id:'d3',numero:'OS-2026-0005',status:'aberta',descricao:'Inspeção',
-       criada_em:hoje+'T09:00:00Z',concluida_em:null,cliente_id:'c1'},
+       data_abertura:hoje,encerrada_em:null,cliente_id:'c1'},
     ],
     itens:[
       {os_id:'d1',descricao:'Manômetro 63mm',quantidade:4,custo_unitario:148,preco_unitario:265,
@@ -5037,28 +5085,52 @@ function tfMenu(ev, id, k){
 //
 // Grupo fechado esconde tudo menos o item ativo. O estado fica no aparelho.
 // ════════════════════════════════════════════════════════════════════════════
+// `mod` é o módulo do perfil que abre este item — os nomes vêm de
+// perfis.modulos, no banco. Quem muda o que alguém vê é um UPDATE naquela
+// tabela, não uma versão nova deste arquivo.
+//
+// ⚠ Isto ESCONDE TELA, não é cofre. O 03_rls.sql decidiu, e está escrito lá,
+// que numa empresa de nove pessoas todo mundo LÊ tudo e o que separa os papéis
+// é a ESCRITA. Tirar Compras do menu do inspetor é para ele não se perder — a
+// trava de verdade é o RLS.
 const NAV = [
   { id:'quadros', rot:'QUADROS', itens:[
-    { v:'campo', rot:'Campo',      ico:'campo',  cont:'nCampo' },
-    { v:'adm',   rot:'Gestão',     ico:'gestao', cont:'nAdm' },
-    { v:'com',   rot:'Comercial',  ico:'funil',  cont:'nCom' },
+    { v:'campo', rot:'Campo',      ico:'campo',  cont:'nCampo', mod:'campo' },
+    { v:'adm',   rot:'Gestão',     ico:'gestao', cont:'nAdm',   mod:'os' },
+    { v:'com',   rot:'Comercial',  ico:'funil',  cont:'nCom',   mod:'comercial' },
   ]},
   { id:'operacao', rot:'OPERAÇÃO', itens:[
-    { v:'cpr', rot:'Compras',    ico:'caixa', cont:'nCpr' },
-    { v:'doc', rot:'Documentos', ico:'doc' },
+    { v:'cpr', rot:'Compras',    ico:'caixa', cont:'nCpr', mod:'compras' },
+    { v:'doc', rot:'Documentos', ico:'doc',                mod:'documentos' },
   ]},
   { id:'analise', rot:'ANÁLISE', itens:[
-    { v:'rel', rot:'Relatórios', ico:'grafico' },
+    { v:'rel', rot:'Relatórios', ico:'grafico', mod:'relatorios' },
   ]},
   { id:'cadastros', rot:'CADASTROS', itens:[
-    { v:'cad', rot:'Clientes',  ico:'predio' },
-    { v:'cat', rot:'Catálogo',  ico:'tag' },
+    { v:'cad', rot:'Clientes',  ico:'predio', mod:'cadastros' },
+    { v:'cat', rot:'Catálogo',  ico:'tag',    mod:'cadastros' },
   ]},
   { id:'sistema', rot:'SISTEMA', fim:true, itens:[
-    { v:'cfg',  rot:'Configurações', ico:'engrenagem' },
+    { v:'cfg',  rot:'Configurações', ico:'engrenagem', mod:'cadastros' },
     { v:'sair', rot:'Sair',          ico:'sair' },
   ]},
 ];
+
+/** O perfil abre este módulo? Admin abre tudo — senão um erro de digitação em
+ *  perfis.modulos tranca o dono do sistema para fora do próprio sistema.
+ *  Perfil SEM nenhum módulo também vê tudo: app em branco parece quebrado, e
+ *  quem tem que reclamar disso é o hub, que diz o motivo com todas as letras. */
+function podeVer(mod){
+  if (!mod || DEMO || sessao.admin) return true;
+  const m = sessao.modulos || [];
+  return m.length ? m.indexOf(mod) >= 0 : true;
+}
+
+/** Só os itens que esta pessoa abre, e só os grupos que sobraram com algo. */
+function navVisivel(){
+  return NAV.map(g => Object.assign({}, g, { itens: g.itens.filter(i => podeVer(i.mod)) }))
+            .filter(g => g.itens.length);
+}
 
 const ICO = {
   campo:'<path d="M2 13l4-9 4 5 2-3 3 7z"/><circle cx="12.5" cy="3.5" r="1.5"/>',
@@ -5084,7 +5156,7 @@ function montarNav(){
   const el = document.getElementById('navGroups');
   const fechados = navGLer();
   el.innerHTML = '';
-  NAV.forEach(g => {
+  navVisivel().forEach(g => {
     const d = document.createElement('div');
     d.className = 'nav-group' + (g.fim ? ' fim' : '') + (fechados[g.id] ? ' fechado' : '');
     d.dataset.g = g.id;
@@ -5119,6 +5191,13 @@ NAV.forEach(g => g.itens.forEach(i => { GRUPO_DE[i.v] = g.rot; }));
 /** O único caminho para trocar de tela. */
 function irPara(v){
   if (v === 'sair'){ sairDaConta(); return; }
+  // Estado guardado de outro login, ou endereço colado: cai na primeira tela
+  // que a pessoa realmente abre, em vez de numa tela sem menu correspondente.
+  const item = NAV.reduce((a,g) => a.concat(g.itens), []).find(i => i.v === v);
+  if (item && !podeVer(item.mod)){
+    const primeira = (navVisivel()[0] || { itens:[] }).itens[0];
+    if (primeira && primeira.v !== v){ irPara(primeira.v); return; }
+  }
   visao = v;
   document.querySelectorAll('.nav-item').forEach(b => {
     const ativo = b.dataset.v === v;
@@ -5211,7 +5290,8 @@ document.addEventListener('keydown', e => {
 
 function sairDaConta(){
   if (!confirm('Sair da conta? O que está na fila continua guardado.')) return;
-  try{ localStorage.removeItem(SESSAO_KEY); }catch(e){}
+  try{ localStorage.removeItem(SESSAO_KEY); localStorage.removeItem(SESSAO_VELHA); }catch(e){}
+  if (NO_SERVIDOR){ location.href = '../'; return; }
   location.reload();
 }
 
@@ -5409,8 +5489,10 @@ async function relCarregar(){
   if (REL.dados && REL.chave === chave) return;
   if (DEMO){ REL.dados = demoRel(); REL.chave = chave; return; }
   const [os, itens, props, negs, peds, margens] = await Promise.all([
-    get('ordens_servico?select=id,numero,status,descricao,criada_em,concluida_em,cliente_id,modo_entrega'
-        + '&criada_em=gte.' + REL.de + '&criada_em=lte.' + REL.ate + 'T23:59:59&order=criada_em'),
+    // As colunas sao data_abertura (DATE) e encerrada_em (TIMESTAMPTZ) — conferidas
+    // contra o information_schema, nao contra a memoria. Ver auditar_consultas.py.
+    get('ordens_servico?select=id,numero,status,descricao,data_abertura,encerrada_em,cliente_id,modo_entrega'
+        + '&data_abertura=gte.' + REL.de + '&data_abertura=lte.' + REL.ate + '&order=data_abertura'),
     get('os_itens?select=os_id,descricao,quantidade,custo_unitario,preco_unitario,total_custo,total_venda,'
         + 'elegivel,aprovado,origem,fornecedor,pedido_numero,pedido_em,previsto_para,recebido_em&limit=5000'),
     get('v_propostas?select=*&limit=2000'),
@@ -5438,10 +5520,13 @@ function relModelo(){
     const os = (D.os || []);
     const porOS = {};
     (D.itens || []).forEach(i => { (porOS[i.os_id] = porOS[i.os_id] || []).push(i); });
-    const abertas = os.filter(o => o.status !== 'concluida');
+    const abertas = os.filter(o => o.status !== 'concluida' && o.status !== 'cancelada');
     const fechadas = os.filter(o => o.status === 'concluida');
-    const dias = fechadas.filter(o => o.concluida_em && o.criada_em)
-      .map(o => (new Date(o.concluida_em) - new Date(o.criada_em)) / 864e5);
+    // Dia contra dia: encerrada_em e instante, data_abertura e data pura. Misturar os
+    // dois em new Date() come um dia em Brasilia (o mesmo defeito do dataBR).
+    const soDia = v => String(v || '').slice(0,10);
+    const dias = fechadas.filter(o => o.encerrada_em && o.data_abertura)
+      .map(o => (new Date(soDia(o.encerrada_em)+'T12:00') - new Date(soDia(o.data_abertura)+'T12:00')) / 864e5);
     const medio = dias.length ? (dias.reduce((a,b)=>a+b,0) / dias.length) : null;
     const colunaDe = {};
     cards.forEach(c => { colunaDe[c.os_id] = c.coluna; });
@@ -5466,7 +5551,7 @@ function relModelo(){
           colunas:['OS','Cliente','Descrição','Aberta em','Situação','Itens','Venda'],
           linhas:os.map(o => {
             const its = (porOS[o.id] || []).filter(i => i.elegivel);
-            return [o.numero, D.cli[o.cliente_id] || '', o.descricao || '', dataBR(o.criada_em),
+            return [o.numero, D.cli[o.cliente_id] || '', o.descricao || '', dataBR(o.data_abertura),
               o.status === 'concluida' ? 'concluída' : (colunaDe[o.id] || 'aberta'),
               its.length, its.reduce((a,i)=>a+Number(i.total_venda||0),0)];
           }), numericas:[5,6], moeda:[6] },
@@ -5796,6 +5881,15 @@ document.getElementById('dTabs').addEventListener('click', e => {
 });
 document.getElementById('btnRefresh').addEventListener('click', () => carregar().catch(()=>{}));
 
+// O botão só aparece quando existe hub para onde voltar — servido, e não no
+// modo demo (que roda com o arquivo aberto do disco, onde ../ não é nada).
+(function(){
+  const b = document.getElementById('btnHub');
+  if (!b || DEMO || !NO_SERVIDOR) return;
+  b.hidden = false;
+  b.addEventListener('click', () => { location.href = '../'; });
+})();
+
 document.getElementById('lgBtn').addEventListener('click', async () => {
   const b = document.getElementById('lgBtn'), erro = document.getElementById('lgErro');
   b.disabled = true; erro.textContent = '';
@@ -5812,6 +5906,10 @@ document.getElementById('lgSenha').addEventListener('keydown', e => {
 });
 
 async function iniciar(){
+  // O menu é remontado AQUI, não só no carregamento do arquivo: quando o
+  // script roda, a sessão ainda não foi lida, e o menu saía inteiro para todo
+  // mundo. Foi o teste de tela que pegou — o perfil comercial via Compras.
+  montarNav();
   document.getElementById('who').innerHTML = '';
   if (sessao.nome){
     const s = document.createElement('span');
@@ -5833,8 +5931,12 @@ async function iniciar(){
     return;
   }
   lerSessao();
-  if (sessao.token){ iniciar(); }
-  else { document.getElementById('login').hidden = false; }
+  if (sessao.token){ iniciar(); return; }
+  // Sem sessão: o login mora no hub. O formulário daqui fica como rede de
+  // segurança para quem abrir este arquivo direto do disco com as chaves
+  // preenchidas — aí não há hub para onde ir.
+  if (NO_SERVIDOR){ irParaHub(''); return; }
+  document.getElementById('login').hidden = false;
 })();
 </script>
 </body>

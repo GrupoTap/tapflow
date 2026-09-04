@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S6</title>
+<title>TapFlow Field · S7</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -206,6 +206,21 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 .toast.on{opacity:1;transform:none}
 .toast.err{background:var(--crit)}.toast.ok{background:var(--ok)}
 
+/* ── conta ────────────────────────────────────── */
+.eu{background:none;border:0;color:inherit;font-size:20px;line-height:1;padding:4px 8px;
+  border-radius:5px;cursor:pointer;opacity:.75}
+.eu:active{background:rgba(255,255,255,.15)}
+.euPan{position:fixed;inset:0;background:rgba(10,20,30,.45);z-index:80;display:flex;
+  align-items:flex-end;justify-content:center;padding:16px}
+.euPan .cx{background:var(--surface);border-radius:10px;padding:18px;width:100%;max-width:380px;
+  display:flex;flex-direction:column;gap:9px}
+.euPan b{font-size:16px}
+.euPan small{color:var(--ink-3);font-size:12.5px;margin-top:-6px;margin-bottom:6px}
+.euPan button{padding:13px;border:1px solid var(--rule);border-radius:7px;background:var(--surface);
+  font:600 15px inherit;cursor:pointer}
+.euPan button.perigo{color:var(--crit);border-color:#E9C4BA}
+.euPan button.fraco{color:var(--ink-3);border:0}
+
 /* ── login ────────────────────────────────────── */
 .login{position:fixed;inset:0;background:var(--accent);display:flex;align-items:center;
   justify-content:center;padding:22px;z-index:30}
@@ -222,7 +237,19 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
   <button class="back" id="btnBack" hidden aria-label="Voltar">‹</button>
   <div class="tit"><b id="hTit">TapFlow Field</b><small id="hSub">—</small></div>
   <div class="st"><span class="dot" id="dot"></span><span id="stTxt"></span></div>
+  <button class="eu" id="btnEu" hidden aria-label="Sua conta">⋯</button>
 </header>
+
+<!-- Painel da conta. Fica fechado e longe do polegar de quem está lançando
+     peça: só aparece na lista, nunca dentro de um levantamento. -->
+<div class="euPan" id="euPan" hidden>
+  <div class="cx" role="dialog" aria-label="Sua conta">
+    <b id="euNome">—</b><small id="euPerfil"></small>
+    <button id="euTrocar" hidden>Trocar de app</button>
+    <button id="euSair" class="perigo">Sair da conta</button>
+    <button id="euFecha" class="fraco">Cancelar</button>
+  </div>
+</div>
 
 <div class="aviso demo" id="barDemo" hidden>MODO DEMO — dados de exemplo</div>
 <div class="aviso inst" id="barInst" hidden>
@@ -259,13 +286,19 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S6';
+const APP_VERSION = 'S7';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
 // rodando outra, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('lgVer').textContent = APP_VERSION; }catch(e){}
 
-const K_SESSAO = 'tff_sessao';
+// Chave ÚNICA para os três arquivos (hub, Manager e Field). Até o S6 este app
+// guardava a sessão em 'tff_sessao' e o Manager em 'tapflow_sessao', o que
+// obrigava o inspetor a logar duas vezes. O GitHub Pages serve os dois do mesmo
+// endereço, então nunca precisou ser assim. A 'tff_sessao' segue sendo adotada
+// para ninguém ser expulso no dia da virada.
+const K_SESSAO = 'tf_sessao';
+const K_SESSAO_VELHA = 'tff_sessao';
 const K_FILA   = 'tff_fila';
 const K_DRAFT  = 'tff_draft_';
 const K_PARAM  = 'tff_param';
@@ -284,7 +317,24 @@ const uid = () => (crypto.randomUUID ? crypto.randomUUID()
 // ════════════════════════════════════════════════════════════════════════════
 // REDE — mesmo endurecimento do TFM
 // ════════════════════════════════════════════════════════════════════════════
-let sessao = LS.get(K_SESSAO, { token:null, refresh:null, nome:null, perfil:null, admin:false });
+// O login mora no hub; aqui só se vai para lá quando isto está sendo SERVIDO.
+// Aberto do disco (file://) não existe ../ para onde ir.
+const NO_SERVIDOR = location.protocol === 'http:' || location.protocol === 'https:';
+function irParaHub(recado){
+  try{ sessionStorage.setItem('tf_recado', recado || ''); }catch(e){}
+  location.href = '../?para=field';
+}
+
+let sessao = (function(){
+  const VAZIA = { token:null, refresh:null, nome:null, perfil:null, perfil_nome:null,
+                  admin:false, modulos:[], executa_em:null };
+  let s = LS.get(K_SESSAO, null);
+  if (!s){
+    const v = LS.get(K_SESSAO_VELHA, null);   // adoção da chave antiga
+    if (v && v.token){ s = v; LS.set(K_SESSAO, v); LS.del(K_SESSAO_VELHA); }
+  }
+  return Object.assign({}, VAZIA, s || {});
+})();
 
 // ── RENOVAÇÃO DO TOKEN ──────────────────────────────────────────────────────
 // O token do Supabase vale ~1 hora. Em campo isso é pior que no escritório: o
@@ -322,10 +372,16 @@ const tokenVencido = e =>
 // Sem renovação possível: volta para o login. O RASCUNHO E A FILA FICAM —
 // nunca se apaga o que o inspetor lançou porque a sessão venceu.
 function sessaoExpirou(){
-  sessao = { token:null, refresh:null, nome:null, perfil:null, admin:false };
-  LS.set(K_SESSAO, sessao);
+  sessao = { token:null, refresh:null, nome:null, perfil:null, perfil_nome:null,
+             admin:false, modulos:[], executa_em:null };
+  LS.del(K_SESSAO); LS.del(K_SESSAO_VELHA);
   pararRecon();
   setConn('off','entre de novo');
+  // A FILA E O RASCUNHO FICAM (chaves diferentes, e ninguém as toca aqui).
+  if (NO_SERVIDOR){
+    irParaHub('Sua sessão expirou. Entre de novo — o que você lançou está guardado.');
+    return;
+  }
   const lg = document.getElementById('login');
   if (lg){
     lg.hidden = false;
@@ -1927,10 +1983,12 @@ async function entrar(email, senha){
   if (!r.ok) throw new Error(j.error_description || j.msg || j.message || 'E-mail ou senha inválidos');
   sessao.token = j.access_token;
   sessao.refresh = j.refresh_token || null;
-  const eu = await get('usuarios?select=nome,perfil_id,perfis(is_admin)&limit=1');
-  if (!eu || !eu.length) throw new Error('Login criado, mas você ainda não tem perfil no sistema. Fale com o Fernando.');
-  sessao.nome = eu[0].nome; sessao.perfil = eu[0].perfil_id;
-  sessao.admin = !!(eu[0].perfis && eu[0].perfis.is_admin);
+  // O servidor diz quem é a pessoa e o que ela abre — ver sql/26_acesso.sql.
+  const a = await rpc('tf_meu_acesso', {});
+  if (!a || !a.perfil) throw new Error('Login criado, mas você ainda não tem perfil no sistema. Fale com o Fernando.');
+  if (!a.usa_campo) throw new Error('Seu perfil (' + (a.perfil_nome || a.perfil) + ') não trabalha em campo. Entre pela Gestão.');
+  Object.assign(sessao, { nome:a.nome, perfil:a.perfil, perfil_nome:a.perfil_nome,
+    admin:!!a.admin, modulos:a.modulos || [], executa_em:a.executa_em });
   LS.set(K_SESSAO, sessao);
 }
 document.getElementById('lgBtn').addEventListener('click', async () => {
@@ -1999,11 +2057,41 @@ document.getElementById('btnInstNao').addEventListener('click', () => {
   document.getElementById('barInst').hidden = true;
 });
 
+/* ── conta: trocar de app e sair ──────────────────────────────────────────
+   O Field nunca teve como sair. Isso parece detalhe até o celular trocar de
+   dono, ou até alguém logar com a conta errada e não ter como desfazer.
+   A FILA E OS RASCUNHOS NÃO SÃO APAGADOS AQUI — chaves diferentes, de
+   propósito: sair da conta não pode custar o levantamento de ninguém. */
+function euAbrir(){
+  document.getElementById('euNome').textContent = sessao.nome || '—';
+  document.getElementById('euPerfil').textContent = sessao.perfil_nome || sessao.perfil || '';
+  const t = document.getElementById('euTrocar');
+  t.hidden = !(NO_SERVIDOR && !DEMO && (sessao.admin || sessao.executa_em === 'ambos'));
+  document.getElementById('euPan').hidden = false;
+}
+function euFechar(){ document.getElementById('euPan').hidden = true; }
+document.getElementById('btnEu').addEventListener('click', euAbrir);
+document.getElementById('euFecha').addEventListener('click', euFechar);
+document.getElementById('euPan').addEventListener('click', e => { if (e.target.id === 'euPan') euFechar(); });
+document.getElementById('euTrocar').addEventListener('click', () => { location.href = '../'; });
+document.getElementById('euSair').addEventListener('click', () => {
+  const n = (LS.get(K_FILA, []) || []).length;
+  if (n && !confirm('Você tem ' + n + ' envio(s) na fila. Eles ficam guardados neste aparelho e '
+      + 'saem quando você entrar de novo. Sair mesmo assim?')) return;
+  LS.del(K_SESSAO); LS.del(K_SESSAO_VELHA);
+  if (NO_SERVIDOR){ location.href = '../'; return; }
+  location.reload();
+});
+
 (function boot(){
   document.getElementById('barDemo').hidden = !DEMO;
+  try{ document.getElementById('btnEu').hidden = false; }catch(e){}
   if (DEMO){ sessao = { token:null, nome:'Inspetor (demo)', perfil:'inspetor', admin:false }; iniciar(); return; }
-  if (sessao.token) iniciar();
-  else document.getElementById('login').hidden = false;
+  if (sessao.token){ iniciar(); return; }
+  // Sem sessão: quem loga é o hub. O formulário daqui fica como rede de
+  // segurança para o arquivo aberto do disco com as chaves preenchidas.
+  if (NO_SERVIDOR){ irParaHub(''); return; }
+  document.getElementById('login').hidden = false;
 })();
 </script>
 </body>

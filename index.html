@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>TapFlow · H1</title>
+<meta name="theme-color" content="#102438">
+<link rel="icon" href="field/icons/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="field/icons/apple-touch-icon.png">
+<!-- ════════════════════════════════════════════════════════════════════════
+     TAPFLOW · HUB — a porta única.
+     ------------------------------------------------------------------------
+     Por que existe: até o S11 o time tinha DOIS endereços e DUAS senhas
+     guardadas, uma em cada app, porque eu usei duas chaves de armazenamento
+     diferentes (tapflow_sessao e tff_sessao). Isso nunca foi necessário: o
+     GitHub Pages serve os dois do MESMO endereço, e para o navegador
+     /tapflow/manager/ e /tapflow/field/ são o mesmo lugar. A separação era
+     invenção minha.
+
+     Agora: um endereço, um login, e o servidor — não esta página — decide o
+     que a pessoa vê, via tf_meu_acesso().
+     ════════════════════════════════════════════════════════════════════════ -->
+<style>
+:root{
+  --accent:#1B6FA9; --accent-hover:#155A8A; --accent-ink:#164C77;
+  --accent-soft:#E3EEF7; --accent-alt:#0087CC;
+  --sidebar-bg:#102438;
+  --paper:#F1F3F4; --surface:#FFFFFF; --surface-2:#F7F9FA;
+  --ink:#14181B; --ink-2:#515252; --ink-3:#78838A;
+  --rule:#DBE0E3; --crit:#A62D18; --crit-soft:#F7E4DF;
+  --sans:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --shadow:0 1px 2px rgba(16,26,28,.06), 0 6px 18px -12px rgba(16,26,28,.3);
+  --sh-lift:0 2px 4px rgba(16,26,28,.08), 0 12px 28px -14px rgba(16,26,28,.42);
+  --t:120ms ease;
+}
+*{box-sizing:border-box}
+/* Sem isto, `.login{display:flex}` vence o `hidden` do navegador e a tela de
+   login continua por cima, invisível, comendo os cliques dos cards. Os outros
+   dois apps já tinham a regra; o hub nasceu sem, e o teste pegou. */
+[hidden]{display:none !important}
+html{overflow-x:hidden}
+body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.5 var(--sans);
+  -webkit-font-smoothing:antialiased;min-height:100dvh;display:flex;flex-direction:column}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+
+.topo{background:var(--sidebar-bg);color:#F5F9FC;padding:11px 18px;display:flex;
+  align-items:center;gap:12px;flex-wrap:wrap}
+.marca{font-size:18px;font-weight:700;letter-spacing:-.02em}
+.marca span{color:var(--accent-alt)}
+.selo{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#7E93A8;
+  border:1px solid rgba(255,255,255,.16);border-radius:3px;padding:2px 6px}
+.topo .dir{margin-left:auto;display:flex;align-items:center;gap:12px;font-size:12.5px;color:#9DB2C6}
+.topo .dir b{color:#F5F9FC;font-weight:600}
+.lnk{background:none;border:0;color:#9DB2C6;font:inherit;cursor:pointer;padding:3px 5px;
+  border-radius:3px;text-decoration:underline;text-underline-offset:2px}
+.lnk:hover{color:#F5F9FC;background:rgba(255,255,255,.06)}
+
+main{flex:1;width:100%;max-width:820px;margin:0 auto;padding:34px 18px 44px}
+h1{font-size:21px;margin:0 0 4px;letter-spacing:-.015em}
+.sub{color:var(--ink-3);font-size:13.5px;margin:0 0 26px}
+
+.cards{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+.card{display:block;text-decoration:none;color:inherit;background:var(--surface);
+  border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:5px;
+  padding:20px;box-shadow:var(--shadow);transition:box-shadow var(--t),transform var(--t)}
+.card:hover,.card:focus-visible{box-shadow:var(--sh-lift);transform:translateY(-1px)}
+.card .ic{width:34px;height:34px;color:var(--accent);margin-bottom:11px}
+.card b{display:block;font-size:16px;letter-spacing:-.01em;margin-bottom:4px}
+.card p{margin:0;font-size:13px;color:var(--ink-3);line-height:1.45}
+.card .quem{margin-top:11px;font-size:11.5px;color:var(--accent-ink);background:var(--accent-soft);
+  display:inline-block;padding:2px 7px;border-radius:3px}
+
+.aviso{background:var(--crit-soft);border:1px solid #E9C4BA;border-left:3px solid var(--crit);
+  border-radius:4px;padding:14px 16px;font-size:13.5px;color:#6E2113}
+.aviso b{display:block;margin-bottom:3px}
+.nota{margin-top:28px;font-size:12.5px;color:var(--ink-3);border-top:1px solid var(--rule);padding-top:14px}
+.nota code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;background:var(--surface-2);
+  border:1px solid var(--rule);border-radius:3px;padding:1px 4px}
+
+/* ── login ─────────────────────────────────────────────────────────────── */
+.login{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;
+  justify-content:center;z-index:10;padding:20px}
+.login .box{background:var(--surface);border:1px solid var(--rule);border-radius:5px;
+  padding:26px;width:min(360px,100%);box-shadow:var(--sh-lift)}
+.login h2{font-size:24px;margin:0 0 3px;letter-spacing:-.02em;font-weight:700}
+.login h2 span{color:var(--accent)}
+.login .casa{font-size:13px;color:var(--ink-3);margin:0 0 18px}
+label{display:block;font-size:12px;font-weight:600;color:var(--ink-2);margin:12px 0 4px}
+input{width:100%;padding:9px 11px;border:1px solid var(--rule);border-radius:4px;
+  font:inherit;background:var(--surface)}
+input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+.btn{width:100%;margin-top:18px;padding:10px;border:0;border-radius:4px;background:var(--accent);
+  color:#fff;font:600 14px var(--sans);cursor:pointer;transition:background var(--t)}
+.btn:hover{background:var(--accent-hover)}
+.btn[disabled]{opacity:.6;cursor:default}
+.erro{color:var(--crit);font-size:12.5px;margin:12px 0 0;min-height:1em;line-height:1.4}
+.indo{font-size:13px;color:var(--ink-3);margin:18px 0 0}
+
+@media(max-width:520px){
+  main{padding:24px 14px 34px}
+  .topo{padding:10px 14px}
+  .topo .dir{width:100%;margin-left:0;order:3}
+}
+</style>
+</head>
+<body>
+
+<div class="topo">
+  <div class="marca">Tap<span>Flow</span></div>
+  <div class="selo" id="selo">HUB · H1</div>
+  <div class="dir" id="quemSou" hidden>
+    <span><b id="euNome"></b> · <span id="euPerfil"></span></span>
+    <button class="lnk" id="btSair">Sair</button>
+  </div>
+</div>
+
+<main id="corpo" hidden>
+  <h1 id="ola">Bem-vindo</h1>
+  <p class="sub" id="subtitulo">Escolha por onde entrar. Você já está autenticado nos dois.</p>
+  <div class="cards" id="cards"></div>
+  <div id="semNada" hidden>
+    <div class="aviso">
+      <b>Seu perfil não tem nenhum sistema liberado.</b>
+      Isso é configuração, não erro de senha. Peça ao Fernando para ajustar o perfil
+      <code id="perfilCru"></code> na tabela <code>perfis</code>.
+    </div>
+  </div>
+  <p class="nota" id="nota"></p>
+</main>
+
+<div class="login" id="login" hidden>
+  <div class="box">
+    <h2>Tap<span>Flow</span></h2>
+    <p class="casa">Engetap Engenharia</p>
+    <form id="frm">
+      <label for="lgEmail">E-mail</label>
+      <input id="lgEmail" type="email" autocomplete="username" required>
+      <label for="lgSenha">Senha</label>
+      <input id="lgSenha" type="password" autocomplete="current-password" required>
+      <p class="erro" id="lgErro"></p>
+      <button class="btn" id="lgBtn" type="submit">Entrar</button>
+    </form>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CONFIGURAÇÃO — as mesmas duas linhas dos outros dois apps.
+   Vazias = modo demonstração (é o que acontece ao abrir por duplo clique).
+   ════════════════════════════════════════════════════════════════════════════ */
+const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';
+
+const APP_VERSION = 'H1';
+try{ document.getElementById('selo').textContent = 'HUB · ' + APP_VERSION; }catch(e){}
+
+const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
+
+/* ── A CHAVE COMPARTILHADA ─────────────────────────────────────────────────
+   Uma só, lida pelos três arquivos. As duas antigas ficam sendo aceitas por
+   um tempo para ninguém ser deslogado no dia da virada — quem já estava
+   dentro continua dentro. */
+const K_SESSAO   = 'tf_sessao';
+const K_ANTIGAS  = ['tapflow_sessao', 'tff_sessao'];
+
+const VAZIA = { token:null, refresh:null, nome:null, email:null, perfil:null,
+                perfil_nome:null, admin:false, modulos:[], executa_em:null,
+                usa_gestao:false, usa_campo:false };
+let sessao = Object.assign({}, VAZIA);
+
+function gravar(){ try{ localStorage.setItem(K_SESSAO, JSON.stringify(sessao)); }catch(e){} }
+function ler(){
+  try{
+    const r = localStorage.getItem(K_SESSAO);
+    if (r){ sessao = Object.assign({}, VAZIA, JSON.parse(r)); return true; }
+    // adoção das chaves antigas: aproveita só o token; o resto vem do servidor
+    for (const k of K_ANTIGAS){
+      const v = localStorage.getItem(k);
+      if (v){
+        const o = JSON.parse(v);
+        if (o && o.token){ sessao = Object.assign({}, VAZIA,
+          { token:o.token, refresh:o.refresh||null, nome:o.nome||null, email:o.email||null }); return true; }
+      }
+    }
+  }catch(e){}
+  return false;
+}
+function limpar(){
+  sessao = Object.assign({}, VAZIA);
+  try{ localStorage.removeItem(K_SESSAO); K_ANTIGAS.forEach(k => localStorage.removeItem(k)); }catch(e){}
+}
+
+/* ── rede ─────────────────────────────────────────────────────────────────
+   Prazo curto: o hub é a primeira tela do dia. Ficar rodando sem dizer nada
+   é pior que dizer "não deu". */
+function prazo(ms){ const c = new AbortController(); setTimeout(() => c.abort(), ms || 12000); return c.signal; }
+
+async function api(caminho, opt){
+  opt = opt || {};
+  const r = await fetch(SUPABASE_URL + caminho, {
+    method: opt.method || 'GET',
+    headers: Object.assign({
+      apikey: SUPABASE_ANON_KEY,
+      'Content-Type':'application/json'
+    }, sessao.token ? { Authorization:'Bearer ' + sessao.token } : {}),
+    body: opt.body ? JSON.stringify(opt.body) : undefined,
+    signal: prazo(opt.ms)
+  });
+  const j = await r.json().catch(() => null);
+  if (!r.ok){
+    const e = new Error((j && (j.error_description || j.msg || j.message || j.hint)) || ('Erro ' + r.status));
+    e.status = r.status; throw e;
+  }
+  return j;
+}
+
+async function renovar(){
+  if (!sessao.refresh) return false;
+  try{
+    const j = await api('/auth/v1/token?grant_type=refresh_token', { method:'POST', body:{ refresh_token: sessao.refresh } });
+    if (!j || !j.access_token) return false;
+    sessao.token = j.access_token;
+    if (j.refresh_token) sessao.refresh = j.refresh_token;
+    gravar(); return true;
+  }catch(e){ return false; }
+}
+
+/** Quem sou eu — resposta do SERVIDOR, não desta página. Uma chamada. */
+async function meuAcesso(){
+  const a = await api('/rest/v1/rpc/tf_meu_acesso', { method:'POST', body:{} });
+  if (!a || !a.perfil)
+    throw new Error('Seu login existe, mas você não está na tabela usuarios. É o Passo 3b do guia de instalação.');
+  Object.assign(sessao, {
+    nome:a.nome, email:a.email, perfil:a.perfil, perfil_nome:a.perfil_nome,
+    admin:!!a.admin, modulos:a.modulos || [], executa_em:a.executa_em,
+    usa_gestao:!!a.usa_gestao, usa_campo:!!a.usa_campo
+  });
+  gravar();
+  return a;
+}
+
+/* ── as portas ────────────────────────────────────────────────────────────
+   O ícone é desenhado aqui, sem biblioteca: o hub tem que abrir rápido no
+   celular do inspetor, às vezes com o sinal da obra. */
+const IC_GESTAO = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>';
+const IC_CAMPO  = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3.5 4 6v13l5-2.5 6 3 5-2.5V4l-5 2.5z"/><path d="M9 3.5v13M15 6.5v13"/></svg>';
+
+const PORTAS = [
+  { chave:'manager', href:'manager/', titulo:'Gestão', icone:IC_GESTAO,
+    texto:'Quadros de OS, comercial, compras, propostas, documentos e relatórios.',
+    liberado:s => s.usa_gestao },
+  { chave:'field', href:'field/', titulo:'Campo', icone:IC_CAMPO,
+    texto:'Levantamento e execução no cliente. Funciona sem sinal e envia depois.',
+    liberado:s => s.usa_campo },
+];
+
+let autoIndo = null;
+
+function montar(){
+  const abertas = PORTAS.filter(p => p.liberado(sessao));
+  const cx = document.getElementById('cards');
+  cx.innerHTML = '';
+  abertas.forEach(p => {
+    const a = document.createElement('a');
+    a.className = 'card'; a.href = p.href;
+    a.innerHTML = p.icone + '<b>' + p.titulo + '</b><p>' + p.texto + '</p>'
+                + '<span class="quem">' + (sessao.perfil_nome || sessao.perfil || '') + '</span>';
+    a.addEventListener('click', () => { if (autoIndo){ clearTimeout(autoIndo); autoIndo = null; } });
+    cx.appendChild(a);
+  });
+
+  document.getElementById('semNada').hidden = abertas.length > 0;
+  document.getElementById('perfilCru').textContent = sessao.perfil || '(sem perfil)';
+  document.getElementById('euNome').textContent = sessao.nome || sessao.email || '';
+  document.getElementById('euPerfil').textContent = sessao.perfil_nome || sessao.perfil || '';
+  document.getElementById('quemSou').hidden = false;
+  document.getElementById('ola').textContent =
+    'Olá, ' + String(sessao.nome || '').split(' ')[0] + '.';
+
+  const mods = (sessao.modulos || []).join(', ');
+  document.getElementById('nota').innerHTML = abertas.length
+    ? 'Seu perfil abre <b>' + abertas.map(p => p.titulo).join(' e ') + '</b>'
+      + (mods ? ', com os módulos <code>' + mods + '</code>' : '') + '. '
+      + 'Quem muda isso é o perfil na tabela <code>perfis</code> — não uma versão nova do app.'
+    : '';
+
+  // Uma porta só: não faz sentido obrigar a clicar. Vai, e deixa cancelar.
+  const p = new URLSearchParams(location.search).get('para');
+  const direto = p ? abertas.find(x => x.chave === p) : (abertas.length === 1 ? abertas[0] : null);
+  if (direto){
+    const aviso = document.createElement('p');
+    aviso.className = 'indo';
+    aviso.innerHTML = 'Indo para <b>' + direto.titulo + '</b>… <button class="lnk" id="btFica" '
+                    + 'style="color:var(--accent)">ficar aqui</button>';
+    document.getElementById('corpo').appendChild(aviso);
+    autoIndo = setTimeout(() => { location.href = direto.href; }, 1400);
+    document.getElementById('btFica').addEventListener('click', () => {
+      clearTimeout(autoIndo); autoIndo = null; aviso.remove();
+    });
+  }
+  document.getElementById('corpo').hidden = false;
+  document.getElementById('login').hidden = true;
+}
+
+function telaLogin(recado){
+  // Recado deixado por quem mandou a pessoa para cá (sessão vencida, por
+  // exemplo). Sem isto o time cai numa tela de login sem saber por quê, que
+  // é como "o sistema me derrubou" vira chamado.
+  if (!recado){
+    try{
+      const r = sessionStorage.getItem('tf_recado');
+      if (r){ recado = r; sessionStorage.removeItem('tf_recado'); }
+    }catch(e){}
+  }
+  document.getElementById('corpo').hidden = true;
+  document.getElementById('quemSou').hidden = true;
+  document.getElementById('login').hidden = false;
+  document.getElementById('lgErro').textContent = recado || '';
+  setTimeout(() => { try{ document.getElementById('lgEmail').focus(); }catch(e){} }, 30);
+}
+
+document.getElementById('frm').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const bt = document.getElementById('lgBtn'), er = document.getElementById('lgErro');
+  const email = document.getElementById('lgEmail').value.trim();
+  const senha = document.getElementById('lgSenha').value;
+  if (!email || !senha) return;
+  bt.disabled = true; bt.textContent = 'Entrando…'; er.textContent = '';
+  try{
+    const j = await api('/auth/v1/token?grant_type=password', { method:'POST', body:{ email, password: senha } });
+    sessao.token = j.access_token; sessao.refresh = j.refresh_token || null;
+    await meuAcesso();
+    montar();
+  }catch(e){
+    limpar();
+    er.textContent = /invalid login|credentials|grant/i.test(e.message || '')
+      ? 'E-mail ou senha inválidos.' : (e.message || 'Não deu para entrar.');
+  }finally{
+    bt.disabled = false; bt.textContent = 'Entrar';
+  }
+});
+
+document.getElementById('btSair').addEventListener('click', () => {
+  if (autoIndo){ clearTimeout(autoIndo); autoIndo = null; }
+  limpar(); telaLogin('');
+});
+
+/* ── entrada ──────────────────────────────────────────────────────────── */
+(async function iniciar(){
+  if (DEMO){
+    Object.assign(sessao, { nome:'Fernando (demo)', perfil:'admin', perfil_nome:'Administração',
+      admin:true, modulos:['os','comercial','compras','campo','cadastros','relatorios','documentos'],
+      executa_em:'ambos', usa_gestao:true, usa_campo:true });
+    document.getElementById('subtitulo').textContent =
+      'Modo demonstração — as chaves do Supabase não estão preenchidas neste arquivo.';
+    montar();
+    return;
+  }
+  if (!ler() || !sessao.token){ telaLogin(''); return; }
+  try{
+    await meuAcesso();
+    montar();
+  }catch(e){
+    if (e.status === 401 && await renovar()){
+      try{ await meuAcesso(); montar(); return; }catch(e2){}
+    }
+    limpar();
+    telaLogin(e.status === 401 ? 'Sua sessão expirou. Entre de novo.' : (e.message || ''));
+  }
+})();
+</script>
+</body>
+</html>
