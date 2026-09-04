@@ -3,7 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager</title>
+<title>TapFlow Manager · S10</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all';this.onload=null">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
 <!-- ═══════════════════════════════════════════════════════════════════════════
      TAPFLOW MANAGER — TFM_S3
      Engetap Engenharia · quadros, cadastros, abertura de OS e itens da OS
@@ -28,52 +32,136 @@
      pipeline_tarefas, então nem um bug daqui conseguiria burlar isso.
      ═══════════════════════════════════════════════════════════════════════ -->
 <style>
+/* ════════════════════════════════════════════════════════════════════════════
+   TOKENS — a cor sai da logomarca da Engetap, não de escolha minha.
+   O monograma é um gradiente de #1D4E80 a #2596D5, o texto é #515252 e o
+   subtítulo é #0087CC. Até o S9 o app era verde, que eu tinha inventado.
+   ════════════════════════════════════════════════════════════════════════════ */
 :root{
-  --paper:#EEF1F0; --surface:#FFFFFF; --surface-2:#F5F7F6;
-  --ink:#101A1C; --ink-2:#3B4A4C; --ink-3:#6B7A7B;
-  --rule:#D6DDDB; --rule-2:#E6EBE9;
-  --accent:#0E5D57; --accent-soft:#DCEBE8;
-  --campo:#0E5D57; --campo-soft:#DCEBE8;
+  --accent:#1B6FA9; --accent-hover:#155A8A; --accent-ink:#164C77;
+  --accent-soft:#E3EEF7; --accent-alt:#0087CC;
+  --sidebar-bg:#102438; --sidebar-fg:#9DB2C6; --sidebar-fg-active:#F5F9FC;
+  --sidebar-hover:rgba(255,255,255,.05); --sidebar-active:rgba(255,255,255,.08);
+  --sidebar-group:#6E8399;
+
+  --paper:#F1F3F4; --surface:#FFFFFF; --surface-2:#F7F9FA;
+  --ink:#14181B; --ink-2:#515252; --ink-3:#78838A;
+  --rule:#DBE0E3; --rule-2:#EBEFF1;
+
+  --campo:#1B6FA9;  --campo-soft:#E3EEF7;
   --gestao:#8A5A12; --gestao-soft:#F6EBD9;
-  --crit:#A62D18; --crit-soft:#F7E4DF;
-  --warn:#96601A; --warn-soft:#F8EEDC;
-  --ok:#2A6449; --ok-soft:#DEECE3;
+  --crit:#A62D18;   --crit-soft:#F7E4DF;
+  --warn:#96601A;   --warn-soft:#F8EEDC;
+  --ok:#1E7A42;     --ok-soft:#DFF0E6;
+
+  --nav-w:220px; --header-h:54px;
+  --sans:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
   --shadow:0 1px 2px rgba(16,26,28,.06), 0 6px 18px -12px rgba(16,26,28,.3);
   --sh-lift:0 2px 4px rgba(16,26,28,.08), 0 12px 28px -14px rgba(16,26,28,.42);
+  --t:120ms ease;
 }
+
+/* ── foco visível em todo lugar ────────────────────────────────────────────
+   O PCM tem UM :focus-visible no arquivo inteiro. Quem navega por teclado —
+   ou quem tem o mouse ruim — fica sem saber onde está. Aqui é global. */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+.nav-item:focus-visible{outline-offset:-2px}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   SHELL — barra lateral fixa + header + conteúdo
+   ════════════════════════════════════════════════════════════════════════════ */
+.nav{position:fixed;top:0;left:0;bottom:0;width:var(--nav-w);background:var(--sidebar-bg);
+  color:var(--sidebar-fg);display:flex;flex-direction:column;padding:14px 0 10px;z-index:60;
+  border-right:1px solid rgba(255,255,255,.05)}
+.nav-brand{padding:0 16px 13px;display:flex;align-items:baseline;gap:7px;
+  border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:10px}
+.nav-brand b{font-size:18px;font-weight:700;color:#fff;letter-spacing:-.02em}
+.nav-brand b span{color:var(--accent-alt)}
+.nav-brand .v{font-family:var(--mono);font-size:10.5px;color:var(--sidebar-group);letter-spacing:.04em}
+.nav-groups{display:flex;flex-direction:column;gap:6px;flex:1;overflow-y:auto;overflow-x:hidden}
+.nav-groups::-webkit-scrollbar{width:6px}
+.nav-groups::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:3px}
+.nav-group{display:flex;flex-direction:column}
+.nav-group.fim{margin-top:auto}
+.nav-gtoggle{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:6px;width:100%;
+  cursor:pointer;user-select:none;font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;
+  color:var(--sidebar-group);padding:9px 16px 4px;transition:color var(--t)}
+.nav-gtoggle:hover{color:var(--sidebar-fg-active)}
+.nav-car{display:inline-block;width:9px;font-size:9px;line-height:1;transition:transform var(--t);opacity:.75}
+.nav-group.fechado .nav-car{transform:rotate(-90deg)}
+.nav-gn{margin-left:auto;font-size:9px;opacity:0;transition:opacity var(--t)}
+.nav-group.fechado .nav-gn{opacity:.6}
+/* grupo fechado esconde tudo MENOS onde você está — barra que esconde a sua
+   própria posição troca 4 pixels por desorientação */
+.nav-group.fechado .nav-item:not(.on){display:none}
+
+.nav-item{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:10px;
+  padding:8px 16px;font-size:13px;color:var(--sidebar-fg);cursor:pointer;
+  border-left:2px solid transparent;transition:background var(--t),color var(--t)}
+.nav-item:hover{background:var(--sidebar-hover);color:var(--sidebar-fg-active)}
+.nav-item.on{background:var(--sidebar-active);color:var(--sidebar-fg-active);border-left-color:var(--accent-alt)}
+.nav-item svg{width:16px;height:16px;flex:0 0 auto}
+.nav-item .rot{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav-n{margin-left:auto;background:rgba(255,255,255,.12);color:var(--sidebar-fg-active);
+  font-size:10px;font-weight:700;line-height:1;padding:2px 6px;border-radius:9px;min-width:16px;text-align:center}
+.nav-n:empty{display:none}
+.nav-n.alerta{background:var(--crit);color:#fff}
+
+.app{margin-left:var(--nav-w);min-height:100vh;display:flex;flex-direction:column}
+.topbar{height:var(--header-h);background:var(--surface);border-bottom:1px solid var(--rule);
+  display:flex;align-items:center;gap:12px;padding:0 18px;position:sticky;top:0;z-index:40}
+.crumb{font-family:var(--mono);font-size:12px;color:var(--ink-3);white-space:nowrap}
+.crumb b{color:var(--ink);font-weight:600}
+.topbar .sp{flex:1}
+.tbBusca{width:250px;height:32px;padding:0 10px;font-size:12.5px;background:var(--surface-2);
+  border:1px solid var(--rule);border-radius:4px;outline:none;font-family:inherit;color:var(--ink);
+  transition:border-color var(--t),background var(--t)}
+.tbBusca:focus{border-color:var(--accent);background:var(--surface)}
+.tbBusca::placeholder{color:var(--ink-3)}
+
+/* A regra base vem ANTES da media query: declarada depois, ela vencia por
+   ordem de cascata e o botão do menu ficava invisível também no celular. */
+.navBurger{display:none;align-items:center;justify-content:center;width:32px;height:32px;
+  border:1px solid var(--rule);background:var(--surface);border-radius:4px;cursor:pointer;font-size:15px}
+
+@media (max-width:900px){
+  :root{--nav-w:0px}
+  .nav{transform:translateX(-100%);transition:transform .2s;width:220px;box-shadow:var(--sh-lift)}
+  body.navAberta .nav{transform:none}
+  body.navAberta .navScrim{display:block}
+  .navScrim{display:none;position:fixed;inset:0;background:rgba(16,26,28,.4);z-index:55}
+  .navBurger{display:flex}
+  .app{margin-left:0}
+  .tbBusca{width:auto;flex:1;min-width:90px}
+  .topbar{gap:8px;padding:0 10px}
+  .crumb{display:none}
+  .who{display:none}
+  #btnRefresh{display:none}          /* puxar para recarregar já existe no navegador */
+  #connTxt{display:none}             /* o ponto continua: é o sinal, o texto é enfeite */
+  #btnNovaOS{padding:6px 9px;font-size:12px}
+  .tela{padding-bottom:24px}
+  main{padding:12px 10px}
+}
+
 *{box-sizing:border-box}
 /* `hidden` tem que vencer o display dos elementos abaixo — sem isto o overlay
    de login continua na frente do app mesmo com o atributo hidden. */
 [hidden]{display:none !important}
 html,body{height:100%}
+/* A gaveta fechada fica em translateX(100%): a caixa continua existindo fora da
+   tela e esticava a largura rolável em 390px. Cortar aqui é mais barato do que
+   animar `right`, que dispara layout a cada quadro. */
+html{overflow-x:hidden}
 body{
   margin:0; background:var(--paper); color:var(--ink);
-  font-family:"IBM Plex Sans Condensed",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  font-size:15px; -webkit-font-smoothing:antialiased;
-  display:flex; flex-direction:column; overflow:hidden;
+  font-family:var(--sans); font-size:13px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
 }
 button{font:inherit;color:inherit;cursor:pointer}
-.mono{font-family:ui-monospace,Menlo,Consolas,"Liberation Mono",monospace}
+.mono{font-family:var(--mono)}
 
 /* ── topo ─────────────────────────────────────────── */
-header{
-  flex:0 0 auto; background:var(--surface); border-bottom:1px solid var(--rule);
-  padding:10px 16px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
-}
-.brand{font-size:19px;font-weight:700;letter-spacing:-.02em;line-height:1}
-.brand span{color:var(--accent)}
-.ver{font-size:10.5px;color:var(--ink-3);letter-spacing:.08em;margin-left:2px}
-
-.switch{display:flex;border:1px solid var(--rule);border-radius:3px;overflow:hidden}
-.switch button{
-  background:var(--surface); border:0; padding:7px 15px; font-size:13px; font-weight:600;
-  color:var(--ink-3); border-right:1px solid var(--rule); white-space:nowrap;
-}
-.switch button:last-child{border-right:0}
-.switch button.on{background:var(--accent);color:#fff}
-.switch button .n{opacity:.65;font-weight:400;margin-left:5px}
-
-.spacer{flex:1}
 .conn{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-2)}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--ink-3);flex:0 0 auto}
 .dot.ok{background:var(--ok)} .dot.off{background:var(--crit)}
@@ -91,13 +179,19 @@ header{
 .who b{color:var(--ink);font-weight:600}
 
 .demo{
-  flex:0 0 auto;background:var(--warn-soft);color:var(--warn);
-  padding:6px 16px;font-size:12.5px;font-weight:600;border-bottom:1px solid var(--rule);
+  background:var(--warn-soft);color:var(--warn);
+  padding:6px 18px;font-size:12.5px;font-weight:600;border-bottom:1px solid var(--rule);
 }
 
 /* ── quadro ───────────────────────────────────────── */
-main{flex:1;overflow-x:auto;overflow-y:hidden;padding:14px}
-.board{display:flex;gap:10px;height:100%;align-items:stretch;min-width:min-content}
+/* O quadro kanban rola na horizontal; as telas de lista rolam na vertical.
+   Por isso a altura é calculada, não 100%: com `height:100%` numa página que
+   agora rola, o quadro ficava com a altura da janela e as colunas cortadas. */
+main{flex:1;overflow-x:auto;padding:16px 18px;min-height:calc(100vh - var(--header-h))}
+main.rolaY{overflow-y:auto}
+.board{display:flex;gap:10px;align-items:stretch;min-width:min-content;
+  height:calc(100vh - var(--header-h) - 32px)}
+.board.livre{display:block;height:auto;min-width:0}
 .col{
   flex:0 0 264px; display:flex; flex-direction:column; height:100%;
   background:var(--surface-2); border:1px solid var(--rule); border-radius:4px;
@@ -297,7 +391,7 @@ button.mini{padding:6px 12px;font-weight:600}
 .linhaCot.vencida{opacity:.6}
 .linhaCompra{grid-template-columns:1fr auto}
 .linhaCompra.atrasado{border-left:3px solid var(--crit);background:var(--crit-soft)}
-.linhaCompra\.chega-logo,.linhaCompra.chega-logo{border-left:3px solid var(--warn)}
+.linhaCompra.chega-logo{border-left:3px solid var(--warn)}
 .linhaCompra.recebido{opacity:.55}
 .linhaCompra .dt{font-size:11.5px;color:var(--ink-3);text-align:right;line-height:1.35}
 .linhaCompra .dt b{font-size:13px;color:var(--ink);display:inline}
@@ -423,6 +517,135 @@ button.mini{padding:6px 12px;font-weight:600}
 .m-f{padding:12px 16px;border-top:1px solid var(--rule);background:var(--surface-2);
   display:flex;gap:8px;justify-content:flex-end}
 
+/* ── TF · motor de tabela ─────────────────────────── */
+.tfWrap{border:1px solid var(--rule);border-radius:5px;overflow:auto;background:var(--surface);
+  max-height:calc(100vh - var(--header-h) - 200px)}
+.tfTab{width:100%;border-collapse:collapse}
+.tfTab thead th{position:sticky;top:0;z-index:5;background:var(--surface-2);padding:0;
+  border-bottom:1px solid var(--rule);white-space:nowrap;text-align:left}
+.tfTab thead th.num{text-align:right}
+.tfTh{display:flex;align-items:center;gap:5px;width:100%;padding:8px 11px;background:none;
+  border:0;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--ink-3);transition:background var(--t),color var(--t);text-align:left;font-family:inherit}
+.tfTh:hover{background:var(--rule-2);color:var(--ink)}
+th.num .tfTh{justify-content:flex-end}
+.tfOrd{font-size:8px;color:var(--accent)}
+.tfFun{font-size:10px;opacity:.35;margin-left:auto}
+th.num .tfFun{margin-left:4px}
+.tfTh:hover .tfFun{opacity:.8}
+th.filtrada .tfTh{color:var(--accent)}
+th.filtrada .tfFun{opacity:1}
+.tfTab td{padding:7px 11px;border-bottom:1px solid var(--rule-2);vertical-align:top;font-size:12.5px}
+.tfTab td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.tfTab tbody tr:nth-child(even) td{background:var(--surface-2)}
+.tfTab tbody tr:hover td{background:var(--accent-soft)}
+.tfTab tbody tr.clicavel{cursor:pointer}
+.tfTab tbody tr.atrasada td:first-child{box-shadow:inset 3px 0 0 var(--crit)}
+.tfTab tbody tr:last-child td{border-bottom:0}
+
+.tfRodape{display:flex;align-items:center;gap:12px;padding:9px 2px 2px;flex-wrap:wrap}
+.tfConta{font-size:12px;color:var(--ink-3);font-family:var(--mono)}
+.tfConta b{color:var(--ink)}
+.tfPag{display:flex;gap:3px;margin-left:auto;align-items:center;flex-wrap:wrap}
+.tfPag button{min-width:28px;height:28px;border:1px solid var(--rule);background:var(--surface);
+  border-radius:4px;font-size:12px;color:var(--ink-2);font-family:var(--mono);padding:0 6px}
+.tfPag button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.tfPag button.atual{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.tfPag button:disabled{opacity:.35;cursor:default}
+.tfEl{color:var(--ink-3);padding:0 2px}
+
+/* `.tog` e `.chk` eram usadas pelo gerador de proposta e nunca existiram no
+   CSS: os dois botões saíam nus, sem indicar qual estava escolhido. */
+.tog{display:flex;gap:7px;flex-wrap:wrap}
+.tog button{flex:1;min-width:110px;padding:8px 10px;border:1px solid var(--rule);
+  background:var(--surface);border-radius:4px;font-size:12.5px;font-weight:600;
+  color:var(--ink-2);font-family:inherit;transition:all var(--t)}
+.tog button:hover{border-color:var(--accent);color:var(--accent)}
+.tog button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.check{display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid var(--rule);
+  border-radius:4px;font-size:13px;background:var(--surface);cursor:pointer;margin-bottom:9px}
+.check input{width:18px;height:18px;flex:0 0 auto;accent-color:var(--accent)}
+
+.tfChips{display:none;gap:6px;align-items:center;flex-wrap:wrap;padding:0 0 9px}
+.tfChips.on{display:flex}
+.tfChip{display:inline-flex;align-items:center;gap:6px;background:var(--accent-soft);
+  border:1px solid transparent;color:var(--accent-ink);border-radius:99px;padding:3px 10px;
+  font-size:11.5px;font-weight:600}
+.tfChip button{border:0;background:none;color:inherit;font-size:13px;line-height:1;padding:0}
+.tfLimpa{border:0;background:none;color:var(--crit);font-size:11.5px;font-weight:700;
+  font-family:inherit;text-decoration:underline;padding:0}
+
+.vazio2{text-align:center;padding:34px 18px;color:var(--ink-3)}
+.vazio2 b{display:block;font-size:14.5px;color:var(--ink-2);margin-bottom:5px}
+.vazio2 p{font-size:12.5px;margin:0;line-height:1.5}
+
+.tfMenu{position:fixed;z-index:200;background:var(--surface);border:1px solid var(--rule);
+  border-radius:6px;box-shadow:var(--sh-lift);width:250px;display:flex;flex-direction:column;overflow:hidden}
+.tfmOrd{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--rule-2)}
+.tfmOrd button{flex:1;border:1px solid var(--rule);background:var(--surface);border-radius:4px;
+  padding:5px;font-size:11.5px;color:var(--ink-2);font-family:inherit}
+.tfmOrd button:hover{border-color:var(--accent);color:var(--accent)}
+.tfmB{padding:8px 10px 4px}
+.tfmB input{width:100%;background:var(--surface-2);border:1px solid var(--rule);border-radius:4px;
+  padding:6px 9px;font-size:12px;font-family:inherit;outline:none}
+.tfmB input:focus{border-color:var(--accent);background:var(--surface)}
+.tfmLista{max-height:230px;overflow:auto;padding:4px 0}
+.tfmItem{display:flex;align-items:center;gap:8px;padding:4px 11px;font-size:12px;cursor:pointer}
+.tfmItem:hover{background:var(--surface-2)}
+.tfmItem input{accent-color:var(--accent);flex:0 0 auto}
+.tfmItem span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tfmItem i{font-style:normal;font-size:10px;color:var(--ink-3);font-family:var(--mono)}
+.tfmMais{font-size:11px;color:var(--ink-3);padding:6px 11px;margin:0}
+.tfmPe{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--rule-2)}
+.tfmPe button{flex:1;border:1px solid var(--rule);background:var(--surface);border-radius:4px;
+  padding:5px;font-size:11.5px;color:var(--ink-2);font-family:inherit}
+.tfmPe button.pri{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+
+.fitaBusca{flex:0 0 auto;align-self:flex-start;background:var(--accent-soft);
+  color:var(--accent-ink);font-size:12px;font-weight:600;padding:5px 11px;border-radius:4px;
+  margin-bottom:8px;position:absolute}
+.conta{font-size:11.5px;font-weight:400;color:var(--ink-3);font-family:var(--mono);margin-left:6px}
+.linhaCli.incompleto b::after{content:' · cadastro incompleto';font-size:10.5px;
+  font-weight:600;color:var(--warn)}
+
+/* ── telas de lista e relatório ───────────────────── */
+.tela{max-width:1180px;min-width:0;padding-bottom:34px}
+.board.livre{min-width:0;max-width:100%}
+.telaCab{margin-bottom:16px}
+.telaCab h2{font-size:19px;font-weight:700;margin:0 0 3px;letter-spacing:-.01em}
+.telaCab p{font-size:13px;color:var(--ink-3);margin:0;line-height:1.5}
+.forte{font-weight:700;color:var(--accent-ink)}
+.btn.ocupado{opacity:.7;cursor:progress}
+
+.relTipos{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:9px;margin-bottom:15px}
+.relTipo{text-align:left;background:var(--surface);border:1px solid var(--rule);border-radius:6px;
+  padding:11px 13px;transition:border-color var(--t),background var(--t)}
+.relTipo:hover{border-color:var(--accent)}
+.relTipo.on{border-color:var(--accent);background:var(--accent-soft)}
+.relTipo b{display:block;font-size:14px;font-weight:600;color:var(--ink)}
+.relTipo.on b{color:var(--accent-ink)}
+.relTipo span{display:block;font-size:11.5px;color:var(--ink-3);margin-top:2px;line-height:1.4}
+
+.relBarra{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--surface);
+  border:1px solid var(--rule);border-radius:6px;padding:10px 12px;margin-bottom:16px}
+.relBarra .rot{font-size:12px;color:var(--ink-3)}
+.relBarra input[type=date]{height:30px;padding:0 7px;font-size:12.5px;border:1px solid var(--rule);
+  border-radius:4px;background:var(--surface);font-family:inherit;color:var(--ink)}
+.btn.sm{padding:4px 10px;font-size:11.5px}
+.relSaidas{display:inline-flex;gap:8px;flex:0 0 auto}
+
+.relKpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin-bottom:18px}
+.relKpi{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:12px 13px}
+.relKpi b{display:block;font-size:21px;font-weight:700;color:var(--accent-ink);
+  font-family:var(--mono);letter-spacing:-.02em;line-height:1.15}
+.relKpi span{display:block;font-size:11.5px;color:var(--ink-3);margin-top:3px;line-height:1.35}
+.relBloco{margin-bottom:22px}
+.relBloco h3{font-size:14px;font-weight:600;margin:0 0 5px}
+.relBloco .nota{margin:0 0 8px}
+.tfThFixo{display:block;padding:8px 11px;font-size:10px;font-weight:700;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--ink-3)}
+th.num .tfThFixo{text-align:right}
+
 /* ── login ────────────────────────────────────────── */
 .login{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;justify-content:center;z-index:10;padding:20px}
 .login .box{background:var(--surface);border:1px solid var(--rule);border-radius:5px;padding:26px;width:min(360px,100%);box-shadow:var(--sh-lift)}
@@ -437,7 +660,7 @@ button.mini{padding:6px 12px;font-weight:600}
 
 @media (max-width:640px){
   header{padding:8px 11px;gap:9px}
-  .brand{font-size:17px}
+
   main{padding:9px}
   .col{flex-basis:246px}
   .who{display:none}
@@ -446,39 +669,38 @@ button.mini{padding:6px 12px;font-weight:600}
 </head>
 <body>
 
-<header>
-  <div>
-    <div class="brand">Tap<span>Flow</span></div>
-    <div class="ver mono" id="verBadge">MANAGER</div>
+<aside class="nav" id="nav" aria-label="Navegação principal">
+  <div class="nav-brand">
+    <b>Tap<span>Flow</span></b>
+    <span class="v" id="verBadge">MANAGER</span>
+  </div>
+  <nav class="nav-groups" id="navGroups"></nav>
+</aside>
+<div class="navScrim" id="navScrim"></div>
+
+<div class="app">
+  <header class="topbar">
+    <button class="navBurger" id="navBurger" aria-label="Abrir o menu">☰</button>
+    <div class="crumb"><span id="crumbGrupo">TapFlow</span> <span style="opacity:.4">/</span> <b id="crumbAtual">Campo</b></div>
+    <div class="sp"></div>
+    <input type="search" class="tbBusca" id="tbBusca" placeholder="Buscar nesta tela…"
+           autocomplete="off" name="tf_busca_nofill" data-lpignore="true" data-1p-ignore
+           readonly onfocus="this.removeAttribute('readonly')" aria-label="Buscar nesta tela">
+    <button class="btn pri" id="btnNovaOS">+ Nova OS</button>
+    <div class="conn"><span class="dot" id="dot"></span><span id="connTxt">—</span></div>
+    <span class="who" id="who"></span>
+    <button class="btn" id="btnRefresh" title="Recarregar os dados">Atualizar</button>
+  </header>
+
+  <div class="demo" id="demoBar" hidden>
+    MODO DEMO — dados de exemplo. Preencha SUPABASE_URL no topo do arquivo para ligar no banco real.
   </div>
 
-  <div class="switch" id="sw">
-    <button data-q="com">Comercial</button>
-    <button data-q="campo"  class="on">Campo <span class="n" id="nCampo">0</span></button>
-    <button data-q="adm">Gestão <span class="n" id="nAdm">0</span></button>
-    <button data-q="cad">Cadastros</button>
-    <button data-q="cpr">Compras</button>
-    <button data-q="cat">Catálogo</button>
-    <button data-q="cfg">Configurações</button>
-  </div>
-
-  <button class="btn pri" id="btnNovaOS">+ Nova OS</button>
-
-  <div class="spacer"></div>
-
-  <div class="conn"><span class="dot" id="dot"></span><span id="connTxt">—</span></div>
-  <span class="who" id="who"></span>
-  <button class="btn" id="btnRefresh">Atualizar</button>
-</header>
-
-<div class="demo" id="demoBar" hidden>
-  MODO DEMO — dados de exemplo. Preencha SUPABASE_URL no topo do arquivo para ligar no banco real.
+  <main><div class="board" id="board"></div></main>
 </div>
 
-<main><div class="board" id="board"></div></main>
-
 <div class="scrim" id="scrim"></div>
-<aside class="drawer" id="drawer" aria-label="Detalhe da OS">
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="dCli">
   <div class="d-h">
     <div>
       <div class="num mono" id="dNum"></div>
@@ -498,10 +720,10 @@ button.mini{padding:6px 12px;font-weight:600}
   <div class="acoes" id="dAcoes"></div>
 </aside>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <div class="mScrim" id="mScrim" hidden></div>
-<div class="modal" id="modal" hidden>
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="mTit" hidden>
   <div class="m-h"><h3 id="mTit"></h3><button class="x" id="mX" aria-label="Fechar">&times;</button></div>
   <div class="m-b" id="mBody"></div>
   <div class="m-f" id="mFoot"></div>
@@ -534,7 +756,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S9';
+const APP_VERSION = 'S10';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -648,7 +870,11 @@ async function req(caminho, opts = {}, tentativas = 2){
       const transitorio = ehTimeout(e) || !e.negocio && (
         /Failed to fetch|NetworkError|Load failed/i.test(e.message) ||
         /devolveu HTML/.test(e.message) || /^HTTP 5\d\d$/.test(e.message));
-      if (!transitorio || i === tentativas){
+      // ESCRITA NÃO SE REPETE SOZINHA. Um POST que chegou ao servidor e estourou
+      // o prazo do cliente já foi commitado lá: o AbortSignal aborta o navegador,
+      // não desfaz a transação no banco. Reenviar cria o segundo registro — e só
+      // `tf_abrir_os` e o envio de arquivo mandam `client_uid` para se defender.
+      if (!transitorio || i === tentativas || (escrita && !opts.idempotente)){
         if (transitorio) falhaDeRede(ultimo);
         throw ultimo;
       }
@@ -659,7 +885,11 @@ async function req(caminho, opts = {}, tentativas = 2){
 }
 
 const get  = (q)      => req('/rest/v1/' + q);
-const rpc  = (f, p)   => req('/rest/v1/rpc/' + f, { method:'POST', body: JSON.stringify(p||{}) });
+/* `p_client_uid` é a chave de idempotência: o banco recusa o segundo envio com
+   o mesmo uid, então ESSAS podem ser retentadas. As outras, não. */
+const rpc  = (f, p)   => req('/rest/v1/rpc/' + f,
+  { method:'POST', body: JSON.stringify(p||{}),
+    idempotente: !!(p && (p.p_client_uid || p.p_uid)) });
 const post = (t, o)   => req('/rest/v1/' + t, { method:'POST', body: JSON.stringify(o),
                              headers:{ Prefer:'return=representation' } });
 const patch= (t, f, o)=> req('/rest/v1/' + t + '?' + f, { method:'PATCH', body: JSON.stringify(o),
@@ -753,8 +983,9 @@ async function entrar(email, senha){
 // DADOS
 // ════════════════════════════════════════════════════════════════════════════
 let cards = [];      // linhas de v_os_kanban
+let falhaCarga = null;   // motivo do último erro, para a tela vazia não mentir
 let quadro = 'campo';
-let visao  = 'quadro';   // 'quadro' | 'cad'
+let visao  = 'campo';    // a chave do item de menu — ver NAV
 let abaDrawer = 'tarefas';
 let cadSel = null;       // cliente selecionado nos cadastros
 let osAberta = null; // { card, tarefas }
@@ -765,12 +996,16 @@ async function carregar(opt){
   if (!opt.silencioso) setConn('sync','Carregando…');
   try{
     cards = await get('v_os_kanban?select=*&order=coluna_ordem,numero');
+    falhaCarga = null;
     pararRecon();
     setConn('ok','Conectado');
-    if (visao === 'quadro') pintar();
+    if (visao === 'campo' || visao === 'adm') pintar();
   }catch(e){
-    if (e.negocio){ setConn('off','Erro'); toast(e.message, 'err'); }
-    pintar();
+    // Guarda o MOTIVO: quadro vazio por erro não pode ser desenhado como
+    // "nada para fazer". Foi assim que um "JWT expired" virou susto.
+    falhaCarga = e.message || 'não deu para carregar';
+    if (e.negocio && !e.sessaoMorta){ setConn('off','Erro'); toast(e.message, 'err'); }
+    if (visao === 'campo' || visao === 'adm') pintar();
     throw e;
   }
 }
@@ -783,7 +1018,11 @@ async function carregar(opt){
 // ════════════════════════════════════════════════════════════════════════════
 
 function pintar(){
-  const doQuadro = cards.filter(c => c.coluna && (c.quadro === quadro || c.quadro === 'ambos'));
+  const noQuadro = cards.filter(c => c.coluna && (c.quadro === quadro || c.quadro === 'ambos'));
+  const q = BUSCA[quadro] || '';
+  const doQuadro = !q ? noQuadro : noQuadro.filter(c => casa(
+    [c.numero, c.cliente, c.coluna, c.tarefa_atual, c.descricao].join(' '), q));
+
   document.getElementById('nCampo').textContent =
     cards.filter(c => c.coluna && (c.quadro === 'campo' || c.quadro === 'ambos')).length;
   document.getElementById('nAdm').textContent =
@@ -792,12 +1031,33 @@ function pintar(){
   const board = document.getElementById('board');
   board.innerHTML = '';
 
+  // Lista vazia por ERRO não pode ser desenhada como "nada para fazer" — foi
+  // assim que um "JWT expired" virou susto de perda de dados.
+  if (!noQuadro.length && falhaCarga){
+    board.innerHTML = '<div class="vazio"><h3>Não deu para carregar o quadro</h3><p class="mt"></p>'
+      + '<button class="btn" id="bRetentar" style="margin-top:14px">Tentar de novo</button></div>';
+    board.querySelector('.mt').textContent = falhaCarga
+      + ' — isto NÃO quer dizer que não há OS abertas.';
+    document.getElementById('bRetentar').addEventListener('click',
+      () => carregar().catch(()=>{}));
+    return;
+  }
+
   if (!doQuadro.length){
-    board.innerHTML =
-      '<div class="vazio"><h3>Nenhuma OS neste quadro</h3>' +
-      '<p>' + (quadro === 'campo'
-        ? 'Nada depende do campo agora. Veja o quadro da gestão.'
-        : 'Nada parado no escritório. Veja o quadro do campo.') + '</p></div>';
+    board.innerHTML = q
+      ? '<div class="vazio"><h3>Nenhuma OS com essa busca</h3><p class="mt2"></p>'
+        + '<button class="btn" id="bLimpaB" style="margin-top:14px">Limpar a busca</button></div>'
+      : '<div class="vazio"><h3>Nenhuma OS neste quadro</h3>' +
+        '<p>' + (quadro === 'campo'
+          ? 'Nada depende do campo agora. Veja o quadro da gestão.'
+          : 'Nada parado no escritório. Veja o quadro do campo.') + '</p></div>';
+    if (q){
+      board.querySelector('.mt2').textContent =
+        noQuadro.length + ' OS neste quadro não casam com "' + q + '".';
+      document.getElementById('bLimpaB').addEventListener('click', () => {
+        BUSCA[quadro] = ''; document.getElementById('tbBusca').value = ''; pintar();
+      });
+    }
     return;
   }
 
@@ -813,6 +1073,13 @@ function pintar(){
     mapa.get(c.coluna).itens.push(c);
   });
   const colunas = [...mapa.entries()].sort((a,b) => a[1].ordem - b[1].ordem);
+
+  if (q){
+    const fita = document.createElement('div');
+    fita.className = 'fitaBusca';
+    fita.textContent = doQuadro.length + ' de ' + noQuadro.length + ' OS batem com "' + q + '"';
+    board.appendChild(fita);
+  }
 
   colunas.forEach(([nome, dados]) => {
     const col = document.createElement('div');
@@ -917,10 +1184,25 @@ function fecharDrawer(){
   document.getElementById('drawer').classList.remove('on');
   document.getElementById('scrim').classList.remove('on');
   osAberta = null;
+  // sem isto, o último negócio continuava vivo e ressuscitava quando alguém
+  // clicava numa aba que sobrou de outra tela
+  negAberto = null;
 }
 document.getElementById('dClose').addEventListener('click', fecharDrawer);
 document.getElementById('scrim').addEventListener('click', fecharDrawer);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharDrawer(); });
+/* Escape resolve por prioridade, de cima para baixo. Antes ele fechava sempre a
+   gaveta: com o modal aberto, fechava a gaveta invisível por baixo e deixava o
+   modal na tela; e digitando uma anotação, fechava a gaveta e perdia o texto. */
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (_tfMenuEl){ tfFecharMenu(); return; }
+  const modal = document.getElementById('modal');
+  if (modal && !modal.hidden){ fecharModal(); return; }
+  const a = document.activeElement;
+  if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')
+      && a.closest('#drawer')){ a.blur(); return; }   // primeiro Esc sai do campo
+  fecharDrawer();
+});
 
 async function abrirOS(c){
   document.getElementById('dNum').textContent = c.numero;
@@ -931,8 +1213,7 @@ async function abrirOS(c){
   document.getElementById('dAcoes').innerHTML = '';
   document.getElementById('drawer').classList.add('on');
   document.getElementById('scrim').classList.add('on');
-  [...document.querySelectorAll('#dTabs button')].forEach(x =>
-    x.classList.toggle('on', x.dataset.t === abaDrawer));
+  montarTabsOS();
 
   let tarefas;
   try{
@@ -944,6 +1225,16 @@ async function abrirOS(c){
 
   osAberta = { card:c, tarefas };
   pintarDrawer();
+}
+
+/** As abas da OS. Precisa ser função porque a gaveta é compartilhada com o
+ *  Comercial, que troca o conteúdo do #dTabs pelas abas dele. */
+function montarTabsOS(){
+  const t = document.getElementById('dTabs');
+  t.innerHTML = [['tarefas','Tarefas'],['itens','Itens'],['proposta','Proposta'],
+                 ['custos','Custos'],['arquivos','Arquivos']]
+    .map(([k,r]) => '<button type="button" data-t="' + k + '"'
+      + (abaDrawer === k ? ' class="on"' : '') + '>' + r + '</button>').join('');
 }
 
 function pintarDrawer(){
@@ -1303,7 +1594,19 @@ function carregarJsPDF(){
   return _jspdf;
 }
 
-const dataBR = d => (d ? new Date(d) : new Date()).toLocaleDateString('pt-BR');
+/* `new Date('2026-09-04')` é meia-noite UTC; em Brasília isso é 03/09 às 21h, e
+   a data saía um dia atrás no PDF, na planilha e na tela. Data pura ganha meio-dia
+   antes de virar Date; timestamp com hora passa direto. */
+const dataBR = d => {
+  if (!d) return new Date().toLocaleDateString('pt-BR');
+  const t = String(d);
+  return new Date(/^\d{4}-\d{2}-\d{2}$/.test(t) ? t + 'T12:00' : t).toLocaleDateString('pt-BR');
+};
+/* E o contrário: "hoje" em ISO. `toISOString()` depois das 21h já virou o dia
+   seguinte, e o período do relatório terminava amanhã. */
+const isoHoje = (d) => { const x = d || new Date();
+  return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0')
+       + '-' + String(x.getDate()).padStart(2,'0'); };
 
 /**
  * Gera o PDF da OS.
@@ -2037,13 +2340,25 @@ async function pintarProposta(){
   document.getElementById('dAcoes').innerHTML = '';
   body.innerHTML = '<p style="color:var(--ink-3);font-size:13px">Carregando…</p>';
 
-  let props = [];
+  let props = [], falhouProp = null;
   try{
     props = DEMO ? (demoPropostas(card.os_id) || [])
       : await get('v_propostas?select=*&os_id=eq.' + card.os_id + '&order=versao.desc');
-  }catch(e){ /* segue com a lista vazia */ }
+  }catch(e){
+    // "não consegui ler" ≠ "não existe". Sem esta distinção, alguém emite a
+    // segunda proposta achando que a primeira nunca saiu.
+    falhouProp = e.message;
+  }
 
   body.innerHTML = '';
+  if (falhouProp){
+    const w = document.createElement('div');
+    w.className = 'vazio2'; w.style.cssText = 'padding:18px 10px;text-align:left';
+    w.innerHTML = '<b>Não deu para ler as propostas desta OS</b><p class="mt"></p>';
+    w.querySelector('.mt').textContent = falhouProp
+      + ' — pode existir proposta emitida que não está aparecendo aqui.';
+    body.appendChild(w);
+  }
   if (props.length){
     const w = document.createElement('div'); w.style.marginBottom = '18px';
     w.innerHTML = '<div style="overflow-x:auto"><table class="tbl"><thead><tr>'
@@ -2155,12 +2470,12 @@ async function pintarArquivos(){
   document.getElementById('dAcoes').innerHTML = '';
   body.innerHTML = '<p style="color:var(--ink-3);font-size:13px">Carregando…</p>';
 
-  let anexos = [];
+  let anexos = [], falhouAnx = null;
   try{
     anexos = DEMO ? (demoAnexos(card.os_id) || [])
       : await get('anexos?select=id,categoria,nome,drive_url,criado_em,bytes'
                   + '&os_id=eq.' + card.os_id + '&ativo=eq.true&order=criado_em.desc');
-  }catch(e){ /* segue vazio */ }
+  }catch(e){ falhouAnx = e.message; }
 
   body.innerHTML = '';
 
@@ -2211,10 +2526,16 @@ async function pintarArquivos(){
 
   if (!anexos.length){
     const p2 = document.createElement('p');
-    p2.style.cssText = 'font-size:13px;color:var(--ink-3);margin:0;line-height:1.5';
-    p2.textContent = driveLigado()
-      ? 'Nada ainda. As fotos do campo e os PDFs aparecem aqui assim que subirem.'
-      : 'O Google Drive ainda não foi configurado — veja o Passo 8 do guia de instalação.';
+    p2.style.cssText = 'font-size:13px;margin:0;line-height:1.5;color:'
+      + (falhouAnx ? 'var(--crit)' : 'var(--ink-3)');
+    // pasta que parece vazia porque a leitura falhou é pior do que pasta vazia:
+    // a pessoa reenvia a foto que já estava lá
+    p2.textContent = falhouAnx
+      ? 'Não deu para listar os arquivos: ' + falhouAnx
+        + ' — pode haver arquivo no Drive que não está aparecendo aqui.'
+      : (driveLigado()
+        ? 'Nada ainda. As fotos do campo e os PDFs aparecem aqui assim que subirem.'
+        : 'O Google Drive ainda não foi configurado — veja o Passo 8 do guia de instalação.');
     body.appendChild(p2);
     return;
   }
@@ -2238,7 +2559,9 @@ async function pintarArquivos(){
 // ════════════════════════════════════════════════════════════════════════════
 // MODAL
 // ════════════════════════════════════════════════════════════════════════════
+let _focoAntesDoModal = null;
 function abrirModal(titulo, corpoHtml, botoes){
+  _focoAntesDoModal = document.activeElement;
   document.getElementById('mTit').textContent = titulo;
   document.getElementById('mBody').innerHTML = corpoHtml;
   const f = document.getElementById('mFoot'); f.innerHTML = '';
@@ -2246,15 +2569,27 @@ function abrirModal(titulo, corpoHtml, botoes){
     const el = document.createElement('button');
     el.className = 'btn' + (b.pri ? ' pri' : '');
     el.textContent = b.label;
-    el.addEventListener('click', () => b.onClick(el));
+    // toda ação de modal passa pela trava de duplo envio: modal é onde se grava
+    el.addEventListener('click', () => _semDuploEnvio_(el, () => b.onClick(el)));
     f.appendChild(el);
   });
   document.getElementById('mScrim').hidden = false;
   document.getElementById('modal').hidden = false;
+  // foco no primeiro campo: quem chega de teclado não deveria ter que caçar
+  requestAnimationFrame(() => {
+    const alvo = document.querySelector('#mBody input,#mBody select,#mBody textarea')
+              || document.querySelector('#mFoot .btn');
+    if (alvo) alvo.focus();
+  });
 }
 function fecharModal(){
   document.getElementById('mScrim').hidden = true;
   document.getElementById('modal').hidden = true;
+  // devolve o foco a quem abriu — sem isto ele volta para o começo da página
+  if (_focoAntesDoModal && document.body.contains(_focoAntesDoModal)){
+    try{ _focoAntesDoModal.focus(); }catch(e){}
+  }
+  _focoAntesDoModal = null;
 }
 
 async function modalNovaOS(){
@@ -2263,7 +2598,7 @@ async function modalNovaOS(){
   catch(e){ toast(e.message,'err'); return; }
   if (!clientes.length){
     toast('Cadastre um cliente antes de abrir OS.','err');
-    document.querySelector('#sw button[data-q="cad"]').click();
+    irPara('cad');
     return;
   }
   abrirModal('Nova ordem de serviço',
@@ -2278,7 +2613,7 @@ async function modalNovaOS(){
       'a OS aparece no quadro do campo, esperando um inspetor aceitar.</p>',
     [{ label:'Cancelar', onClick: fecharModal },
      { label:'Abrir OS', pri:true, onClick: async (btn) => {
-        btn.disabled = true;
+        // o disabled e o texto "Processando…" agora são do _semDuploEnvio_
         try{
           const r = DEMO
             ? demoNovaOS(document.getElementById('oC').value, document.getElementById('oD').value)
@@ -2290,11 +2625,9 @@ async function modalNovaOS(){
               });
           fecharModal();
           toast('OS ' + r.numero + ' aberta.', 'ok');
-          quadro = 'campo'; visao = 'quadro';
-          [...document.querySelectorAll('#sw button')].forEach(x =>
-            x.classList.toggle('on', x.dataset.q === 'campo'));
           await carregar();
-        }catch(e){ toast(e.message,'err'); btn.disabled = false; }
+          irPara('campo');
+        }catch(e){ toast(e.message,'err'); }
      }}]);
 }
 
@@ -2693,13 +3026,13 @@ async function pintarCustos(){
         + (q.escolhida ? ' · escolhida' : '');
       el.querySelector('.vl').textContent = BRL(q.total_estimado);
       const bt = el.querySelector('.btn');
-      if (bt) bt.addEventListener('click', async () => {
+      if (bt) bt.addEventListener('click', () => _semDuploEnvio_(bt, async () => {
         try{
           if (!DEMO) await rpc('tf_escolher_cotacao', { p_cotacao_id: q.id });
           toast('Cotação escolhida — custo e prazo do item preenchidos.','ok');
           pintarCustos();
         }catch(e){ toast(e.message,'err'); }
-      });
+      }));
       box.appendChild(el);
     });
     QL.appendChild(box);
@@ -2754,7 +3087,6 @@ async function pintarCustos(){
 // COMPRAS — a lista que substitui "acompanhar de memória"
 // ════════════════════════════════════════════════════════════════════════════
 async function pintarCompras(){
-  visao = 'cpr';
   const board = document.getElementById('board');
   board.innerHTML = '<div class="comWrap"><div class="barraCom">'
     + '<b style="font-size:15px">Compras em andamento</b>'
@@ -2762,26 +3094,52 @@ async function pintarCompras(){
     + '<div class="comBoard" style="overflow:auto"><div id="cprLista" '
     + 'style="max-width:1000px;padding-bottom:30px"></div></div></div>';
 
-  let itens = [];
-  try{ itens = DEMO ? demoCompras() : await get('v_compras?select=*'); }
+  let todos = [];
+  try{ todos = DEMO ? demoCompras() : await get('v_compras?select=*'); }
   catch(e){ toast(e.message,'err'); return; }
 
+  REPINTA.cpr = () => desenharCompras(todos);
+  desenharCompras(todos);
+}
+
+function desenharCompras(todos){
+  const q = BUSCA.cpr || '';
+  const itens = !q ? todos : todos.filter(i => casa(
+    // era `i.os_numero`, que a view não devolve: virava a string "undefined" e
+    // buscar pelo número da OS nunca achava nada — justo o que o placeholder promete
+    [i.descricao, i.os, i.cliente, i.fornecedor, i.pedido_numero, i.situacao].join(' '), q));
+
   const atras = itens.filter(i => i.situacao === 'atrasado');
-  document.getElementById('cprResumo').innerHTML = itens.length
+  // o contador da lateral mostra o que dói: atrasado, não o total
+  const nCpr = document.getElementById('nCpr');
+  if (nCpr){
+    const nAtr = todos.filter(i => i.situacao === 'atrasado').length;
+    nCpr.textContent = nAtr || '';
+    nCpr.classList.toggle('alerta', nAtr > 0);
+  }
+  const elRes = document.getElementById('cprResumo');
+  if (!elRes) return;    // a pessoa trocou de tela durante o carregamento
+  elRes.innerHTML = itens.length
     ? itens.length + ' item(ns) · ' + (atras.length
         ? '<b style="color:var(--crit)">' + atras.length + ' atrasado(s)</b>' : 'nenhum atrasado')
     : '';
 
   const L = document.getElementById('cprLista');
   if (!itens.length){
-    L.innerHTML = '<p class="nota">Nada em compra. Itens entram aqui quando a origem é '
-      + '“comprar” e o cliente aprovou.</p>';
+    L.innerHTML = q
+      ? '<div class="vazio2"><b>Nada com essa busca</b><p>' + todos.length
+        + ' item(ns) em compra não casam com o que você digitou.</p></div>'
+      : '<p class="nota">Nada em compra. Itens entram aqui quando a origem é '
+        + '“comprar” e o cliente aprovou.</p>';
     return;
   }
 
   // atrasados primeiro: é o que precisa de telefonema hoje
   const ordem = { 'atrasado':0, 'chega logo':1, 'no prazo':2, 'sem previsão':3, 'recebido':4 };
-  itens.sort((a,b) => (ordem[a.situacao]-ordem[b.situacao]) || (b.dias_atraso-a.dias_atraso));
+  // situação fora do mapa dava `undefined - undefined` = NaN, e comparador que
+  // devolve NaN embaralha a lista — o agrupamento por seção repetia cabeçalho
+  itens.sort((a,b) => ((ordem[a.situacao] ?? 99) - (ordem[b.situacao] ?? 99))
+                   || ((Number(b.dias_atraso)||0) - (Number(a.dias_atraso)||0)));
 
   let sit = null;
   itens.forEach(i => {
@@ -2835,12 +3193,11 @@ async function pintarComercial(){
   board.innerHTML = '<div class="comWrap">'
     + '<div class="barraCom">'
     +   '<button class="btn pri" id="cNovo">+ Novo negócio</button>'
-    +   '<input id="cBusca" type="search" placeholder="Buscar por cliente, número ou título">'
     +   '<span class="resumoCom" id="cResumo"></span></div>'
     + '<div class="comBoard"><div class="board" id="qCom"></div></div></div>';
 
   document.getElementById('cNovo').addEventListener('click', formNegocio);
-  document.getElementById('cBusca').addEventListener('input', debounce(desenharCom, 200));
+  REPINTA.com = desenharCom;
 
   try{
     if (DEMO){ COLS_COM = demoColsCom(); negocios = demoNegocios(); }
@@ -2858,14 +3215,15 @@ async function pintarComercial(){
 function desenharCom(){
   const q = document.getElementById('qCom');
   if (!q) return;
-  const termos = norm((document.getElementById('cBusca')||{}).value||'').trim().split(/\s+/).filter(Boolean);
-  const filtra = n => !termos.length || termos.every(w =>
-    norm([n.numero, n.cliente_nome, n.titulo].join(' ')).includes(w));
-
-  const vis = negocios.filter(filtra);
+  const busca = BUSCA.com || '';
+  const vis = negocios.filter(n =>
+    casa([n.numero, n.cliente_nome, n.titulo, n.coluna, n.contato_nome].join(' '), busca));
   const total = vis.reduce((s,n) => s + Number(n.valor_propostas || n.valor_estimado || 0), 0);
   document.getElementById('cResumo').textContent =
-    vis.length + ' negócio(s) · ' + BRL(total) + ' em jogo';
+    vis.length + (busca && vis.length !== negocios.length ? ' de ' + negocios.length : '')
+    + ' negócio(s) · ' + BRL(total) + ' em jogo';
+  const nc = document.getElementById('nCom');
+  if (nc) nc.textContent = negocios.length || '';
 
   q.innerHTML = '';
   // As colunas vêm da tabela, não das linhas: coluna vazia CONTINUA no quadro.
@@ -3336,7 +3694,8 @@ async function cfgUsuarios(){
       +   (u.tarefas_concluidas ? ' · ' + u.tarefas_concluidas + ' tarefa(s) concluída(s)' : '')
       +   (u.ativo ? '' : ' · DESATIVADO') + '</small></div>'
       + '<div class="acoesU">'
-      +   '<select class="mini" data-perfil="' + u.id + '">'
+      +   '<select class="mini" data-perfil="' + u.id + '" data-antes="' + esc(u.perfil_id||'') + '"'
+      +     ' aria-label="Perfil de ' + esc(u.nome) + '">'
       +     perfis.map(x => '<option value="' + x.id + '"' + (x.id===u.perfil_id?' selected':'') + '>'
               + esc(x.nome) + '</option>').join('') + '</select>'
       +   (u.sou_eu ? '' : '<button class="btn mini" data-ativo="' + u.id + '" data-v="'
@@ -3366,19 +3725,29 @@ async function cfgUsuarios(){
     }catch(e){ toast(e.message,'err'); b.disabled = false; }
   }));
 
-  c.querySelectorAll('[data-perfil]').forEach(s => s.addEventListener('change', async () => {
+  c.querySelectorAll('[data-perfil]').forEach(sel => sel.addEventListener('change', async () => {
+    const antes = sel.dataset.antes || '';
+    sel.disabled = true;
     try{
-      if (!DEMO) await patch('usuarios', 'id=eq.' + s.dataset.perfil, { perfil_id: s.value });
+      if (!DEMO) await patch('usuarios', 'id=eq.' + sel.dataset.perfil, { perfil_id: sel.value });
+      sel.dataset.antes = sel.value;
       toast('Perfil alterado.','ok');
-    }catch(e){ toast(e.message,'err'); cfgUsuarios(); }
+    }catch(e){
+      // devolve o <select> ao valor antigo: deixá-lo mostrando o perfil novo
+      // depois de a gravação falhar é o app mentindo sobre a permissão da pessoa
+      sel.value = antes;
+      toast(e.message,'err');
+    }
+    finally{ sel.disabled = false; }
   }));
 
-  c.querySelectorAll('[data-ativo]').forEach(b => b.addEventListener('click', async () => {
-    try{
-      if (!DEMO) await rpc('tf_usuario_ativo', { p_id:b.dataset.ativo, p_ativo: b.dataset.v === '1' });
-      toast(b.dataset.v === '1' ? 'Reativado.' : 'Acesso encerrado.','ok'); cfgUsuarios();
-    }catch(e){ toast(e.message,'err'); }
-  }));
+  c.querySelectorAll('[data-ativo]').forEach(b => b.addEventListener('click',
+    () => _semDuploEnvio_(b, async () => {
+      try{
+        if (!DEMO) await rpc('tf_usuario_ativo', { p_id:b.dataset.ativo, p_ativo: b.dataset.v === '1' });
+        toast(b.dataset.v === '1' ? 'Reativado.' : 'Acesso encerrado.','ok'); cfgUsuarios();
+      }catch(e){ toast(e.message,'err'); }
+    })));
 }
 
 // ── PERFIS ──────────────────────────────────────────────────────────────────
@@ -3628,9 +3997,7 @@ async function pintarCatalogo(){
   board.innerHTML = '<div class="cadWrap">'
     + '<div class="painel"><h3>Catálogo</h3>'
     +   '<div id="catFams" class="chips"></div>'
-    +   '<div class="campo" style="margin:10px 0 6px"><input id="catBusca" type="text" '
-    +     'placeholder="Buscar por descrição, marca, modelo ou código"></div>'
-    +   '<div class="lista" id="catLista"></div></div>'
+    +   '<div class="lista" id="catLista" style="margin-top:10px"></div></div>'
     + '<div class="painel" id="catDet"></div></div>';
 
   await carregarFamilias();
@@ -3646,7 +4013,7 @@ async function pintarCatalogo(){
     chips.appendChild(b);
   });
 
-  document.getElementById('catBusca').addEventListener('input', debounce(listarCatalogo, 250));
+  REPINTA.cat = listarCatalogo;
   await listarCatalogo();
   formCatalogo(null);
 }
@@ -3656,7 +4023,7 @@ const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = se
 async function listarCatalogo(){
   const el = document.getElementById('catLista');
   if (!el) return;
-  const termo = (document.getElementById('catBusca')||{}).value || '';
+  const termo = BUSCA.cat || '';
 
   // A família filtra no servidor; o texto filtra aqui. O catálogo tem centenas
   // de itens, não milhões — e filtrar aqui deixa a busca igual à do celular,
@@ -3671,19 +4038,17 @@ async function listarCatalogo(){
     }
   }catch(e){ toast(e.message,'err'); return; }
 
-  const termos = norm(termo).trim().split(/\s+/).filter(Boolean);
-  if (termos.length){
-    itens = itens.filter(i => {
-      const alvo = norm([i.descricao, i.marca, i.modelo, i.codigo, i.familia,
-        Object.values(i.especificacoes||{}).join(' ')].join(' '));
-      return termos.every(w => alvo.includes(w));
-    });
-  }
+  const antes = itens.length;
+  if (termo) itens = itens.filter(i => casa(
+    [i.descricao, i.marca, i.modelo, i.codigo, i.familia,
+     Object.values(i.especificacoes||{}).join(' ')].join(' '), termo));
 
   el.innerHTML = '';
   if (!itens.length){
     el.innerHTML = '<p style="font-size:13px;color:var(--ink-3)">'
-      + (termo ? 'Nada encontrado para “' + esc(termo) + '”.' : 'Nenhum item nesta família ainda.')
+      + (termo ? 'Nada encontrado para “' + esc(termo) + '” entre os ' + antes
+                 + ' itens desta família.'
+               : 'Nenhum item nesta família ainda.')
       + '</p>';
     return;
   }
@@ -3866,7 +4231,8 @@ async function pintarCadastros(){
   visao = 'cad';
   const board = document.getElementById('board');
   board.innerHTML = '<div class="cadWrap">'
-    + '<div class="painel"><h3>Clientes</h3><div id="cadForm"></div><div class="lista" id="cadLista"></div></div>'
+    + '<div class="painel"><h3>Clientes <span class="conta" id="cadConta"></span></h3>'
+    +   '<div id="cadForm"></div><div class="lista" id="cadLista"></div></div>'
     + '<div class="painel" id="cadDet"><p style="color:var(--ink-3);font-size:13.5px;margin:0">'
     + 'Escolha um cliente à esquerda para ver contatos e equipamentos.</p></div></div>';
 
@@ -3891,18 +4257,56 @@ async function pintarCadastros(){
     }
   });
 
-  let cli = [];
-  try{ cli = DEMO ? demoClientes()
-      : await get('clientes?select=id,nome,cnpj,contatos(count),equipamentos(count)&ativo=eq.true&order=nome'); }
-  catch(e){ toast(e.message,'err'); }
-
-  const lista = document.getElementById('cadLista');
-  lista.innerHTML = '';
-  if (!cli.length){
-    lista.innerHTML = '<p style="font-size:13px;color:var(--ink-3)">Nenhum cliente ainda.</p>';
+  let todos = [];
+  try{ todos = DEMO ? demoClientes()
+      : await get('clientes?select=id,nome,cnpj,cidade,observacoes,contatos(count),equipamentos(count)'
+                  + '&ativo=eq.true&order=nome&limit=2000'); }
+  catch(e){
+    // sem `return`, seguia com a lista vazia e escrevia "Nenhum cliente ainda"
+    // em cima de uma falha de rede — com 516 clientes cadastrados
+    const l = document.getElementById('cadLista');
+    if (l){ l.innerHTML = '<div class="vazio2" style="padding:22px 8px;text-align:left">'
+      + '<b>Não deu para carregar os clientes</b><p class="mt"></p>'
+      + '<button class="btn" id="cadRetry" style="margin-top:12px">Tentar de novo</button></div>';
+      l.querySelector('.mt').textContent = e.message;
+      document.getElementById('cadRetry').addEventListener('click', pintarCadastros);
+    }
+    toast(e.message,'err');
     return;
   }
-  cli.forEach(c => {
+
+  // Com 516 clientes importados, listar todos era rolar por dois minutos até
+  // achar um. A busca é o caminho normal aqui, não o atalho.
+  REPINTA.cad = () => desenharClientes(todos);
+  desenharClientes(todos);
+}
+
+function desenharClientes(todos){
+  const lista = document.getElementById('cadLista');
+  if (!lista) return;              // trocou de tela durante o carregamento
+  const q = BUSCA.cad || '';
+  const cli = !q ? todos : todos.filter(c => casa(
+    [c.nome, c.cnpj, c.cidade, c.observacoes].join(' '), q));
+
+  lista.innerHTML = '';
+  const cab = document.getElementById('cadConta');
+  if (cab) cab.textContent = q
+    ? cli.length + ' de ' + todos.length + ' clientes'
+    : todos.length + ' cliente(s)';
+
+  if (!cli.length){
+    lista.innerHTML = q
+      ? '<div class="vazio2" style="padding:24px 10px"><b>Nada com essa busca</b>'
+        + '<p>Nenhum dos ' + todos.length + ' clientes casa com o que você digitou.</p></div>'
+      : '<p style="font-size:13px;color:var(--ink-3)">Nenhum cliente ainda.</p>';
+    return;
+  }
+
+  // O corte é declarado, não escondido: dizer "há mais" é o que faz a pessoa
+  // buscar em vez de concluir que o cliente sumiu.
+  const CORTE = 120;
+  const mostrar = cli.slice(0, CORTE);
+  mostrar.forEach(c => {
     const b = document.createElement('button');
     b.className = 'linhaCli' + (cadSel === c.id ? ' on' : '');
     b.innerHTML = '<b></b><small></small>';
@@ -3911,9 +4315,17 @@ async function pintarCadastros(){
     const ne = (c.equipamentos && c.equipamentos[0] ? c.equipamentos[0].count : (c._equip||0));
     b.querySelector('small').textContent =
       (c.cnpj ? c.cnpj + ' · ' : '') + nc + ' contato(s) · ' + ne + ' equipamento(s)';
+    if (c.observacoes && /incompleto/i.test(c.observacoes)) b.classList.add('incompleto');
     b.addEventListener('click', () => { cadSel = c.id; pintarCadastros(); detalheCliente(c); });
     lista.appendChild(b);
   });
+  if (cli.length > CORTE){
+    const p2 = document.createElement('p');
+    p2.style.cssText = 'font-size:12px;color:var(--ink-3);padding:9px 2px;margin:0';
+    p2.textContent = 'Mostrando os ' + CORTE + ' primeiros de ' + cli.length
+      + '. Use a busca do topo para achar o resto.';
+    lista.appendChild(p2);
+  }
   const sel = cli.find(c => c.id === cadSel);
   if (sel) detalheCliente(sel);
 }
@@ -4233,6 +4645,66 @@ const demoContatos = id => (demoCad(), D_CT.filter(x => x.cliente_id === id));
 const demoEquips   = id => (demoCad(), D_EQ.filter(x => x.cliente_id === id));
 const demoItens    = os => (demoCad(), D_IT[os] || []);
 const demoPropostas= os => (demoCad(), D_PR[os] || []);
+/** O relatório em modo demo. Sem isto, clicar em Relatórios com o arquivo aberto
+ *  por duplo clique (que é sempre DEMO) estourava "demoRel is not defined". */
+function demoRel(){
+  const hoje = isoHoje();
+  const cli = { c1:'Uau Ingleza Indústria Ltda', c2:'Fundição Santana', c3:'Gerdau — Divinópolis' };
+  return {
+    cli,
+    os:[
+      {id:'d1',numero:'OS-2026-0007',status:'aberta',descricao:'Acessórios NR-13',
+       criada_em:hoje+'T09:00:00Z',concluida_em:null,cliente_id:'c3'},
+      {id:'d2',numero:'OS-2026-0006',status:'concluida',descricao:'Parada anual',
+       criada_em:hoje+'T09:00:00Z',concluida_em:hoje+'T18:00:00Z',cliente_id:'c2'},
+      {id:'d3',numero:'OS-2026-0005',status:'aberta',descricao:'Inspeção',
+       criada_em:hoje+'T09:00:00Z',concluida_em:null,cliente_id:'c1'},
+    ],
+    itens:[
+      {os_id:'d1',descricao:'Manômetro 63mm',quantidade:4,custo_unitario:148,preco_unitario:265,
+       total_custo:592,total_venda:1060,elegivel:true,aprovado:true,origem:'compra',
+       fornecedor:'Wika',pedido_numero:'PC-2026-0002',pedido_em:hoje,previsto_para:hoje,recebido_em:null},
+      {os_id:'d3',descricao:'Válvula de segurança 1"',quantidade:2,custo_unitario:420,preco_unitario:720,
+       total_custo:840,total_venda:1440,elegivel:true,aprovado:true,origem:'compra',
+       fornecedor:'Famabras',pedido_numero:'PC-2026-0001',pedido_em:hoje,previsto_para:'2026-08-20',recebido_em:null},
+    ],
+    props:[
+      {id:'p1',numero:'PROP-2026-0002',versao:1,status:'emitida',cliente:cli.c3,
+       os_numero:'OS-2026-0007',emitida_em:hoje,valor_total:4200},
+      {id:'p2',numero:'PROP-2026-0001',versao:2,status:'aprovada',cliente:cli.c1,
+       os_numero:'OS-2026-0005',emitida_em:hoje,valor_total:7340},
+      {id:'p3',numero:'PROP-2026-0000',versao:1,status:'reprovada',cliente:cli.c2,
+       os_numero:'OS-2026-0006',emitida_em:hoje,valor_total:2900,motivo_perda:'preço'},
+    ],
+    negs:[{coluna:'Proposta enviada'},{coluna:'Primeiro contato'},{coluna:'Proposta enviada'}],
+    peds:[
+      {numero:'PC-2026-0001',fornecedor:'Famabras',cliente:cli.c1,os_numero:'OS-2026-0005',
+       emitido_em:hoje,valor:840,itens:1,recebidos:0,previsto_para:'2026-08-20'},
+      {numero:'PC-2026-0002',fornecedor:'Wika',cliente:cli.c3,os_numero:'OS-2026-0007',
+       emitido_em:hoje,valor:592,itens:1,recebidos:0,previsto_para:hoje},
+    ],
+    margens:[
+      {os_id:'d1',numero:'OS-2026-0007',cliente:cli.c3,venda:1060,custo_itens:592,
+       margem_bruta:468,custos_extras:120,margem_real:348,margem_pct:33},
+      {os_id:'d3',numero:'OS-2026-0005',cliente:cli.c1,venda:1440,custo_itens:840,
+       margem_bruta:600,custos_extras:0,margem_real:600,margem_pct:42},
+    ],
+  };
+}
+
+/** Documentos em demo, no formato das views (não o da aba de Configurações). */
+const demoDocsGerados = () => ([
+  {id:'g1',os_id:'d3',os:'OS-2026-0005',cliente:'Uau Ingleza Indústria Ltda',
+   numero:'PROP-2026-0001',modelo_titulo:'Inspeção NR-13 — básico 2024.2',
+   natureza:'Inspeção em vasos de pressão',valor_total:7340,
+   created_at:isoHoje()+'T14:20:00Z',quem:'Fernando Sousa'},
+]);
+const demoPedidosDoc = () => ([
+  {numero:'PC-2026-0001',os_id:'d3',os_numero:'OS-2026-0005',cliente:'Uau Ingleza Indústria Ltda',
+   fornecedor:'Famabras',emitido_em:isoHoje()+'T10:00:00Z',valor:840,itens:1,recebidos:0,
+   previsto_para:'2026-08-20',emitido_por_nome:'Fernando Sousa'},
+]);
+
 const demoPedPend = () => ([
   {fornecedor:'Wika', itens:2, pecas:6, custo:1184, maior_prazo:10, sem_fornecedor:false},
   {fornecedor:'Famabras', itens:1, pecas:2, custo:840, maior_prazo:20, sem_fornecedor:false}
@@ -4283,19 +4755,1036 @@ function demoProposta(os,num){
     valor_total:(D_IT[os]||[]).reduce((s,i)=>s+Number(i.total_venda||0),0), dias_sem_resposta:null });
 }
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// TRAVA DE DUPLO ENVIO
+// ----------------------------------------------------------------------------
+// Duplo clique num botão que grava = dois registros. O remendo mora no
+// `onclick`, não dentro da função de salvar: assim vale para todas sem obrigar
+// a refatorar nenhuma.
+//   uso: onclick="_semDuploEnvio_(this, salvarX)"  ou  (this, () => f(a,b))
+// ════════════════════════════════════════════════════════════════════════════
+async function _semDuploEnvio_(btn, fn){
+  if (btn && btn.dataset.enviando === '1') return;      // o segundo clique morre aqui
+  if (btn) btn.dataset.enviando = '1';
+  const txt = btn ? btn.textContent : null;
+  const desab = btn ? btn.disabled : false;
+  if (btn){ btn.disabled = true; btn.classList.add('ocupado'); btn.textContent = 'Processando…'; }
+  try{ return await fn(); }
+  finally{
+    if (btn){ btn.disabled = desab; btn.classList.remove('ocupado');
+              btn.textContent = txt; delete btn.dataset.enviando; }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// TF — o motor de tabela
+// ----------------------------------------------------------------------------
+// Ordenação por coluna, filtro por valor, paginação e cabeçalho fixo, com o
+// estado guardado FORA do DOM. É isso que faz o filtro sobreviver ao re-render:
+// no desenho antigo, qualquer atualização em segundo plano apagava o que a
+// pessoa tinha filtrado, e ela reclamava que "o sistema volta sozinho".
+//
+// Cada tela declara as colunas e de onde vêm os dados; o motor faz o resto.
+// ════════════════════════════════════════════════════════════════════════════
+const TF = { inst: {} };
+
+function tfReg(id, cfg){
+  if (!TF.inst[id]) TF.inst[id] = { s:{ ordem:null, dir:1, filtros:{}, pag:1, porPag:50 } };
+  TF.inst[id].cfg = cfg;
+  return TF.inst[id];
+}
+
+const tfCasca = id =>
+  '<div class="tfChips" id="tf_' + id + '_chips"></div>' +
+  '<div class="tfWrap" id="tf_' + id + '_wrap"><table class="tfTab">' +
+  '<thead><tr id="tf_' + id + '_head"></tr></thead>' +
+  '<tbody id="tf_' + id + '_body"></tbody></table></div>' +
+  '<div class="tfRodape"><div class="tfConta" id="tf_' + id + '_conta"></div>' +
+  '<div class="tfPag" id="tf_' + id + '_pag"></div></div>';
+
+function tfLinhas(id){
+  const I = TF.inst[id]; if (!I || !I.cfg) return [];
+  let d = I.cfg.dados() || [];
+  // índice de busca memoizado na própria linha: sem isso são milhares de
+  // normalizações por tecla digitada
+  if (I.cfg.textoBusca) for (const r of d) if (r._tfBusca === undefined) r._tfBusca = norm(I.cfg.textoBusca(r));
+  const q = I.cfg.consulta ? I.cfg.consulta() : '';
+  if (q && I.cfg.textoBusca){
+    const termos = norm(q).split(/\s+/).filter(Boolean);
+    d = d.filter(r => termos.every(t => r._tfBusca.includes(t)));
+  }
+  for (const k in I.s.filtros){
+    const vals = I.s.filtros[k];
+    if (!vals || !vals.length) continue;
+    const c = I.cfg.colunas.find(x => x.k === k); if (!c) continue;
+    d = d.filter(r => vals.includes(String(tfValor(c, r) ?? '')));
+  }
+  if (I.s.ordem){
+    const c = I.cfg.colunas.find(x => x.k === I.s.ordem);
+    if (c) d = d.slice().sort((a,b) => {
+      let va = tfValor(c,a), vb = tfValor(c,b);
+      const ea = (va == null || va === ''), eb = (vb == null || vb === '');
+      if (ea && eb) return 0;
+      if (ea) return 1;            // vazio vai sempre para o fim, nos dois sentidos
+      if (eb) return -1;
+      if (c.tipo === 'num'){ va = Number(va)||0; vb = Number(vb)||0; }
+      else { va = norm(va); vb = norm(vb); }
+      return (va < vb ? -1 : va > vb ? 1 : 0) * I.s.dir;
+    });
+  }
+  return d;
+}
+const tfValor = (c, r) => c.valor ? c.valor(r) : r[c.k];
+
+function tfRender(id){
+  const I = TF.inst[id]; if (!I || !I.cfg) return;
+  const cab = document.getElementById('tf_' + id + '_head');
+  const cor = document.getElementById('tf_' + id + '_body');
+  if (!cab || !cor) return;
+
+  cab.innerHTML = I.cfg.colunas.map(c => {
+    const ord = I.s.ordem === c.k ? (I.s.dir > 0 ? '▲' : '▼') : '';
+    const fil = (I.s.filtros[c.k] || []).length ? ' filtrada' : '';
+    return '<th class="' + (c.tipo === 'num' ? 'num' : '') + fil + '"'
+      + (c.larg ? ' style="width:' + c.larg + '"' : '') + '>'
+      + '<button type="button" class="tfTh" data-k="' + c.k + '">'
+      + '<span>' + esc(c.rot) + '</span><span class="tfOrd">' + ord + '</span>'
+      + (c.filtro === false ? '' : '<span class="tfFun" aria-hidden="true">⌄</span>')
+      + '</button></th>';
+  }).join('');
+  cab.querySelectorAll('.tfTh').forEach(b =>
+    b.addEventListener('click', e => tfMenu(e, id, b.dataset.k)));
+
+  const todas = tfLinhas(id);
+  const tot = todas.length;
+  const pp = I.s.porPag;
+  const nPag = Math.max(1, Math.ceil(tot / pp));
+  if (I.s.pag > nPag) I.s.pag = nPag;
+  const ini = (I.s.pag - 1) * pp;
+  const pagina = todas.slice(ini, ini + pp);
+
+  if (!tot){
+    const temFiltro = Object.values(I.s.filtros).some(v => v && v.length)
+      || (I.cfg.consulta && I.cfg.consulta());
+    cor.innerHTML = '<tr><td colspan="' + I.cfg.colunas.length + '">'
+      + '<div class="vazio2"><b>' + (temFiltro ? 'Nada com esses filtros' : (I.cfg.vazio || 'Nada por aqui'))
+      + '</b><p>' + (temFiltro
+          ? 'Ajuste a busca ou <button type="button" class="tfLimpa" id="tf_' + id + '_limpa">limpe os filtros</button>.'
+          : esc(I.cfg.vazioSub || '')) + '</p></div></td></tr>';
+    const lb = document.getElementById('tf_' + id + '_limpa');
+    if (lb) lb.addEventListener('click', () => tfLimpar(id));
+  } else {
+    cor.innerHTML = '';
+    pagina.forEach(r => {
+      const tr = document.createElement('tr');
+      if (I.cfg.classeLinha){ const cl = I.cfg.classeLinha(r); if (cl) tr.className = cl; }
+      tr.innerHTML = I.cfg.colunas.map(c =>
+        '<td class="' + (c.tipo === 'num' ? 'num' : '') + '">'
+        + (c.render ? c.render(r) : esc(tfValor(c, r) ?? '')) + '</td>').join('');
+      if (I.cfg.aoClicar){ tr.classList.add('clicavel'); tr.addEventListener('click', () => I.cfg.aoClicar(r)); }
+      cor.appendChild(tr);
+    });
+  }
+
+  document.getElementById('tf_' + id + '_conta').innerHTML = tot
+    ? '<b>' + (ini + 1) + '–' + Math.min(ini + pp, tot) + '</b> de <b>' + tot + '</b>'
+      + (I.cfg.unidade ? ' ' + I.cfg.unidade : '')
+    : '';
+  tfPaginador(id, nPag);
+  tfChips(id);
+}
+
+function tfPaginador(id, nPag){
+  const I = TF.inst[id];
+  const el = document.getElementById('tf_' + id + '_pag');
+  if (nPag <= 1){ el.innerHTML = ''; return; }
+  const p = I.s.pag;
+  const nums = new Set([1, nPag, p, p-1, p+1, p-2, p+2]);
+  const lista = [...nums].filter(n => n >= 1 && n <= nPag).sort((a,b) => a-b);
+  let h = '<button type="button" aria-label="Página anterior" data-p="' + (p-1) + '"'
+        + (p === 1 ? ' disabled' : '') + '>‹</button>';
+  let ant = 0;
+  lista.forEach(n => {
+    if (n - ant > 1) h += '<span class="tfEl">…</span>';
+    h += '<button type="button" data-p="' + n + '"' + (n === p ? ' class="atual" aria-current="page"' : '')
+       + ' aria-label="Página ' + n + '">' + n + '</button>';
+    ant = n;
+  });
+  h += '<button type="button" aria-label="Próxima página" data-p="' + (p+1) + '"'
+     + (p === nPag ? ' disabled' : '') + '>›</button>';
+  el.innerHTML = h;
+  el.querySelectorAll('button[data-p]').forEach(b => b.addEventListener('click', () => {
+    const n = Number(b.dataset.p);
+    if (n >= 1 && n <= nPag){ I.s.pag = n; tfRender(id);
+      const w = document.getElementById('tf_' + id + '_wrap'); if (w) w.scrollTop = 0; }
+  }));
+}
+
+function tfChips(id){
+  const I = TF.inst[id];
+  const el = document.getElementById('tf_' + id + '_chips');
+  const ativos = Object.entries(I.s.filtros).filter(([,v]) => v && v.length);
+  if (!ativos.length){ el.className = 'tfChips'; el.innerHTML = ''; return; }
+  el.className = 'tfChips on';
+  el.innerHTML = ativos.map(([k, v]) => {
+    const c = I.cfg.colunas.find(x => x.k === k);
+    return '<span class="tfChip">' + esc((c && c.rot) || k) + ': '
+      + esc(v.length > 2 ? v.length + ' valores' : v.map(x => x || '(vazio)').join(', '))
+      + '<button type="button" data-k="' + k + '" aria-label="Tirar este filtro">×</button></span>';
+  }).join('') + '<button type="button" class="tfLimpa" id="tf_' + id + '_limpatudo">limpar tudo</button>';
+  el.querySelectorAll('.tfChip button').forEach(b => b.addEventListener('click', () => {
+    delete I.s.filtros[b.dataset.k]; I.s.pag = 1; tfRender(id);
+  }));
+  document.getElementById('tf_' + id + '_limpatudo').addEventListener('click', () => tfLimpar(id));
+}
+
+function tfLimpar(id){
+  const I = TF.inst[id];
+  I.s.filtros = {}; I.s.pag = 1;
+  if (I.cfg.limparConsulta) I.cfg.limparConsulta();
+  tfRender(id);
+}
+
+// ── o menu da coluna: ordenar e filtrar por valor ───────────────────────────
+let _tfMenuEl = null;
+function tfFecharMenu(){ if (_tfMenuEl){ _tfMenuEl.remove(); _tfMenuEl = null; } }
+document.addEventListener('click', e => {
+  if (_tfMenuEl && !_tfMenuEl.contains(e.target) && !e.target.closest('.tfTh')) tfFecharMenu();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') tfFecharMenu(); });
+
+function tfMenu(ev, id, k){
+  ev.stopPropagation();
+  tfFecharMenu();
+  const I = TF.inst[id];
+  const c = I.cfg.colunas.find(x => x.k === k); if (!c) return;
+
+  const m = document.createElement('div');
+  m.className = 'tfMenu';
+  const podeFiltrar = c.filtro !== false;
+
+  // os valores da coluna, com quantas linhas cada um tem — a contagem é o que
+  // transforma "filtrar" em "ver a distribuição"
+  const conta = new Map();
+  if (podeFiltrar) (I.cfg.dados() || []).forEach(r => {
+    const v = String(tfValor(c, r) ?? '');
+    conta.set(v, (conta.get(v) || 0) + 1);
+  });
+  const vals = [...conta.entries()].sort((a,b) => norm(a[0]) < norm(b[0]) ? -1 : 1);
+  const sel = new Set(I.s.filtros[k] || []);
+
+  m.innerHTML =
+    '<div class="tfmOrd">' +
+      '<button type="button" data-d="1">▲ Crescente</button>' +
+      '<button type="button" data-d="-1">▼ Decrescente</button>' +
+    '</div>' +
+    (podeFiltrar && vals.length > 8
+      ? '<div class="tfmB"><input type="text" placeholder="Filtrar valores…" id="tfmBusca"'
+        + ' aria-label="Filtrar os valores desta coluna" autocomplete="off"></div>' : '') +
+    (podeFiltrar
+      ? '<div class="tfmLista" id="tfmLista"></div>' +
+        '<div class="tfmPe"><button type="button" id="tfmTudo">Todos</button>' +
+        '<button type="button" id="tfmNada">Nenhum</button>' +
+        '<button type="button" class="pri" id="tfmOk">Aplicar</button></div>'
+      : '');
+  document.body.appendChild(m);
+  _tfMenuEl = m;
+
+  const r = ev.currentTarget.getBoundingClientRect();
+  m.style.left = Math.min(r.left, window.innerWidth - m.offsetWidth - 12) + 'px';
+  m.style.top  = Math.min(r.bottom + 4, window.innerHeight - m.offsetHeight - 12) + 'px';
+
+  m.querySelectorAll('.tfmOrd button').forEach(b => b.addEventListener('click', () => {
+    I.s.ordem = k; I.s.dir = Number(b.dataset.d); I.s.pag = 1;
+    tfFecharMenu(); tfRender(id);
+  }));
+  if (!podeFiltrar) return;
+
+  const lista = m.querySelector('#tfmLista');
+  const pinta = (q) => {
+    const vis = vals.filter(([v]) => !q || norm(v).includes(norm(q)));
+    lista.innerHTML = vis.slice(0, 300).map(([v, n]) =>
+      '<label class="tfmItem"><input type="checkbox" value="' + esc(v) + '"'
+      + (sel.size === 0 || sel.has(v) ? ' checked' : '') + '>'
+      + '<span>' + esc(v || '(vazio)') + '</span><i>' + n + '</i></label>').join('')
+      + (vis.length > 300 ? '<p class="tfmMais">' + vis.length + ' valores — refine a busca.</p>' : '');
+  };
+  pinta('');
+  const bq = m.querySelector('#tfmBusca');
+  if (bq){ bq.addEventListener('input', () => pinta(bq.value)); setTimeout(() => bq.focus(), 40); }
+  m.querySelector('#tfmTudo').addEventListener('click',
+    () => lista.querySelectorAll('input').forEach(i => i.checked = true));
+  m.querySelector('#tfmNada').addEventListener('click',
+    () => lista.querySelectorAll('input').forEach(i => i.checked = false));
+  m.querySelector('#tfmOk').addEventListener('click', () => {
+    const marcados = [...lista.querySelectorAll('input:checked')].map(i => i.value);
+    // marcar tudo é o mesmo que não filtrar — guardar a lista inteira só faria
+    // o chip mentir dizendo que há um filtro ativo
+    if (marcados.length === vals.length || marcados.length === 0) delete I.s.filtros[k];
+    else I.s.filtros[k] = marcados;
+    I.s.pag = 1; tfFecharMenu(); tfRender(id);
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// NAVEGAÇÃO — barra lateral por função
+// ----------------------------------------------------------------------------
+// A fita de abas no topo tinha sete botões em linha e não cabia mais nada. Pior:
+// misturava QUADRO (Campo, Gestão) com CADASTRO (Catálogo) e com CONFIGURAÇÃO,
+// como se fossem a mesma coisa. Agrupado na lateral, cada item tem um lugar que
+// diz o que ele é, e ainda sobra espaço para crescer.
+//
+// Grupo fechado esconde tudo menos o item ativo. O estado fica no aparelho.
+// ════════════════════════════════════════════════════════════════════════════
+const NAV = [
+  { id:'quadros', rot:'QUADROS', itens:[
+    { v:'campo', rot:'Campo',      ico:'campo',  cont:'nCampo' },
+    { v:'adm',   rot:'Gestão',     ico:'gestao', cont:'nAdm' },
+    { v:'com',   rot:'Comercial',  ico:'funil',  cont:'nCom' },
+  ]},
+  { id:'operacao', rot:'OPERAÇÃO', itens:[
+    { v:'cpr', rot:'Compras',    ico:'caixa', cont:'nCpr' },
+    { v:'doc', rot:'Documentos', ico:'doc' },
+  ]},
+  { id:'analise', rot:'ANÁLISE', itens:[
+    { v:'rel', rot:'Relatórios', ico:'grafico' },
+  ]},
+  { id:'cadastros', rot:'CADASTROS', itens:[
+    { v:'cad', rot:'Clientes',  ico:'predio' },
+    { v:'cat', rot:'Catálogo',  ico:'tag' },
+  ]},
+  { id:'sistema', rot:'SISTEMA', fim:true, itens:[
+    { v:'cfg',  rot:'Configurações', ico:'engrenagem' },
+    { v:'sair', rot:'Sair',          ico:'sair' },
+  ]},
+];
+
+const ICO = {
+  campo:'<path d="M2 13l4-9 4 5 2-3 3 7z"/><circle cx="12.5" cy="3.5" r="1.5"/>',
+  gestao:'<rect x="2" y="3" width="4" height="10" rx="1"/><rect x="7" y="3" width="4" height="7" rx="1"/><rect x="12" y="3" width="2" height="12" rx="1"/>',
+  funil:'<path d="M2 3h12l-4.5 5.5V14L6.5 12V8.5z"/>',
+  caixa:'<path d="M2 5l6-3 6 3v6l-6 3-6-3z"/><path d="M2 5l6 3 6-3M8 8v6"/>',
+  doc:'<path d="M4 2h5l3 3v9H4z"/><path d="M9 2v3h3M6 8h4M6 11h4"/>',
+  grafico:'<path d="M2 14V8M6 14V4M10 14v-4M14 14V6"/>',
+  predio:'<rect x="3" y="3" width="10" height="11" rx="1"/><path d="M6 6h1M9 6h1M6 9h1M9 9h1M6 12h4"/>',
+  tag:'<path d="M8 2H3v5l7 7 5-5z"/><circle cx="5.5" cy="4.5" r="1"/>',
+  engrenagem:'<circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"/>',
+  sair:'<path d="M6 2H3v12h3"/><path d="M9 5l3 3-3 3M12 8H6"/>',
+};
+const svgIco = k => '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
+  + 'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+  + (ICO[k] || '') + '</svg>';
+
+const K_NAVG = 'tfm_nav_grupos';
+const navGLer = () => { try{ return JSON.parse(localStorage.getItem(K_NAVG) || '{}'); }catch(e){ return {}; } };
+const navGGravar = o => { try{ localStorage.setItem(K_NAVG, JSON.stringify(o)); }catch(e){} };
+
+function montarNav(){
+  const el = document.getElementById('navGroups');
+  const fechados = navGLer();
+  el.innerHTML = '';
+  NAV.forEach(g => {
+    const d = document.createElement('div');
+    d.className = 'nav-group' + (g.fim ? ' fim' : '') + (fechados[g.id] ? ' fechado' : '');
+    d.dataset.g = g.id;
+    const t = document.createElement('button');
+    t.type = 'button'; t.className = 'nav-gtoggle';
+    t.setAttribute('aria-expanded', fechados[g.id] ? 'false' : 'true');
+    t.innerHTML = '<span class="nav-car" aria-hidden="true">▾</span><span>' + g.rot
+                + '</span><span class="nav-gn" aria-hidden="true">' + g.itens.length + '</span>';
+    t.addEventListener('click', () => {
+      const f = navGLer(); f[g.id] = !f[g.id]; navGGravar(f);
+      d.classList.toggle('fechado', !!f[g.id]);
+      t.setAttribute('aria-expanded', f[g.id] ? 'false' : 'true');
+    });
+    d.appendChild(t);
+    g.itens.forEach(i => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'nav-item'; b.dataset.v = i.v; b.id = 'nav_' + i.v;
+      b.innerHTML = svgIco(i.ico) + '<span class="rot">' + i.rot + '</span>'
+        + (i.cont ? '<span class="nav-n" id="' + i.cont + '"></span>' : '');
+      b.addEventListener('click', () => irPara(i.v));
+      d.appendChild(b);
+    });
+    el.appendChild(d);
+  });
+}
+
+const ROTULO = { campo:'Campo', adm:'Gestão', com:'Comercial', cpr:'Compras',
+  doc:'Documentos', rel:'Relatórios', cad:'Clientes', cat:'Catálogo', cfg:'Configurações' };
+const GRUPO_DE = {};
+NAV.forEach(g => g.itens.forEach(i => { GRUPO_DE[i.v] = g.rot; }));
+
+/** O único caminho para trocar de tela. */
+function irPara(v){
+  if (v === 'sair'){ sairDaConta(); return; }
+  visao = v;
+  document.querySelectorAll('.nav-item').forEach(b => {
+    const ativo = b.dataset.v === v;
+    b.classList.toggle('on', ativo);
+    if (ativo) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
+  });
+  const g = GRUPO_DE[v];
+  document.getElementById('crumbGrupo').textContent =
+    g ? g.charAt(0) + g.slice(1).toLowerCase() : 'TapFlow';
+  document.getElementById('crumbAtual').textContent = ROTULO[v] || v;
+  document.body.classList.remove('navAberta');
+
+  // a busca é POR TELA: o texto de uma não pode vazar para a outra
+  const bu = document.getElementById('tbBusca');
+  bu.value = BUSCA[v] || '';
+  bu.placeholder = PLACEHOLDER_BUSCA[v] || 'Buscar nesta tela…';
+  bu.disabled = !PLACEHOLDER_BUSCA[v];
+  bu.style.visibility = PLACEHOLDER_BUSCA[v] ? '' : 'hidden';
+
+  // Quadro rola na horizontal e tem altura de janela; lista rola na vertical.
+  // Misturar os dois foi o que deixava a tela de Compras cortada no rodapé.
+  const eQuadro = (v === 'campo' || v === 'adm' || v === 'com');
+  document.getElementById('board').classList.toggle('livre', !eQuadro);
+  document.querySelector('main').classList.toggle('rolaY', !eQuadro);
+
+  if (v === 'campo' || v === 'adm'){ quadro = v; REPINTA[v] = pintar; return pintar(); }
+  if (v === 'com') return pintarComercial();
+  if (v === 'cpr') return pintarCompras();
+  if (v === 'doc') return pintarDocumentos();
+  if (v === 'rel') return pintarRelatorios();
+  if (v === 'cad') return pintarCadastros();
+  if (v === 'cat') return pintarCatalogo();
+  if (v === 'cfg') return pintarConfig();
+  return pintar();
+}
+
+// ── busca por tela ──────────────────────────────────────────────────────────
+// O estado vive aqui, não no DOM: sobrevive ao re-render e ao refresh em
+// segundo plano. Foi assim que o PCM parou de perder o que a pessoa digitou.
+const BUSCA = {};
+/** Quem sabe repintar a própria tela a partir do que já está na memória. Cada
+ *  `pintarX` registra a sua aqui; sem registro, a busca recarrega a tela. */
+const REPINTA = {};
+const PLACEHOLDER_BUSCA = {
+  campo:'Buscar OS, cliente, etapa…', adm:'Buscar OS, cliente, etapa…',
+  com:'Buscar negócio, cliente, contato…', cpr:'Buscar item, OS, fornecedor…',
+  doc:'Buscar número, cliente, modelo…', cad:'Buscar cliente, CNPJ, cidade…',
+  cat:'Buscar item, código, marca…',
+};
+/** Multi-termo E: cada palavra digitada tem que aparecer no texto da linha.
+ *  (`norm` já existe mais acima, no seletor de catálogo — é a mesma função.) */
+function casa(texto, q){
+  if (!q) return true;
+  const t = norm(texto);
+  return norm(q).split(/\s+/).filter(Boolean).every(p => t.includes(p));
+}
+
+let _buscaT = null;
+function ligarBusca(){
+  const el = document.getElementById('tbBusca');
+  el.addEventListener('input', () => {
+    BUSCA[visao] = el.value;
+    clearTimeout(_buscaT);
+    _buscaT = setTimeout(() => {
+      const foco = document.activeElement === el;
+      const pos = el.selectionStart;
+      // repinta sem ir à rede quando a tela sabe filtrar sozinha
+      if (REPINTA[visao]) REPINTA[visao]();
+      else irPara(visao);
+      if (foco){ requestAnimationFrame(() => {
+        const n = document.getElementById('tbBusca');
+        if (n){ n.focus(); try{ n.setSelectionRange(pos, pos); }catch(e){} }
+      }); }
+    }, 140);
+  });
+  // Esc limpa a busca sem tirar a mão do teclado
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && el.value){ e.stopPropagation(); el.value = ''; BUSCA[visao] = ''; irPara(visao); }
+  });
+}
+
+/** Atalho: "/" foca a busca, como em toda ferramenta que se usa o dia inteiro. */
+document.addEventListener('keydown', e => {
+  if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+  const a = document.activeElement;
+  if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')) return;
+  const el = document.getElementById('tbBusca');
+  if (el && !el.disabled){ e.preventDefault(); el.focus(); el.select(); }
+});
+
+function sairDaConta(){
+  if (!confirm('Sair da conta? O que está na fila continua guardado.')) return;
+  try{ localStorage.removeItem(SESSAO_KEY); }catch(e){}
+  location.reload();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// TELA: DOCUMENTOS — tudo que o TapFlow emitiu
+// ----------------------------------------------------------------------------
+// Antes, para achar uma proposta era preciso lembrar de qual OS ela saiu, abrir
+// a OS e ir na aba. Aqui é uma lista só, com busca e filtro por tipo, cliente e
+// mês. É a pergunta "que proposta eu mandei para a Gerdau em agosto?".
+// ════════════════════════════════════════════════════════════════════════════
+async function pintarDocumentos(){
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Documentos</h2>'
+    + '<p>Propostas e pedidos de compra emitidos pelo TapFlow.</p></div>'
+    + '<div id="docTab"><p class="nota">Carregando…</p></div></div>';
+
+  let props = [], peds = [];
+  try{
+    // era `demoDocs()`, que é a fixture da aba Configurações → Documentos e tem
+    // outro formato: a tabela saía com número vazio e valor "—"
+    [props, peds] = DEMO ? [demoDocsGerados(), demoPedidosDoc()] : await Promise.all([
+      get('v_documentos_gerados?select=*&order=created_at.desc&limit=500'),
+      get('v_pedidos_compra?select=*&order=emitido_em.desc&limit=500')
+    ]);
+  }catch(e){
+    document.getElementById('docTab').innerHTML = '<div class="vazio2"><b>Não deu para carregar</b><p></p></div>';
+    document.querySelector('#docTab p').textContent = e.message; return;
+  }
+
+  const linhas = []
+    .concat((props||[]).map(d => ({
+      tipo:'Proposta', numero:d.numero, cliente:d.cliente || '', os:d.os || '',
+      quando:d.created_at, valor:d.valor_total, quem:d.quem || '',
+      detalhe:d.modelo_titulo || d.natureza || '', os_id:d.os_id })))
+    .concat((peds||[]).map(d => ({
+      tipo:'Pedido de compra', numero:d.numero, cliente:d.cliente || '', os:d.os_numero || '',
+      quando:d.emitido_em, valor:d.valor, quem:d.emitido_por_nome || '',
+      detalhe:d.fornecedor || '', os_id:d.os_id })));
+  linhas.sort((a,b) => String(b.quando||'').localeCompare(String(a.quando||'')));
+
+  tfReg('doc', {
+    unidade:'documentos',
+    dados: () => linhas,
+    consulta: () => BUSCA.doc || '',
+    limparConsulta: () => { BUSCA.doc = ''; const i = document.getElementById('tbBusca'); if (i) i.value = ''; },
+    textoBusca: r => [r.tipo, r.numero, r.cliente, r.os, r.detalhe, r.quem].join(' '),
+    vazio:'Nenhum documento emitido ainda',
+    vazioSub:'Propostas e pedidos aparecem aqui assim que forem gerados.',
+    aoClicar: r => { if (r.os_id) abrirOSPorId(r.os_id); },
+    colunas:[
+      { k:'numero',  rot:'Número', larg:'130px', render:r => '<span class="mono forte">' + esc(r.numero) + '</span>' },
+      { k:'tipo',    rot:'Tipo',   larg:'120px' },
+      { k:'cliente', rot:'Cliente' },
+      { k:'detalhe', rot:'Modelo / fornecedor' },
+      { k:'os',      rot:'OS', larg:'120px', render:r => '<span class="mono">' + esc(r.os) + '</span>' },
+      { k:'quem',    rot:'Emitido por', larg:'130px' },
+      // sem `tipo:'num'`: Number('2026-09-04T…') é NaN, virava 0 em todas as
+      // linhas e clicar em ordenar não mexia em nada. Texto ISO ordena certo.
+      { k:'quando',  rot:'Data', larg:'92px', filtro:false, classe:'num',
+        render:r => r.quando ? dataBR(r.quando) : '—' },
+      { k:'valor',   rot:'Valor', larg:'104px', tipo:'num', filtro:false,
+        render:r => r.valor != null ? BRL(r.valor) : '—' },
+    ]
+  });
+  const elDoc = document.getElementById('docTab');
+  if (!elDoc) return;                 // trocou de tela durante o carregamento
+  elDoc.innerHTML = tfCasca('doc');
+  REPINTA.doc = () => tfRender('doc');
+  tfRender('doc');
+}
+
+/** Abre a gaveta da OS a partir do id, mesmo estando em outra tela. */
+async function abrirOSPorId(osId){
+  let c = cards.find(x => x.os_id === osId);
+  if (!c){
+    // "não achei" e "não consegui perguntar" são coisas diferentes, e dizer
+    // "OS encerrada" quando a rede caiu manda a pessoa procurar o problema errado
+    try{ const r = await get('v_os_kanban?select=*&os_id=eq.' + osId); c = (r||[])[0]; }
+    catch(e){ toast(e.message, 'err'); return; }
+  }
+  if (!c){ toast('Esta OS já foi encerrada e saiu do quadro.','err'); return; }
+  abrirOS(c);
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// TELA: RELATÓRIOS
+// ----------------------------------------------------------------------------
+// Quatro relatórios, um período, três saídas. A regra que veio do ProperCare e
+// que evita a divergência mais chata: **um modelo, três saídas**. A função
+// `relModelo()` devolve { titulo, kpis, blocos }; tela, PDF e planilha leem o
+// MESMO objeto. Montar o relatório duas vezes é como o número da tela passa a
+// discordar do número do PDF.
+//
+// A tela mostra as primeiras 60 linhas de cada bloco e diz isso em voz alta —
+// o PDF e a planilha levam todas.
+// ════════════════════════════════════════════════════════════════════════════
+const REL = {
+  qual:'operacional',
+  de:null, ate:null,
+  dados:null,      // cache do que foi buscado, por período
+  chave:null,
+};
+const REL_TIPOS = [
+  ['operacional','Operacional', 'OS por período, etapa e responsável'],
+  ['comercial',  'Comercial',   'Funil, propostas, aprovação e perdas'],
+  ['financeiro', 'Financeiro',  'Margem por OS: venda, custo, frete'],
+  ['compras',    'Compras',     'Pedidos por fornecedor e atrasos'],
+];
+
+function relIniciaPeriodo(){
+  if (REL.de && REL.ate) return;
+  const h = new Date();
+  REL.ate = isoHoje(h);
+  REL.de  = isoHoje(new Date(h.getFullYear(), h.getMonth(), 1));
+}
+function relAtalho(qual){
+  const h = new Date();
+  const iso = isoHoje;
+  if (qual === 'mes'){ REL.de = iso(new Date(h.getFullYear(), h.getMonth(), 1)); REL.ate = iso(h); }
+  if (qual === 'mespassado'){
+    REL.de  = iso(new Date(h.getFullYear(), h.getMonth()-1, 1));
+    REL.ate = iso(new Date(h.getFullYear(), h.getMonth(), 0));
+  }
+  if (qual === '90'){ REL.de = iso(new Date(h.getTime() - 90*864e5)); REL.ate = iso(h); }
+  if (qual === 'ano'){ REL.de = iso(new Date(h.getFullYear(), 0, 1)); REL.ate = iso(h); }
+  REL.dados = null;
+  pintarRelatorios();
+}
+
+async function pintarRelatorios(){
+  relIniciaPeriodo();
+  const board = document.getElementById('board');
+  board.innerHTML =
+    '<div class="tela"><div class="telaCab"><h2>Relatórios</h2>'
+    + '<p>Um período, quatro recortes. O que aparece na tela é o que sai no PDF e na planilha.</p></div>'
+    + '<div class="relTipos" id="relTipos"></div>'
+    + '<div class="relBarra">'
+    +   '<span class="rot">Período</span>'
+    +   '<input type="date" id="relDe" aria-label="Início do período" value="' + esc(REL.de) + '">'
+    +   '<span class="rot">até</span>'
+    +   '<input type="date" id="relAte" aria-label="Fim do período" value="' + esc(REL.ate) + '">'
+    +   '<button class="btn sm" data-a="mes">Este mês</button>'
+    +   '<button class="btn sm" data-a="mespassado">Mês passado</button>'
+    +   '<button class="btn sm" data-a="90">90 dias</button>'
+    +   '<button class="btn sm" data-a="ano">Este ano</button>'
+    +   '<span style="flex:1"></span>'
+    +   '<span class="relSaidas"><button class="btn" id="relPDF">⬇ PDF</button>'
+    +   '<button class="btn" id="relXLS">⬇ Planilha</button></span>'
+    + '</div>'
+    + '<div id="relCorpo"><p class="nota">Carregando…</p></div></div>';
+
+  const t = document.getElementById('relTipos');
+  REL_TIPOS.forEach(([id, rot, sub]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'relTipo' + (REL.qual === id ? ' on' : '');
+    b.innerHTML = '<b></b><span></span>';
+    b.querySelector('b').textContent = rot;
+    b.querySelector('span').textContent = sub;
+    b.addEventListener('click', () => { REL.qual = id; pintarRelatorios(); });
+    t.appendChild(b);
+  });
+
+  document.getElementById('relDe').addEventListener('change', e => {
+    REL.de = e.target.value; REL.dados = null; pintarRelatorios(); });
+  document.getElementById('relAte').addEventListener('change', e => {
+    REL.ate = e.target.value; REL.dados = null; pintarRelatorios(); });
+  document.querySelectorAll('.relBarra button[data-a]').forEach(b =>
+    b.addEventListener('click', () => relAtalho(b.dataset.a)));
+
+  if (REL.de && REL.ate && REL.de > REL.ate){
+    document.getElementById('relCorpo').innerHTML =
+      '<div class="vazio2"><b>O início do período é depois do fim</b>'
+      + '<p>Nenhuma OS cabe nesse intervalo. Ajuste as datas.</p></div>';
+    return;
+  }
+
+  try{ await relCarregar(); }
+  catch(e){
+    document.getElementById('relCorpo').innerHTML = '<div class="vazio2"><b>Não deu para carregar</b><p></p></div>';
+    document.querySelector('#relCorpo p').textContent = e.message;
+    return;
+  }
+
+  const m = relModelo();
+  relPintarCorpo(m);
+  document.getElementById('relPDF').addEventListener('click', e => _semDuploEnvio_(e.target, () => relPDF(m)));
+  document.getElementById('relXLS').addEventListener('click', e => _semDuploEnvio_(e.target, () => relXLSX(m)));
+}
+
+/** Busca os dados uma vez por período — trocar de relatório não vai ao banco. */
+async function relCarregar(){
+  const chave = REL.de + '|' + REL.ate;
+  if (REL.dados && REL.chave === chave) return;
+  if (DEMO){ REL.dados = demoRel(); REL.chave = chave; return; }
+  const [os, itens, props, negs, peds, margens] = await Promise.all([
+    get('ordens_servico?select=id,numero,status,descricao,criada_em,concluida_em,cliente_id,modo_entrega'
+        + '&criada_em=gte.' + REL.de + '&criada_em=lte.' + REL.ate + 'T23:59:59&order=criada_em'),
+    get('os_itens?select=os_id,descricao,quantidade,custo_unitario,preco_unitario,total_custo,total_venda,'
+        + 'elegivel,aprovado,origem,fornecedor,pedido_numero,pedido_em,previsto_para,recebido_em&limit=5000'),
+    get('v_propostas?select=*&limit=2000'),
+    get('v_negocios_kanban?select=*&limit=2000').catch(() => []),
+    get('v_pedidos_compra?select=*&limit=2000').catch(() => []),
+    get('v_os_margem?select=*&limit=2000').catch(() => []),
+  ]);
+  const cli = {};
+  try{ (await get('clientes?select=id,nome&limit=2000')).forEach(c => cli[c.id] = c.nome); }catch(e){}
+  REL.dados = { os, itens, props, negs, peds, margens, cli };
+  REL.chave = chave;
+}
+
+const _dentro = (d) => !d ? false : (String(d).slice(0,10) >= REL.de && String(d).slice(0,10) <= REL.ate);
+
+/**
+ * O MODELO. Uma função, um objeto, três saídas.
+ * { titulo, subtitulo, kpis:[{rot,val}], blocos:[{titulo,colunas,linhas,nota}] }
+ */
+function relModelo(){
+  const D = REL.dados || {};
+  const per = 'de ' + dataBR(REL.de) + ' a ' + dataBR(REL.ate);
+
+  if (REL.qual === 'operacional'){
+    const os = (D.os || []);
+    const porOS = {};
+    (D.itens || []).forEach(i => { (porOS[i.os_id] = porOS[i.os_id] || []).push(i); });
+    const abertas = os.filter(o => o.status !== 'concluida');
+    const fechadas = os.filter(o => o.status === 'concluida');
+    const dias = fechadas.filter(o => o.concluida_em && o.criada_em)
+      .map(o => (new Date(o.concluida_em) - new Date(o.criada_em)) / 864e5);
+    const medio = dias.length ? (dias.reduce((a,b)=>a+b,0) / dias.length) : null;
+    const colunaDe = {};
+    cards.forEach(c => { colunaDe[c.os_id] = c.coluna; });
+    const porColuna = {};
+    abertas.forEach(o => { const c = colunaDe[o.id] || '(fora do quadro)';
+      porColuna[c] = (porColuna[c] || 0) + 1; });
+    return {
+      titulo:'Relatório operacional', subtitulo:'OS abertas no período ' + per,
+      kpis:[
+        { rot:'OS abertas no período', val:String(os.length) },
+        { rot:'Concluídas', val:String(fechadas.length) },
+        { rot:'Em andamento', val:String(abertas.length) },
+        { rot:'Tempo médio até fechar', val: medio == null ? '—' : medio.toFixed(1) + ' dias' },
+      ],
+      blocos:[
+        { titulo:'Onde estão as OS em andamento',
+          colunas:['Etapa','OS'],
+          linhas:Object.entries(porColuna).sort((a,b)=>b[1]-a[1]).map(([k,v]) => [k, v]),
+          numericas:[1],
+          nota:'A etapa é derivada da primeira tarefa não resolvida — não é campo digitado.' },
+        { titulo:'OS do período',
+          colunas:['OS','Cliente','Descrição','Aberta em','Situação','Itens','Venda'],
+          linhas:os.map(o => {
+            const its = (porOS[o.id] || []).filter(i => i.elegivel);
+            return [o.numero, D.cli[o.cliente_id] || '', o.descricao || '', dataBR(o.criada_em),
+              o.status === 'concluida' ? 'concluída' : (colunaDe[o.id] || 'aberta'),
+              its.length, its.reduce((a,i)=>a+Number(i.total_venda||0),0)];
+          }), numericas:[5,6], moeda:[6] },
+      ]
+    };
+  }
+
+  if (REL.qual === 'comercial'){
+    const props = (D.props || []).filter(p => _dentro(p.emitida_em || p.created_at));
+    const val = s => props.filter(p => p.status === s).reduce((a,p)=>a+Number(p.valor_total||0),0);
+    const n = s => props.filter(p => p.status === s).length;
+    const emitidas = props.length;
+    const aprov = n('aprovada'), rep = n('reprovada');
+    const conv = (aprov + rep) ? Math.round(aprov / (aprov + rep) * 100) : null;
+    const porMotivo = {};
+    props.filter(p => p.status === 'reprovada').forEach(p => {
+      const m = p.motivo_perda || p.motivo_perda_id || '(não informado)';
+      porMotivo[m] = (porMotivo[m] || 0) + 1;
+    });
+    const funil = {};
+    (D.negs || []).forEach(x => { funil[x.coluna || '—'] = (funil[x.coluna || '—'] || 0) + 1; });
+    return {
+      titulo:'Relatório comercial', subtitulo:'Propostas emitidas ' + per,
+      kpis:[
+        { rot:'Propostas emitidas', val:String(emitidas) },
+        { rot:'Valor emitido', val:BRL(props.reduce((a,p)=>a+Number(p.valor_total||0),0)) },
+        { rot:'Aprovadas', val:aprov + (conv != null ? ' · ' + conv + '%' : '') },
+        { rot:'Valor aprovado', val:BRL(val('aprovada')) },
+      ],
+      blocos:[
+        { titulo:'Propostas do período',
+          colunas:['Número','V.','Cliente','OS','Status','Emitida em','Valor'],
+          linhas:props.map(p => [p.numero, p.versao, p.cliente || '', p.os_numero || p.os || '',
+            p.status, p.emitida_em ? dataBR(p.emitida_em) : '', Number(p.valor_total||0)]),
+          numericas:[1,6], moeda:[6] },
+        { titulo:'Por que se perde',
+          colunas:['Motivo','Propostas'],
+          linhas:Object.entries(porMotivo).sort((a,b)=>b[1]-a[1]),
+          numericas:[1],
+          nota:!rep ? 'Nenhuma proposta reprovada no período.' : '' },
+        { titulo:'Funil comercial hoje',
+          colunas:['Etapa','Negócios'], linhas:Object.entries(funil), numericas:[1],
+          nota:'Foto de agora, não do período — o funil é um estado, não um acumulado.' },
+      ]
+    };
+  }
+
+  if (REL.qual === 'financeiro'){
+    const idsPeriodo = new Set((D.os || []).map(o => o.id));
+    const m = (D.margens || []).filter(x => idsPeriodo.has(x.os_id));
+    const soma = k => m.reduce((a,x) => a + Number(x[k]||0), 0);
+    const venda = soma('venda'), custo = soma('custo_itens'), extras = soma('custos_extras');
+    const real = soma('margem_real');
+    return {
+      titulo:'Relatório financeiro', subtitulo:'Margem das OS abertas ' + per,
+      kpis:[
+        { rot:'Venda', val:BRL(venda) },
+        { rot:'Custo dos itens', val:BRL(custo) },
+        { rot:'Frete e outros', val:'−' + BRL(extras) },
+        { rot:'Margem real', val:BRL(real) + (venda ? ' · ' + Math.round(real/venda*100) + '%' : '') },
+      ],
+      blocos:[
+        { titulo:'Margem por OS',
+          colunas:['OS','Cliente','Venda','Custo itens','Frete e outros','Margem real','%'],
+          linhas:m.map(x => [x.numero, x.cliente || '', Number(x.venda||0), Number(x.custo_itens||0),
+            Number(x.custos_extras||0), Number(x.margem_real||0), x.margem_pct]),
+          numericas:[2,3,4,5,6], moeda:[2,3,4,5],
+          nota:'Margem real = venda − custo dos itens − o que não é item (frete, deslocamento, terceiro). '
+             + 'É a conta que some quando o frete fica no WhatsApp.' },
+      ]
+    };
+  }
+
+  // compras
+  const peds = (D.peds || []).filter(p => _dentro(p.emitido_em));
+  const itens = (D.itens || []).filter(i => i.pedido_numero);
+  const hoje = new Date().toISOString().slice(0,10);
+  const atrasados = itens.filter(i => !i.recebido_em && i.previsto_para && i.previsto_para < hoje);
+  const porForn = {};
+  peds.forEach(p => {
+    const f = p.fornecedor || '(sem fornecedor)';
+    const o = porForn[f] = porForn[f] || { pedidos:0, valor:0, atrasados:0 };
+    o.pedidos++; o.valor += Number(p.valor||0);
+  });
+  atrasados.forEach(i => {
+    const f = i.fornecedor || '(sem fornecedor)';
+    if (porForn[f]) porForn[f].atrasados++;
+  });
+  return {
+    titulo:'Relatório de compras', subtitulo:'Pedidos emitidos ' + per,
+    kpis:[
+      { rot:'Pedidos emitidos', val:String(peds.length) },
+      { rot:'Valor comprado', val:BRL(peds.reduce((a,p)=>a+Number(p.valor||0),0)) },
+      { rot:'Fornecedores', val:String(Object.keys(porForn).length) },
+      { rot:'Itens atrasados', val:String(atrasados.length) },
+    ],
+    blocos:[
+      { titulo:'Por fornecedor',
+        colunas:['Fornecedor','Pedidos','Valor','Itens atrasados'],
+        linhas:Object.entries(porForn).sort((a,b)=>b[1].valor-a[1].valor)
+          .map(([f,o]) => [f, o.pedidos, o.valor, o.atrasados]),
+        numericas:[1,2,3], moeda:[2] },
+      { titulo:'Pedidos do período',
+        colunas:['Pedido','Fornecedor','Cliente','OS','Emitido','Previsto','Itens','Valor'],
+        linhas:peds.map(p => [p.numero, p.fornecedor || '', p.cliente || '', p.os_numero || '',
+          dataBR(p.emitido_em), p.previsto_para ? dataBR(p.previsto_para) : '—', p.itens, Number(p.valor||0)]),
+        numericas:[6,7], moeda:[7] },
+      { titulo:'O que está atrasado',
+        colunas:['Item','Fornecedor','Pedido','Previsto para','Dias de atraso'],
+        linhas:atrasados.map(i => [i.descricao, i.fornecedor || '', i.pedido_numero || '',
+          dataBR(i.previsto_para),
+          Math.round((new Date(hoje) - new Date(i.previsto_para)) / 864e5)]),
+        numericas:[4],
+        nota:!atrasados.length ? 'Nada atrasado. Esta é a linha que você quer ver vazia.' : '' },
+    ]
+  };
+}
+
+function relPintarCorpo(m){
+  const el = document.getElementById('relCorpo');
+  let h = '<div class="relKpis">' + m.kpis.map(k =>
+    '<div class="relKpi"><b>' + esc(k.val) + '</b><span>' + esc(k.rot) + '</span></div>').join('') + '</div>';
+  m.blocos.forEach(b => {
+    const corte = b.linhas.slice(0, 60);
+    h += '<div class="relBloco"><h3>' + esc(b.titulo) + '</h3>';
+    if (b.nota) h += '<p class="nota">' + esc(b.nota) + '</p>';
+    if (!b.linhas.length){
+      h += '<p class="nota" style="color:var(--ink-3)">Nada no período.</p>';
+    } else {
+      h += '<div class="tfWrap" style="max-height:none"><table class="tfTab"><thead><tr>'
+        + b.colunas.map((c,i) => '<th class="' + ((b.numericas||[]).includes(i) ? 'num' : '')
+            + '"><span class="tfThFixo">' + esc(c) + '</span></th>').join('')
+        + '</tr></thead><tbody>'
+        + corte.map(l => '<tr>' + l.map((v,i) => {
+            const num = (b.numericas||[]).includes(i);
+            // contagem e dinheiro são os dois numéricos, e formatar pelo tipo do
+            // valor erra: 1060 reais é inteiro e sairia "1060" na cara do leitor
+            const txt = (b.moeda||[]).includes(i) ? BRL(Number(v)||0)
+              : (num && typeof v === 'number' ? String(v) : esc(v ?? ''));
+            return '<td class="' + (num ? 'num' : '') + '">' + txt + '</td>';
+          }).join('') + '</tr>').join('')
+        + '</tbody></table></div>';
+      if (b.linhas.length > 60)
+        h += '<p class="nota">Mostrando as 60 primeiras de ' + b.linhas.length
+           + ' na tela — <b>o PDF e a planilha levam todas</b>.</p>';
+    }
+    h += '</div>';
+  });
+  el.innerHTML = h;
+}
+
+const relNomeArq = (m, ext) => {
+  const lim = s => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^A-Za-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+  return 'TapFlow_' + lim(m.titulo) + '_' + REL.de + '_a_' + REL.ate + '.' + ext;
+};
+
+async function relPDF(m){
+  const jsPDF = await carregarJsPDF();
+  const doc = new jsPDF({ unit:'mm', format:'a4' });
+  const M = 13; let y = M;
+  const novaPag = (alt) => { if (y + (alt||6) > 283){ doc.addPage(); y = M; } };
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(14);
+  doc.text('ENGETAP ENGENHARIA', M, y); y += 5.5;
+  doc.setFontSize(11); doc.text(m.titulo, M, y); y += 5;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(90);
+  doc.text(m.subtitulo, M, y); y += 4.5;
+  doc.text('Emitido em ' + dataBR() + (sessao.nome ? ' por ' + sessao.nome : ''), M, y);
+  doc.setTextColor(0); y += 6;
+  doc.setDrawColor(180); doc.line(M, y, 210-M, y); y += 7;
+
+  const lk = (210 - 2*M) / m.kpis.length;
+  m.kpis.forEach((k, i) => {
+    doc.setFont('helvetica','bold'); doc.setFontSize(13);
+    doc.text(String(k.val), M + i*lk, y);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(110);
+    doc.text(doc.splitTextToSize(k.rot, lk - 3), M + i*lk, y + 4);
+    doc.setTextColor(0);
+  });
+  y += 13;
+
+  m.blocos.forEach(b => {
+    if (!b.linhas.length && !b.nota) return;
+    novaPag(14);
+    doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.text(b.titulo, M, y); y += 5;
+    if (b.nota){
+      doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(110);
+      const t = doc.splitTextToSize(b.nota, 210 - 2*M);
+      doc.text(t, M, y); y += t.length * 3.2 + 2; doc.setTextColor(0);
+    }
+    if (!b.linhas.length){ y += 4; return; }
+
+    // A largura sai do CONTEÚDO, não de um peso fixo: com peso fixo o "R$
+    // 1.060,00" quebrava em duas linhas enquanto a coluna de data sobrava.
+    const larg = 210 - 2*M;
+    const txtDe = (v, i) => (b.moeda||[]).includes(i) ? BRL(Number(v)||0) : String(v ?? '');
+    const amostra = b.linhas.slice(0, 200);
+    const pesos = b.colunas.map((c, i) => {
+      let mx = String(c).length;
+      for (const l of amostra) mx = Math.max(mx, txtDe(l[i], i).length);
+      // teto de 34: uma descrição longa não pode espremer as outras seis colunas
+      return Math.min(Math.max(mx, 6), 34);
+    });
+    const somaP = pesos.reduce((a,x)=>a+x,0);
+    const ws = pesos.map(p => p / somaP * larg);
+    const xs = ws.reduce((acc,w,i) => { acc.push(i ? acc[i-1] + ws[i-1] : M); return acc; }, []);
+
+    const cabecalho = () => {
+      doc.setFont('helvetica','bold'); doc.setFontSize(7);
+      b.colunas.forEach((c,i) => {
+        const num = (b.numericas||[]).includes(i);
+        doc.text(String(c), num ? xs[i] + ws[i] - 1 : xs[i], y, num ? {align:'right'} : undefined);
+      });
+      y += 1.6; doc.setDrawColor(210); doc.line(M, y, 210-M, y); y += 3.4;
+      doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+    };
+    cabecalho();
+
+    b.linhas.forEach(l => {
+      if (y > 280){ doc.addPage(); y = M; cabecalho(); }
+      let alt = 3.6;
+      l.forEach((v,i) => {
+        const num = (b.numericas||[]).includes(i);
+        const txt = (b.moeda||[]).includes(i) ? BRL(Number(v)||0)
+          : (num && typeof v === 'number' ? String(v) : String(v ?? ''));
+        const linhas = doc.splitTextToSize(txt, ws[i] - 2).slice(0, 2);
+        alt = Math.max(alt, linhas.length * 3.4);
+        doc.text(linhas, num ? xs[i] + ws[i] - 1 : xs[i], y, num ? {align:'right'} : undefined);
+      });
+      y += alt + 0.8;
+    });
+    y += 5;
+  });
+
+  doc.save(relNomeArq(m, 'pdf'));
+}
+
+/**
+ * A planilha sai sem biblioteca: um .xlsx é um ZIP com cinco XMLs, e escrever à
+ * mão evita 900 KB de CDN para uma função que roda uma vez por semana. Número
+ * vai como NÚMERO — planilha em que tudo é texto é um PDF com grade.
+ */
+async function relXLSX(m){
+  const JSZipLib = await carregarJSZip();
+  const zip = new JSZipLib();
+  const esc_ = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const col = n => { let s = ''; n++; while (n > 0){ const r = (n-1) % 26; s = String.fromCharCode(65+r) + s; n = Math.floor((n-1)/26); } return s; };
+
+  const abas = m.blocos.filter(b => b.linhas.length).map((b, bi) => ({
+    nome: (b.titulo || ('Bloco ' + (bi+1))).replace(/[\\\/\?\*\[\]:]/g,'').slice(0,28),
+    colunas: b.colunas,
+    linhas: b.linhas,
+    numericas: b.numericas || [],
+    moeda: b.moeda || []
+  }));
+  if (!abas.length){ toast('Nada no período para exportar.','err'); return; }
+
+  zip.file('[Content_Types].xml',
+    '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    + '<Default Extension="xml" ContentType="application/xml"/>'
+    + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+    + abas.map((_,i) => '<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('')
+    + '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+    + '</Types>');
+  zip.folder('_rels').file('.rels',
+    '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+  const xl = zip.folder('xl');
+  xl.file('workbook.xml',
+    '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+    + 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'
+    + abas.map((a,i) => '<sheet name="'+esc_(a.nome)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>').join('')
+    + '</sheets></workbook>');
+  xl.folder('_rels').file('workbook.xml.rels',
+    '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + abas.map((_,i) => '<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>').join('')
+    + '<Relationship Id="rIdS" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+  xl.file('styles.xml',
+    '<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font>'
+    + '<font><b/><sz val="11"/><name val="Calibri"/></font></fonts>'
+    + '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
+    + '<borders count="1"><border/></borders>'
+    + '<cellStyleXfs count="1"><xf/></cellStyleXfs>'
+    + '<cellXfs count="2"><xf xfId="0"/><xf xfId="0" fontId="1" applyFont="1"/></cellXfs></styleSheet>');
+
+  const ws = xl.folder('worksheets');
+  abas.forEach((a, i) => {
+    const linhas = [a.colunas].concat(a.linhas);
+    const xml = linhas.map((l, ri) =>
+      '<row r="'+(ri+1)+'">' + l.map((v, ci) => {
+        const ref = col(ci) + (ri+1);
+        const num = ri > 0 && a.numericas.includes(ci) && typeof v === 'number' && isFinite(v);
+        if (num) return '<c r="'+ref+'"><v>'+v+'</v></c>';
+        return '<c r="'+ref+'" t="inlineStr"'+(ri===0?' s="1"':'')+'><is><t xml:space="preserve">'+esc_(v)+'</t></is></c>';
+      }).join('') + '</row>').join('');
+    ws.file('sheet'+(i+1)+'.xml',
+      '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+      + '<sheetData>' + xml + '</sheetData></worksheet>');
+  });
+
+  const blob = await zip.generateAsync({ type:'blob',
+    mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  baixarBlob(blob, relNomeArq(m, 'xlsx'));
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // BOOT
 // ════════════════════════════════════════════════════════════════════════════
-document.getElementById('sw').addEventListener('click', e => {
-  const b = e.target.closest('button[data-q]'); if (!b) return;
-  [...document.querySelectorAll('#sw button')].forEach(x => x.classList.toggle('on', x === b));
-  if (b.dataset.q === 'cad'){ visao = 'cad'; pintarCadastros(); return; }
-  if (b.dataset.q === 'com'){ visao = 'com'; pintarComercial(); return; }
-  if (b.dataset.q === 'cpr'){ visao = 'cpr'; pintarCompras(); return; }
-  if (b.dataset.q === 'cat'){ visao = 'cat'; pintarCatalogo(); return; }
-  if (b.dataset.q === 'cfg'){ visao = 'cfg'; pintarConfig(); return; }
-  visao = 'quadro'; quadro = b.dataset.q; pintar();
-});
+montarNav();
+ligarBusca();
+document.getElementById('navBurger').addEventListener('click',
+  () => document.body.classList.toggle('navAberta'));
+document.getElementById('navScrim').addEventListener('click',
+  () => document.body.classList.remove('navAberta'));
 document.getElementById('btnNovaOS').addEventListener('click', modalNovaOS);
 document.getElementById('mX').addEventListener('click', fecharModal);
 document.getElementById('mScrim').addEventListener('click', fecharModal);
@@ -4333,7 +5822,7 @@ async function iniciar(){
   }
   await carregarColunas();
   await carregarParametros();
-  carregar().catch(()=>{});
+  carregar().catch(()=>{}).finally(() => irPara(visao));
 }
 
 (function boot(){
