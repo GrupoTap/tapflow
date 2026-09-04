@@ -161,6 +161,32 @@ main{flex:1;overflow-x:auto;overflow-y:hidden;padding:14px}
 .chk input{width:16px;height:16px;flex:0 0 auto}
 .nota{font-size:12px;color:var(--ink-3);line-height:1.45;margin:8px 0 0}
 
+
+/* ── configurações ────────────────────────────────── */
+.cfgWrap{padding:18px;max-width:1100px}
+.cfgWrap .chips{margin-bottom:14px}
+.linhaU{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
+  padding:11px 13px;border:1px solid var(--rule);border-radius:3px;margin-bottom:6px;background:var(--surface)}
+.linhaU.off{opacity:.55}
+.linhaU.pend{border-color:var(--warn);background:var(--warn-soft)}
+.linhaU b{display:block;font-size:14.5px;font-weight:600}
+.linhaU small{display:block;font-size:12px;color:var(--ink-3);margin-top:2px}
+.acoesU{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.mini{font-size:13px;padding:6px 9px;border:1px solid var(--rule);border-radius:3px;
+  background:var(--surface);max-width:190px}
+button.mini{padding:6px 12px;font-weight:600}
+.tag{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  background:var(--surface-2);color:var(--ink-3);padding:1px 5px;border-radius:2px;vertical-align:middle}
+.tag.adm{background:var(--accent-soft);color:var(--accent)}
+.aviso{font-size:13px;line-height:1.5;padding:11px 13px;border-radius:3px;margin-bottom:14px;
+  background:var(--warn-soft);color:var(--ink)}
+.aviso.ok{background:var(--accent-soft);color:var(--accent)}
+.tab{width:100%;border-collapse:collapse;font-size:13px}
+.tab th{text-align:left;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-3);padding:7px 9px;border-bottom:1px solid var(--rule)}
+.tab td{padding:8px 9px;border-bottom:1px solid var(--rule-2)}
+.tab a{color:var(--accent);font-weight:600}
+
 /* ── gaveta ───────────────────────────────────────── */
 .scrim{position:fixed;inset:0;background:rgba(16,26,28,.42);opacity:0;pointer-events:none;transition:opacity .18s}
 .scrim.on{opacity:1;pointer-events:auto}
@@ -309,6 +335,7 @@ main{flex:1;overflow-x:auto;overflow-y:hidden;padding:14px}
     <button data-q="adm">Gestão <span class="n" id="nAdm">0</span></button>
     <button data-q="cad">Cadastros</button>
     <button data-q="cat">Catálogo</button>
+    <button data-q="cfg">Configurações</button>
   </div>
 
   <button class="btn pri" id="btnNovaOS">+ Nova OS</button>
@@ -1596,6 +1623,352 @@ async function modalNovaOS(){
 }
 
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// CONFIGURAÇÕES
+// ----------------------------------------------------------------------------
+// Quatro coisas que até agora só existiam em SQL: quem entra, o que cada perfil
+// pode, onde os arquivos estão e o que o sistema já gerou. Tudo só para admin.
+// ════════════════════════════════════════════════════════════════════════════
+let abaCfg = 'usuarios';
+
+async function pintarConfig(){
+  visao = 'cfg';
+  const board = document.getElementById('board');
+  if (!sessao.admin){
+    board.innerHTML = '<div class="painel"><h3>Configurações</h3>'
+      + '<p class="nota">Esta área é do perfil admin. Fale com o Fernando ou o Bruno.</p></div>';
+    return;
+  }
+  board.innerHTML = '<div class="cfgWrap">'
+    + '<div class="chips" id="cfgTabs"></div>'
+    + '<div id="cfgCorpo"></div></div>';
+
+  const abas = [['usuarios','Usuários'],['perfis','Perfis'],
+                ['docs','Documentos'],['param','Google Drive'],['exc','Exclusões']];
+  const t = document.getElementById('cfgTabs');
+  abas.forEach(([id,rot]) => {
+    const b = document.createElement('button');
+    b.className = 'fchip' + (abaCfg === id ? ' on' : '');
+    b.textContent = rot;
+    b.addEventListener('click', () => { abaCfg = id; pintarConfig(); });
+    t.appendChild(b);
+  });
+
+  if (abaCfg === 'usuarios') return cfgUsuarios();
+  if (abaCfg === 'perfis')   return cfgPerfis();
+  if (abaCfg === 'docs')     return cfgDocumentos();
+  if (abaCfg === 'param')    return cfgParametros();
+  if (abaCfg === 'exc')      return cfgExclusoes();
+}
+
+// ── USUÁRIOS ────────────────────────────────────────────────────────────────
+async function cfgUsuarios(){
+  const c = document.getElementById('cfgCorpo');
+  c.innerHTML = '<p class="nota">Carregando…</p>';
+
+  let users = [], perfis = [], pendentes = [];
+  try{
+    if (DEMO){ users = demoUsuarios(); perfis = demoPerfis(); pendentes = []; }
+    else [users, perfis, pendentes] = await Promise.all([
+      get('v_usuarios?select=*&order=ativo.desc,nome'),
+      get('v_perfis?select=*&ativo=is.true&order=id'),
+      rpc('tf_logins_sem_perfil', {})
+    ]);
+  }catch(e){ c.innerHTML = ''; toast(e.message,'err'); return; }
+
+  let h = '<div class="painel"><h3>Quem usa o TapFlow</h3>';
+
+  // logins criados no Supabase que ainda não têm perfil
+  if (pendentes && pendentes.length){
+    h += '<div class="aviso"><b>' + pendentes.length + ' login(s) sem perfil.</b> '
+      + 'Foram criados na Authentication do Supabase mas ainda não entram no sistema — '
+      + 'quem manda no acesso é esta lista, não o login.</div>';
+    pendentes.forEach(p => {
+      h += '<div class="linhaU pend"><div><b>' + esc(p.email) + '</b>'
+        + '<small>' + (p.confirmado ? 'e-mail confirmado' : '⚠ e-mail NÃO confirmado — não consegue entrar') + '</small></div>'
+        + '<div class="acoesU">'
+        +   '<input class="mini" id="nm_' + p.auth_id + '" placeholder="Nome da pessoa">'
+        +   '<select class="mini" id="pf_' + p.auth_id + '">'
+        +     perfis.map(x => '<option value="' + x.id + '">' + esc(x.nome) + '</option>').join('')
+        +   '</select>'
+        +   '<button class="btn pri mini" data-vinc="' + p.auth_id + '">Dar acesso</button>'
+        + '</div></div>';
+    });
+  }
+
+  h += '<div class="secTit">Com acesso</div>';
+  users.forEach(u => {
+    h += '<div class="linhaU' + (u.ativo ? '' : ' off') + '">'
+      + '<div><b>' + esc(u.nome) + (u.sou_eu ? ' <span class="tag">você</span>' : '')
+      +   (u.is_admin ? ' <span class="tag adm">admin</span>' : '') + '</b>'
+      + '<small>' + esc(u.email||'') + ' · ' + esc(u.perfil||'sem perfil')
+      +   (u.tarefas_concluidas ? ' · ' + u.tarefas_concluidas + ' tarefa(s) concluída(s)' : '')
+      +   (u.ativo ? '' : ' · DESATIVADO') + '</small></div>'
+      + '<div class="acoesU">'
+      +   '<select class="mini" data-perfil="' + u.id + '">'
+      +     perfis.map(x => '<option value="' + x.id + '"' + (x.id===u.perfil_id?' selected':'') + '>'
+              + esc(x.nome) + '</option>').join('') + '</select>'
+      +   (u.sou_eu ? '' : '<button class="btn mini" data-ativo="' + u.id + '" data-v="'
+              + (u.ativo?'0':'1') + '">' + (u.ativo ? 'Desativar' : 'Reativar') + '</button>')
+      + '</div></div>';
+  });
+
+  h += '<div class="secTit">Adicionar alguém</div>'
+    +  '<p class="nota">O login é criado uma vez, no painel do Supabase: <b>Authentication → '
+    +  'Users → Add user</b>, com <b>Auto Confirm User</b> marcado. Assim que existir, ele '
+    +  'aparece aqui em cima para você dar o perfil.<br>'
+    +  'Desativar aqui fecha o acesso na hora e mantém o histórico com o nome da pessoa — '
+    +  'é o que se usa quando alguém sai, não apagar.</p>'
+    +  '</div>';
+
+  c.innerHTML = h;
+
+  c.querySelectorAll('[data-vinc]').forEach(b => b.addEventListener('click', async () => {
+    const id = b.dataset.vinc;
+    const nome = (document.getElementById('nm_'+id)||{}).value || '';
+    if (!nome.trim()){ toast('Escreva o nome da pessoa.','err'); return; }
+    b.disabled = true;
+    try{
+      await rpc('tf_vincular_usuario', { p_auth_id:id, p_nome:nome.trim(),
+        p_perfil_id: document.getElementById('pf_'+id).value });
+      toast('Acesso liberado para ' + nome.trim() + '.','ok'); cfgUsuarios();
+    }catch(e){ toast(e.message,'err'); b.disabled = false; }
+  }));
+
+  c.querySelectorAll('[data-perfil]').forEach(s => s.addEventListener('change', async () => {
+    try{
+      if (!DEMO) await patch('usuarios', 'id=eq.' + s.dataset.perfil, { perfil_id: s.value });
+      toast('Perfil alterado.','ok');
+    }catch(e){ toast(e.message,'err'); cfgUsuarios(); }
+  }));
+
+  c.querySelectorAll('[data-ativo]').forEach(b => b.addEventListener('click', async () => {
+    try{
+      if (!DEMO) await rpc('tf_usuario_ativo', { p_id:b.dataset.ativo, p_ativo: b.dataset.v === '1' });
+      toast(b.dataset.v === '1' ? 'Reativado.' : 'Acesso encerrado.','ok'); cfgUsuarios();
+    }catch(e){ toast(e.message,'err'); }
+  }));
+}
+
+// ── PERFIS ──────────────────────────────────────────────────────────────────
+const MODULOS = [['os','OS e quadros'],['comercial','Comercial'],['compras','Compras'],
+                 ['campo','Campo'],['cadastros','Cadastros'],['relatorios','Relatórios']];
+
+async function cfgPerfis(){
+  const c = document.getElementById('cfgCorpo');
+  let perfis = [];
+  try{ perfis = DEMO ? demoPerfis() : await get('v_perfis?select=*&order=id'); }
+  catch(e){ toast(e.message,'err'); return; }
+
+  let h = '<div class="cadWrap"><div class="painel"><h3>Perfis</h3>'
+    + '<p class="nota">Perfil é dado, não código: criar “Estagiário de campo” é preencher '
+    + 'este formulário. O perfil decide o que a pessoa vê e quais tarefas pode assumir.</p>';
+  perfis.forEach(p => {
+    h += '<button class="linhaCli' + (p.ativo?'':' off') + '" data-p="' + esc(p.id) + '">'
+      + '<b>' + esc(p.nome) + (p.is_admin ? ' <span class="tag adm">admin</span>' : '') + '</b>'
+      + '<small>' + esc(p.id) + ' · ' + ({campo:'campo',adm:'escritório',ambos:'campo e escritório'}[p.executa_em]||p.executa_em)
+      + ' · ' + p.pessoas + ' pessoa(s)' + (p.ativo?'':' · inativo') + '</small></button>';
+  });
+  h += '<button class="btn pri" id="pNovo" style="width:100%;margin-top:10px">Novo perfil</button>'
+    +  '</div><div class="painel" id="pDet"></div></div>';
+  c.innerHTML = h;
+
+  c.querySelectorAll('[data-p]').forEach(b => b.addEventListener('click',
+    () => formPerfil(perfis.find(x => x.id === b.dataset.p))));
+  document.getElementById('pNovo').addEventListener('click', () => formPerfil(null));
+  formPerfil(perfis[0]);
+}
+
+function formPerfil(p){
+  const d = document.getElementById('pDet');
+  if (!d) return;
+  const mods = (p && p.modulos) || [];
+  d.innerHTML = '<h3>' + (p ? esc(p.nome) : 'Novo perfil') + '</h3>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="pfId">Código</label><input id="pfId" type="text" value="'
+    +    esc(p?p.id:'') + '"' + (p?' disabled':'') + ' placeholder="ex.: estagiario"></div>'
+    +  '<div class="campo"><label for="pfNome">Nome</label><input id="pfNome" type="text" value="'
+    +    esc(p?p.nome:'') + '"></div></div>'
+    + '<div class="campo"><label for="pfEx">Onde executa</label><select id="pfEx">'
+    +  ['campo','adm','ambos'].map(v => '<option value="' + v + '"'
+        + (p && p.executa_em===v ? ' selected':'') + '>'
+        + ({campo:'Campo',adm:'Escritório',ambos:'Campo e escritório'}[v]) + '</option>').join('')
+    + '</select></div>'
+    + '<label class="chk"><input type="checkbox" id="pfAdm"' + (p&&p.is_admin?' checked':'')
+    +  '> É administrador (vê e faz tudo, inclusive esta tela)</label>'
+    + '<div class="secTit">O que aparece na tela</div><div class="grelha">'
+    + MODULOS.map(([v,l]) => '<label class="chk"><input type="checkbox" data-mod="' + v + '"'
+        + (mods.includes(v)?' checked':'') + '> ' + l + '</label>').join('')
+    + '</div>'
+    + '<label class="chk"><input type="checkbox" id="pfAtivo"' + (!p||p.ativo?' checked':'')
+    +  '> Perfil ativo</label>'
+    + '<div class="linhaBtns"><button class="btn pri" id="pfSalvar">'
+    +  (p?'Salvar':'Criar perfil') + '</button></div>';
+
+  document.getElementById('pfSalvar').addEventListener('click', async (e) => {
+    const id = document.getElementById('pfId').value.trim().toLowerCase().replace(/[^a-z0-9_]/g,'_');
+    const nome = document.getElementById('pfNome').value.trim();
+    if (!id || !nome){ toast('Código e nome são obrigatórios.','err'); return; }
+    e.target.disabled = true;
+    try{
+      if (!DEMO) await rpc('tf_salvar_perfil', {
+        p_id:id, p_nome:nome,
+        p_executa_em: document.getElementById('pfEx').value,
+        p_is_admin: document.getElementById('pfAdm').checked,
+        p_modulos: [...d.querySelectorAll('[data-mod]:checked')].map(x => x.dataset.mod),
+        p_ativo: document.getElementById('pfAtivo').checked });
+      toast('Perfil salvo.','ok'); cfgPerfis();
+    }catch(err){ toast(err.message,'err'); e.target.disabled = false; }
+  });
+}
+
+// ── DOCUMENTOS ──────────────────────────────────────────────────────────────
+async function cfgDocumentos(){
+  const c = document.getElementById('cfgCorpo');
+  c.innerHTML = '<div class="painel"><h3>Documentos e arquivos</h3>'
+    + '<p class="nota">Tudo que o TapFlow gerou ou guardou, de todas as OS. '
+    + 'Serve para achar “a proposta da Gerdau de agosto” sem lembrar em qual OS ela estava.</p>'
+    + '<div class="campo"><input id="dBusca" type="text" placeholder="Buscar por cliente, OS, tipo ou nome"></div>'
+    + '<div id="dLista"><p class="nota">Carregando…</p></div></div>';
+
+  let docs = [];
+  try{ docs = DEMO ? demoDocs() : await get('v_documentos?select=*&order=quando.desc&limit=300'); }
+  catch(e){ document.getElementById('dLista').innerHTML=''; toast(e.message,'err'); return; }
+
+  const ROTULO = { proposta:'Proposta', pedido_compra:'Pedido de compra', certificado:'Certificado',
+    relatorio:'Relatório', foto_item:'Foto de item', foto_tarefa:'Foto', assinatura:'Aceite',
+    outro:'Outro' };
+
+  function lista(){
+    const termos = norm((document.getElementById('dBusca')||{}).value||'').trim().split(/\s+/).filter(Boolean);
+    const el = document.getElementById('dLista');
+    const achados = docs.filter(d => {
+      if (!termos.length) return true;
+      const alvo = norm([d.cliente, d.os, d.tipo, d.identificacao, d.quem].join(' '));
+      return termos.every(w => alvo.includes(w));
+    });
+    if (!achados.length){ el.innerHTML = '<p class="nota">Nada encontrado.</p>'; return; }
+    el.innerHTML = '<table class="tab"><thead><tr><th>Quando</th><th>Tipo</th>'
+      + '<th>Identificação</th><th>OS</th><th>Cliente</th><th>Quem</th><th></th></tr></thead><tbody>'
+      + achados.map(d => '<tr>'
+        + '<td>' + new Date(d.quando).toLocaleDateString('pt-BR') + '</td>'
+        + '<td>' + esc(ROTULO[d.tipo] || d.tipo) + '</td>'
+        + '<td>' + esc(d.identificacao||'—') + '</td>'
+        + '<td>' + esc(d.os) + '</td>'
+        + '<td>' + esc(d.cliente) + '</td>'
+        + '<td>' + esc(d.quem) + '</td>'
+        + '<td>' + (d.url ? '<a href="' + esc(d.url) + '" target="_blank" rel="noopener">abrir</a>'
+                          : '<span class="nota">sem arquivo</span>') + '</td></tr>').join('')
+      + '</tbody></table>'
+      + '<p class="nota">' + achados.length + ' de ' + docs.length + ' registro(s).</p>';
+  }
+  document.getElementById('dBusca').addEventListener('input', debounce(lista, 200));
+  lista();
+}
+
+// ── GOOGLE DRIVE ────────────────────────────────────────────────────────────
+async function cfgParametros(){
+  const c = document.getElementById('cfgCorpo');
+  let par = {};
+  try{
+    const r = DEMO ? [] : await get('parametros?select=chave,valor');
+    (r||[]).forEach(x => par[x.chave] = x.valor);
+  }catch(e){ toast(e.message,'err'); }
+
+  const ligado = !!(par.drive_url && par.drive_chave);
+  c.innerHTML = '<div class="painel"><h3>Google Drive</h3>'
+    + '<div class="' + (ligado ? 'aviso ok' : 'aviso') + '">'
+    +   (ligado ? '✓ Ligado. As fotos do campo e os PDFs vão para o Drive da Engetap.'
+                : '⚠ Ainda não ligado. <b>Sem isso o inspetor não fecha OS em campo</b>, '
+                + 'porque o fechamento exige a foto do aceite e não há onde guardá-la.')
+    + '</div>'
+    + '<div class="campo"><label for="drUrl">URL do Web App (Apps Script)</label>'
+    +  '<input id="drUrl" type="text" value="' + esc(par.drive_url||'') + '" '
+    +  'placeholder="https://script.google.com/macros/s/.../exec"></div>'
+    + '<div class="campo"><label for="drCh">TAPFLOW_CHAVE</label>'
+    +  '<input id="drCh" type="text" value="' + esc(par.drive_chave||'') + '" '
+    +  'placeholder="a mesma senha longa gravada nas propriedades do script"></div>'
+    + '<div class="campo"><label for="drRaiz">Pasta raiz no Drive</label>'
+    +  '<input id="drRaiz" type="text" value="' + esc(par.drive_raiz||'TapFlow') + '"></div>'
+    + '<div class="linhaBtns"><button class="btn" id="drTestar">Testar conexão</button>'
+    +  '<button class="btn pri" id="drSalvar">Salvar</button></div>'
+    + '<p class="nota">Os dois primeiros vêm do passo 8 do guia: publique o '
+    + '<b>GAS_TapFlow_Drive.gs</b> no Apps Script, copie a URL que termina em <b>/exec</b>, e '
+    + 'use aqui a mesma TAPFLOW_CHAVE que você gravou nas propriedades do script. '
+    + 'Se as duas não baterem, o Drive recusa o envio.</p></div>';
+
+  document.getElementById('drTestar').addEventListener('click', async (e) => {
+    const u = document.getElementById('drUrl').value.trim();
+    if (!u){ toast('Cole a URL primeiro.','err'); return; }
+    e.target.disabled = true;
+    try{
+      const r = await fetch(u + (u.includes('?')?'&':'?') + 'action=ping');
+      const j = await r.json();
+      toast(j.status === 'ok'
+        ? 'Respondeu: ' + (j.configurado ? 'tudo configurado.' : 'no ar, mas faltam propriedades no script.')
+        : 'Respondeu com erro: ' + (j.mensagem||''), j.status === 'ok' && j.configurado ? 'ok' : 'err');
+    }catch(err){ toast('Não respondeu. Confira se a implantação está como "Qualquer pessoa".','err'); }
+    e.target.disabled = false;
+  });
+
+  document.getElementById('drSalvar').addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    try{
+      const vals = { drive_url: document.getElementById('drUrl').value.trim(),
+                     drive_chave: document.getElementById('drCh').value.trim(),
+                     drive_raiz: document.getElementById('drRaiz').value.trim() || 'TapFlow' };
+      for (const k of Object.keys(vals))
+        await patch('parametros', 'chave=eq.' + k, { valor: vals[k] });
+      toast('Salvo. O app de campo pega na próxima abertura.','ok');
+      cfgParametros();
+    }catch(err){ toast(err.message,'err'); e.target.disabled = false; }
+  });
+}
+
+// ── EXCLUSÕES ───────────────────────────────────────────────────────────────
+async function cfgExclusoes(){
+  const c = document.getElementById('cfgCorpo');
+  let ex = [];
+  try{ ex = DEMO ? [] : await get('v_exclusoes?select=*&limit=200'); }
+  catch(e){ toast(e.message,'err'); }
+  c.innerHTML = '<div class="painel"><h3>O que foi excluído</h3>'
+    + '<p class="nota">Excluir uma OS apaga o histórico dela. Esta lista é o que sobra: '
+    + 'quem apagou, o quê e por quê. Sem ela, “a OS 0007 sumiu” vira mistério.</p>'
+    + (ex.length ? '<table class="tab"><thead><tr><th>Quando</th><th>O quê</th>'
+        + '<th>Identificação</th><th>Motivo</th><th>Quem</th></tr></thead><tbody>'
+        + ex.map(x => '<tr><td>' + new Date(x.excluido_em).toLocaleString('pt-BR') + '</td>'
+          + '<td>' + esc({ordens_servico:'OS',clientes:'Cliente',catalogo_itens:'Item de catálogo'}[x.tabela]||x.tabela) + '</td>'
+          + '<td>' + esc(x.identificacao) + '</td><td>' + esc(x.motivo||'—') + '</td>'
+          + '<td>' + esc(x.quem) + '</td></tr>').join('') + '</tbody></table>'
+      : '<p class="nota">Nada foi excluído ainda.</p>')
+    + '</div>';
+}
+
+// dados do modo demo
+const demoUsuarios = () => ([
+  {id:'u1',nome:'Fernando Sousa',email:'fernando@engetap.com.br',perfil_id:'admin',perfil:'Administração',
+   is_admin:true,ativo:true,sou_eu:true,tarefas_concluidas:12},
+  {id:'u2',nome:'Glênio Arantes',email:'glenio@engetap.com.br',perfil_id:'comercial',perfil:'Comercial',
+   is_admin:false,ativo:true,sou_eu:false,tarefas_concluidas:5},
+  {id:'u3',nome:'Inspetor 1',email:'inspetor1@engetap.com.br',perfil_id:'inspetor',perfil:'Inspetor de Campo',
+   is_admin:false,ativo:true,sou_eu:false,tarefas_concluidas:31}
+]);
+const demoPerfis = () => ([
+  {id:'admin',nome:'Administração',executa_em:'ambos',is_admin:true,ativo:true,pessoas:2,
+   modulos:['os','comercial','compras','campo','cadastros','relatorios']},
+  {id:'comercial',nome:'Comercial',executa_em:'adm',is_admin:false,ativo:true,pessoas:1,
+   modulos:['os','comercial','relatorios']},
+  {id:'inspetor',nome:'Inspetor de Campo',executa_em:'campo',is_admin:false,ativo:true,pessoas:2,
+   modulos:['campo']}
+]);
+const demoDocs = () => ([
+  {id:'d1',origem:'documento',tipo:'proposta',identificacao:'ORC-4417',url:'#',
+   quando:new Date().toISOString(),os:'OS-2026-0005',cliente:'Fundição Pará de Minas',quem:'Glênio Arantes'},
+  {id:'d2',origem:'anexo',tipo:'foto_tarefa',identificacao:'aceite.jpg',url:'#',
+   quando:new Date().toISOString(),os:'OS-2026-0003',cliente:'Laticínios Serra Azul',quem:'Inspetor 1'}
+]);
+
 // ════════════════════════════════════════════════════════════════════════════
 // CATÁLOGO
 // ----------------------------------------------------------------------------
@@ -2187,6 +2560,7 @@ document.getElementById('sw').addEventListener('click', e => {
   [...document.querySelectorAll('#sw button')].forEach(x => x.classList.toggle('on', x === b));
   if (b.dataset.q === 'cad'){ visao = 'cad'; pintarCadastros(); return; }
   if (b.dataset.q === 'cat'){ visao = 'cat'; pintarCatalogo(); return; }
+  if (b.dataset.q === 'cfg'){ visao = 'cfg'; pintarConfig(); return; }
   visao = 'quadro'; quadro = b.dataset.q; pintar();
 });
 document.getElementById('btnNovaOS').addEventListener('click', modalNovaOS);
