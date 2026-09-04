@@ -5,13 +5,30 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#0E5D57">
 <title>TapFlow Field</title>
+
+<!-- ── app instalável (PWA) ──────────────────────────────────────────────────
+     Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
+     ABRE SEM SINAL — que é o caso normal dentro de planta industrial. O
+     service worker guarda só a casca; dado nenhum. -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TapFlow">
+<meta name="mobile-web-app-capable" content="yes">
 <!-- ═══════════════════════════════════════════════════════════════════════════
-     TAPFLOW FIELD — TFF_S2
+     TAPFLOW FIELD — TFF_S5
      Engetap Engenharia · o app do inspetor
 
-     S2 acrescenta: fotos (do ponto e do aceite) gravadas no Google Drive,
-     coleta em EQUIPE (dois técnicos na mesma OS) e a fila offline cuidando
-     também das imagens.
+     S5 acrescenta: o app vira INSTALÁVEL (abre sem o navegador e sem sinal) e
+     a sessão vencida deixa de virar quadro vazio — vai para o login dizendo o
+     que houve.
+     S4 trouxe a tela da fase 2: registro item a item da instalação, com
+     certificado e lacre, e o fechamento que só libera com 100%.
+     S2 trouxe: fotos (do ponto e do aceite) gravadas no Google Drive, coleta
+     em EQUIPE (dois técnicos na mesma OS) e a fila offline cuidando também
+     das imagens.
 
      ARQUIVO ÚNICO. Sem SUPABASE_URL preenchido, roda em MODO DEMO.
 
@@ -76,6 +93,10 @@ header .st{display:flex;align-items:center;gap:6px;font-size:11.5px;opacity:.92;
 .aviso.demo{background:var(--warn-soft);color:var(--warn)}
 .aviso.fila{background:var(--crit-soft);color:var(--crit);display:flex;gap:8px;align-items:center}
 .aviso.fila button{background:var(--crit);color:#fff;border:0;border-radius:3px;padding:4px 10px;font-size:12px;font-weight:600;margin-left:auto}
+.aviso.inst{background:var(--accent-soft);color:var(--accent-ink);display:flex;gap:8px;align-items:center}
+.aviso.inst button{background:var(--accent);color:#fff;border:0;border-radius:3px;
+  padding:5px 12px;font-size:12px;font-weight:600;margin-left:auto;flex:0 0 auto}
+.aviso.inst button.nao{background:none;color:var(--accent-ink);margin-left:0;padding:5px 4px;font-size:15px}
 
 main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 28px;
   display:flex;flex-direction:column}
@@ -132,6 +153,15 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 .itemRow .d b{display:block;font-size:15px;font-weight:600;line-height:1.3}
 .itemRow .d small{display:block;font-size:12px;color:var(--ink-3);margin-top:3px}
 .itemRow .x{flex:0 0 auto;background:none;border:0;color:var(--ink-3);font-size:20px;padding:2px 4px}
+.itemRow .cv{flex:0 0 auto;color:var(--ink-3);font-size:19px;line-height:1}
+.itemRow.feito{border-left:3px solid var(--ok)}
+.itemRow .q.feito{background:var(--ok-soft);color:var(--ok)}
+.itemRow.naoexec{border-left:3px solid var(--warn)}
+.itemRow .q.naoexec{background:var(--warn-soft);color:var(--warn)}
+.prog{height:7px;border-radius:4px;background:var(--rule-2);overflow:hidden}
+.prog i{display:block;height:100%;background:var(--accent);border-radius:4px;transition:width .25s}
+.grupoTit{font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3);margin:17px 0 7px}
 
 .campo{margin-bottom:13px}
 .campo label{display:block;font-size:12px;font-weight:700;letter-spacing:.05em;
@@ -157,6 +187,7 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 .doCatalogo{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--accent-soft);
   border-radius:5px;padding:11px 13px;margin-bottom:14px;font-size:13.5px;color:var(--accent)}
 .doCatalogo b{font-weight:700}
+.veio{font-size:12px;color:var(--accent-ink);margin:6px 0 0;line-height:1.4}
 .lnk{background:none;border:none;color:var(--accent);font-size:13px;font-weight:600;
   text-decoration:underline;padding:2px 0}
 
@@ -191,6 +222,11 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 </header>
 
 <div class="aviso demo" id="barDemo" hidden>MODO DEMO — dados de exemplo</div>
+<div class="aviso inst" id="barInst" hidden>
+  <span>Instale na tela inicial — abre mais rápido e funciona sem sinal.</span>
+  <button id="btnInst">Instalar</button>
+  <button id="btnInstNao" class="nao" aria-label="Agora não">✕</button>
+</div>
 <div class="aviso fila" id="barFila" hidden>
   <span id="filaTxt"></span><button id="btnFlush">Tentar agora</button>
 </div>
@@ -220,7 +256,7 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S3';
+const APP_VERSION = 'S5';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
 const K_SESSAO = 'tff_sessao';
@@ -282,6 +318,8 @@ const tokenVencido = e =>
 function sessaoExpirou(){
   sessao = { token:null, refresh:null, nome:null, perfil:null, admin:false };
   LS.set(K_SESSAO, sessao);
+  pararRecon();
+  setConn('off','entre de novo');
   const lg = document.getElementById('login');
   if (lg){
     lg.hidden = false;
@@ -333,10 +371,19 @@ async function req(caminho, opts={}, tentativas=2){
 
         // sessão velha: renova UMA vez e repete. Vale também para o item na
         // fila offline — ele volta a subir sozinho em vez de virar erro.
-        if (tokenVencido(err) && !jaRenovou && sessao.refresh){
-          jaRenovou = true;
-          if (await renovarToken()){ i--; continue; }
+        // Sessão vencida. A ordem importa: tenta renovar UMA vez; se não der —
+        // ou se nem existe refresh_token guardado (sessão antiga, de antes da
+        // renovação automática) — manda para o login com recado claro. Antes,
+        // este caso caía direto no `throw` e a pessoa ficava com o quadro vazio
+        // e um "JWT expired" vermelho na tela: parece perda de dados, e não é.
+        if (tokenVencido(err)){
+          if (!jaRenovou && sessao.refresh){
+            jaRenovou = true;
+            if (await renovarToken()){ i--; continue; }
+          }
           sessaoExpirou();
+          throw Object.assign(new Error('Sua sessão expirou. Entre de novo — nada se perdeu.'),
+                              { negocio:true, sessaoMorta:true });
         }
         throw err;
       }
@@ -518,6 +565,16 @@ async function flushFila(){
           await subirArquivo(dataUrl, e.meta);
           await IDB.del(e.idbKey);
           filaRemover(e.assinatura);
+        } else if (e.tipo === 'execucao'){
+          // registro da volta ao cliente: não tem rascunho nem foto atrelada
+          await rpc(e.funcao, e.payload);
+          filaRemover(e.assinatura);
+          // se a tela da execução está aberta, o item deixa de ser "no aparelho"
+          if (exec && exec.osId === e.osId){
+            const it = exec.itens.find(x => x.id === e.payload.p_os_item_id);
+            if (it) delete it._fila;
+          }
+          toast('Registro da ' + e.rotulo + ' enviado.', 'ok');
         } else {
           const r = await rpc(e.funcao, e.payload);
           filaRemover(e.assinatura);
@@ -537,7 +594,12 @@ async function flushFila(){
         }
       }
     }
-  } finally { flushEmVoo = false; pintarFila(); }
+  } finally {
+    flushEmVoo = false; pintarFila();
+    // a tela da execução conta a fila para decidir se o fechar acende — quando
+    // a fila esvazia, ela precisa saber disso sem o inspetor sair e voltar
+    if (tela === 'exec' && exec && !execForm) pintarExecucao();
+  }
 }
 
 /**
@@ -561,8 +623,13 @@ function pintarFila(){
   const f = filaLer();
   const bar = document.getElementById('barFila');
   bar.hidden = !f.length;
-  if (f.length) document.getElementById('filaTxt').textContent =
-    f.length + (f.length === 1 ? ' levantamento aguardando envio' : ' levantamentos aguardando envio');
+  if (f.length){
+    const soLev = f.every(e => e.tipo !== 'execucao');
+    const rot = soLev ? ['levantamento aguardando envio','levantamentos aguardando envio']
+                      : ['registro aguardando envio','registros aguardando envio'];
+    document.getElementById('filaTxt').textContent =
+      f.length + ' ' + (f.length === 1 ? rot[0] : rot[1]);
+  }
 }
 document.getElementById('btnFlush').addEventListener('click', () => {
   setConn('sync','enviando…'); flushFila().then(()=>carregar(true)).catch(()=>{});
@@ -572,9 +639,12 @@ document.getElementById('btnFlush').addEventListener('click', () => {
 // ESTADO
 // ════════════════════════════════════════════════════════════════════════════
 let listaOS = [];
+let falhaCarga = null;   // motivo do último erro de carga, para a tela vazia não mentir
 let atual   = null;   // { os, tarefas, equipamentos }
 let tela    = 'lista';
 let coleta  = null;   // { client_uid, fase, itens: [] }
+let exec    = null;   // { osId, itens: [] }  — a volta ao cliente
+let execForm = null;  // item aberto no formulario, ou 'fim' na conferencia
 
 // ════════════════════════════════════════════════════════════════════════════
 // CARREGAR
@@ -584,10 +654,14 @@ async function carregar(silencioso){
   if (!silencioso) setConn('sync','carregando…');
   try{
     listaOS = await get('v_os_campo?select=*&order=coluna_ordem,numero');
+    falhaCarga = null;
     pararRecon(); setConn('ok','conectado');
     if (tela === 'lista') pintarLista();
   }catch(e){
-    if (e.negocio){ setConn('off','erro'); toast(e.message,'err'); }
+    // guarda O MOTIVO da falha: lista vazia por erro não pode ser desenhada
+    // como "nada para fazer hoje" — foi assim que o "JWT expired" virou susto
+    falhaCarga = e.message || 'não deu para carregar';
+    if (e.negocio && !e.sessaoMorta){ setConn('off','erro'); toast(e.message,'err'); }
     if (tela === 'lista') pintarLista();
   }
 }
@@ -605,6 +679,17 @@ function pintarLista(){
   const m = document.getElementById('main');
   m.innerHTML = '';
   if (!listaOS.length){
+    if (falhaCarga){
+      const v = document.createElement('div'); v.className = 'vazio';
+      v.innerHTML = '<b>Não deu para carregar suas ordens</b><p class="mt"></p>' +
+        '<button class="btn" id="bTent" style="max-width:260px;margin:18px auto 0">Tentar de novo</button>';
+      v.querySelector('.mt').textContent = falhaCarga +
+        ' — isto NÃO quer dizer que não há OS para você.';
+      m.appendChild(v);
+      document.getElementById('bTent').addEventListener('click',
+        () => carregar().then(pintarLista).catch(()=>pintarLista()));
+      return;
+    }
     m.innerHTML = '<div class="vazio"><b>Nada no campo agora</b>' +
       '<p>Quando o escritório abrir uma OS para você, ela aparece aqui.</p></div>';
     return;
@@ -677,7 +762,7 @@ function pintarOS(){
   const m = document.getElementById('main');
   m.innerHTML = '';
 
-  const naFila = filaLer().find(e => e.osId === os.os_id);
+  const naFila = filaLer().find(e => e.osId === os.os_id && e.tipo === 'levantamento');
   if (naFila){
     m.innerHTML = '<div class="painel"><div class="et">Aguardando envio</div>' +
       '<h2>O levantamento está na fila</h2>' +
@@ -763,8 +848,26 @@ function pintarOS(){
     const b = document.createElement('button');
     b.className = 'btn pri';
     b.textContent = fase === 2 ? 'Registrar instalação' : 'Lançar acessórios';
-    b.addEventListener('click', () => abrirColeta(fase));
+    // Fase 1 é lista em branco: o inspetor descobre a planta.
+    // Fase 2 é lista fechada: ele executa o que foi aprovado. São telas
+    // diferentes de propósito — na volta, escopo novo é problema, não recurso.
+    b.addEventListener('click', () => fase === 2 ? abrirExecucao() : abrirColeta(fase));
     p.appendChild(b);
+    if (fase === 2){
+      const n = document.createElement('p');
+      n.style.cssText = 'font-size:13px;color:var(--ink-3);margin:11px 0 0;line-height:1.45';
+      n.textContent = 'Você registra peça por peça o que foi feito, com o número do '
+        + 'certificado e do lacre. A OS só fecha com todos os itens registrados.';
+      p.appendChild(n);
+      const fq = filaLer().filter(e => e.tipo === 'execucao' && e.osId === os.os_id).length;
+      if (fq){
+        const w = document.createElement('p');
+        w.style.cssText='font-size:13.5px;color:var(--warn);margin:9px 0 0;font-weight:600';
+        w.textContent = fq + ' registro(s) salvos no aparelho, ainda não enviados.';
+        p.appendChild(w);
+      }
+      return;
+    }
     const d = LS.get(K_DRAFT + os.os_id, null);
     if (d && d.itens && d.itens.length){
       const n = document.createElement('p');
@@ -1317,6 +1420,366 @@ async function enviar(){
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// TELA: EXECUÇÃO — a volta ao cliente
+// ----------------------------------------------------------------------------
+// Aqui NÃO se lança item novo. Os itens já foram levantados, cotados e
+// aprovados; o que o inspetor faz na volta é dizer, peça por peça, o que
+// aconteceu — e informar o número do certificado e do lacre, que é o papel que
+// o cliente guarda para a fiscalização.
+//
+// Por isso esta tela é uma lista FECHADA e não um formulário em branco: o campo
+// não redefine o escopo na hora da instalação, só executa o que foi aprovado.
+// Item que não deu para instalar não trava a OS — vira "não executado" com o
+// motivo escrito, que é o que o escritório precisa para decidir.
+//
+// O botão de fechar só acende com 100% dos itens registrados. É a mesma trava
+// do TapControl: OS fechada pela metade vira retrabalho no escritório com o
+// inspetor já fora da planta.
+// ════════════════════════════════════════════════════════════════════════════
+const ACOES = [
+  ['instalado',           'Instalado'],
+  ['instalado_calibrado', 'Instalado e calibrado'],
+  ['entregue',            'Entregue ao cliente'],
+  ['substituido',         'Substituído'],
+  ['nao_executado',       'Não executado']
+];
+const rotuloAcao = a => (ACOES.find(x => x[0] === a) || [null, a || ''])[1];
+const hojeISO = () => { const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
+
+async function abrirExecucao(){
+  const { os } = atual;
+  tela = 'exec'; execForm = null;
+  document.getElementById('hTit').textContent = 'Instalação';
+  document.getElementById('hSub').textContent = os.numero + ' · ' + os.cliente;
+  const m = document.getElementById('main');
+  m.innerHTML = '<div class="vazio"><p>Carregando os itens aprovados…</p></div>';
+  try{
+    const itens = DEMO ? demoExecItens(os.os_id)
+      : await get('v_itens_execucao?select=*&os_id=eq.' + os.os_id);
+    exec = { osId: os.os_id, itens: itens || [] };
+    pintarExecucao();
+  }catch(e){
+    m.innerHTML = '<div class="vazio"><b>Não deu para carregar os itens</b><p></p></div>';
+    m.querySelector('p').textContent = e.message;
+  }
+}
+
+/**
+ * O progresso é contado aqui, no aparelho, e não lido do servidor — porque o
+ * inspetor precisa ver a barra andar mesmo sem sinal. O servidor recalcula por
+ * conta própria na hora de fechar; esta conta só decide se o botão acende.
+ */
+function progExec(){
+  const its = exec.itens;
+  const naFila = filaLer().filter(e => e.tipo === 'execucao' && e.osId === exec.osId).length;
+  const feitos = its.filter(i => i.acao_executada).length;
+  return { total: its.length, feitos, naFila,
+           pode: its.length > 0 && feitos === its.length && naFila === 0 };
+}
+
+function pintarExecucao(){
+  const { os } = atual;
+  execForm = null;
+  document.getElementById('hTit').textContent = 'Instalação';
+  document.getElementById('hSub').textContent = os.numero + ' · ' + os.cliente;
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+  const p = progExec();
+
+  const topo = document.createElement('div');
+  topo.className = 'painel';
+  topo.innerHTML = '<div class="et">Retorno para instalação</div>' +
+    '<h2 class="pgT"></h2>' +
+    '<div class="prog"><i></i></div>' +
+    '<p class="pgS" style="margin:10px 0 0"></p>';
+  topo.querySelector('.pgT').textContent = p.feitos + ' de ' + p.total + ' itens registrados';
+  topo.querySelector('.prog i').style.width = (p.total ? (p.feitos/p.total*100) : 0) + '%';
+  topo.querySelector('.pgS').textContent = p.total === 0
+    ? 'Esta OS não tem itens aprovados. Fale com o escritório antes de fechar.'
+    : (p.feitos === p.total
+        ? 'Tudo registrado. Confira e feche com o cliente.'
+        : 'Toque em cada peça e diga o que foi feito. Dá para registrar sem sinal.');
+  m.appendChild(topo);
+
+  if (p.naFila){
+    const av = document.createElement('div');
+    av.className = 'painel';
+    av.style.cssText = 'background:var(--crit-soft);border-color:transparent';
+    av.innerHTML = '<h2 style="font-size:17px" class="ft"></h2>' +
+      '<p style="margin:0">Sobe sozinho quando o sinal voltar. O fechamento só ' +
+      'libera depois que o servidor receber tudo.</p>';
+    av.querySelector('.ft').textContent = p.naFila +
+      (p.naFila === 1 ? ' registro ainda no aparelho' : ' registros ainda no aparelho');
+    m.appendChild(av);
+  }
+
+  // agrupado por equipamento: é assim que o inspetor anda pela planta —
+  // termina um vaso, passa para o próximo, e não pula de um lado para o outro.
+  const grupos = new Map();
+  exec.itens.forEach(i => {
+    const g = i.equipamento || 'Sem equipamento';
+    if (!grupos.has(g)) grupos.set(g, []);
+    grupos.get(g).push(i);
+  });
+  grupos.forEach((its, nome) => {
+    const h = document.createElement('div');
+    h.className = 'grupoTit';
+    h.textContent = nome + ' · ' + its.filter(i=>i.acao_executada).length + '/' + its.length;
+    m.appendChild(h);
+    its.forEach(i => m.appendChild(linhaExec(i)));
+  });
+
+  const barra = document.createElement('div');
+  barra.className = 'barra';
+  barra.innerHTML = '<div class="resumo" id="xRes"></div>' +
+    '<button class="btn pri" id="xFim">Finalizar e fechar</button>';
+  m.appendChild(barra);
+  document.getElementById('xRes').textContent = p.pode
+    ? 'Pronto para fechar'
+    : (p.naFila ? 'Aguardando o envio dos registros'
+                : 'Faltam ' + (p.total - p.feitos) + ' item(ns)');
+  const bf = document.getElementById('xFim');
+  bf.disabled = !p.pode;
+  bf.addEventListener('click', telaFechamento);
+}
+
+function linhaExec(i){
+  // item não executado NÃO ganha o certo verde: ele conta como registrado, mas
+  // é uma pendência que o escritório vai ter de resolver. Marcar de verde
+  // esconderia justamente o que precisa aparecer.
+  const nao = i.acao_executada === 'nao_executado';
+  const d = document.createElement('div');
+  d.className = 'itemRow' + (nao ? ' naoexec' : (i.acao_executada ? ' feito' : ''));
+  d.innerHTML = '<div class="q"></div><div class="d"><b></b><small></small></div>' +
+                '<div class="cv">›</div>';
+  const q = d.querySelector('.q');
+  q.textContent = nao ? '!' : (i.acao_executada ? '✓' : i.quantidade);
+  if (i.acao_executada) q.className = 'q ' + (nao ? 'naoexec' : 'feito');
+  d.querySelector('b').textContent = i.descricao;
+
+  const notas = [];
+  if (i.acao_executada){
+    notas.push(rotuloAcao(i.acao_executada));
+    if (nao && i.obs_execucao) notas.push(i.obs_execucao);
+    if (i.certificado_num) notas.push('cert. ' + i.certificado_num);
+    if (i.lacre_num) notas.push('lacre ' + i.lacre_num);
+    if (i._fila) notas.push('no aparelho');
+  } else {
+    if (i.exige) notas.push(i.exige);
+    else notas.push('toque para registrar');
+    if (i.origem) notas.push(i.origem);
+  }
+  d.querySelector('small').textContent = notas.join(' · ');
+  d.addEventListener('click', () => formExecucao(i));
+  return d;
+}
+
+function formExecucao(i){
+  execForm = i;
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+  document.getElementById('hTit').textContent = 'Registrar item';
+
+  const est = {
+    acao: i.acao_executada || (i.requer_calibracao ? 'instalado_calibrado' : 'instalado'),
+    data: i.instalado_em || hojeISO(),
+    cert: i.certificado_num || '',
+    lacre: i.lacre_num || '',
+    obs: i.obs_execucao || ''
+  };
+
+  const box = document.createElement('div');
+  box.className = 'painel';
+  box.innerHTML =
+    '<div class="et"></div><h2 style="font-size:18px" class="xd"></h2>' +
+    '<p class="xq" style="margin:0 0 14px"></p>' +
+    '<div class="campo"><label>O que foi feito</label><div class="tog" id="xTg"></div></div>' +
+    '<div class="campo" id="cData"><label for="xData">Data</label>' +
+      '<input id="xData" type="date"></div>' +
+    '<div class="campo" id="cCert" hidden><label for="xCert">Nº do certificado</label>' +
+      '<input id="xCert" type="text" inputmode="text" placeholder="como está no certificado">' +
+      '<p class="veio" id="xCertV" hidden>Veio da calibração — confira e corrija se estiver diferente.</p></div>' +
+    '<div class="campo" id="cLacre" hidden><label for="xLacre">Nº do lacre</label>' +
+      '<input id="xLacre" type="text" inputmode="text" placeholder="número gravado no lacre">' +
+      '<p class="veio" id="xLacreV" hidden>Já registrado no escritório — confira.</p></div>' +
+    '<div class="campo"><label for="xObs" id="lObs">Observação</label>' +
+      '<textarea id="xObs" rows="3" placeholder="opcional"></textarea></div>' +
+    '<button class="btn pri" id="xOk">Salvar registro</button>' +
+    '<button class="btn" id="xCa">Cancelar</button>';
+  m.appendChild(box);
+
+  box.querySelector('.et').textContent = i.equipamento || 'Sem equipamento';
+  box.querySelector('.xd').textContent = i.descricao;
+  const exig = [];
+  if (i.requer_calibracao) exig.push('exige certificado de calibração');
+  if (i.requer_lacre) exig.push('exige número de lacre');
+  box.querySelector('.xq').textContent =
+    'Quantidade: ' + i.quantidade + (exig.length ? ' · ' + exig.join(' e ') : '');
+
+  const tg = document.getElementById('xTg');
+  const pinta = () => {
+    [...tg.children].forEach(b => b.classList.toggle('on', b.dataset.v === est.acao));
+    const naoExec = est.acao === 'nao_executado';
+    // certificado e lacre só aparecem quando fazem sentido — item não executado
+    // não tem o que certificar, e pedir número em branco é convite a inventar
+    document.getElementById('cCert').hidden  = naoExec || !i.requer_calibracao;
+    document.getElementById('cLacre').hidden = naoExec || !i.requer_lacre;
+    document.getElementById('cData').hidden  = naoExec;
+    document.getElementById('lObs').textContent = naoExec
+      ? 'Por que não deu para executar (obrigatório)' : 'Observação';
+    document.getElementById('xObs').placeholder = naoExec
+      ? 'ex.: ponto inacessível, linha pressurizada' : 'opcional';
+  };
+  ACOES.forEach(([v,l]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = l; b.dataset.v = v;
+    b.addEventListener('click', () => { est.acao = v; pinta(); });
+    tg.appendChild(b);
+  });
+
+  document.getElementById('xData').value = est.data;
+  document.getElementById('xCert').value = est.cert;
+  document.getElementById('xLacre').value = est.lacre;
+  // número que já veio do escritório aparece preenchido, com a origem dita em
+  // voz alta. Redigitar um número certo é a melhor forma de errá-lo.
+  document.getElementById('xCertV').hidden  = !(i.certificado_num && !i.acao_executada);
+  document.getElementById('xLacreV').hidden = !(i.lacre_num && !i.acao_executada);
+  document.getElementById('xObs').value = est.obs;
+  pinta();
+
+  document.getElementById('xCa').addEventListener('click', pintarExecucao);
+  document.getElementById('xOk').addEventListener('click', () => {
+    const cert = document.getElementById('xCert').value.trim();
+    const lacre = document.getElementById('xLacre').value.trim();
+    const obs = document.getElementById('xObs').value.trim();
+    // as mesmas travas do servidor, checadas aqui — para que o registro feito
+    // sem sinal não vá para a fila só para ser recusado horas depois
+    if (est.acao !== 'nao_executado'){
+      if (i.requer_calibracao && !cert){ toast('Este item exige calibração — informe o número do certificado.','err'); return; }
+      if (i.requer_lacre && !lacre){ toast('Este item exige lacre — informe o número.','err'); return; }
+    }
+    if (est.acao === 'nao_executado' && !obs){
+      toast('Escreva por que não deu para executar.','err'); return; }
+    salvarExecucao(i, { acao: est.acao, data: document.getElementById('xData').value || hojeISO(),
+                        cert, lacre, obs });
+  });
+}
+
+async function salvarExecucao(i, v){
+  const { os } = atual;
+  const payload = {
+    p_os_item_id: i.id,
+    p_acao: v.acao,
+    p_data: v.acao === 'nao_executado' ? null : v.data,
+    p_certificado: v.cert || null,
+    p_lacre: v.lacre || null,
+    p_observacao: v.obs || null
+  };
+  const assinatura = 'exec|' + i.id;
+  const local = () => {
+    i.acao_executada = v.acao;
+    i.instalado_em = v.acao === 'nao_executado' ? null : v.data;
+    if (v.cert) i.certificado_num = v.cert;
+    if (v.lacre) i.lacre_num = v.lacre;
+    i.obs_execucao = v.obs || null;
+    i.exige = null;
+  };
+
+  document.querySelectorAll('#main .btn').forEach(b => b.disabled = true);
+
+  if (DEMO){ local(); pintarExecucao(); toast('Registrado.','ok'); return; }
+
+  if (navigator.onLine === false || !conectado){
+    filaAdd({ tipo:'execucao', funcao:'tf_registrar_execucao', payload, assinatura,
+              osId: os.os_id, rotulo: os.numero });
+    local(); i._fila = true;
+    pintarExecucao();
+    toast('Sem sinal — registro salvo no aparelho. Sobe sozinho quando conectar.','err');
+    return;
+  }
+
+  setConn('sync','enviando…');
+  try{
+    await rpc('tf_registrar_execucao', payload);
+    setConn('ok','conectado');
+    local(); delete i._fila;
+    filaRemover(assinatura);          // se havia versão antiga na fila, esta manda
+    pintarExecucao();
+    toast('Registrado: ' + rotuloAcao(v.acao) + '.','ok');
+  }catch(e){
+    if (e.negocio){
+      setConn('ok','conectado');
+      toast('Recusado: ' + e.message,'err');
+      document.querySelectorAll('#main .btn').forEach(b => b.disabled = false);
+    } else {
+      filaAdd({ tipo:'execucao', funcao:'tf_registrar_execucao', payload, assinatura,
+                osId: os.os_id, rotulo: os.numero });
+      local(); i._fila = true;
+      pintarExecucao();
+      toast('Não deu para enviar agora — ficou na fila, nada se perdeu.','err');
+    }
+  }
+}
+
+/**
+ * O fechamento é o único ponto desta tela que exige sinal. É de propósito: é um
+ * ato decisivo — devolve a OS ao escritório — e fechar "no escuro", para
+ * descobrir depois que o servidor recusou, seria pior do que esperar.
+ */
+function telaFechamento(){
+  const { os } = atual;
+  const p = progExec();
+  execForm = 'fim';
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+  document.getElementById('hTit').textContent = 'Fechar a instalação';
+
+  const naoExec = exec.itens.filter(i => i.acao_executada === 'nao_executado');
+  const box = document.createElement('div');
+  box.className = 'painel';
+  box.innerHTML = '<div class="et">Conferência final</div>' +
+    '<h2 class="ft"></h2><p class="fs"></p>' +
+    '<div class="campo"><label for="fObs">Observação para o escritório</label>' +
+      '<textarea id="fObs" rows="3" placeholder="opcional"></textarea></div>' +
+    '<button class="btn pri" id="fOkF">Confirmar fechamento</button>' +
+    '<button class="btn" id="fCaF">Voltar</button>';
+  m.appendChild(box);
+  box.querySelector('.ft').textContent = p.feitos + ' item(ns) registrados';
+  box.querySelector('.fs').textContent = naoExec.length
+    ? naoExec.length + ' item(ns) ficaram como não executados — o motivo vai junto ' +
+      'e o escritório decide o que fazer.'
+    : 'Todos os itens aprovados foram executados. A OS volta para o escritório ' +
+      'conferir e encerrar — quem fecha o faturamento não é o campo.';
+
+  document.getElementById('fCaF').addEventListener('click', pintarExecucao);
+  document.getElementById('fOkF').addEventListener('click', async () => {
+    const obs = document.getElementById('fObs').value.trim();
+    document.querySelectorAll('#main .btn').forEach(b => b.disabled = true);
+    if (DEMO){ demoFecharExec(os.os_id); toast('Instalação fechada.','ok');
+               await carregar(true); pintarLista(); return; }
+    if (navigator.onLine === false || !conectado){
+      toast('O fechamento precisa de sinal. Os registros já estão salvos — tente quando conectar.','err');
+      document.querySelectorAll('#main .btn').forEach(b => b.disabled = false);
+      return;
+    }
+    setConn('sync','enviando…');
+    try{
+      const r = await rpc('tf_fechar_execucao', { p_os_id: os.os_id, p_observacao: obs || null });
+      setConn('ok','conectado');
+      toast('Instalação fechada — ' + (r && r.itens ? r.itens : p.feitos) + ' item(ns).','ok');
+      exec = null;
+      await carregar(true);
+      pintarLista();
+    }catch(e){
+      if (e.negocio){ setConn('ok','conectado'); toast('Recusado: ' + e.message,'err'); }
+      else toast('Não deu para fechar agora — tente de novo com sinal.','err');
+      document.querySelectorAll('#main .btn').forEach(b => b.disabled = false);
+    }
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // AUXILIARES
 // ════════════════════════════════════════════════════════════════════════════
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c =>
@@ -1331,9 +1794,19 @@ function toast(msg, tipo){
   toastT = setTimeout(() => el.className = 'toast', 4600);
 }
 
+function voltarParaOS(){
+  pintarOS(); tela = 'os';
+  document.getElementById('hTit').textContent = atual.os.cliente;
+  document.getElementById('hSub').textContent = atual.os.numero + ' · ' + atual.os.coluna;
+}
 document.getElementById('btnBack').addEventListener('click', () => {
-  if (tela === 'coleta') { pintarOS(); tela = 'os'; document.getElementById('hTit').textContent = atual.os.cliente;
-    document.getElementById('hSub').textContent = atual.os.numero + ' · ' + atual.os.coluna; return; }
+  if (tela === 'coleta'){ voltarParaOS(); return; }
+  // na execução o voltar tem dois degraus: do formulário para a lista de itens,
+  // e só da lista para a OS. Sair da peça por engano e perder a tela toda irrita.
+  if (tela === 'exec'){
+    if (execForm){ pintarExecucao(); return; }
+    voltarParaOS(); return;
+  }
   pintarLista();
 });
 
@@ -1358,10 +1831,37 @@ function demoSeed(){
   ];
   const avancar = (ts, alvo) => { const i = ts.findIndex(t=>t.tarefa_id===alvo);
     ts.forEach((t,k)=>{ if(k<i) t.status='completo'; else if(k===i) t.status='pendente'; }); return ts; };
+  // a OS da volta ao cliente: tudo para trás já fechou, sobrou instalar
+  const modeloF2 = () => {
+    const ts = modelo().map(t => Object.assign({}, t, {status:'completo'}));
+    ts.push(T('T14','Agendar retorno','manual','Retorno p/ instalação',80,1,'completo',['tecnico_adm']));
+    ts.push(T('T15','Instalar em campo','auto:levantamento_f2','Retorno p/ instalação',80,2,'pendente',
+      ['inspetor','auxiliar'],'Registro do que foi instalado, calibrado e lacrado — peça por peça.'));
+    return ts;
+  };
+  const XI = (id,desc,q,eq,cal,lac,ori) => ({
+    id, os_id:'d4', descricao:desc, quantidade:q, equipamento:eq,
+    requer_calibracao:cal, requer_lacre:lac, origem:ori,
+    acao_executada:null, instalado_em:null, certificado_num:null, lacre_num:null,
+    obs_execucao:null, executado_por_nome:'',
+    exige: (cal && lac) ? 'precisa de certificado e lacre'
+         : cal ? 'precisa do número do certificado'
+         : lac ? 'precisa do número do lacre' : null });
   DB = {
     d1:{ meta:{os_id:'d1',numero:'OS-2026-0007',cliente:'Gerdau — Divinópolis',dias:1}, tarefas:avancar(modelo(),'T01') },
     d2:{ meta:{os_id:'d2',numero:'OS-2026-0006',cliente:'Fundição Santana',dias:0},     tarefas:avancar(modelo(),'T02') },
-    d3:{ meta:{os_id:'d3',numero:'OS-2026-0005',cliente:'Uau Ingleza',dias:2},          tarefas:avancar(modelo(),'T03') }
+    d3:{ meta:{os_id:'d3',numero:'OS-2026-0005',cliente:'Uau Ingleza',dias:2},          tarefas:avancar(modelo(),'T03') },
+    d4:{ meta:{os_id:'d4',numero:'OS-2026-0003',cliente:'Farmax — Divinópolis',dias:0},
+         tarefas: modeloF2(),
+         execItens: [
+           XI('x1','Manômetro 63mm 0-14 kgf/cm² · 1/4" NPT',2,'VP-01',true,false,'compra'),
+           XI('x2','Válvula de segurança 1" · 10,5 kgf/cm²',1,'VP-01',true,true,'proper'),
+           XI('x3','Purgador de boia 3/4"',1,'CL-01',false,false,'estoque'),
+           // este já voltou calibrado do laboratório: o número vem preenchido e
+           // a linha não cobra nada — é o caso que mais aparece na prática
+           Object.assign(XI('x4','Manômetro 100mm 0-25 kgf/cm² · 1/2" NPT',1,'CL-01',true,false,'compra'),
+             { certificado_num:'RBC-2026-0771', exige:null })
+         ] }
   };
 }
 const EXEC = { inspetor:'campo', auxiliar:'campo', comercial:'adm', compras:'adm', tecnico_adm:'adm', admin:'adm' };
@@ -1394,6 +1894,12 @@ function demoAgir(osId, tid, acao){
   t.status = 'completo';
   const p = DB[osId].tarefas.find(x => x.status === 'bloqueado');
   if (p) p.status = 'pendente';
+  DB[osId].meta.dias = 0;
+}
+const demoExecItens = id => (DB || (demoSeed(), DB))[id].execItens || [];
+function demoFecharExec(osId){
+  const t = DB[osId].tarefas.find(x => x.tipo === 'auto:levantamento_f2');
+  if (t) t.status = 'completo';
   DB[osId].meta.dias = 0;
 }
 function demoEnviar(osId){
@@ -1444,6 +1950,48 @@ function iniciar(){
     sincronizarCatalogo().catch(()=>{});
   });
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// APP INSTALÁVEL
+// ----------------------------------------------------------------------------
+// O service worker só entra em http(s): em file:// o navegador recusa, e o app
+// continua tendo que abrir com duplo clique para eu testar.
+//
+// Sobre o convite de instalar: sem ele, ninguém acha "Adicionar à tela inicial"
+// no menu de três pontinhos. Com ele, é um toque. Quem dispensar não vê de
+// novo — o app não fica insistindo com quem já disse não.
+// ════════════════════════════════════════════════════════════════════════════
+const K_INST = 'tff_inst_nao';
+
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+
+let promptInstalar = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  promptInstalar = e;
+  if (LS.get(K_INST, false)) return;
+  const b = document.getElementById('barInst');
+  if (b) b.hidden = false;
+});
+window.addEventListener('appinstalled', () => {
+  const b = document.getElementById('barInst'); if (b) b.hidden = true;
+  promptInstalar = null;
+});
+document.getElementById('btnInst').addEventListener('click', async () => {
+  const b = document.getElementById('barInst');
+  if (!promptInstalar){ b.hidden = true; return; }
+  b.hidden = true;
+  try{ promptInstalar.prompt(); await promptInstalar.userChoice; }catch(e){}
+  promptInstalar = null;
+});
+document.getElementById('btnInstNao').addEventListener('click', () => {
+  LS.set(K_INST, true);
+  document.getElementById('barInst').hidden = true;
+});
 
 (function boot(){
   document.getElementById('barDemo').hidden = !DEMO;
