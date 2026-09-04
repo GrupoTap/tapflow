@@ -251,6 +251,42 @@ button.mini{padding:6px 12px;font-weight:600}
 .agItem b{display:block;font-size:13.5px;font-weight:600}
 .agItem small{display:block;font-size:12px;color:var(--ink-3);margin-top:2px}
 
+
+/* ── custos e cotações ────────────────────────────── */
+.margemBox{display:grid;grid-template-columns:1fr auto;gap:0;border:1px solid var(--rule);
+  border-radius:3px;overflow:hidden;margin-bottom:12px}
+.mg{display:contents}
+.mg span{padding:9px 12px;font-size:13px;color:var(--ink-2);border-bottom:1px solid var(--rule-2)}
+.mg b{padding:9px 12px;font-size:13.5px;font-weight:600;text-align:right;
+  border-bottom:1px solid var(--rule-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mg.perde b{color:var(--crit)}
+.mg.final span,.mg.final b{background:var(--accent-soft);color:var(--accent);font-weight:700;
+  border-bottom:none;font-size:15px}
+.mg.final b i{font-style:normal;font-size:12.5px;opacity:.8}
+.aviso2{background:var(--crit-soft);color:var(--ink);padding:10px 12px;border-radius:3px}
+.linhaCusto,.linhaCot,.linhaCompra{display:grid;grid-template-columns:1fr auto auto;gap:0 10px;
+  align-items:center;padding:9px 11px;border:1px solid var(--rule);border-radius:3px;
+  margin-bottom:5px;background:var(--surface)}
+.linhaCusto b,.linhaCot b,.linhaCompra b{display:block;font-size:13.5px;font-weight:600}
+.linhaCusto small,.linhaCot small,.linhaCompra small{display:block;font-size:11.5px;
+  color:var(--ink-3);margin-top:2px;line-height:1.35}
+.linhaCusto .vl,.linhaCot .vl{font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums;
+  white-space:nowrap}
+.linhaCusto .x{background:none;border:none;color:var(--ink-3);font-size:18px;
+  line-height:1;padding:0 4px;cursor:pointer}
+.linhaCusto .x:hover{color:var(--crit)}
+.grupoCot{margin-bottom:12px}
+.gcTit{font-size:11.5px;font-weight:700;color:var(--ink-3);margin-bottom:5px}
+.linhaCot.on{border-color:var(--accent);background:var(--accent-soft)}
+.linhaCot.vencida{opacity:.6}
+.linhaCompra{grid-template-columns:1fr auto}
+.linhaCompra.atrasado{border-left:3px solid var(--crit);background:var(--crit-soft)}
+.linhaCompra\.chega-logo,.linhaCompra.chega-logo{border-left:3px solid var(--warn)}
+.linhaCompra.recebido{opacity:.55}
+.linhaCompra .dt{font-size:11.5px;color:var(--ink-3);text-align:right;line-height:1.35}
+.linhaCompra .dt b{font-size:13px;color:var(--ink);display:inline}
+.linhaCompra .dt b.atr{color:var(--crit)}
+
 /* ── gaveta ───────────────────────────────────────── */
 .scrim{position:fixed;inset:0;background:rgba(16,26,28,.42);opacity:0;pointer-events:none;transition:opacity .18s}
 .scrim.on{opacity:1;pointer-events:auto}
@@ -391,7 +427,7 @@ button.mini{padding:6px 12px;font-weight:600}
 <header>
   <div>
     <div class="brand">Tap<span>Flow</span></div>
-    <div class="ver mono">MANAGER · S5</div>
+    <div class="ver mono">MANAGER · S6</div>
   </div>
 
   <div class="switch" id="sw">
@@ -399,6 +435,7 @@ button.mini{padding:6px 12px;font-weight:600}
     <button data-q="campo"  class="on">Campo <span class="n" id="nCampo">0</span></button>
     <button data-q="adm">Gestão <span class="n" id="nAdm">0</span></button>
     <button data-q="cad">Cadastros</button>
+    <button data-q="cpr">Compras</button>
     <button data-q="cat">Catálogo</button>
     <button data-q="cfg">Configurações</button>
   </div>
@@ -432,6 +469,7 @@ button.mini{padding:6px 12px;font-weight:600}
     <button data-t="tarefas" class="on">Tarefas</button>
     <button data-t="itens">Itens</button>
     <button data-t="proposta">Proposta</button>
+    <button data-t="custos">Custos</button>
     <button data-t="arquivos">Arquivos</button>
   </div>
   <div class="d-b" id="dBody"></div>
@@ -474,7 +512,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S5';
+const APP_VERSION = 'S6';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -877,6 +915,7 @@ async function abrirOS(c){
 function pintarDrawer(){
   if (abaDrawer === 'itens')    return pintarItens();
   if (abaDrawer === 'proposta') return pintarProposta();
+  if (abaDrawer === 'custos')   return pintarCustos();
   if (abaDrawer === 'arquivos') return pintarArquivos();
   const { card, tarefas } = osAberta;
   const body = document.getElementById('dBody');
@@ -1689,6 +1728,242 @@ async function modalNovaOS(){
 
 
 
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// CUSTOS E COTAÇÕES — a aba que mostra para onde foi a margem
+// ----------------------------------------------------------------------------
+// Frete NÃO é item da proposta. Item é o que o cliente compra; frete é o que
+// custa entregar. Aqui ele aparece como custo da OS: reduz a margem, entra no
+// resumo interno, e não aparece no documento que vai ao cliente.
+// ════════════════════════════════════════════════════════════════════════════
+async function pintarCustos(){
+  const b = document.getElementById('dBody');
+  const { card } = osAberta;
+  b.innerHTML = '<p class="nota">Carregando…</p>';
+
+  let m = null, custos = [], cots = [], itens = [];
+  try{
+    if (DEMO){ m = demoMargem(); custos = demoCustos(); cots = demoCots(); itens = demoItens(card.os_id); }
+    else {
+      const [a,c,q,i] = await Promise.all([
+        get('v_os_margem?select=*&os_id=eq.' + card.os_id),
+        get('custos_os?select=*&os_id=eq.' + card.os_id + '&order=quando'),
+        get('v_cotacoes?select=*&os_id=eq.' + card.os_id),
+        get('os_itens?select=id,descricao,quantidade&os_id=eq.' + card.os_id + '&elegivel=is.true&order=descricao')
+      ]);
+      m = a[0]; custos = c; cots = q; itens = i;
+    }
+  }catch(e){ b.innerHTML=''; toast(e.message,'err'); return; }
+
+  const bruta = Number((m&&m.margem_bruta)||0), real = Number((m&&m.margem_real)||0);
+  const extras = Number((m&&m.custos_extras)||0);
+  const some = bruta - real;
+
+  b.innerHTML =
+    '<div class="margemBox">'
+    + '<div class="mg"><span>Venda</span><b>' + BRL((m&&m.venda)||0) + '</b></div>'
+    + '<div class="mg"><span>Custo dos itens</span><b>' + BRL((m&&m.custo_itens)||0) + '</b></div>'
+    + '<div class="mg"><span>Margem bruta</span><b>' + BRL(bruta) + '</b></div>'
+    + '<div class="mg ' + (some > 0 ? 'perde' : '') + '"><span>Frete e outros</span><b>−'
+    +   BRL(extras) + '</b></div>'
+    + '<div class="mg final"><span>Margem real</span><b>' + BRL(real)
+    +   ((m&&m.margem_pct) != null ? ' <i>' + m.margem_pct + '%</i>' : '') + '</b></div>'
+    + '</div>'
+    + (some > 0
+        ? '<p class="nota aviso2">O que não é item comeu <b>' + BRL(some) + '</b> — '
+          + ((m&&m.extras_pct)||0) + '% da venda. Este é o número que somia quando o frete '
+          + 'ficava no WhatsApp.</p>'
+        : '<p class="nota">Nenhum custo fora dos itens lançado ainda. Se houve frete ou '
+          + 'deslocamento e ele não está aqui, a margem acima está otimista.</p>')
+
+    + '<div class="secTit">Custos que não são item</div>'
+    + '<div id="cuLista"></div>'
+    + '<div class="grelha" style="margin-top:10px">'
+    +  '<div class="campo"><label for="cuT">Tipo</label><select id="cuT">'
+    +   [['frete','Frete'],['deslocamento','Deslocamento'],['hospedagem','Hospedagem'],
+        ['terceiro','Serviço de terceiro'],['calibracao','Calibração'],['taxa','Taxa'],
+        ['outro','Outro']].map(([v,l]) => '<option value="' + v + '">' + l + '</option>').join('')
+    +  '</select></div>'
+    +  '<div class="campo"><label for="cuD">Descrição</label><input id="cuD" type="text" '
+    +   'placeholder="ex.: entrega em Itaúna"></div>'
+    +  '<div class="campo"><label for="cuF">Fornecedor</label><input id="cuF" type="text"></div>'
+    +  '<div class="campo"><label for="cuV">Valor</label><input id="cuV" type="number" step="0.01"></div>'
+    + '</div>'
+    + '<button class="btn pri" id="cuAdd" style="width:100%">Lançar custo</button>'
+
+    + '<div class="secTit">Cotações</div>'
+    + '<p class="nota">A conversa continua no WhatsApp. O que fica aqui é a resposta: quem, '
+    + 'quanto, prazo. <b>Compare pelo total</b> — o mais barato por peça nem sempre é o mais '
+    + 'barato com frete.</p>'
+    + '<div id="coLista"></div>'
+    + '<div class="grelha" style="margin-top:10px">'
+    +  '<div class="campo"><label for="coI">Item</label><select id="coI">'
+    +   '<option value="">— cotação geral —</option>'
+    +   itens.map(i => '<option value="' + i.id + '">' + esc(i.descricao).slice(0,44) + '</option>').join('')
+    +  '</select></div>'
+    +  '<div class="campo"><label for="coF">Fornecedor</label><input id="coF" type="text"></div>'
+    +  '<div class="campo"><label for="coV">Valor unitário</label><input id="coV" type="number" step="0.01"></div>'
+    +  '<div class="campo"><label for="coFr">Frete</label><input id="coFr" type="number" step="0.01"></div>'
+    +  '<div class="campo"><label for="coP">Prazo (dias)</label><input id="coP" type="number"></div>'
+    +  '<div class="campo"><label for="coC">Canal</label><select id="coC">'
+    +   ['whatsapp','telefone','email','presencial','site'].map(c =>
+        '<option value="' + c + '">' + c + '</option>').join('') + '</select></div>'
+    + '</div>'
+    + '<button class="btn" id="coAdd" style="width:100%">Registrar cotação</button>';
+
+  // custos lançados
+  const CL = document.getElementById('cuLista');
+  if (!custos.length) CL.innerHTML = '<p class="nota">Nada lançado.</p>';
+  custos.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'linhaCusto';
+    el.innerHTML = '<div><b></b><small></small></div><div class="vl"></div>'
+      + '<button class="x" aria-label="Remover">×</button>';
+    el.querySelector('b').textContent = c.descricao;
+    el.querySelector('small').textContent = (c.fornecedor ? c.fornecedor + ' · ' : '')
+      + new Date(c.quando+'T12:00').toLocaleDateString('pt-BR')
+      + (c.realizado ? ' · realizado' : ' · previsto');
+    el.querySelector('.vl').textContent = BRL(c.valor);
+    el.querySelector('.x').addEventListener('click', async () => {
+      if (!confirm('Remover "' + c.descricao + '"?')) return;
+      try{
+        if (!DEMO) await req('/rest/v1/custos_os?id=eq.' + c.id, { method:'DELETE' });
+        toast('Removido.','ok'); pintarCustos();
+      }catch(e){ toast(e.message,'err'); }
+    });
+    CL.appendChild(el);
+  });
+
+  // cotações agrupadas por item
+  const QL = document.getElementById('coLista');
+  if (!cots.length) QL.innerHTML = '<p class="nota">Nenhuma cotação registrada.</p>';
+  const porItem = {};
+  cots.forEach(q => { (porItem[q.os_item_id || 'geral'] = porItem[q.os_item_id || 'geral'] || []).push(q); });
+  Object.keys(porItem).forEach(k => {
+    const g = porItem[k].slice().sort((a,b) => (a.total_estimado||0) - (b.total_estimado||0));
+    const box = document.createElement('div');
+    box.className = 'grupoCot';
+    box.innerHTML = '<div class="gcTit"></div>';
+    box.querySelector('.gcTit').textContent = g[0].item || 'Cotação geral';
+    g.forEach((q, idx) => {
+      const el = document.createElement('div');
+      el.className = 'linhaCot' + (q.escolhida ? ' on' : '') + (q.vencida ? ' vencida' : '');
+      el.innerHTML = '<div><b></b><small></small></div><div class="vl"></div>'
+        + (q.os_item_id && !q.escolhida ? '<button class="btn mini">Escolher</button>' : '');
+      el.querySelector('b').textContent = q.fornecedor
+        + (idx === 0 && g.length > 1 ? '  ← menor total' : '');
+      el.querySelector('small').textContent =
+        BRL(q.valor_unitario) + ' un'
+        + (Number(q.valor_frete) ? ' + ' + BRL(q.valor_frete) + ' frete' : '')
+        + (q.prazo_dias ? ' · ' + q.prazo_dias + 'd' : '')
+        + (q.vencida ? ' · VENCIDA' : '')
+        + (q.escolhida ? ' · escolhida' : '');
+      el.querySelector('.vl').textContent = BRL(q.total_estimado);
+      const bt = el.querySelector('.btn');
+      if (bt) bt.addEventListener('click', async () => {
+        try{
+          if (!DEMO) await rpc('tf_escolher_cotacao', { p_cotacao_id: q.id });
+          toast('Cotação escolhida — custo e prazo do item preenchidos.','ok');
+          pintarCustos();
+        }catch(e){ toast(e.message,'err'); }
+      });
+      box.appendChild(el);
+    });
+    QL.appendChild(box);
+  });
+
+  document.getElementById('cuAdd').addEventListener('click', async (e) => {
+    const v = document.getElementById('cuV').value;
+    if (v === '' || Number(v) < 0){ toast('Informe o valor.','err'); return; }
+    e.target.disabled = true;
+    try{
+      if (!DEMO) await rpc('tf_salvar_custo', { p_os_id: card.os_id,
+        p_tipo: document.getElementById('cuT').value,
+        p_descricao: document.getElementById('cuD').value.trim() || null,
+        p_fornecedor: document.getElementById('cuF').value.trim() || null,
+        p_valor: Number(v) });
+      toast('Custo lançado — a margem já mudou.','ok'); pintarCustos();
+    }catch(err){ toast(err.message,'err'); e.target.disabled = false; }
+  });
+
+  document.getElementById('coAdd').addEventListener('click', async (e) => {
+    const f = document.getElementById('coF').value.trim();
+    if (!f){ toast('Diga com quem você cotou.','err'); return; }
+    e.target.disabled = true;
+    const n = id => { const v = document.getElementById(id).value; return v === '' ? null : Number(v); };
+    try{
+      if (!DEMO) await rpc('tf_registrar_cotacao', { p_os_id: card.os_id,
+        p_fornecedor: f,
+        p_os_item_id: document.getElementById('coI').value || null,
+        p_valor_unitario: n('coV'), p_valor_frete: n('coFr'),
+        p_prazo_dias: n('coP'), p_canal: document.getElementById('coC').value });
+      toast('Cotação registrada.','ok'); pintarCustos();
+    }catch(err){ toast(err.message,'err'); e.target.disabled = false; }
+  });
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// COMPRAS — a lista que substitui "acompanhar de memória"
+// ════════════════════════════════════════════════════════════════════════════
+async function pintarCompras(){
+  visao = 'cpr';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="comWrap"><div class="barraCom">'
+    + '<b style="font-size:15px">Compras em andamento</b>'
+    + '<span class="resumoCom" id="cprResumo"></span></div>'
+    + '<div class="comBoard" style="overflow:auto"><div id="cprLista" '
+    + 'style="max-width:1000px;padding-bottom:30px"></div></div></div>';
+
+  let itens = [];
+  try{ itens = DEMO ? demoCompras() : await get('v_compras?select=*'); }
+  catch(e){ toast(e.message,'err'); return; }
+
+  const atras = itens.filter(i => i.situacao === 'atrasado');
+  document.getElementById('cprResumo').innerHTML = itens.length
+    ? itens.length + ' item(ns) · ' + (atras.length
+        ? '<b style="color:var(--crit)">' + atras.length + ' atrasado(s)</b>' : 'nenhum atrasado')
+    : '';
+
+  const L = document.getElementById('cprLista');
+  if (!itens.length){
+    L.innerHTML = '<p class="nota">Nada em compra. Itens entram aqui quando a origem é '
+      + '“comprar” e o cliente aprovou.</p>';
+    return;
+  }
+
+  // atrasados primeiro: é o que precisa de telefonema hoje
+  const ordem = { 'atrasado':0, 'chega logo':1, 'no prazo':2, 'sem previsão':3, 'recebido':4 };
+  itens.sort((a,b) => (ordem[a.situacao]-ordem[b.situacao]) || (b.dias_atraso-a.dias_atraso));
+
+  let sit = null;
+  itens.forEach(i => {
+    if (i.situacao !== sit){
+      sit = i.situacao;
+      const h = document.createElement('div');
+      h.className = 'secTit';
+      h.textContent = ({atrasado:'Atrasados', 'chega logo':'Chegam nos próximos 3 dias',
+        'no prazo':'No prazo', 'sem previsão':'Sem previsão de entrega',
+        recebido:'Recebidos'})[sit] || sit;
+      L.appendChild(h);
+    }
+    const el = document.createElement('div');
+    el.className = 'linhaCompra ' + i.situacao.replace(/\s/g,'-');
+    el.innerHTML = '<div><b></b><small></small></div><div class="dt"></div>';
+    el.querySelector('b').textContent = i.descricao;
+    el.querySelector('small').textContent = i.os + ' · ' + i.cliente
+      + (i.fornecedor ? ' · ' + i.fornecedor : ' · sem fornecedor')
+      + (i.pedido_numero ? ' · ' + i.pedido_numero : '');
+    el.querySelector('.dt').innerHTML = i.recebido_em
+      ? 'recebido<br><b>' + new Date(i.recebido_em+'T12:00').toLocaleDateString('pt-BR') + '</b>'
+      : (i.previsto_para
+          ? (i.dias_atraso > 0 ? '<b class="atr">' + i.dias_atraso + ' dias<br>de atraso</b>'
+                               : 'previsto<br><b>' + new Date(i.previsto_para+'T12:00').toLocaleDateString('pt-BR') + '</b>')
+          : '<span class="nota">sem data</span>');
+    L.appendChild(el);
+  });
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 // COMERCIAL — o quadro que substitui o Trello
@@ -3029,6 +3304,35 @@ function demoExcluirCat(it){
 
 
 // ── comercial no modo demo ──────────────────────────────────────────────────
+
+// ── custos/compras no modo demo ─────────────────────────────────────────────
+const demoMargem = () => ({venda:2650, custo_itens:1690, custos_extras:420, frete:420,
+  margem_bruta:960, margem_real:540, margem_pct:20.4, extras_pct:15.8});
+const demoCustos = () => ([
+ {id:'x1',tipo:'frete',descricao:'Frete — Famabras',fornecedor:'Famabras',valor:240,
+  quando:new Date().toISOString().slice(0,10),realizado:false},
+ {id:'x2',tipo:'frete',descricao:'Entrega ao cliente — Itaúna',fornecedor:'Transportadora X',
+  valor:180,quando:new Date().toISOString().slice(0,10),realizado:false}
+]);
+const demoCots = () => ([
+ {id:'q1',os_item_id:'i1',item:'Manômetro 0-16 bar 100mm',fornecedor:'Proper Compressores',
+  valor_unitario:185,valor_frete:0,prazo_dias:5,total_estimado:1850,escolhida:false},
+ {id:'q2',os_item_id:'i1',item:'Manômetro 0-16 bar 100mm',fornecedor:'Wika',
+  valor_unitario:178,valor_frete:90,prazo_dias:12,total_estimado:1870,escolhida:false},
+ {id:'q3',os_item_id:'i1',item:'Manômetro 0-16 bar 100mm',fornecedor:'Famabras',
+  valor_unitario:169,valor_frete:240,prazo_dias:20,total_estimado:1930,escolhida:true}
+]);
+const demoCompras = () => ([
+ {item_id:'c1',os:'OS-2026-0003',cliente:'Fundição Pará de Minas',descricao:'Manômetro 0-25 bar 6"',
+  fornecedor:'Wika',pedido_numero:'PC-2026-0001',previsto_para:new Date(Date.now()-10*864e5).toISOString().slice(0,10),
+  situacao:'atrasado',dias_atraso:10},
+ {item_id:'c2',os:'OS-2026-0005',cliente:'Gerdau — Divinópolis',descricao:'Válvula de segurança 1.1/2"',
+  fornecedor:'Bermo',pedido_numero:'PC-2026-0002',previsto_para:new Date(Date.now()+2*864e5).toISOString().slice(0,10),
+  situacao:'chega logo',dias_atraso:-2},
+ {item_id:'c3',os:'OS-2026-0006',cliente:'Setormec',descricao:'Purgador automático 1/2"',
+  fornecedor:null,previsto_para:null,situacao:'sem previsão',dias_atraso:0}
+]);
+
 const demoColsCom = () => ([
  {nome:'Leads',ordem:10,descricao:'Alguém apareceu. Ainda não falamos.'},
  {nome:'Contato realizado',ordem:20,descricao:'Já falamos. Falta marcar a visita.'},
@@ -3120,6 +3424,7 @@ document.getElementById('sw').addEventListener('click', e => {
   [...document.querySelectorAll('#sw button')].forEach(x => x.classList.toggle('on', x === b));
   if (b.dataset.q === 'cad'){ visao = 'cad'; pintarCadastros(); return; }
   if (b.dataset.q === 'com'){ visao = 'com'; pintarComercial(); return; }
+  if (b.dataset.q === 'cpr'){ visao = 'cpr'; pintarCompras(); return; }
   if (b.dataset.q === 'cat'){ visao = 'cat'; pintarCatalogo(); return; }
   if (b.dataset.q === 'cfg'){ visao = 'cfg'; pintarConfig(); return; }
   visao = 'quadro'; quadro = b.dataset.q; pintar();
