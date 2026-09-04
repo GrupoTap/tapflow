@@ -1,0 +1,1758 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TapFlow Manager</title>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     TAPFLOW MANAGER — TFM_S3
+     Engetap Engenharia · quadros, cadastros, abertura de OS e itens da OS
+
+     S2 acrescentou: cadastros, abertura de OS, aba de ITENS e registro da
+     proposta externa.
+     S3 acrescenta: upload do PDF da proposta para o Google Drive, geração de
+     PDF (levantamento e resumo da OS) e a aba ARQUIVOS.
+
+     ARQUIVO ÚNICO, SEM BUILD. Abre com duplo clique ou hospeda no GitHub Pages.
+
+     ── COMO LIGAR NO SUPABASE ─────────────────────────────────────────────────
+     Enquanto SUPABASE_URL estiver vazio, o app roda em MODO DEMO com dados de
+     mentira — dá para ver os quadros funcionando sem instalar nada.
+     Para ligar de verdade, preencha as duas constantes logo abaixo com o que
+     está em Supabase → Settings → API.
+
+     ── O QUE ESTE APP NÃO FAZ, DE PROPÓSITO ───────────────────────────────────
+     Não existe arrastar o card. A coluna é a fase da primeira tarefa não
+     resolvida, calculada pelo banco na view v_os_kanban. O card se move quando
+     uma tarefa fecha — e só assim. O banco recusa UPDATE direto em
+     pipeline_tarefas, então nem um bug daqui conseguiria burlar isso.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<style>
+:root{
+  --paper:#EEF1F0; --surface:#FFFFFF; --surface-2:#F5F7F6;
+  --ink:#101A1C; --ink-2:#3B4A4C; --ink-3:#6B7A7B;
+  --rule:#D6DDDB; --rule-2:#E6EBE9;
+  --accent:#0E5D57; --accent-soft:#DCEBE8;
+  --campo:#0E5D57; --campo-soft:#DCEBE8;
+  --gestao:#8A5A12; --gestao-soft:#F6EBD9;
+  --crit:#A62D18; --crit-soft:#F7E4DF;
+  --warn:#96601A; --warn-soft:#F8EEDC;
+  --ok:#2A6449; --ok-soft:#DEECE3;
+  --shadow:0 1px 2px rgba(16,26,28,.06), 0 6px 18px -12px rgba(16,26,28,.3);
+  --sh-lift:0 2px 4px rgba(16,26,28,.08), 0 12px 28px -14px rgba(16,26,28,.42);
+}
+*{box-sizing:border-box}
+/* `hidden` tem que vencer o display dos elementos abaixo — sem isto o overlay
+   de login continua na frente do app mesmo com o atributo hidden. */
+[hidden]{display:none !important}
+html,body{height:100%}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"IBM Plex Sans Condensed",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-size:15px; -webkit-font-smoothing:antialiased;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+button{font:inherit;color:inherit;cursor:pointer}
+.mono{font-family:ui-monospace,Menlo,Consolas,"Liberation Mono",monospace}
+
+/* ── topo ─────────────────────────────────────────── */
+header{
+  flex:0 0 auto; background:var(--surface); border-bottom:1px solid var(--rule);
+  padding:10px 16px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+}
+.brand{font-size:19px;font-weight:700;letter-spacing:-.02em;line-height:1}
+.brand span{color:var(--accent)}
+.ver{font-size:10.5px;color:var(--ink-3);letter-spacing:.08em;margin-left:2px}
+
+.switch{display:flex;border:1px solid var(--rule);border-radius:3px;overflow:hidden}
+.switch button{
+  background:var(--surface); border:0; padding:7px 15px; font-size:13px; font-weight:600;
+  color:var(--ink-3); border-right:1px solid var(--rule); white-space:nowrap;
+}
+.switch button:last-child{border-right:0}
+.switch button.on{background:var(--accent);color:#fff}
+.switch button .n{opacity:.65;font-weight:400;margin-left:5px}
+
+.spacer{flex:1}
+.conn{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-2)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--ink-3);flex:0 0 auto}
+.dot.ok{background:var(--ok)} .dot.off{background:var(--crit)}
+.dot.sync{background:var(--warn);animation:pulse 1.1s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.btn{
+  background:var(--surface);border:1px solid var(--rule);padding:6px 12px;
+  border-radius:3px;font-size:13px;font-weight:600;color:var(--ink-2);
+}
+.btn:hover{background:var(--surface-2)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.pri:hover{filter:brightness(1.1)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.who{font-size:12.5px;color:var(--ink-3)}
+.who b{color:var(--ink);font-weight:600}
+
+.demo{
+  flex:0 0 auto;background:var(--warn-soft);color:var(--warn);
+  padding:6px 16px;font-size:12.5px;font-weight:600;border-bottom:1px solid var(--rule);
+}
+
+/* ── quadro ───────────────────────────────────────── */
+main{flex:1;overflow-x:auto;overflow-y:hidden;padding:14px}
+.board{display:flex;gap:10px;height:100%;align-items:stretch;min-width:min-content}
+.col{
+  flex:0 0 264px; display:flex; flex-direction:column; height:100%;
+  background:var(--surface-2); border:1px solid var(--rule); border-radius:4px;
+}
+.col.vazia{opacity:.62}
+.col-h{
+  padding:9px 11px; border-bottom:1px solid var(--rule); display:flex;
+  align-items:baseline; gap:8px; position:sticky; top:0;
+}
+.col-h .t{font-size:12.5px;font-weight:700;letter-spacing:.02em;line-height:1.25}
+.col-h .c{
+  margin-left:auto;font-size:11px;font-weight:700;color:var(--ink-3);
+  background:var(--surface);border:1px solid var(--rule);border-radius:99px;padding:1px 7px;
+}
+.col.campo{border-top:3px solid var(--campo)}
+.col.gestao{border-top:3px solid var(--gestao)}
+.col-b{overflow-y:auto;padding:9px;display:flex;flex-direction:column;gap:8px;min-height:60px}
+.col-vazia{font-size:12px;color:var(--ink-3);text-align:center;padding:14px 6px;font-style:italic}
+
+/* ── card ─────────────────────────────────────────── */
+.card{
+  background:var(--surface);border:1px solid var(--rule);border-radius:3px;
+  padding:10px 11px;box-shadow:var(--shadow);cursor:pointer;
+  border-left:3px solid var(--rule); text-align:left; width:100%; display:block;
+}
+.card:hover{box-shadow:var(--sh-lift);border-left-color:var(--accent)}
+.card.travada{border-left-color:var(--crit)}
+.card.atrasada{border-left-color:var(--warn)}
+.card .num{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.04em}
+.card .cli{font-size:14px;font-weight:600;line-height:1.25;margin:3px 0 6px}
+.card .tar{font-size:12px;color:var(--ink-2);line-height:1.35;display:flex;gap:5px}
+.card .tar .ic{flex:0 0 auto;opacity:.75}
+.card .foot{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;align-items:center}
+.chip{
+  font-size:10.5px;font-weight:600;padding:2px 6px;border-radius:2px;
+  background:var(--surface-2);color:var(--ink-3);border:1px solid var(--rule-2);white-space:nowrap;
+}
+.chip.prog{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.chip.travada{background:var(--crit-soft);color:var(--crit);border-color:transparent}
+.chip.atras{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.chip.lock{background:var(--gestao-soft);color:var(--gestao);border-color:transparent}
+.bar{height:3px;background:var(--rule-2);border-radius:2px;margin-top:8px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
+
+/* ── gaveta ───────────────────────────────────────── */
+.scrim{position:fixed;inset:0;background:rgba(16,26,28,.42);opacity:0;pointer-events:none;transition:opacity .18s}
+.scrim.on{opacity:1;pointer-events:auto}
+.drawer{
+  position:fixed;top:0;right:0;bottom:0;width:min(460px,100%);background:var(--surface);
+  border-left:1px solid var(--rule);transform:translateX(100%);transition:transform .22s ease;
+  display:flex;flex-direction:column;z-index:5;
+}
+.drawer.on{transform:none}
+.d-h{padding:14px 16px;border-bottom:1px solid var(--rule);display:flex;align-items:flex-start;gap:10px}
+.d-h .num{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.04em}
+.d-h h2{margin:2px 0 0;font-size:18px;font-weight:600;line-height:1.2}
+.d-h .sub{font-size:12.5px;color:var(--ink-3);margin-top:4px}
+.x{margin-left:auto;background:none;border:0;font-size:22px;color:var(--ink-3);line-height:1;padding:0 2px}
+.d-b{flex:1;overflow-y:auto;padding:14px 16px}
+
+.fase-h{
+  font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);margin:16px 0 7px;display:flex;align-items:center;gap:8px;
+}
+.fase-h:first-child{margin-top:0}
+.fase-h.atual{color:var(--accent)}
+.fase-h::after{content:"";flex:1;height:1px;background:var(--rule-2)}
+
+.tk{display:flex;gap:9px;padding:7px 0;border-bottom:1px solid var(--rule-2);align-items:flex-start}
+.tk:last-child{border-bottom:0}
+.tk .st{flex:0 0 17px;text-align:center;font-size:13px;line-height:1.4}
+.tk .nm{flex:1;font-size:13.5px;line-height:1.35}
+.tk .nm small{display:block;color:var(--ink-3);font-size:11.5px;margin-top:2px}
+.tk.res .nm{color:var(--ink-3)}
+.tk.res .nm b{font-weight:400}
+.tk.atual{background:var(--accent-soft);margin:0 -8px;padding:8px;border-radius:3px;border-bottom:0}
+.tk.atual .nm{font-weight:600}
+
+.acoes{border-top:1px solid var(--rule);padding:12px 16px;background:var(--surface-2)}
+.acoes .lbl{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:8px}
+.acoes .row{display:flex;gap:8px;flex-wrap:wrap}
+.acoes .hint{font-size:12px;color:var(--ink-3);margin-top:9px;line-height:1.4}
+
+.toast{
+  position:fixed;left:50%;bottom:22px;transform:translate(-50%,14px);
+  background:var(--ink);color:#fff;padding:10px 16px;border-radius:3px;font-size:13.5px;
+  opacity:0;pointer-events:none;transition:all .2s;z-index:9;max-width:min(520px,92vw);
+}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.toast.err{background:var(--crit)}
+.toast.ok{background:var(--ok)}
+
+.vazio{padding:60px 20px;text-align:center;color:var(--ink-3)}
+.vazio h3{font-size:17px;font-weight:600;color:var(--ink-2);margin:0 0 6px}
+.vazio p{font-size:13.5px;margin:0;line-height:1.5}
+
+/* ── abas da gaveta ───────────────────────────────── */
+.tabs{display:flex;border-bottom:1px solid var(--rule);background:var(--surface-2);flex:0 0 auto}
+.tabs button{flex:1;background:none;border:0;border-bottom:2px solid transparent;
+  padding:10px 6px;font-size:13px;font-weight:600;color:var(--ink-3)}
+.tabs button.on{color:var(--accent);border-bottom-color:var(--accent);background:var(--surface)}
+.drawer{width:min(620px,100%)}
+
+/* ── tabela de itens ──────────────────────────────── */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-3);padding:6px 5px;border-bottom:1px solid var(--rule);white-space:nowrap}
+.tbl td{padding:6px 5px;border-bottom:1px solid var(--rule-2);vertical-align:middle}
+.tbl td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tbl input{width:100%;padding:6px 7px;border:1px solid var(--rule);border-radius:3px;
+  font-size:13px;background:var(--surface);min-width:64px}
+.tbl input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.tbl input.falta{border-color:var(--gestao);background:var(--gestao-soft)}
+.tbl tr.fora{opacity:.55}
+.tbl tr.fora td:first-child::after{content:" · fora do orçamento";font-size:10.5px;color:var(--ink-3)}
+.totais{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--rule);
+  border:1px solid var(--rule);margin-top:14px}
+.totais div{background:var(--surface);padding:9px 11px}
+.totais .k{font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+.totais .v{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:18px;font-weight:600;
+  font-variant-numeric:tabular-nums;margin-top:2px}
+.totais .v.pos{color:var(--ok)} .totais .v.neg{color:var(--crit)}
+
+/* ── cadastros ────────────────────────────────────── */
+.cadWrap{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:14px;height:100%;
+  align-items:start;min-width:min-content}
+.painel{background:var(--surface);border:1px solid var(--rule);border-radius:4px;
+  padding:16px 18px;box-shadow:var(--shadow)}
+.painel h3{margin:0 0 12px;font-size:17px}
+.lista{max-height:calc(100vh - 210px);overflow-y:auto;margin:-4px -6px;padding:4px 6px}
+.linhaCli{width:100%;text-align:left;background:var(--surface);border:1px solid var(--rule);
+  border-radius:3px;padding:10px 12px;margin-bottom:6px;display:block}
+.linhaCli.on{border-color:var(--accent);background:var(--accent-soft)}
+.linhaCli b{display:block;font-size:14.5px;font-weight:600}
+.linhaCli small{display:block;font-size:12px;color:var(--ink-3);margin-top:2px}
+
+/* ── formulários ──────────────────────────────────── */
+.campo{margin-bottom:12px}
+.campo label{display:block;font-size:10.5px;font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
+.campo input,.campo select,.campo textarea{width:100%;padding:9px 11px;border:1px solid var(--rule);
+  border-radius:3px;font-size:14px;background:var(--surface);font-family:inherit}
+.campo input:focus,.campo select:focus,.campo textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.campo .dica{font-size:11.5px;color:var(--ink-3);margin-top:4px;line-height:1.4}
+.dupla{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* ── modal ────────────────────────────────────────── */
+.mScrim{position:fixed;inset:0;background:rgba(16,26,28,.45);z-index:8}
+.modal{position:fixed;z-index:9;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(480px,calc(100% - 28px));max-height:86vh;background:var(--surface);
+  border:1px solid var(--rule);border-radius:5px;box-shadow:var(--sh-lift);
+  display:flex;flex-direction:column}
+.m-h{display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid var(--rule)}
+.m-h h3{margin:0;font-size:17px;flex:1}
+.m-b{padding:16px;overflow-y:auto}
+.m-f{padding:12px 16px;border-top:1px solid var(--rule);background:var(--surface-2);
+  display:flex;gap:8px;justify-content:flex-end}
+
+/* ── login ────────────────────────────────────────── */
+.login{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;justify-content:center;z-index:10;padding:20px}
+.login .box{background:var(--surface);border:1px solid var(--rule);border-radius:5px;padding:26px;width:min(360px,100%);box-shadow:var(--sh-lift)}
+.login h1{font-size:24px;margin:0 0 3px;letter-spacing:-.02em}
+.login h1 span{color:var(--accent)}
+.login p{font-size:13px;color:var(--ink-3);margin:0 0 18px}
+.login label{display:block;font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:0 0 4px}
+.login input{width:100%;padding:9px 11px;border:1px solid var(--rule);border-radius:3px;font:inherit;margin-bottom:12px;background:var(--surface-2)}
+.login input:focus{outline:2px solid var(--accent);outline-offset:-1px;background:var(--surface)}
+.login .btn{width:100%;padding:10px;justify-content:center}
+.login .erro{font-size:12.5px;color:var(--crit);margin:0 0 10px;min-height:16px}
+
+@media (max-width:640px){
+  header{padding:8px 11px;gap:9px}
+  .brand{font-size:17px}
+  main{padding:9px}
+  .col{flex-basis:246px}
+  .who{display:none}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="brand">Tap<span>Flow</span></div>
+    <div class="ver mono">MANAGER · S3</div>
+  </div>
+
+  <div class="switch" id="sw">
+    <button data-q="campo"  class="on">Campo <span class="n" id="nCampo">0</span></button>
+    <button data-q="adm">Gestão <span class="n" id="nAdm">0</span></button>
+    <button data-q="cad">Cadastros</button>
+  </div>
+
+  <button class="btn pri" id="btnNovaOS">+ Nova OS</button>
+
+  <div class="spacer"></div>
+
+  <div class="conn"><span class="dot" id="dot"></span><span id="connTxt">—</span></div>
+  <span class="who" id="who"></span>
+  <button class="btn" id="btnRefresh">Atualizar</button>
+</header>
+
+<div class="demo" id="demoBar" hidden>
+  MODO DEMO — dados de exemplo. Preencha SUPABASE_URL no topo do arquivo para ligar no banco real.
+</div>
+
+<main><div class="board" id="board"></div></main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Detalhe da OS">
+  <div class="d-h">
+    <div>
+      <div class="num mono" id="dNum"></div>
+      <h2 id="dCli"></h2>
+      <div class="sub" id="dSub"></div>
+    </div>
+    <button class="x" id="dClose" aria-label="Fechar">×</button>
+  </div>
+  <div class="tabs" id="dTabs">
+    <button data-t="tarefas" class="on">Tarefas</button>
+    <button data-t="itens">Itens</button>
+    <button data-t="proposta">Proposta</button>
+    <button data-t="arquivos">Arquivos</button>
+  </div>
+  <div class="d-b" id="dBody"></div>
+  <div class="acoes" id="dAcoes"></div>
+</aside>
+
+<div class="toast" id="toast"></div>
+
+<div class="mScrim" id="mScrim" hidden></div>
+<div class="modal" id="modal" hidden>
+  <div class="m-h"><h3 id="mTit"></h3><button class="x" id="mX" aria-label="Fechar">&times;</button></div>
+  <div class="m-b" id="mBody"></div>
+  <div class="m-f" id="mFoot"></div>
+</div>
+
+<div class="login" id="login" hidden>
+  <div class="box">
+    <h1>Tap<span>Flow</span></h1>
+    <p>Engetap Engenharia</p>
+    <label for="lgEmail">E-mail</label>
+    <input id="lgEmail" type="email" autocomplete="username">
+    <label for="lgSenha">Senha</label>
+    <input id="lgSenha" type="password" autocomplete="current-password">
+    <p class="erro" id="lgErro"></p>
+    <button class="btn pri" id="lgBtn">Entrar</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ════════════════════════════════════════════════════════════════════════════
+// CONFIGURAÇÃO — preencha as duas linhas abaixo para ligar no Supabase.
+// Estão em: Supabase → seu projeto → Settings → API
+// Deixe vazio para rodar em modo demo.
+// ════════════════════════════════════════════════════════════════════════════
+const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';
+                                // Serve também a antiga "anon public" (eyJ...),
+                                // mas ela será desligada pelo Supabase no fim
+                                // de 2026 — prefira a Publishable.
+
+const APP_VERSION = 'S3';
+const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
+
+// ════════════════════════════════════════════════════════════════════════════
+// CAMADA DE REDE
+// ----------------------------------------------------------------------------
+// Transplantada do ProperCare (achados DAT-02 e DAT-05 do parecer). Três coisas
+// que o TapControl não tinha e custaram dado:
+//   · AbortSignal DE VERDADE — 30 s leitura, 45 s escrita. Promise.race rejeita
+//     a promessa mas deixa o fetch vivo, e o retry em cima disso é o que
+//     duplicava escrita.
+//   · Sinal NOVO a cada tentativa: um AbortSignal já disparado continua
+//     disparado, e reusá-lo faria o retry abortar na hora.
+//   · Erro de rede que sobrevive ao retry DERRUBA o indicador. O verde não
+//     mente: melhor recusar alto do que fingir que gravou.
+// ════════════════════════════════════════════════════════════════════════════
+
+let conectado = false;
+let reconTimer = null, reconPasso = 0;
+const BACKOFF = [5000, 10000, 20000, 40000, 60000];
+
+function setConn(estado, texto){
+  const d = document.getElementById('dot');
+  d.className = 'dot' + (estado ? ' ' + estado : '');
+  document.getElementById('connTxt').textContent = texto;
+  conectado = (estado === 'ok');
+}
+
+function sinal(escrita){
+  try{
+    if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout)
+      return AbortSignal.timeout(escrita ? 45000 : 30000);
+  }catch(e){}
+  return undefined;
+}
+const ehTimeout = e => !!e && (e.name === 'TimeoutError' || e.name === 'AbortError'
+  || /timed out|timeout|aborted/i.test(String(e.message||'')));
+
+function pararRecon(){ if(reconTimer){clearTimeout(reconTimer);reconTimer=null;} reconPasso=0; }
+function agendarRecon(){
+  if (reconTimer || DEMO) return;
+  const espera = BACKOFF[Math.min(reconPasso, BACKOFF.length-1)];
+  reconPasso++;
+  setConn('off', 'Reconectando em ' + Math.round(espera/1000) + 's');
+  reconTimer = setTimeout(async () => {
+    reconTimer = null;
+    try { await carregar({silencioso:true}); } catch(e){}
+  }, espera);
+}
+function falhaDeRede(e){
+  setConn('off', 'Sem conexão');
+  console.warn('[rede] conexão marcada OFF:', e && e.message);
+  agendarRecon();
+}
+
+async function req(caminho, opts = {}, tentativas = 2){
+  const escrita = (opts.method || 'GET').toUpperCase() !== 'GET';
+  let ultimo;
+  for (let i = 0; i <= tentativas; i++){
+    try{
+      const s = sinal(escrita);
+      const r = await fetch(SUPABASE_URL + caminho, Object.assign({}, opts, {
+        signal: s,
+        // A chave vai SEMPRE no cabeçalho `apikey`. O `Authorization` só entra
+        // quando existe sessão de verdade — as chaves novas do Supabase
+        // (sb_publishable_...) NÃO são JWT, e mandá-las como Bearer faz a
+        // verificação falhar. Assim o app funciona com a chave nova e com a
+        // antiga (anon), sem depender de qual delas foi colada acima.
+        headers: Object.assign(
+          { apikey: SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+          sessao.token ? { Authorization: 'Bearer ' + sessao.token } : {},
+          opts.headers || {})
+      }));
+      const txt = await r.text();
+      if (txt.trim().startsWith('<'))
+        throw new Error('O servidor devolveu HTML — verifique a URL do projeto');
+      let corpo = null;
+      if (txt) { try { corpo = JSON.parse(txt); } catch(e){ throw new Error('Resposta inválida: ' + txt.slice(0,80)); } }
+      if (!r.ok){
+        // erro de NEGÓCIO (o banco recusou): não retenta e não derruba o verde
+        const msg = (corpo && (corpo.message || corpo.error_description || corpo.error || corpo.hint)) || ('HTTP ' + r.status);
+        const err = new Error(msg); err.negocio = (r.status >= 400 && r.status < 500); err.status = r.status;
+        throw err;
+      }
+      return corpo;
+    }catch(e){
+      ultimo = e;
+      if (ehTimeout(e)){
+        ultimo = new Error('O servidor não respondeu em ' + (escrita ? '45' : '30') + 's'
+          + (escrita ? ' — a operação pode NÃO ter sido gravada.' : '.'));
+      }
+      const transitorio = ehTimeout(e) || !e.negocio && (
+        /Failed to fetch|NetworkError|Load failed/i.test(e.message) ||
+        /devolveu HTML/.test(e.message) || /^HTTP 5\d\d$/.test(e.message));
+      if (!transitorio || i === tentativas){
+        if (transitorio) falhaDeRede(ultimo);
+        throw ultimo;
+      }
+      await new Promise(r => setTimeout(r, 600 * (i+1)));
+    }
+  }
+  throw ultimo;
+}
+
+const get  = (q)      => req('/rest/v1/' + q);
+const rpc  = (f, p)   => req('/rest/v1/rpc/' + f, { method:'POST', body: JSON.stringify(p||{}) });
+const post = (t, o)   => req('/rest/v1/' + t, { method:'POST', body: JSON.stringify(o),
+                             headers:{ Prefer:'return=representation' } });
+const patch= (t, f, o)=> req('/rest/v1/' + t + '?' + f, { method:'PATCH', body: JSON.stringify(o),
+                             headers:{ Prefer:'return=representation' } });
+
+window.addEventListener('online',  () => { pararRecon(); if(!conectado) carregar({silencioso:true}); });
+window.addEventListener('offline', () => { setConn('off','Sem conexão'); agendarRecon(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !conectado && !DEMO) { pararRecon(); carregar({silencioso:true}); }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// SESSÃO
+// ════════════════════════════════════════════════════════════════════════════
+const SESSAO_KEY = 'tapflow_sessao';
+let sessao = { token:null, nome:null, email:null, perfil:null, admin:false };
+
+function salvarSessao(){ try{ localStorage.setItem(SESSAO_KEY, JSON.stringify(sessao)); }catch(e){} }
+function lerSessao(){ try{ const r = localStorage.getItem(SESSAO_KEY); if(r) sessao = JSON.parse(r); }catch(e){} }
+
+async function entrar(email, senha){
+  const r = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=password', {
+    method:'POST',
+    headers:{ apikey: SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
+    body: JSON.stringify({ email, password: senha }),
+    signal: sinal(true)
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error_description || j.msg || j.message || 'E-mail ou senha inválidos');
+  sessao.token = j.access_token;
+  const eu = await get('usuarios?select=nome,email,perfil_id,perfis(is_admin)&limit=1');
+  if (!eu || !eu.length)
+    throw new Error('Login existe, mas você não está na tabela usuarios — veja o Passo 3b do guia.');
+  sessao.nome = eu[0].nome; sessao.email = eu[0].email;
+  sessao.perfil = eu[0].perfil_id; sessao.admin = !!(eu[0].perfis && eu[0].perfis.is_admin);
+  salvarSessao();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// DADOS
+// ════════════════════════════════════════════════════════════════════════════
+let cards = [];      // linhas de v_os_kanban
+let quadro = 'campo';
+let visao  = 'quadro';   // 'quadro' | 'cad'
+let abaDrawer = 'tarefas';
+let cadSel = null;       // cliente selecionado nos cadastros
+let osAberta = null; // { card, tarefas }
+
+async function carregar(opt){
+  opt = opt || {};
+  if (DEMO){ cards = demoCards(); pintar(); setConn('ok','Modo demo'); return; }
+  if (!opt.silencioso) setConn('sync','Carregando…');
+  try{
+    cards = await get('v_os_kanban?select=*&order=coluna_ordem,numero');
+    pararRecon();
+    setConn('ok','Conectado');
+    if (visao === 'quadro') pintar();
+  }catch(e){
+    if (e.negocio){ setConn('off','Erro'); toast(e.message, 'err'); }
+    pintar();
+    throw e;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PINTURA DOS QUADROS
+// ----------------------------------------------------------------------------
+// As colunas saem dos próprios dados: cada `coluna` distinta do quadro vira uma.
+// Nada é fixo no código — renomear uma fase no banco renomeia a coluna aqui.
+// ════════════════════════════════════════════════════════════════════════════
+
+function pintar(){
+  const doQuadro = cards.filter(c => c.coluna && (c.quadro === quadro || c.quadro === 'ambos'));
+  document.getElementById('nCampo').textContent =
+    cards.filter(c => c.coluna && (c.quadro === 'campo' || c.quadro === 'ambos')).length;
+  document.getElementById('nAdm').textContent =
+    cards.filter(c => c.coluna && (c.quadro === 'adm' || c.quadro === 'ambos')).length;
+
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+
+  if (!doQuadro.length){
+    board.innerHTML =
+      '<div class="vazio"><h3>Nenhuma OS neste quadro</h3>' +
+      '<p>' + (quadro === 'campo'
+        ? 'Nada depende do campo agora. Veja o quadro da gestão.'
+        : 'Nada parado no escritório. Veja o quadro do campo.') + '</p></div>';
+    return;
+  }
+
+  // As colunas do quadro vêm do TEMPLATE, não só das OS que existem hoje.
+  // Coluna vazia continua na tela: é assim que se enxerga o fluxo inteiro e se
+  // percebe que ninguém está em "Calibração" — some a coluna, some a informação.
+  const mapa = new Map();
+  COLUNAS.filter(k => k.quadro === quadro)
+         .forEach(k => mapa.set(k.fase, { ordem:k.ordem, itens:[] }));
+
+  doQuadro.forEach(c => {
+    if (!mapa.has(c.coluna)) mapa.set(c.coluna, { ordem: c.coluna_ordem, itens: [] });
+    mapa.get(c.coluna).itens.push(c);
+  });
+  const colunas = [...mapa.entries()].sort((a,b) => a[1].ordem - b[1].ordem);
+
+  colunas.forEach(([nome, dados]) => {
+    const col = document.createElement('div');
+    col.className = 'col ' + (quadro === 'campo' ? 'campo' : 'gestao')
+                  + (dados.itens.length ? '' : ' vazia');
+    col.innerHTML =
+      '<div class="col-h"><span class="t"></span><span class="c">' + dados.itens.length + '</span></div>' +
+      '<div class="col-b"></div>';
+    col.querySelector('.t').textContent = nome;
+    const body = col.querySelector('.col-b');
+    if (!dados.itens.length){
+      const v = document.createElement('div'); v.className = 'col-vazia'; v.textContent = 'vazia';
+      body.appendChild(v);
+    }
+    // mais crítico primeiro: travada, depois atrasada, depois mais tempo parada
+    dados.itens.sort((a,b) => (peso(b) - peso(a)) || ((b.dias_na_coluna||0) - (a.dias_na_coluna||0)));
+    dados.itens.forEach(c => body.appendChild(cardEl(c)));
+    board.appendChild(col);
+  });
+}
+
+// ── registro de colunas ─────────────────────────────────────────────────────
+// Lido uma vez do template ativo. O quadro de cada coluna é o executa_em do
+// perfil responsável pela primeira tarefa dela.
+let COLUNAS = [];
+
+async function carregarColunas(){
+  try{
+    let tarefas, perfis;
+    if (DEMO){
+      if (!DEMO_DB) demoSeed();
+      tarefas = Object.values(DEMO_DB)[0].tarefas;
+      perfis  = Object.entries(EXECUTOR).map(([id, ex]) => ({ id, executa_em: ex }));
+    } else {
+      const tpl = await get('pipeline_templates?select=tarefas&ativo=eq.true&limit=1');
+      if (!tpl || !tpl.length) return;
+      tarefas = tpl[0].tarefas || [];
+      perfis  = await get('perfis?select=id,executa_em');
+    }
+    const ex = {}; perfis.forEach(p => ex[p.id] = p.executa_em);
+    const vistas = new Map();
+    tarefas.forEach(t => {
+      const fase = t.fase, ordem = t.fase_ordem;
+      if (!fase || vistas.has(fase)) return;
+      const p1 = (t.perfis_responsaveis || [])[0];
+      vistas.set(fase, { fase, ordem, quadro: ex[p1] || 'adm' });
+    });
+    COLUNAS = [...vistas.values()].sort((a,b) => a.ordem - b.ordem);
+  }catch(e){ console.warn('[colunas] não foi possível ler o template:', e.message); }
+}
+
+const atrasado = c => c.alerta_dias && c.dias_na_coluna != null && c.dias_na_coluna >= c.alerta_dias;
+const peso = c => (c.travada ? 2 : 0) + (atrasado(c) ? 1 : 0);
+
+function cardEl(c){
+  const el = document.createElement('button');
+  el.className = 'card' + (c.travada ? ' travada' : atrasado(c) ? ' atrasada' : '');
+  el.type = 'button';
+
+  const total = c.tarefas_na_coluna || 0, feitas = c.resolvidas_na_coluna || 0;
+  const pct = total ? Math.round(feitas / total * 100) : 0;
+
+  const chips = [];
+  if (total > 1) chips.push('<span class="chip prog">' + feitas + ' de ' + total + '</span>');
+  if (c.travada) chips.push('<span class="chip travada">travada</span>');
+  else if (atrasado(c)) chips.push('<span class="chip atras">' + c.dias_na_coluna + 'd · meta ' + c.alerta_dias + 'd</span>');
+  else if (c.dias_na_coluna != null) chips.push('<span class="chip">' + c.dias_na_coluna + 'd na coluna</span>');
+  if (c.tarefa_atual_lock) chips.push('<span class="chip lock">assumida</span>');
+
+  el.innerHTML =
+    '<div class="num mono"></div>' +
+    '<div class="cli"></div>' +
+    '<div class="tar"><span class="ic">' + icone(c.tarefa_atual_status, c.tarefa_atual_tipo) + '</span><span class="tn"></span></div>' +
+    (total > 1 ? '<div class="bar"><i style="width:' + pct + '%"></i></div>' : '') +
+    '<div class="foot">' + chips.join('') + '</div>';
+
+  el.querySelector('.num').textContent = c.numero;
+  el.querySelector('.cli').textContent = c.cliente;
+  el.querySelector('.tn').textContent  = c.tarefa_atual || '—';
+  el.addEventListener('click', () => abrirOS(c));
+  return el;
+}
+
+function icone(status, tipo){
+  if (status === 'completo')   return '✓';
+  if (status === 'dispensado') return '–';
+  if (status === 'bloqueado')  return '\u2298';
+  if (status === 'condicional')return '◇';
+  if (status === 'com_pendencia' || status === 'incompleto') return '!';
+  if (tipo === 'decisao')      return '?';
+  if (String(tipo||'').startsWith('auto:agregacao')) return '∑';
+  if (String(tipo||'').startsWith('auto:documento')) return '§';
+  if (String(tipo||'').startsWith('auto:'))          return '⟳';
+  if (status === 'em_andamento') return '▸';
+  return '○';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// GAVETA DA OS
+// ════════════════════════════════════════════════════════════════════════════
+function fecharDrawer(){
+  document.getElementById('drawer').classList.remove('on');
+  document.getElementById('scrim').classList.remove('on');
+  osAberta = null;
+}
+document.getElementById('dClose').addEventListener('click', fecharDrawer);
+document.getElementById('scrim').addEventListener('click', fecharDrawer);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharDrawer(); });
+
+async function abrirOS(c){
+  document.getElementById('dNum').textContent = c.numero;
+  document.getElementById('dCli').textContent = c.cliente;
+  document.getElementById('dSub').textContent =
+    c.coluna + ' · quadro ' + (c.quadro === 'campo' ? 'do campo' : 'da gestão');
+  document.getElementById('dBody').innerHTML = '<p style="color:var(--ink-3);font-size:13px">Carregando…</p>';
+  document.getElementById('dAcoes').innerHTML = '';
+  document.getElementById('drawer').classList.add('on');
+  document.getElementById('scrim').classList.add('on');
+  [...document.querySelectorAll('#dTabs button')].forEach(x =>
+    x.classList.toggle('on', x.dataset.t === abaDrawer));
+
+  let tarefas;
+  try{
+    tarefas = DEMO ? demoTarefas(c.os_id)
+      : await get('pipeline_tarefas?select=tarefa_id,nome,tipo,fase,fase_ordem,ordem,status,opcoes,perfis_responsaveis,lock_por'
+                  + '&os_id=eq.' + c.os_id + '&ativo=eq.SIM&order=camada,fase_ordem,ordem');
+  }catch(e){ document.getElementById('dBody').innerHTML = '<p style="color:var(--crit);font-size:13px"></p>';
+             document.getElementById('dBody').querySelector('p').textContent = e.message; return; }
+
+  osAberta = { card:c, tarefas };
+  pintarDrawer();
+}
+
+function pintarDrawer(){
+  if (abaDrawer === 'itens')    return pintarItens();
+  if (abaDrawer === 'proposta') return pintarProposta();
+  if (abaDrawer === 'arquivos') return pintarArquivos();
+  const { card, tarefas } = osAberta;
+  const body = document.getElementById('dBody');
+  body.innerHTML = '';
+
+  let faseAtual = null;
+  tarefas.forEach(t => {
+    if (t.fase !== faseAtual){
+      faseAtual = t.fase;
+      const h = document.createElement('div');
+      h.className = 'fase-h' + (t.fase === card.coluna ? ' atual' : '');
+      h.textContent = t.fase;
+      body.appendChild(h);
+    }
+    const resolvida = (t.status === 'completo' || t.status === 'dispensado');
+    const eAtual = (t.tarefa_id === card.tarefa_atual_id);
+    const el = document.createElement('div');
+    el.className = 'tk' + (resolvida ? ' res' : '') + (eAtual ? ' atual' : '');
+    el.innerHTML = '<div class="st">' + icone(t.status, t.tipo) + '</div><div class="nm"><b></b><small></small></div>';
+    el.querySelector('b').textContent = t.nome;
+    el.querySelector('small').textContent =
+      t.status + (t.perfis_responsaveis && t.perfis_responsaveis.length
+        ? ' · ' + t.perfis_responsaveis.join(', ') : '');
+    body.appendChild(el);
+  });
+
+  pintarAcoes();
+}
+
+function pintarAcoes(){
+  const { card, tarefas } = osAberta;
+  const cx = document.getElementById('dAcoes');
+  const t = tarefas.find(x => x.tarefa_id === card.tarefa_atual_id);
+  cx.innerHTML = '';
+  if (!t){ cx.innerHTML = '<div class="hint">OS sem tarefa aberta.</div>'; return; }
+
+  const podeAgir = sessao.admin || !t.perfis_responsaveis || !t.perfis_responsaveis.length
+                   || t.perfis_responsaveis.includes(sessao.perfil);
+
+  const lbl = document.createElement('div');
+  lbl.className = 'lbl'; lbl.textContent = 'Tarefa atual · ' + t.tarefa_id;
+  cx.appendChild(lbl);
+
+  const row = document.createElement('div'); row.className = 'row'; cx.appendChild(row);
+  const hint = document.createElement('div'); hint.className = 'hint'; cx.appendChild(hint);
+
+  if (!podeAgir){
+    hint.textContent = 'Esta tarefa é de ' + t.perfis_responsaveis.join(' ou ')
+      + '. Ela aparece aqui para você saber por que a OS está parada — mas quem conclui é o perfil responsável.';
+    return;
+  }
+
+  if (t.status === 'bloqueado' || t.status === 'condicional'){
+    hint.textContent = 'Esta tarefa ainda não está liberada. Ela abre sozinha quando as anteriores fecharem.';
+    return;
+  }
+
+  if (String(t.tipo||'').startsWith('auto:agregacao')){
+    hint.textContent = 'Esta etapa fecha sozinha quando todos os itens estiverem preenchidos — '
+      + 'não há botão. O contador no card mostra quanto falta.';
+    return;
+  }
+  if (String(t.tipo||'').startsWith('auto:documento')){
+    hint.textContent = 'Esta etapa fecha quando o documento for emitido. Emitir é o que move o card.';
+    return;
+  }
+  if (String(t.tipo||'').startsWith('auto:')){
+    hint.textContent = 'Esta etapa fecha com o envio do app de campo.';
+    return;
+  }
+
+  if (t.tipo === 'decisao'){
+    (t.opcoes || []).forEach(o => {
+      const b = document.createElement('button');
+      b.className = 'btn' + (o.valor === 'reprovado' ? '' : ' pri');
+      b.textContent = o.label || o.valor;
+      b.addEventListener('click', () => agir('decisao', t, o.valor));
+      row.appendChild(b);
+    });
+    hint.textContent = 'A resposta do cliente. Registre também contato, canal e data no módulo de propostas.';
+    return;
+  }
+
+  if (t.status === 'pendente' && !t.lock_por){
+    const b = document.createElement('button');
+    b.className = 'btn pri'; b.textContent = 'Assumir';
+    b.addEventListener('click', () => agir('assumir', t));
+    row.appendChild(b);
+  }
+  const bc = document.createElement('button');
+  bc.className = 'btn' + (t.status === 'em_andamento' ? ' pri' : '');
+  bc.textContent = 'Concluir';
+  bc.addEventListener('click', () => agir('concluir', t));
+  row.appendChild(bc);
+  hint.textContent = 'Concluir esta tarefa move o card — a próxima coluna é consequência, não escolha.';
+}
+
+async function agir(acao, t, valor){
+  const { card } = osAberta;
+  document.querySelectorAll('#dAcoes .btn').forEach(b => b.disabled = true);
+  try{
+    if (DEMO){ demoAgir(card, t, acao, valor); toast('Modo demo: ' + acao + ' aplicado', 'ok'); }
+    else if (acao === 'assumir')  await rpc('tf_assumir_tarefa',  { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id });
+    else if (acao === 'concluir') await rpc('tf_concluir_tarefa', { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id });
+    else if (acao === 'decisao')  await rpc('tf_resolver_decisao',{ p_os_id: card.os_id, p_tarefa_id: t.tarefa_id, p_valor: valor });
+
+    await carregar({silencioso:true});
+    const novo = cards.find(x => x.os_id === card.os_id);
+    if (!novo || !novo.coluna){ fecharDrawer(); toast('OS concluída — saiu do quadro.', 'ok'); return; }
+    if (novo.coluna !== card.coluna) toast('Card foi para "' + novo.coluna + '".', 'ok');
+    await abrirOS(novo);
+  }catch(e){
+    toast(e.message, 'err');
+    pintarAcoes();
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// TOAST
+// ════════════════════════════════════════════════════════════════════════════
+let toastTimer = null;
+function toast(msg, tipo){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast on' + (tipo ? ' ' + tipo : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = 'toast', 4200);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// DADOS DE DEMONSTRAÇÃO
+// ----------------------------------------------------------------------------
+// Reproduzem o formato exato de v_os_kanban, para a tela ser a mesma nos dois
+// modos. Cinco OS em pontos diferentes do fluxo.
+// ════════════════════════════════════════════════════════════════════════════
+let DEMO_DB = null;
+
+function demoSeed(){
+  const T = (id,nome,tipo,fase,fo,ord,status,perfis,opcoes) =>
+    ({ tarefa_id:id, nome, tipo, fase, fase_ordem:fo, ordem:ord, status,
+       perfis_responsaveis:perfis||[], opcoes:opcoes||[], lock_por:null });
+
+  const modelo = () => [
+    T('T01','Aceitar OS e deslocar','manual','Aberta',10,1,'pendente',['inspetor','auxiliar']),
+    T('T02','Executar levantamento','auto:levantamento','Em campo',20,1,'bloqueado',['inspetor','auxiliar']),
+    T('T03','Fechar levantamento com o cliente','manual','Concluída em campo',30,1,'bloqueado',['inspetor']),
+    T('T04','Conferir levantamento','manual','Orçamento',40,1,'bloqueado',['tecnico_adm','compras','comercial']),
+    T('T05','Cotar com fornecedores','auto:agregacao','Orçamento',40,2,'bloqueado',['compras']),
+    T('T06','Precificar','auto:agregacao','Orçamento',40,3,'bloqueado',['comercial','admin']),
+    T('T07','Emitir proposta','auto:documento:proposta','Orçamento',40,4,'bloqueado',['comercial']),
+    T('T08','Enviar ao cliente','manual','Orçamento',40,5,'bloqueado',['comercial']),
+    T('T09','Cliente aprovou?','decisao','Aguardando aprovação',50,1,'bloqueado',['comercial','admin'],
+      [{valor:'aprovado_total',label:'Aprovou tudo'},{valor:'aprovado_parcial',label:'Aprovou em parte'},{valor:'reprovado',label:'Não aprovou'}]),
+    T('T11','Emitir pedido de compra','auto:documento:pedido_compra','Compra',60,1,'condicional',['compras']),
+    T('T12','Receber material','auto:agregacao','Compra',60,2,'condicional',['compras']),
+    T('T13','Calibrar e lacrar','auto:agregacao','Calibração',70,1,'condicional',['tecnico_adm']),
+    T('T14','Agendar retorno','manual','Retorno p/ instalação',80,1,'condicional',['tecnico_adm','comercial']),
+    T('T15','Instalar em campo','auto:levantamento_f2','Retorno p/ instalação',80,2,'condicional',['inspetor','auxiliar']),
+    T('T10','Registrar motivo de perda','manual','Encerramento',90,1,'condicional',['comercial','admin']),
+    T('T16','Encerrar OS','manual','Encerramento',90,2,'bloqueado',['admin','tecnico_adm'])
+  ];
+
+  // avança um pipeline até uma tarefa alvo, resolvendo o que vem antes
+  const ate = (ts, alvo, dispensar) => {
+    const idx = ts.findIndex(t => t.tarefa_id === alvo);
+    ts.forEach((t,i) => {
+      if (i < idx) t.status = 'completo';
+      else if (i === idx) t.status = 'pendente';
+    });
+    (dispensar||[]).forEach(id => { const t = ts.find(x=>x.tarefa_id===id); if(t) t.status='dispensado'; });
+    return ts;
+  };
+
+  const os = [
+    { os_id:'d1', numero:'OS-2026-101', cliente:'Gerdau — Divinópolis', alvo:'T01', dias:1,  alerta:2 },
+    { os_id:'d2', numero:'OS-2026-102', cliente:'Farmax Ind. Farmacêutica', alvo:'T02', dias:0, alerta:3 },
+    { os_id:'d3', numero:'OS-2026-098', cliente:'Fundição Santana', alvo:'T05', dias:7,  alerta:5 },
+    { os_id:'d4', numero:'OS-2026-095', cliente:'Uau Ingleza', alvo:'T09', dias:12, alerta:7 },
+    { os_id:'d5', numero:'OS-2026-090', cliente:'Bauminas Agro — Itapecerica', alvo:'T14', dias:2, alerta:3,
+      dispensar:['T10'] },
+    { os_id:'d6', numero:'OS-2026-088', cliente:'LAX Soluções', alvo:'T15', dias:1, alerta:3, dispensar:['T10'] }
+  ];
+
+  DEMO_DB = {};
+  os.forEach(o => {
+    DEMO_DB[o.os_id] = { meta:o, tarefas: ate(modelo(), o.alvo, o.dispensar) };
+  });
+  // a OS-098 está travada: a única tarefa aberta da camada está bloqueada
+  DEMO_DB.d3.travada = true;
+  // a OS-095 está com a decisão parada há 12 dias — atrasada
+}
+
+const EXECUTOR = {
+  inspetor:'campo', auxiliar:'campo',
+  comercial:'adm', compras:'adm', tecnico_adm:'adm', admin:'adm'
+};
+
+function demoCards(){
+  if (!DEMO_DB) demoSeed();
+  return Object.values(DEMO_DB).map(({meta, tarefas, travada}) => {
+    const abertas = tarefas.filter(t => t.status !== 'completo' && t.status !== 'dispensado');
+    const atual = abertas[0];
+    if (!atual) return { os_id:meta.os_id, numero:meta.numero, cliente:meta.cliente, coluna:null };
+    const naFase = tarefas.filter(t => t.fase === atual.fase);
+    return {
+      os_id: meta.os_id, numero: meta.numero, cliente: meta.cliente,
+      status_os: 'em_andamento',
+      coluna: atual.fase, coluna_ordem: atual.fase_ordem,
+      quadro: EXECUTOR[(atual.perfis_responsaveis||[])[0]] || 'adm',
+      tarefa_atual_id: atual.tarefa_id, tarefa_atual: atual.nome,
+      tarefa_atual_tipo: atual.tipo, tarefa_atual_status: atual.status,
+      tarefa_atual_perfis: atual.perfis_responsaveis, tarefa_atual_lock: atual.lock_por,
+      tarefas_na_coluna: naFase.length,
+      resolvidas_na_coluna: naFase.filter(t => t.status==='completo'||t.status==='dispensado').length,
+      travada: !!travada,
+      dias_na_coluna: meta.dias, alerta_dias: meta.alerta
+    };
+  });
+}
+
+function demoTarefas(osId){ if(!DEMO_DB) demoSeed(); return DEMO_DB[osId].tarefas; }
+
+function demoAgir(card, t, acao, valor){
+  const db = DEMO_DB[card.os_id];
+  const alvo = db.tarefas.find(x => x.tarefa_id === t.tarefa_id);
+  if (acao === 'assumir'){ alvo.lock_por = 'eu'; alvo.status = 'em_andamento'; return; }
+  alvo.status = 'completo';
+  db.travada = false;
+  if (acao === 'decisao'){
+    const aprovou = valor !== 'reprovado';
+    ['T11','T12','T13','T14','T15'].forEach(id => {
+      const x = db.tarefas.find(y => y.tarefa_id === id);
+      if (x) x.status = aprovou ? (id === 'T11' ? 'pendente' : 'bloqueado') : 'dispensado';
+    });
+    const t10 = db.tarefas.find(y => y.tarefa_id === 'T10');
+    if (t10) t10.status = aprovou ? 'dispensado' : 'pendente';
+  }
+  // libera a próxima aberta (aproximação do motor, só para a demo)
+  const prox = db.tarefas.find(x => x.status === 'bloqueado');
+  if (prox && !db.tarefas.some(x => x.status === 'pendente' || x.status === 'em_andamento'))
+    prox.status = 'pendente';
+  db.meta.dias = 0;
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// ARQUIVOS — Google Drive
+// ----------------------------------------------------------------------------
+// A URL do serviço vem do banco (tabela `parametros`), não embutida aqui: no dia
+// em que a implantação do Apps Script mudar, é um UPDATE, não um redeploy.
+// ════════════════════════════════════════════════════════════════════════════
+let PARAM = { drive_url:'', drive_chave:'' };
+
+async function carregarParametros(){
+  if (DEMO){ PARAM = { drive_url:'demo', drive_chave:'demo' }; return; }
+  try{
+    const r = await get('parametros?select=chave,valor');
+    const m = {}; (r||[]).forEach(x => m[x.chave] = x.valor);
+    PARAM = { drive_url: m.drive_url || '', drive_chave: m.drive_chave || '' };
+  }catch(e){ console.warn('[parametros]', e.message); }
+}
+const driveLigado = () => !!(PARAM.drive_url && PARAM.drive_chave);
+
+const arquivoParaBase64 = f => new Promise((ok, err) => {
+  const r = new FileReader();
+  r.onerror = () => err(new Error('Não consegui ler o arquivo.'));
+  r.onload  = () => ok(r.result);
+  r.readAsDataURL(f);
+});
+
+/**
+ * Sobe para o Drive e registra o anexo. Sem cabeçalho customizado de propósito:
+ * é o que evita o preflight OPTIONS, que o Apps Script não responde.
+ */
+async function subirArquivo(dataUrl, meta){
+  if (DEMO){ demoAnexo(meta.os_id, meta.categoria, meta.nome);
+             return { url:'https://drive.google.com/demo', file_id:'demo' }; }
+  if (!driveLigado())
+    throw Object.assign(new Error('O Google Drive ainda não foi configurado — veja o Passo 8 do guia.'),
+                        { negocio:true });
+
+  const r = await fetch(PARAM.drive_url, {
+    method:'POST', redirect:'follow', signal: sinal(true),
+    body: JSON.stringify({
+      chave: PARAM.drive_chave, token: sessao.token,
+      client_uid: meta.client_uid, cliente: meta.cliente, os_numero: meta.os_numero,
+      categoria: meta.categoria, nome: meta.nome,
+      mime: meta.mime || 'application/octet-stream', base64: dataUrl
+    })
+  });
+  const j = await r.json().catch(() => null);
+  if (!j) throw new Error('O serviço de arquivos não respondeu como esperado.');
+  if (j.status !== 'ok')
+    throw Object.assign(new Error(j.mensagem || 'Falha ao gravar no Drive'),
+                        { negocio: j.codigo === 'CHAVE' || j.codigo === 'TOKEN' });
+
+  await rpc('tf_registrar_anexo', {
+    p_os_id: meta.os_id, p_categoria: meta.categoria, p_nome: meta.nome,
+    p_client_uid: meta.client_uid, p_drive_file_id: j.file_id, p_drive_url: j.url,
+    p_mime: meta.mime, p_bytes: j.bytes || null
+  });
+  return j;
+}
+
+// ── jsPDF sob demanda ───────────────────────────────────────────────────────
+// Carregado só quando alguém clica em "gerar PDF". Deixar no <head> custaria
+// ~350 KB de download e parse em toda abertura do app, para uma função que a
+// maioria das sessões nem usa.
+let _jspdf = null;
+function carregarJsPDF(){
+  if (_jspdf) return _jspdf;
+  _jspdf = new Promise((ok, err) => {
+    if (window.jspdf && window.jspdf.jsPDF) return ok(window.jspdf.jsPDF);
+    const s2 = document.createElement('script');
+    s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s2.onload  = () => (window.jspdf && window.jspdf.jsPDF)
+      ? ok(window.jspdf.jsPDF)
+      : err(new Error('A biblioteca de PDF carregou, mas não inicializou.'));
+    s2.onerror = () => err(new Error('Não consegui baixar a biblioteca de PDF. Sem internet?'));
+    document.head.appendChild(s2);
+  });
+  return _jspdf;
+}
+
+const dataBR = d => (d ? new Date(d) : new Date()).toLocaleDateString('pt-BR');
+
+/**
+ * Gera o PDF da OS.
+ *   tipo 'levantamento' → sem valores. É o que se mostra ao cliente e à planta.
+ *   tipo 'resumo'       → com custo, preço e margem. USO INTERNO.
+ * A separação é deliberada: proposta ao cliente leva valor fechado; o cálculo
+ * fica em documento interno.
+ */
+async function gerarPDF(tipo, card, itens){
+  const jsPDF = await carregarJsPDF();
+  const doc = new jsPDF({ unit:'mm', format:'a4' });
+  const interno = (tipo === 'resumo');
+  const M = 15;
+  let y = M;
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(15);
+  doc.text('ENGETAP ENGENHARIA', M, y); y += 6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10.5);
+  doc.text(interno ? 'Resumo da ordem de serviço — uso interno'
+                   : 'Levantamento de acessórios · NR-13', M, y); y += 8;
+  doc.setDrawColor(180); doc.line(M, y, 210-M, y); y += 7;
+
+  doc.setFontSize(10);
+  const linha = (k, v) => { doc.setFont('helvetica','bold'); doc.text(k, M, y);
+    doc.setFont('helvetica','normal'); doc.text(String(v||'—'), M+32, y); y += 5.5; };
+  linha('OS:', card.numero);
+  linha('Cliente:', card.cliente);
+  linha('Etapa:', card.coluna);
+  linha('Emitido em:', dataBR());
+  y += 4;
+
+  const elegiveis = itens.filter(i => i.elegivel);
+  const cols = interno
+    ? [{t:'Item',x:M,w:76},{t:'Qtd',x:M+78,w:10,r:1},{t:'Custo un.',x:M+96,w:20,r:1},
+       {t:'Preço un.',x:M+124,w:20,r:1},{t:'Total',x:M+152,w:22,r:1}]
+    : [{t:'Item',x:M,w:112},{t:'Qtd',x:M+118,w:12,r:1},{t:'Calibração',x:M+140,w:24},
+       {t:'Lacre',x:M+166,w:14}];
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+  cols.forEach(c => doc.text(c.t, c.r ? c.x + c.w : c.x, y, c.r ? {align:'right'} : undefined));
+  y += 2; doc.setDrawColor(210); doc.line(M, y, 210-M, y); y += 4.5;
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  (interno ? elegiveis : itens).forEach(it => {
+    if (y > 265){ doc.addPage(); y = M; }
+    // até duas linhas: cortar a descrição do acessório em uma linha esconde
+    // justamente a parte que identifica a peça (escala, bitola, rosca)
+    const nome = doc.splitTextToSize(String(it.descricao||''), cols[0].w).slice(0, 2);
+    doc.text(nome, cols[0].x, y);
+    doc.text(String(Number(it.quantidade)), cols[1].x + cols[1].w, y, {align:'right'});
+    if (interno){
+      doc.text(BRL(it.custo_unitario||0), cols[2].x + cols[2].w, y, {align:'right'});
+      doc.text(BRL(it.preco_unitario||0), cols[3].x + cols[3].w, y, {align:'right'});
+      doc.text(BRL(it.total_venda||0),    cols[4].x + cols[4].w, y, {align:'right'});
+    } else {
+      doc.text(it.requer_calibracao ? 'sim' : '—', cols[2].x, y);
+      doc.text(it.requer_lacre ? 'sim' : '—', cols[3].x, y);
+      if (!it.elegivel){ doc.setFontSize(7.5); doc.setTextColor(120);
+        doc.text('instalado em campo', cols[0].x + 2, y + 3.4 + (nome.length-1)*4.2);
+        doc.setFontSize(9); doc.setTextColor(0); y += 3.4; }
+    }
+    y += 5.4 + (nome.length - 1) * 4.2;
+  });
+
+  y += 2; doc.setDrawColor(180); doc.line(M, y, 210-M, y); y += 6;
+
+  if (interno){
+    const c = elegiveis.reduce((a,i)=>a+Number(i.total_custo||0),0);
+    const v = elegiveis.reduce((a,i)=>a+Number(i.total_venda||0),0);
+    doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.text('Custo total:', M, y);  doc.text(BRL(c), M+60, y, {align:'right'}); y += 5.5;
+    doc.text('Venda total:', M, y);  doc.text(BRL(v), M+60, y, {align:'right'}); y += 5.5;
+    doc.text('Margem:', M, y);       doc.text(BRL(v-c) + (v>0 ? '   ('+Math.round((v-c)/v*100)+'%)' : ''),
+                                              M+60, y, {align:'right'}); y += 9;
+    doc.setFont('helvetica','normal'); doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text('Documento interno — não enviar ao cliente.', M, y);
+  } else {
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    doc.text('Total de itens levantados: ' + itens.length, M, y); y += 14;
+    doc.setDrawColor(140);
+    doc.line(M, y, M+70, y); doc.line(120, y, 195, y); y += 4.5;
+    doc.setFontSize(8); doc.setTextColor(110);
+    doc.text('Inspetor Engetap', M, y);
+    doc.text('Responsável pela planta', 120, y);
+  }
+
+  const nome = (interno ? 'resumo-' : 'levantamento-') + card.numero + '.pdf';
+  return { blob: doc.output('datauristring'), nome };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ABA ITENS — a tela de trabalho do Vinícius e do Glênio
+// ----------------------------------------------------------------------------
+// Digitar custo aqui é o que faz o gateway de agregação andar. Por isso, depois
+// de cada gravação, o quadro é relido: se aquele foi o último item que faltava,
+// o card muda de coluna na frente de quem digitou.
+// ════════════════════════════════════════════════════════════════════════════
+const BRL = v => (Number(v)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+
+async function pintarItens(){
+  const { card } = osAberta;
+  const body = document.getElementById('dBody');
+  document.getElementById('dAcoes').innerHTML = '';
+  body.innerHTML = '<p style="color:var(--ink-3);font-size:13px">Carregando itens…</p>';
+
+  let itens;
+  try{
+    itens = DEMO ? demoItens(card.os_id)
+      : await get('os_itens?select=id,descricao,tipo_acessorio,quantidade,elegivel,fornecedor,'
+        + 'custo_unitario,preco_unitario,total_custo,total_venda,margem_valor,aprovado,'
+        + 'requer_calibracao,recebido_em,certificado_num'
+        + '&os_id=eq.' + card.os_id + '&order=created_at');
+  }catch(e){ body.innerHTML=''; const p=document.createElement('p');
+             p.style.color='var(--crit)'; p.textContent=e.message; body.appendChild(p); return; }
+
+  if (!itens.length){
+    body.innerHTML = '<div class="vazio" style="padding:40px 10px"><h3>Nenhum item ainda</h3>'
+      + '<p>Os itens entram pelo TapFlow Field, quando o inspetor envia o levantamento.</p></div>';
+    return;
+  }
+
+  body.innerHTML = '<div style="overflow-x:auto"><table class="tbl"><thead><tr>'
+    + '<th>Item</th><th>Qtd</th><th>Fornecedor</th><th>Custo un.</th><th>Preço un.</th><th>Margem</th>'
+    + '</tr></thead><tbody></tbody></table></div>';
+  const tb = body.querySelector('tbody');
+
+  itens.forEach(it => {
+    const tr = document.createElement('tr');
+    if (!it.elegivel) tr.className = 'fora';
+    tr.innerHTML = '<td class="d"></td><td class="num q"></td>'
+      + '<td><input class="f" type="text" placeholder="—"></td>'
+      + '<td><input class="c" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0,00"></td>'
+      + '<td><input class="p" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0,00"></td>'
+      + '<td class="num m"></td>';
+    tr.querySelector('.d').textContent = it.descricao;
+    tr.querySelector('.q').textContent = Number(it.quantidade);
+    const fi = tr.querySelector('.f'), ci = tr.querySelector('.c'), pi = tr.querySelector('.p');
+    fi.value = it.fornecedor || '';
+    ci.value = it.custo_unitario != null ? it.custo_unitario : '';
+    pi.value = it.preco_unitario != null ? it.preco_unitario : '';
+    if (it.elegivel && !(Number(it.custo_unitario) > 0)) ci.classList.add('falta');
+    if (it.elegivel && !(Number(it.preco_unitario) > 0)) pi.classList.add('falta');
+    tr.querySelector('.m').textContent = it.margem_valor != null ? BRL(it.margem_valor) : '—';
+    if (!it.elegivel){ [fi,ci,pi].forEach(x => x.disabled = true); }
+
+    const grava = (campo, el, numerico) => el.addEventListener('change', async () => {
+      const bruto = el.value.trim();
+      const valor = numerico ? (bruto === '' ? null : Number(bruto)) : (bruto || null);
+      if (numerico && bruto !== '' && !(valor >= 0)){ toast('Valor inválido.','err'); return; }
+      el.disabled = true;
+      try{
+        if (DEMO) demoGravarItem(card.os_id, it.id, campo, valor);
+        else await patch('os_itens', 'id=eq.' + it.id, { [campo]: valor });
+        const colAntes = card.coluna;
+        await carregar({silencioso:true});
+        const novo = cards.find(x => x.os_id === card.os_id);
+        if (novo && novo.coluna !== colAntes){
+          toast('Etapa concluída — o card foi para "' + novo.coluna + '".', 'ok');
+          osAberta.card = novo;
+          document.getElementById('dSub').textContent =
+            novo.coluna + ' · quadro ' + (novo.quadro === 'campo' ? 'do campo' : 'da gestão');
+        }
+        pintarItens();
+      }catch(e){ toast(e.message,'err'); el.disabled = false; }
+    });
+    grava('fornecedor', fi, false);
+    grava('custo_unitario', ci, true);
+    grava('preco_unitario', pi, true);
+    tb.appendChild(tr);
+  });
+
+  const el = itens.filter(i => i.elegivel);
+  const somaC = el.reduce((s,i)=>s+Number(i.total_custo||0),0);
+  const somaV = el.reduce((s,i)=>s+Number(i.total_venda||0),0);
+  const somaM = somaV - somaC;
+  const t = document.createElement('div'); t.className = 'totais';
+  t.innerHTML = '<div><div class="k">Custo</div><div class="v"></div></div>'
+              + '<div><div class="k">Venda</div><div class="v"></div></div>'
+              + '<div><div class="k">Margem</div><div class="v ' + (somaM>=0?'pos':'neg') + '"></div></div>';
+  t.querySelectorAll('.v')[0].textContent = BRL(somaC);
+  t.querySelectorAll('.v')[1].textContent = BRL(somaV);
+  t.querySelectorAll('.v')[2].textContent = BRL(somaM) + (somaV>0 ? '  ·  ' + Math.round(somaM/somaV*100) + '%' : '');
+  body.appendChild(t);
+
+  const falta = el.filter(i => !(Number(i.custo_unitario)>0)).length;
+  const faltaP = el.filter(i => !(Number(i.preco_unitario)>0)).length;
+  const n = document.createElement('p');
+  n.style.cssText = 'font-size:12.5px;color:var(--ink-3);margin:12px 0 0;line-height:1.5';
+  n.textContent = falta ? falta + ' item(ns) ainda sem custo — a etapa de cotação só fecha no último.'
+    : faltaP ? faltaP + ' item(ns) sem preço de venda — a etapa de precificação fecha quando todos tiverem.'
+    : 'Todos os itens elegíveis têm custo e preço.';
+  body.appendChild(n);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ABA PROPOSTA — a proposta é montada FORA; aqui se registra o número
+// ════════════════════════════════════════════════════════════════════════════
+async function pintarProposta(){
+  const { card } = osAberta;
+  const body = document.getElementById('dBody');
+  document.getElementById('dAcoes').innerHTML = '';
+  body.innerHTML = '<p style="color:var(--ink-3);font-size:13px">Carregando…</p>';
+
+  let props = [];
+  try{
+    props = DEMO ? (demoPropostas(card.os_id) || [])
+      : await get('v_propostas?select=*&os_id=eq.' + card.os_id + '&order=versao.desc');
+  }catch(e){ /* segue com a lista vazia */ }
+
+  body.innerHTML = '';
+  if (props.length){
+    const w = document.createElement('div'); w.style.marginBottom = '18px';
+    w.innerHTML = '<div style="overflow-x:auto"><table class="tbl"><thead><tr>'
+      + '<th>Número</th><th>V.</th><th>Status</th><th>Valor</th><th>Parada</th>'
+      + '</tr></thead><tbody></tbody></table></div>';
+    const tb = w.querySelector('tbody');
+    props.forEach(pr => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td class="mono n"></td><td class="num v"></td><td class="s"></td>'
+                   + '<td class="num t"></td><td class="num d"></td>';
+      tr.querySelector('.n').textContent = pr.numero;
+      tr.querySelector('.v').textContent = pr.versao;
+      tr.querySelector('.s').textContent = pr.status;
+      tr.querySelector('.t').textContent = BRL(pr.valor_total);
+      tr.querySelector('.d').textContent = pr.dias_sem_resposta != null ? pr.dias_sem_resposta + 'd' : '—';
+      tb.appendChild(tr);
+    });
+    body.appendChild(w);
+  }
+
+  const f = document.createElement('div');
+  f.innerHTML =
+    '<h3 style="font-size:15px;margin:0 0 4px">Registrar proposta enviada</h3>' +
+    '<p style="font-size:12.5px;color:var(--ink-3);margin:0 0 14px;line-height:1.5">' +
+      'A proposta é montada no seu sistema. Aqui entra o número dela — e é esse registro ' +
+      'que fecha a etapa e move o card.</p>' +
+    '<div class="campo"><label for="pN">Número da proposta</label>' +
+      '<input id="pN" type="text" placeholder="ex.: ORC-8842"></div>' +
+    '<div class="dupla">' +
+      '<div class="campo"><label for="pV">Valor total</label>' +
+        '<input id="pV" type="number" step="0.01" min="0" inputmode="decimal" placeholder="deixe vazio p/ usar o da OS"></div>' +
+      '<div class="campo"><label for="pD">Validade</label><input id="pD" type="date"></div>' +
+    '</div>' +
+    '<div class="campo"><label for="pF">PDF da proposta</label>' +
+      '<input id="pF" type="file" accept="application/pdf">' +
+      '<div class="dica" id="pFd"></div></div>' +
+    '<button class="btn pri" id="pOk" style="width:100%;padding:11px">Registrar e mover o card</button>';
+  body.appendChild(f);
+
+  const dicaF = document.getElementById('pFd');
+  dicaF.textContent = driveLigado()
+    ? 'O arquivo vai para o Drive da Engetap, na pasta do cliente e da OS.'
+    : 'O Google Drive ainda não foi configurado — dá para registrar o número sem o arquivo.';
+  document.getElementById('pF').disabled = !driveLigado();
+
+  const d = new Date(); d.setDate(d.getDate() + 15);
+  document.getElementById('pD').value = d.toISOString().slice(0,10);
+
+  document.getElementById('pOk').addEventListener('click', async () => {
+    const num = document.getElementById('pN').value.trim();
+    if (!num){ toast('Informe o número da proposta.','err'); return; }
+    const b = document.getElementById('pOk'); b.disabled = true;
+    const arq = (document.getElementById('pF').files || [])[0];
+    try{
+      // O arquivo sobe ANTES do registro: se o Drive recusar, nada é gravado e
+      // o número continua livre para tentar de novo. O contrário deixaria uma
+      // proposta registrada apontando para um PDF que não existe.
+      let url = null;
+      if (arq){
+        if (arq.size > 18 * 1024 * 1024) throw new Error('PDF acima de 18 MB — comprima antes de subir.');
+        b.textContent = 'Enviando o PDF…';
+        const j = await subirArquivo(await arquivoParaBase64(arq), {
+          os_id: card.os_id, cliente: card.cliente, os_numero: card.numero,
+          categoria: 'proposta', nome: num + '.pdf', mime: 'application/pdf',
+          client_uid: 'prop-' + card.os_id + '-' + num
+        });
+        url = j.url;
+        b.textContent = 'Registrando…';
+      }
+      if (DEMO) demoProposta(card.os_id, num);
+      else await rpc('tf_registrar_proposta_externa', {
+        p_os_id: card.os_id, p_numero: num,
+        p_valor_total: document.getElementById('pV').value ? Number(document.getElementById('pV').value) : null,
+        p_validade: document.getElementById('pD').value || null,
+        p_arquivo_url: url
+      });
+      const antes = card.coluna;
+      await carregar({silencioso:true});
+      const novo = cards.find(x => x.os_id === card.os_id);
+      if (novo){ osAberta.card = novo;
+        toast(novo.coluna !== antes ? 'Registrada — o card foi para "' + novo.coluna + '".' : 'Proposta registrada.', 'ok');
+      } else toast('Proposta registrada.','ok');
+      pintarProposta();
+    }catch(e){ toast(e.message,'err'); b.disabled = false; b.textContent = 'Registrar e mover o card'; }
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ABA ARQUIVOS — o que está no Drive desta OS
+// ════════════════════════════════════════════════════════════════════════════
+const CAT_ROTULO = {
+  foto_item:'Foto de item', foto_tarefa:'Foto de etapa', assinatura:'Aceite do cliente',
+  proposta:'Proposta', pedido_compra:'Pedido de compra', certificado:'Certificado',
+  relatorio:'Relatório', outro:'Outro'
+};
+
+async function pintarArquivos(){
+  const { card } = osAberta;
+  const body = document.getElementById('dBody');
+  document.getElementById('dAcoes').innerHTML = '';
+  body.innerHTML = '<p style="color:var(--ink-3);font-size:13px">Carregando…</p>';
+
+  let anexos = [];
+  try{
+    anexos = DEMO ? (demoAnexos(card.os_id) || [])
+      : await get('anexos?select=id,categoria,nome,drive_url,criado_em,bytes'
+                  + '&os_id=eq.' + card.os_id + '&ativo=eq.true&order=criado_em.desc');
+  }catch(e){ /* segue vazio */ }
+
+  body.innerHTML = '';
+
+  // ── gerar PDF ──
+  const g = document.createElement('div');
+  g.innerHTML =
+    '<h3 style="font-size:15px;margin:0 0 4px">Gerar documento</h3>' +
+    '<p style="font-size:12.5px;color:var(--ink-3);margin:0 0 12px;line-height:1.5">' +
+      'O PDF é montado aqui e guardado no Drive, na pasta desta OS.</p>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button class="btn" id="gLev" style="flex:1;min-width:150px;padding:10px">Levantamento (sem valores)</button>' +
+      '<button class="btn" id="gRes" style="flex:1;min-width:150px;padding:10px">Resumo interno (com margem)</button>' +
+    '</div>' +
+    '<p style="font-size:12px;color:var(--ink-3);margin:9px 0 20px;line-height:1.45">' +
+      'O <b>levantamento</b> é o que se mostra à planta: lista de acessórios, sem preço. ' +
+      'O <b>resumo interno</b> traz custo, preço e margem — não é para sair da empresa.</p>';
+  body.appendChild(g);
+
+  const gerar = async (tipo, btn) => {
+    const rotulo = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Montando…';
+    try{
+      const itens = DEMO ? demoItens(card.os_id)
+        : await get('os_itens?select=descricao,quantidade,elegivel,custo_unitario,preco_unitario,'
+            + 'total_custo,total_venda,requer_calibracao,requer_lacre'
+            + '&os_id=eq.' + card.os_id + '&order=created_at');
+      if (!itens.length) throw new Error('Esta OS ainda não tem itens.');
+      const { blob, nome } = await gerarPDF(tipo, card, itens);
+      btn.textContent = 'Enviando…';
+      await subirArquivo(blob, {
+        os_id: card.os_id, cliente: card.cliente, os_numero: card.numero,
+        categoria: 'relatorio', nome, mime: 'application/pdf',
+        client_uid: 'pdf-' + card.os_id + '-' + tipo + '-' + Date.now()
+      });
+      toast('PDF gerado e guardado no Drive.', 'ok');
+      pintarArquivos();
+    }catch(e){ toast(e.message, 'err'); btn.disabled = false; btn.textContent = rotulo; }
+  };
+  document.getElementById('gLev').addEventListener('click', e => gerar('levantamento', e.target));
+  document.getElementById('gRes').addEventListener('click', e => gerar('resumo', e.target));
+
+  // ── lista do que já está no Drive ──
+  const h = document.createElement('div');
+  h.style.cssText = 'font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;'
+                  + 'color:var(--ink-3);margin:0 0 8px';
+  h.textContent = 'No Drive';
+  body.appendChild(h);
+
+  if (!anexos.length){
+    const p2 = document.createElement('p');
+    p2.style.cssText = 'font-size:13px;color:var(--ink-3);margin:0;line-height:1.5';
+    p2.textContent = driveLigado()
+      ? 'Nada ainda. As fotos do campo e os PDFs aparecem aqui assim que subirem.'
+      : 'O Google Drive ainda não foi configurado — veja o Passo 8 do guia de instalação.';
+    body.appendChild(p2);
+    return;
+  }
+
+  anexos.forEach(a => {
+    const r = document.createElement('div');
+    r.style.cssText = 'display:flex;gap:10px;align-items:baseline;padding:8px 0;'
+                    + 'border-bottom:1px solid var(--rule-2);font-size:13.5px';
+    r.innerHTML = '<span class="chip" style="flex:0 0 auto"></span>'
+      + '<a target="_blank" rel="noopener" style="flex:1;min-width:0;overflow:hidden;'
+      + 'text-overflow:ellipsis;white-space:nowrap"></a>'
+      + '<span style="flex:0 0 auto;font-size:11.5px;color:var(--ink-3)"></span>';
+    r.querySelector('.chip').textContent = CAT_ROTULO[a.categoria] || a.categoria;
+    const link = r.querySelector('a');
+    link.textContent = a.nome; link.href = a.drive_url || '#';
+    r.querySelector('span:last-child').textContent = dataBR(a.criado_em);
+    body.appendChild(r);
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MODAL
+// ════════════════════════════════════════════════════════════════════════════
+function abrirModal(titulo, corpoHtml, botoes){
+  document.getElementById('mTit').textContent = titulo;
+  document.getElementById('mBody').innerHTML = corpoHtml;
+  const f = document.getElementById('mFoot'); f.innerHTML = '';
+  (botoes||[]).forEach(b => {
+    const el = document.createElement('button');
+    el.className = 'btn' + (b.pri ? ' pri' : '');
+    el.textContent = b.label;
+    el.addEventListener('click', () => b.onClick(el));
+    f.appendChild(el);
+  });
+  document.getElementById('mScrim').hidden = false;
+  document.getElementById('modal').hidden = false;
+}
+function fecharModal(){
+  document.getElementById('mScrim').hidden = true;
+  document.getElementById('modal').hidden = true;
+}
+
+async function modalNovaOS(){
+  let clientes = [];
+  try{ clientes = DEMO ? demoClientes() : await get('clientes?select=id,nome&ativo=eq.true&order=nome'); }
+  catch(e){ toast(e.message,'err'); return; }
+  if (!clientes.length){
+    toast('Cadastre um cliente antes de abrir OS.','err');
+    document.querySelector('#sw button[data-q="cad"]').click();
+    return;
+  }
+  abrirModal('Nova ordem de serviço',
+    '<div class="campo"><label for="oC">Cliente</label><select id="oC">' +
+      clientes.map(c => '<option value="'+c.id+'">'+esc(c.nome)+'</option>').join('') +
+    '</select></div>' +
+    '<div class="campo"><label for="oD">Descrição</label>' +
+      '<input id="oD" type="text" placeholder="ex.: Acessórios NR-13 — parada anual"></div>' +
+    '<div class="campo"><label for="oP">Data prevista (opcional)</label><input id="oP" type="date"></div>' +
+    '<p style="font-size:12.5px;color:var(--ink-3);margin:0;line-height:1.5">' +
+      'O número é gerado automaticamente e o pipeline de 16 etapas já nasce junto — ' +
+      'a OS aparece no quadro do campo, esperando um inspetor aceitar.</p>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Abrir OS', pri:true, onClick: async (btn) => {
+        btn.disabled = true;
+        try{
+          const r = DEMO
+            ? demoNovaOS(document.getElementById('oC').value, document.getElementById('oD').value)
+            : await rpc('tf_abrir_os', {
+                p_cliente_id: document.getElementById('oC').value,
+                p_descricao: document.getElementById('oD').value.trim() || null,
+                p_data_prevista: document.getElementById('oP').value || null,
+                p_client_uid: 'os-' + Date.now() + '-' + Math.random().toString(36).slice(2,8)
+              });
+          fecharModal();
+          toast('OS ' + r.numero + ' aberta.', 'ok');
+          quadro = 'campo'; visao = 'quadro';
+          [...document.querySelectorAll('#sw button')].forEach(x =>
+            x.classList.toggle('on', x.dataset.q === 'campo'));
+          await carregar();
+        }catch(e){ toast(e.message,'err'); btn.disabled = false; }
+     }}]);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CADASTROS
+// ════════════════════════════════════════════════════════════════════════════
+async function pintarCadastros(){
+  visao = 'cad';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="cadWrap">'
+    + '<div class="painel"><h3>Clientes</h3><div id="cadForm"></div><div class="lista" id="cadLista"></div></div>'
+    + '<div class="painel" id="cadDet"><p style="color:var(--ink-3);font-size:13.5px;margin:0">'
+    + 'Escolha um cliente à esquerda para ver contatos e equipamentos.</p></div></div>';
+
+  document.getElementById('cadForm').innerHTML =
+    '<div class="dupla"><div class="campo"><label for="cN">Nome</label><input id="cN" type="text"></div>' +
+    '<div class="campo"><label for="cC">CNPJ</label><input id="cC" type="text" placeholder="opcional"></div></div>' +
+    '<button class="btn pri" id="cAdd" style="width:100%;padding:9px;margin-bottom:14px">Adicionar cliente</button>';
+
+  document.getElementById('cAdd').addEventListener('click', async (e) => {
+    const nome = document.getElementById('cN').value.trim();
+    if (!nome){ toast('Informe o nome do cliente.','err'); return; }
+    e.target.disabled = true;
+    try{
+      const cnpj = document.getElementById('cC').value.trim() || null;
+      if (DEMO) demoAddCliente(nome, cnpj); else await post('clientes', { nome, cnpj });
+      toast('Cliente cadastrado.','ok');
+      pintarCadastros();
+    }catch(err){
+      toast(/duplicate|unique|ux_clientes/i.test(err.message)
+        ? 'Já existe um cliente com esse CNPJ.' : err.message, 'err');
+      e.target.disabled = false;
+    }
+  });
+
+  let cli = [];
+  try{ cli = DEMO ? demoClientes()
+      : await get('clientes?select=id,nome,cnpj,contatos(count),equipamentos(count)&ativo=eq.true&order=nome'); }
+  catch(e){ toast(e.message,'err'); }
+
+  const lista = document.getElementById('cadLista');
+  lista.innerHTML = '';
+  if (!cli.length){
+    lista.innerHTML = '<p style="font-size:13px;color:var(--ink-3)">Nenhum cliente ainda.</p>';
+    return;
+  }
+  cli.forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'linhaCli' + (cadSel === c.id ? ' on' : '');
+    b.innerHTML = '<b></b><small></small>';
+    b.querySelector('b').textContent = c.nome;
+    const nc = (c.contatos && c.contatos[0] ? c.contatos[0].count : (c._contatos||0));
+    const ne = (c.equipamentos && c.equipamentos[0] ? c.equipamentos[0].count : (c._equip||0));
+    b.querySelector('small').textContent =
+      (c.cnpj ? c.cnpj + ' · ' : '') + nc + ' contato(s) · ' + ne + ' equipamento(s)';
+    b.addEventListener('click', () => { cadSel = c.id; pintarCadastros(); detalheCliente(c); });
+    lista.appendChild(b);
+  });
+  const sel = cli.find(c => c.id === cadSel);
+  if (sel) detalheCliente(sel);
+}
+
+async function detalheCliente(c){
+  const d = document.getElementById('cadDet');
+  d.innerHTML = '<h3></h3><p style="color:var(--ink-3);font-size:13px">Carregando…</p>';
+  d.querySelector('h3').textContent = c.nome;
+
+  let contatos = [], equips = [];
+  try{
+    [contatos, equips] = DEMO ? [demoContatos(c.id), demoEquips(c.id)] : await Promise.all([
+      get('contatos?select=id,nome,email,telefone,papeis&cliente_id=eq.' + c.id + '&ativo=eq.true&order=nome'),
+      get('equipamentos?select=id,tag,tipo,localizacao,pmta&cliente_id=eq.' + c.id + '&ativo=eq.true&order=tag')
+    ]);
+  }catch(e){ toast(e.message,'err'); }
+
+  d.innerHTML = '';
+  const h = document.createElement('h3'); h.textContent = c.nome; d.appendChild(h);
+
+  const bloco = (titulo, linhas, vazio) => {
+    const s = document.createElement('div'); s.style.marginBottom = '18px';
+    s.innerHTML = '<div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;'
+      + 'text-transform:uppercase;color:var(--ink-3);margin:0 0 8px"></div>';
+    s.firstChild.textContent = titulo;
+    if (!linhas.length){
+      const p = document.createElement('p');
+      p.style.cssText='font-size:13px;color:var(--ink-3);margin:0'; p.textContent = vazio;
+      s.appendChild(p);
+    } else linhas.forEach(l => {
+      const r = document.createElement('div');
+      r.style.cssText='font-size:13.5px;padding:7px 0;border-bottom:1px solid var(--rule-2)';
+      r.innerHTML = '<b></b> <span style="color:var(--ink-3)"></span>';
+      r.querySelector('b').textContent = l.b; r.querySelector('span').textContent = l.s;
+      s.appendChild(r);
+    });
+    d.appendChild(s);
+    return s;
+  };
+
+  bloco('Contatos', contatos.map(x => ({ b:x.nome,
+    s: [x.email, x.telefone, (x.papeis||[]).join('/')].filter(Boolean).join(' · ') })),
+    'Nenhum contato. O contato que APROVA proposta é obrigatório na hora de registrar a aprovação.');
+
+  const fc = document.createElement('div');
+  fc.innerHTML = '<div class="dupla"><div class="campo"><label>Nome</label><input id="ctN" type="text"></div>'
+    + '<div class="campo"><label>Telefone / e-mail</label><input id="ctT" type="text"></div></div>'
+    + '<label class="campo" style="display:flex;align-items:center;gap:8px;font-size:13.5px">'
+    + '<input id="ctA" type="checkbox" style="width:18px;height:18px"> Este contato aprova propostas</label>'
+    + '<button class="btn" id="ctAdd" style="width:100%;padding:9px;margin-bottom:20px">Adicionar contato</button>';
+  d.appendChild(fc);
+  document.getElementById('ctAdd').addEventListener('click', async (e) => {
+    const nome = document.getElementById('ctN').value.trim();
+    if (!nome){ toast('Informe o nome do contato.','err'); return; }
+    e.target.disabled = true;
+    const t = document.getElementById('ctT').value.trim();
+    const obj = { cliente_id: c.id, nome,
+      email: t.includes('@') ? t : null, telefone: t.includes('@') ? null : (t||null),
+      papeis: document.getElementById('ctA').checked ? ['aprova'] : [] };
+    try{ if (DEMO) demoAddContato(obj); else await post('contatos', obj);
+         toast('Contato cadastrado.','ok'); detalheCliente(c); }
+    catch(err){ toast(err.message,'err'); e.target.disabled = false; }
+  });
+
+  bloco('Equipamentos', equips.map(x => ({ b:x.tag,
+    s: [x.tipo, x.localizacao, x.pmta ? 'PMTA ' + x.pmta : ''].filter(Boolean).join(' · ') })),
+    'Nenhum equipamento. Sem TAG cadastrada, o inspetor lança o item sem vínculo com o vaso.');
+
+  const fe = document.createElement('div');
+  fe.innerHTML = '<div class="dupla"><div class="campo"><label>TAG</label><input id="eqT" type="text" placeholder="VP-01"></div>'
+    + '<div class="campo"><label>Tipo</label><select id="eqK">'
+    + '<option value="vaso">Vaso de pressão</option><option value="caldeira">Caldeira</option>'
+    + '<option value="tanque">Tanque</option><option value="tubulacao">Tubulação</option>'
+    + '<option value="outro">Outro</option></select></div></div>'
+    + '<div class="dupla"><div class="campo"><label>Local</label><input id="eqL" type="text"></div>'
+    + '<div class="campo"><label>PMTA</label><input id="eqP" type="number" step="0.01" inputmode="decimal"></div></div>'
+    + '<button class="btn" id="eqAdd" style="width:100%;padding:9px">Adicionar equipamento</button>';
+  d.appendChild(fe);
+  document.getElementById('eqAdd').addEventListener('click', async (e) => {
+    const tag = document.getElementById('eqT').value.trim();
+    if (!tag){ toast('Informe a TAG.','err'); return; }
+    e.target.disabled = true;
+    const obj = { cliente_id: c.id, tag, tipo: document.getElementById('eqK').value,
+      localizacao: document.getElementById('eqL').value.trim() || null,
+      pmta: document.getElementById('eqP').value ? Number(document.getElementById('eqP').value) : null };
+    try{ if (DEMO) demoAddEquip(obj); else await post('equipamentos', obj);
+         toast('Equipamento cadastrado.','ok'); detalheCliente(c); }
+    catch(err){ toast(/duplicate|ux_equip/i.test(err.message)
+        ? 'Já existe essa TAG neste cliente.' : err.message,'err'); e.target.disabled = false; }
+  });
+}
+
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g, ch =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+
+// ── dados de demonstração dos novos módulos ─────────────────────────────────
+let D_CLI = null, D_CT = null, D_EQ = null, D_IT = null, D_PR = null;
+function demoCad(){
+  if (D_CLI) return;
+  D_CLI = [{id:'c1',nome:'Gerdau — Divinópolis',cnpj:'26.668.182/0001-85',_contatos:1,_equip:2},
+           {id:'c2',nome:'Fundição Santana',cnpj:null,_contatos:0,_equip:1}];
+  D_CT  = [{id:'t1',cliente_id:'c1',nome:'Heliton Coutinho',email:'heliton@cliente',papeis:['aprova']}];
+  D_EQ  = [{id:'e1',cliente_id:'c1',tag:'VP-01',tipo:'vaso',localizacao:'Utilidades',pmta:10.5},
+           {id:'e2',cliente_id:'c1',tag:'CL-01',tipo:'caldeira',localizacao:'Casa de caldeiras',pmta:8},
+           {id:'e3',cliente_id:'c2',tag:'TQ-01',tipo:'tanque',localizacao:'Pátio',pmta:6}];
+  D_IT = { d3: [
+    {id:'i1',descricao:'Manômetro 63mm 0-14 kgf/cm²',quantidade:10,elegivel:true,fornecedor:'Wika',
+     custo_unitario:180,preco_unitario:297,total_custo:1800,total_venda:2970,margem_valor:1170,requer_calibracao:true},
+    {id:'i2',descricao:'Válvula de segurança 1/2"',quantidade:2,elegivel:true,fornecedor:'Leser',
+     custo_unitario:940,preco_unitario:null,total_custo:1880,total_venda:0,margem_valor:-1880,requer_calibracao:true},
+    {id:'i3',descricao:'Purgador termodinâmico 1/2"',quantidade:1,elegivel:true,fornecedor:null,
+     custo_unitario:null,preco_unitario:null,total_custo:0,total_venda:0,margem_valor:0},
+    {id:'i4',descricao:'Niple 1/4" (instalado em campo)',quantidade:1,elegivel:false,
+     custo_unitario:null,preco_unitario:null,total_custo:0,total_venda:0,margem_valor:null}
+  ]};
+  D_PR = {};
+}
+const demoClientes = () => (demoCad(), D_CLI);
+const demoContatos = id => (demoCad(), D_CT.filter(x => x.cliente_id === id));
+const demoEquips   = id => (demoCad(), D_EQ.filter(x => x.cliente_id === id));
+const demoItens    = os => (demoCad(), D_IT[os] || []);
+const demoPropostas= os => (demoCad(), D_PR[os] || []);
+function demoAddCliente(nome,cnpj){ demoCad(); D_CLI.push({id:'c'+Date.now(),nome,cnpj,_contatos:0,_equip:0}); }
+function demoAddContato(o){ demoCad(); D_CT.push(Object.assign({id:'t'+Date.now()},o));
+  const c=D_CLI.find(x=>x.id===o.cliente_id); if(c) c._contatos++; }
+function demoAddEquip(o){ demoCad(); D_EQ.push(Object.assign({id:'e'+Date.now()},o));
+  const c=D_CLI.find(x=>x.id===o.cliente_id); if(c) c._equip++; }
+function demoNovaOS(cli,desc){
+  demoCad(); const n = 'OS-2026-0' + (100 + Object.keys(DEMO_DB||{}).length);
+  return { numero:n, os_id:'novo' };
+}
+function demoGravarItem(os,id,campo,valor){
+  demoCad(); const it = (D_IT[os]||[]).find(x => x.id === id); if (!it) return;
+  it[campo] = valor;
+  it.total_custo = (Number(it.custo_unitario)||0) * it.quantidade;
+  it.total_venda = (Number(it.preco_unitario)||0) * it.quantidade;
+  it.margem_valor = it.total_venda - it.total_custo;
+}
+let D_AN = {};
+const demoAnexos = os => (D_AN[os] || []);
+function demoAnexo(os, categoria, nome){
+  D_AN[os] = D_AN[os] || [];
+  D_AN[os].unshift({ id:'a'+Date.now(), categoria, nome,
+    drive_url:'https://drive.google.com/demo', criado_em:new Date().toISOString() });
+}
+function demoProposta(os,num){
+  demoCad(); D_PR[os] = D_PR[os] || [];
+  D_PR[os].unshift({ id:'p'+Date.now(), numero:num, versao:D_PR[os].length+1, status:'emitida',
+    valor_total:(D_IT[os]||[]).reduce((s,i)=>s+Number(i.total_venda||0),0), dias_sem_resposta:null });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// BOOT
+// ════════════════════════════════════════════════════════════════════════════
+document.getElementById('sw').addEventListener('click', e => {
+  const b = e.target.closest('button[data-q]'); if (!b) return;
+  [...document.querySelectorAll('#sw button')].forEach(x => x.classList.toggle('on', x === b));
+  if (b.dataset.q === 'cad'){ visao = 'cad'; pintarCadastros(); return; }
+  visao = 'quadro'; quadro = b.dataset.q; pintar();
+});
+document.getElementById('btnNovaOS').addEventListener('click', modalNovaOS);
+document.getElementById('mX').addEventListener('click', fecharModal);
+document.getElementById('mScrim').addEventListener('click', fecharModal);
+document.getElementById('dTabs').addEventListener('click', e => {
+  const b = e.target.closest('button[data-t]'); if (!b || !osAberta) return;
+  [...document.querySelectorAll('#dTabs button')].forEach(x => x.classList.toggle('on', x === b));
+  abaDrawer = b.dataset.t;
+  pintarDrawer();
+});
+document.getElementById('btnRefresh').addEventListener('click', () => carregar().catch(()=>{}));
+
+document.getElementById('lgBtn').addEventListener('click', async () => {
+  const b = document.getElementById('lgBtn'), erro = document.getElementById('lgErro');
+  b.disabled = true; erro.textContent = '';
+  try{
+    await entrar(document.getElementById('lgEmail').value.trim(),
+                 document.getElementById('lgSenha').value);
+    document.getElementById('login').hidden = true;
+    iniciar();
+  }catch(e){ erro.textContent = e.message; }
+  finally{ b.disabled = false; }
+});
+document.getElementById('lgSenha').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('lgBtn').click();
+});
+
+async function iniciar(){
+  document.getElementById('who').innerHTML = '';
+  if (sessao.nome){
+    const s = document.createElement('span');
+    s.innerHTML = '<b></b> · ';
+    s.querySelector('b').textContent = sessao.nome;
+    s.appendChild(document.createTextNode(sessao.perfil || ''));
+    document.getElementById('who').appendChild(s);
+  }
+  await carregarColunas();
+  await carregarParametros();
+  carregar().catch(()=>{});
+}
+
+(function boot(){
+  document.getElementById('demoBar').hidden = !DEMO;
+  if (DEMO){
+    sessao = { token:null, nome:'Modo demo', email:null, perfil:'admin', admin:true };
+    iniciar();
+    return;
+  }
+  lerSessao();
+  if (sessao.token){ iniciar(); }
+  else { document.getElementById('login').hidden = false; }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#0E5D57">
+<title>TapFlow Field</title>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     TAPFLOW FIELD — TFF_S2
+     Engetap Engenharia · o app do inspetor
+
+     S2 acrescenta: fotos (do ponto e do aceite) gravadas no Google Drive,
+     coleta em EQUIPE (dois técnicos na mesma OS) e a fila offline cuidando
+     também das imagens.
+
+     ARQUIVO ÚNICO. Sem SUPABASE_URL preenchido, roda em MODO DEMO.
+
+     ── O QUE ESTE APP PRECISA ACERTAR ─────────────────────────────────────────
+     Ele roda dentro de planta industrial, com sinal ruim. Três regras vieram
+     direto do que o TapControl errou (achados DAT-01, DAT-02 e DAT-05):
+
+     1. O client_uid é gerado UMA VEZ por coleta e reusado em todo reenvio.
+        É ele que faz o banco recusar o envio duplicado em vez de criar uma
+        segunda OS de material.
+     2. O verde NUNCA mente. "Enviado" só aparece depois de resposta de verdade
+        do servidor. Sem resposta, o levantamento fica visível "na fila".
+     3. Nada é apagado sem confirmação do servidor. O rascunho só some depois
+        que o envio volta OK.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<style>
+:root{
+  --paper:#F1F3F2; --surface:#FFFFFF; --surface-2:#F6F8F7;
+  --ink:#0F1719; --ink-2:#3B4A4C; --ink-3:#6B7A7B;
+  --rule:#D6DDDB; --rule-2:#E7ECEA;
+  --accent:#0E5D57; --accent-soft:#DCEBE8; --accent-ink:#0A4741;
+  --crit:#A62D18; --crit-soft:#F8E5E0;
+  --warn:#8A5A12; --warn-soft:#F8EEDC;
+  --ok:#2A6449; --ok-soft:#DEECE3;
+  --sh:0 1px 2px rgba(15,23,25,.06), 0 6px 16px -10px rgba(15,23,25,.28);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none !important}
+html,body{height:100%}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased;
+  display:flex;flex-direction:column;overflow:hidden;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+
+/* ── topo ─────────────────────────────────────── */
+header{
+  flex:0 0 auto;background:var(--accent);color:#fff;
+  padding:calc(10px + env(safe-area-inset-top)) 14px 10px;
+  display:flex;align-items:center;gap:10px;
+}
+header .back{
+  background:rgba(255,255,255,.16);border:0;color:#fff;width:34px;height:34px;
+  border-radius:4px;font-size:19px;line-height:1;flex:0 0 auto;
+}
+header .tit{flex:1;min-width:0}
+header .tit b{display:block;font-size:16px;font-weight:600;line-height:1.2;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header .tit small{display:block;font-size:12px;opacity:.8;line-height:1.3}
+header .st{display:flex;align-items:center;gap:6px;font-size:11.5px;opacity:.92;flex:0 0 auto}
+.dot{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.5)}
+.dot.ok{background:#7BE0A9}.dot.off{background:#FF9E86}
+.dot.sync{background:#FFD98A;animation:pl 1.1s infinite}
+@keyframes pl{0%,100%{opacity:1}50%{opacity:.35}}
+
+.aviso{flex:0 0 auto;padding:8px 14px;font-size:13px;font-weight:600}
+.aviso.demo{background:var(--warn-soft);color:var(--warn)}
+.aviso.fila{background:var(--crit-soft);color:var(--crit);display:flex;gap:8px;align-items:center}
+.aviso.fila button{background:var(--crit);color:#fff;border:0;border-radius:3px;padding:4px 10px;font-size:12px;font-weight:600;margin-left:auto}
+
+main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 28px;
+  display:flex;flex-direction:column}
+
+/* ── cartões de OS ────────────────────────────── */
+.osCard{
+  width:100%;text-align:left;background:var(--surface);border:1px solid var(--rule);
+  border-left:4px solid var(--accent);border-radius:5px;padding:13px 14px;
+  box-shadow:var(--sh);margin-bottom:10px;display:block;
+}
+.osCard.outro{border-left-color:var(--rule)}
+.osCard .n{font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.03em}
+.osCard .c{font-size:17px;font-weight:600;line-height:1.25;margin:3px 0 7px}
+.osCard .t{font-size:13.5px;color:var(--ink-2);display:flex;gap:6px;align-items:flex-start}
+.osCard .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.chip{font-size:11px;font-weight:600;padding:3px 8px;border-radius:3px;
+  background:var(--surface-2);color:var(--ink-3);border:1px solid var(--rule-2)}
+.chip.eu{background:var(--accent-soft);color:var(--accent-ink);border-color:transparent}
+.chip.fila{background:var(--crit-soft);color:var(--crit);border-color:transparent}
+.chip.outro{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+
+.sec{font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3);margin:18px 0 9px}
+.sec:first-child{margin-top:2px}
+
+.vazio{text-align:center;padding:44px 20px;color:var(--ink-3)}
+.vazio b{display:block;font-size:17px;color:var(--ink-2);margin-bottom:6px}
+.vazio p{font-size:14px;margin:0;line-height:1.5}
+
+/* ── painel da tarefa ─────────────────────────── */
+.painel{background:var(--surface);border:1px solid var(--rule);border-radius:5px;
+  padding:15px;box-shadow:var(--sh);margin-bottom:12px}
+.painel .et{font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+.painel h2{font-size:19px;font-weight:600;margin:5px 0 6px;line-height:1.25}
+.painel p{font-size:14px;color:var(--ink-2);margin:0 0 13px;line-height:1.5}
+.painel p:last-child{margin-bottom:0}
+
+.btn{display:block;width:100%;padding:14px;border-radius:5px;border:1px solid var(--rule);
+  background:var(--surface);font-size:16px;font-weight:600;text-align:center;margin-bottom:9px}
+.btn:last-child{margin-bottom:0}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger{background:var(--surface);border-color:var(--crit);color:var(--crit)}
+.btn:disabled{opacity:.45}
+.btn.sm{padding:10px;font-size:14px}
+.linha{display:flex;gap:8px}
+.linha .btn{margin-bottom:0}
+
+/* ── coleta ───────────────────────────────────── */
+.itemRow{background:var(--surface);border:1px solid var(--rule);border-radius:5px;
+  padding:11px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start}
+.itemRow .q{flex:0 0 auto;background:var(--accent-soft);color:var(--accent-ink);
+  font-weight:700;font-size:14px;border-radius:4px;padding:5px 9px;min-width:38px;text-align:center}
+.itemRow .d{flex:1;min-width:0}
+.itemRow .d b{display:block;font-size:15px;font-weight:600;line-height:1.3}
+.itemRow .d small{display:block;font-size:12px;color:var(--ink-3);margin-top:3px}
+.itemRow .x{flex:0 0 auto;background:none;border:0;color:var(--ink-3);font-size:20px;padding:2px 4px}
+
+.campo{margin-bottom:13px}
+.campo label{display:block;font-size:12px;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--ink-3);margin-bottom:5px}
+.campo input,.campo select,.campo textarea{
+  width:100%;padding:12px;border:1px solid var(--rule);border-radius:5px;
+  background:var(--surface);font-size:16px}
+.campo input:focus,.campo select:focus,.campo textarea:focus{
+  outline:2px solid var(--accent);outline-offset:-1px}
+.tog{display:flex;gap:8px;flex-wrap:wrap}
+.tog button{flex:1;min-width:88px;padding:11px 8px;border:1px solid var(--rule);
+  border-radius:5px;background:var(--surface);font-size:14px;font-weight:600;color:var(--ink-2)}
+.tog button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.check{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--rule);
+  border-radius:5px;background:var(--surface);margin-bottom:8px;font-size:15px}
+.check input{width:22px;height:22px;flex:0 0 auto;accent-color:var(--accent)}
+
+.barra{
+  position:sticky;bottom:0;margin:14px -12px -28px;margin-top:auto;padding:12px 12px calc(12px + env(safe-area-inset-bottom));
+  background:var(--surface);border-top:1px solid var(--rule);
+}
+.resumo{font-size:13px;color:var(--ink-3);margin-bottom:9px;text-align:center}
+
+.toast{position:fixed;left:12px;right:12px;bottom:16px;background:var(--ink);color:#fff;
+  padding:13px 15px;border-radius:5px;font-size:14.5px;opacity:0;pointer-events:none;
+  transition:all .2s;transform:translateY(10px);z-index:20;line-height:1.4}
+.toast.on{opacity:1;transform:none}
+.toast.err{background:var(--crit)}.toast.ok{background:var(--ok)}
+
+/* ── login ────────────────────────────────────── */
+.login{position:fixed;inset:0;background:var(--accent);display:flex;align-items:center;
+  justify-content:center;padding:22px;z-index:30}
+.login .box{background:var(--surface);border-radius:7px;padding:26px;width:100%;max-width:360px}
+.login h1{margin:0 0 2px;font-size:26px;letter-spacing:-.02em}
+.login h1 span{color:var(--accent)}
+.login .sub{font-size:13.5px;color:var(--ink-3);margin:0 0 20px}
+.login .erro{color:var(--crit);font-size:13px;margin:0 0 10px;min-height:18px;line-height:1.4}
+</style>
+</head>
+<body>
+
+<header>
+  <button class="back" id="btnBack" hidden aria-label="Voltar">‹</button>
+  <div class="tit"><b id="hTit">TapFlow Field</b><small id="hSub">—</small></div>
+  <div class="st"><span class="dot" id="dot"></span><span id="stTxt"></span></div>
+</header>
+
+<div class="aviso demo" id="barDemo" hidden>MODO DEMO — dados de exemplo</div>
+<div class="aviso fila" id="barFila" hidden>
+  <span id="filaTxt"></span><button id="btnFlush">Tentar agora</button>
+</div>
+
+<main id="main"></main>
+<div class="toast" id="toast"></div>
+
+<div class="login" id="login" hidden>
+  <div class="box">
+    <h1>Tap<span>Flow</span></h1>
+    <p class="sub">Field · Engetap Engenharia</p>
+    <div class="campo"><label for="lgE">E-mail</label>
+      <input id="lgE" type="email" autocomplete="username" inputmode="email"></div>
+    <div class="campo"><label for="lgS">Senha</label>
+      <input id="lgS" type="password" autocomplete="current-password"></div>
+    <p class="erro" id="lgErr"></p>
+    <button class="btn pri" id="lgBtn">Entrar</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ════════════════════════════════════════════════════════════════════════════
+// CONFIGURAÇÃO — Supabase → Settings → API. Vazio = modo demo.
+// ════════════════════════════════════════════════════════════════════════════
+const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';
+
+const APP_VERSION = 'S2';
+const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
+
+const K_SESSAO = 'tff_sessao';
+const K_FILA   = 'tff_fila';
+const K_DRAFT  = 'tff_draft_';
+const K_PARAM  = 'tff_param';
+
+// ── armazenamento tolerante a falha ─────────────────────────────────────────
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
+
+const uid = () => (crypto.randomUUID ? crypto.randomUUID()
+  : 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2,10));
+
+// ════════════════════════════════════════════════════════════════════════════
+// REDE — mesmo endurecimento do TFM
+// ════════════════════════════════════════════════════════════════════════════
+let sessao = LS.get(K_SESSAO, { token:null, nome:null, perfil:null, admin:false });
+let conectado = false, reconT = null, reconP = 0;
+const BACKOFF = [5000,10000,20000,40000,60000];
+
+function setConn(e, t){
+  document.getElementById('dot').className = 'dot' + (e ? ' '+e : '');
+  document.getElementById('stTxt').textContent = t || '';
+  conectado = (e === 'ok');
+}
+function sinal(w){ try{ if (AbortSignal.timeout) return AbortSignal.timeout(w ? 45000 : 30000); }catch(e){} }
+const ehTO = e => !!e && (e.name==='TimeoutError'||e.name==='AbortError'||/timeout|aborted/i.test(e.message||''));
+
+function pararRecon(){ if(reconT){clearTimeout(reconT);reconT=null;} reconP=0; }
+function agendarRecon(){
+  if (reconT || DEMO) return;
+  const t = BACKOFF[Math.min(reconP, BACKOFF.length-1)]; reconP++;
+  setConn('off','sem sinal');
+  reconT = setTimeout(() => { reconT = null; flushFila().then(()=>carregar(true)).catch(()=>{}); }, t);
+}
+
+async function req(caminho, opts={}, tentativas=2){
+  const escrita = (opts.method||'GET').toUpperCase() !== 'GET';
+  let ultimo;
+  for (let i=0;i<=tentativas;i++){
+    try{
+      const r = await fetch(SUPABASE_URL + caminho, Object.assign({}, opts, {
+        signal: sinal(escrita),
+        // A chave vai SEMPRE no `apikey`. O `Authorization` só entra quando
+        // existe sessão — as chaves novas (sb_publishable_...) não são JWT.
+        headers: Object.assign(
+          { apikey: SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
+          sessao.token ? { Authorization: 'Bearer ' + sessao.token } : {},
+          opts.headers||{})
+      }));
+      const txt = await r.text();
+      if (txt.trim().startsWith('<')) throw new Error('O servidor devolveu HTML — confira a URL');
+      let corpo = null;
+      if (txt){ try{ corpo = JSON.parse(txt); }catch(e){ throw new Error('Resposta inválida do servidor'); } }
+      if (!r.ok){
+        const msg = (corpo && (corpo.message||corpo.error_description||corpo.error||corpo.hint)) || ('HTTP '+r.status);
+        const err = new Error(msg); err.negocio = (r.status>=400 && r.status<500); err.status = r.status;
+        throw err;
+      }
+      return corpo;
+    }catch(e){
+      ultimo = ehTO(e)
+        ? Object.assign(new Error('O servidor não respondeu' + (escrita ? ' — pode NÃO ter sido enviado.' : '.')), {rede:true})
+        : e;
+      const transitorio = !e.negocio && (ehTO(e) || /Failed to fetch|NetworkError|Load failed/i.test(e.message)
+        || /devolveu HTML/.test(e.message) || /^HTTP 5\d\d$/.test(e.message));
+      ultimo.rede = transitorio;
+      if (!transitorio || i === tentativas){ if (transitorio) agendarRecon(); throw ultimo; }
+      await new Promise(r => setTimeout(r, 600*(i+1)));
+    }
+  }
+  throw ultimo;
+}
+const get = q => req('/rest/v1/' + q);
+const rpc = (f,p) => req('/rest/v1/rpc/' + f, { method:'POST', body: JSON.stringify(p||{}) });
+
+window.addEventListener('online',  () => { pararRecon(); flushFila().then(()=>carregar(true)).catch(()=>{}); });
+window.addEventListener('offline', () => { setConn('off','sem sinal'); agendarRecon(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible'){ flushFila().then(()=>carregar(true)).catch(()=>{}); }
+});
+// batimento: tenta esvaziar a fila mesmo com o indicador verde
+setInterval(() => { if (!DEMO && filaLer().length) flushFila().catch(()=>{}); }, 90000);
+
+// ════════════════════════════════════════════════════════════════════════════
+// FOTOS
+// ----------------------------------------------------------------------------
+// O localStorage tem ~5 MB e guarda o índice da fila. Foto NÃO cabe lá: uma
+// única imagem de 300 KB em base64 já ocupa 400 KB e estoura a cota com meia
+// dúzia. Então: localStorage indexa, IndexedDB guarda o conteúdo. É a mesma
+// separação que o PCF do ProperCare precisou fazer.
+// ════════════════════════════════════════════════════════════════════════════
+const IDB = {
+  _p: null,
+  abrir(){
+    if (this._p) return this._p;
+    this._p = new Promise((ok, err) => {
+      const r = indexedDB.open('tapflow_field', 1);
+      r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('fotos'))
+        r.result.createObjectStore('fotos'); };
+      r.onsuccess = () => ok(r.result);
+      r.onerror   = () => err(r.error || new Error('IndexedDB indisponível'));
+    });
+    return this._p;
+  },
+  async _tx(modo, fn){
+    const db = await this.abrir();
+    return new Promise((ok, err) => {
+      const t = db.transaction('fotos', modo);
+      const p = fn(t.objectStore('fotos'));
+      t.oncomplete = () => ok(p && p.result !== undefined ? p.result : undefined);
+      t.onerror    = () => err(t.error);
+    });
+  },
+  put(k, v){ return this._tx('readwrite', st => st.put(v, k)); },
+  get(k){    return this._tx('readonly',  st => st.get(k)); },
+  del(k){    return this._tx('readwrite', st => st.delete(k)); }
+};
+
+/** Reduz para caber na rede da planta: 1600px no maior lado, JPEG 0.72. */
+function reduzirFoto(file, maxDim, q){
+  maxDim = maxDim || 1600; q = q || 0.72;
+  return new Promise((ok, err) => {
+    const fr = new FileReader();
+    fr.onerror = () => err(new Error('Não consegui ler a imagem.'));
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => err(new Error('Arquivo não parece ser uma imagem.'));
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim){ const r = Math.min(maxDim/w, maxDim/h);
+          w = Math.round(w*r); h = Math.round(h*r); }
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        ok(c.toDataURL('image/jpeg', q));
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+/** Abre a câmera / galeria e devolve o dataURL já reduzido. */
+function tirarFoto(){
+  return new Promise(ok => {
+    const i = document.createElement('input');
+    i.type = 'file'; i.accept = 'image/*'; i.setAttribute('capture','environment');
+    i.style.display = 'none';
+    i.addEventListener('change', async () => {
+      const f = i.files && i.files[0];
+      document.body.removeChild(i);
+      if (!f) return ok(null);
+      try { ok(await reduzirFoto(f)); }
+      catch(e){ toast(e.message,'err'); ok(null); }
+    });
+    document.body.appendChild(i); i.click();
+  });
+}
+
+// ── parâmetros do serviço de arquivos ───────────────────────────────────────
+let PARAM = LS.get(K_PARAM, { drive_url:'', drive_chave:'' });
+async function carregarParametros(){
+  if (DEMO) return;
+  try{
+    const r = await get('parametros?select=chave,valor');
+    const m = {}; (r||[]).forEach(x => m[x.chave] = x.valor);
+    PARAM = { drive_url: m.drive_url || '', drive_chave: m.drive_chave || '' };
+    LS.set(K_PARAM, PARAM);
+  }catch(e){ /* usa o que estava salvo */ }
+}
+const driveLigado = () => DEMO || !!(PARAM.drive_url && PARAM.drive_chave);
+
+/**
+ * Sobe o arquivo para o Drive e registra o anexo no banco.
+ * Sem cabeçalho customizado de propósito: assim o navegador não dispara o
+ * preflight OPTIONS, que o Apps Script não responde.
+ */
+async function subirArquivo(dataUrl, meta){
+  if (DEMO) return { drive_url:'https://drive.google.com/demo', file_id:'demo' };
+  if (!driveLigado()) throw Object.assign(new Error('O Drive ainda não foi configurado.'), {negocio:true});
+
+  const r = await fetch(PARAM.drive_url, {
+    method:'POST', redirect:'follow', signal: sinal(true),
+    body: JSON.stringify({
+      chave: PARAM.drive_chave, token: sessao.token,
+      client_uid: meta.client_uid, cliente: meta.cliente, os_numero: meta.os_numero,
+      categoria: meta.categoria, nome: meta.nome, mime:'image/jpeg', base64: dataUrl
+    })
+  });
+  const j = await r.json().catch(() => null);
+  if (!j) throw new Error('O serviço de arquivos não respondeu como esperado.');
+  if (j.status !== 'ok') throw Object.assign(new Error(j.mensagem || 'Falha ao gravar no Drive'),
+                                             { negocio: j.codigo === 'CHAVE' || j.codigo === 'TOKEN' });
+
+  await rpc('tf_registrar_anexo', {
+    p_os_id: meta.os_id, p_categoria: meta.categoria, p_nome: meta.nome,
+    p_client_uid: meta.client_uid, p_drive_file_id: j.file_id, p_drive_url: j.url,
+    p_os_item_id: meta.os_item_id || null, p_levantamento_id: meta.levantamento_id || null,
+    p_tarefa_id: meta.tarefa_id || null, p_slot: meta.slot || null,
+    p_mime: 'image/jpeg', p_bytes: j.bytes || null
+  });
+  return { drive_url: j.url, file_id: j.file_id };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// FILA OFFLINE
+// ----------------------------------------------------------------------------
+// A assinatura inclui o client_uid: dois envios diferentes nunca colidem, e o
+// mesmo envio reenviado SUBSTITUI o da fila em vez de virar dois.
+// Nada é descartado em silêncio — o que não sai fica visível na barra vermelha.
+// ════════════════════════════════════════════════════════════════════════════
+const filaLer = () => LS.get(K_FILA, []);
+const filaGravar = f => LS.set(K_FILA, f);
+
+function filaAdd(entrada){
+  const f = filaLer().filter(e => e.assinatura !== entrada.assinatura);
+  f.push(Object.assign({ tentativas:0, em: new Date().toISOString() }, entrada));
+  filaGravar(f); pintarFila();
+}
+function filaRemover(assinatura){
+  filaGravar(filaLer().filter(e => e.assinatura !== assinatura)); pintarFila();
+}
+
+let flushEmVoo = false;
+async function flushFila(){
+  if (DEMO || flushEmVoo) return;
+  const f = filaLer(); if (!f.length) return;
+  flushEmVoo = true;
+  try{
+    for (const e of f){
+      try{
+        if (e.tipo === 'anexo'){
+          const dataUrl = await IDB.get(e.idbKey);
+          if (!dataUrl){ filaRemover(e.assinatura); continue; }   // já subiu ou sumiu
+          await subirArquivo(dataUrl, e.meta);
+          await IDB.del(e.idbKey);
+          filaRemover(e.assinatura);
+        } else {
+          const r = await rpc(e.funcao, e.payload);
+          filaRemover(e.assinatura);
+          LS.del(K_DRAFT + e.osId);
+          await enfileirarFotosDoEnvio(e, r);
+          toast('Levantamento da ' + e.rotulo + ' enviado.', 'ok');
+        }
+      }catch(err){
+        if (err.negocio){
+          // o servidor RECUSOU por regra — reenviar não resolve. Sai da fila e avisa.
+          filaRemover(e.assinatura);
+          toast('A ' + e.rotulo + ' foi recusada: ' + err.message, 'err');
+        } else {
+          e.tentativas = (e.tentativas||0) + 1;
+          filaGravar(filaLer().map(x => x.assinatura === e.assinatura ? e : x));
+          break;   // sem rede: para de tentar os próximos
+        }
+      }
+    }
+  } finally { flushEmVoo = false; pintarFila(); }
+}
+
+/**
+ * Depois que o levantamento sobe, o servidor devolve os ids dos itens criados —
+ * na mesma ordem em que foram enviados. É com eles que cada foto encontra o
+ * seu item. Sem isso, a foto do manômetro ficaria solta na OS.
+ */
+async function enfileirarFotosDoEnvio(entrada, resposta){
+  const fotos = entrada.fotos || [];
+  if (!fotos.length) return;
+  const ids = (resposta && resposta.itens_ids) || [];
+  for (const f of fotos){
+    const meta = Object.assign({}, f.meta, { os_item_id: ids[f.indice] || null });
+    filaAdd({ tipo:'anexo', assinatura:'anx|'+meta.client_uid, osId: entrada.osId,
+              rotulo: entrada.rotulo, idbKey: f.idbKey, meta });
+  }
+  flushFila().catch(()=>{});
+}
+
+function pintarFila(){
+  const f = filaLer();
+  const bar = document.getElementById('barFila');
+  bar.hidden = !f.length;
+  if (f.length) document.getElementById('filaTxt').textContent =
+    f.length + (f.length === 1 ? ' levantamento aguardando envio' : ' levantamentos aguardando envio');
+}
+document.getElementById('btnFlush').addEventListener('click', () => {
+  setConn('sync','enviando…'); flushFila().then(()=>carregar(true)).catch(()=>{});
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// ESTADO
+// ════════════════════════════════════════════════════════════════════════════
+let listaOS = [];
+let atual   = null;   // { os, tarefas, equipamentos }
+let tela    = 'lista';
+let coleta  = null;   // { client_uid, fase, itens: [] }
+
+// ════════════════════════════════════════════════════════════════════════════
+// CARREGAR
+// ════════════════════════════════════════════════════════════════════════════
+async function carregar(silencioso){
+  if (DEMO){ listaOS = demoLista(); setConn('ok','demo'); if(tela==='lista') pintarLista(); return; }
+  if (!silencioso) setConn('sync','carregando…');
+  try{
+    listaOS = await get('v_os_campo?select=*&order=coluna_ordem,numero');
+    pararRecon(); setConn('ok','conectado');
+    if (tela === 'lista') pintarLista();
+  }catch(e){
+    if (e.negocio){ setConn('off','erro'); toast(e.message,'err'); }
+    if (tela === 'lista') pintarLista();
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// TELA: LISTA
+// ════════════════════════════════════════════════════════════════════════════
+function pintarLista(){
+  tela = 'lista'; atual = null; coleta = null;
+  document.getElementById('btnBack').hidden = true;
+  document.getElementById('hTit').textContent = 'Minhas ordens';
+  document.getElementById('hSub').textContent =
+    (sessao.nome || '') + (listaOS.length ? ' · ' + listaOS.length + ' no campo' : '');
+
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+  if (!listaOS.length){
+    m.innerHTML = '<div class="vazio"><b>Nada no campo agora</b>' +
+      '<p>Quando o escritório abrir uma OS para você, ela aparece aqui.</p></div>';
+    return;
+  }
+
+  const minhas = listaOS.filter(o => o.minha);
+  const outras = listaOS.filter(o => !o.minha);
+  const bloco = (titulo, arr, outro) => {
+    if (!arr.length) return;
+    const h = document.createElement('div'); h.className = 'sec'; h.textContent = titulo;
+    m.appendChild(h);
+    arr.forEach(o => m.appendChild(cardOS(o, outro)));
+  };
+  bloco('Para você', minhas, false);
+  bloco('Da equipe', outras, true);
+}
+
+function cardOS(o, outro){
+  const b = document.createElement('button');
+  b.className = 'osCard' + (outro ? ' outro' : '');
+  b.type = 'button';
+  const naFila = filaLer().some(e => e.osId === o.os_id);
+  const chips = [];
+  if (naFila) chips.push('<span class="chip fila">na fila de envio</span>');
+  if (o.tarefa_atual_lock) chips.push('<span class="chip eu">assumida</span>');
+  chips.push('<span class="chip">' + o.coluna + '</span>');
+  if (o.dias_na_coluna != null) chips.push('<span class="chip">' + o.dias_na_coluna + 'd</span>');
+
+  b.innerHTML = '<div class="n mono"></div><div class="c"></div>' +
+    '<div class="t"><span>›</span><span class="tn"></span></div>' +
+    '<div class="chips">' + chips.join('') + '</div>';
+  b.querySelector('.n').textContent = o.numero;
+  b.querySelector('.c').textContent = o.cliente;
+  b.querySelector('.tn').textContent = o.tarefa_atual || '—';
+  b.addEventListener('click', () => abrirOS(o));
+  return b;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// TELA: OS
+// ════════════════════════════════════════════════════════════════════════════
+async function abrirOS(o){
+  tela = 'os';
+  document.getElementById('btnBack').hidden = false;
+  document.getElementById('hTit').textContent = o.cliente;
+  document.getElementById('hSub').textContent = o.numero + ' · ' + o.coluna;
+  const m = document.getElementById('main');
+  m.innerHTML = '<div class="vazio"><p>Carregando…</p></div>';
+
+  try{
+    const [tarefas, equipamentos, coletas] = DEMO
+      ? [demoTarefas(o.os_id), demoEquip(), demoColeta(o.os_id)]
+      : await Promise.all([
+          get('pipeline_tarefas?select=tarefa_id,nome,descricao,tipo,fase,status,perfis_responsaveis,lock_por,requisitos'
+              + '&os_id=eq.' + o.os_id + '&ativo=eq.SIM&order=camada,fase_ordem,ordem'),
+          get('equipamentos?select=id,tag,tipo,localizacao&cliente_id=eq.' + o.cliente_id + '&ativo=eq.true&order=tag'),
+          get('v_os_coleta?select=inspetor,total_itens,enviado_em,fase&os_id=eq.' + o.os_id + '&order=enviado_em')
+        ]);
+    atual = { os:o, tarefas, equipamentos, coletas: coletas || [] };
+    pintarOS();
+  }catch(e){
+    m.innerHTML = '<div class="vazio"><b>Não deu para abrir</b><p></p></div>';
+    m.querySelector('p').textContent = e.message;
+  }
+}
+
+function pintarOS(){
+  const { os, tarefas } = atual;
+  const t = tarefas.find(x => x.tarefa_id === os.tarefa_atual_id);
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+
+  const naFila = filaLer().find(e => e.osId === os.os_id);
+  if (naFila){
+    m.innerHTML = '<div class="painel"><div class="et">Aguardando envio</div>' +
+      '<h2>O levantamento está na fila</h2>' +
+      '<p>Ele foi salvo no aparelho e vai subir sozinho quando o sinal voltar. ' +
+      'Não precisa lançar de novo — se lançar, o sistema recusa o duplicado.</p>' +
+      '<button class="btn pri" id="bFl">Tentar enviar agora</button></div>';
+    document.getElementById('bFl').addEventListener('click', () => {
+      setConn('sync','enviando…');
+      flushFila().then(()=>carregar(true)).then(()=>pintarLista()).catch(()=>{});
+    });
+    return;
+  }
+
+  // ── o que a equipe já lançou nesta OS ──
+  // Sem isto, o segundo técnico não sabe o que o primeiro fez e o risco é
+  // lançar o mesmo acessório duas vezes na mão.
+  const cs = (atual.coletas || []).filter(c => c.fase === 1);
+  if (cs.length){
+    const tot = cs.reduce((s2,c) => s2 + (c.total_itens||0), 0);
+    const quem = [...new Set(cs.map(c => c.inspetor))].join(', ');
+    const r = document.createElement('div');
+    r.className = 'painel';
+    r.style.cssText = 'background:var(--accent-soft);border-color:transparent';
+    r.innerHTML = '<div class="et">Já lançado nesta OS</div>' +
+      '<h2 style="font-size:17px" class="rt"></h2><p class="rq" style="margin:0"></p>';
+    r.querySelector('.rt').textContent = tot + ' item(ns) em ' + cs.length + ' envio(s)';
+    r.querySelector('.rq').textContent = 'Por: ' + quem + '. Confira antes de lançar para não repetir.';
+    m.appendChild(r);
+  }
+
+  // ── a coleta continua disponível enquanto a OS estiver no campo ──
+  // A T02 fecha no primeiro envio, mas isso não pode impedir o colega de
+  // lançar a parte dele da planta.
+  const coletaAberta = tarefas.some(x => String(x.tipo||'').startsWith('auto:levantamento')
+    && (x.status === 'completo') ) && tarefas.some(x => x.status !== 'completo' && x.status !== 'dispensado'
+    && (x.fase === 'Em campo' || x.fase === 'Concluída em campo' || x.fase === 'Aberta'));
+  if (coletaAberta && (!t || !String(t.tipo||'').startsWith('auto:levantamento'))){
+    const extra = document.createElement('div');
+    extra.className = 'painel';
+    extra.innerHTML = '<div class="et">Coleta em equipe</div>' +
+      '<h2 style="font-size:17px">Lançar mais itens</h2>' +
+      '<p>Se você ficou com outra parte da planta, lance aqui. Vai como um envio ' +
+      'separado e os itens somam na OS.</p><button class="btn" id="bMais">Lançar mais itens</button>';
+    m.appendChild(extra);
+    document.getElementById('bMais').addEventListener('click', () => abrirColeta(1));
+  }
+
+  if (!t){
+    if (!coletaAberta)
+      m.innerHTML = '<div class="vazio"><b>Nada pendente aqui</b><p>Esta OS não tem tarefa aberta para o campo.</p></div>';
+    return;
+  }
+
+  const meu = !t.perfis_responsaveis || !t.perfis_responsaveis.length
+    || t.perfis_responsaveis.includes(sessao.perfil) || sessao.admin;
+
+  const p = document.createElement('div');
+  p.className = 'painel';
+  p.innerHTML = '<div class="et">' + os.coluna + '</div><h2></h2><p class="ds"></p>';
+  p.querySelector('h2').textContent = t.nome;
+  p.querySelector('.ds').textContent = t.descricao || '';
+  m.appendChild(p);
+
+  if (!meu){
+    const a = document.createElement('p');
+    a.style.cssText = 'font-size:14px;color:var(--ink-3);line-height:1.5';
+    a.textContent = 'Esta etapa é de ' + t.perfis_responsaveis.join(' ou ')
+      + '. Aparece aqui para você saber em que pé está a OS.';
+    p.appendChild(a);
+    return;
+  }
+
+  if (t.status === 'bloqueado' || t.status === 'condicional'){
+    const a = document.createElement('p');
+    a.style.cssText = 'font-size:14px;color:var(--ink-3)';
+    a.textContent = 'Ainda não liberada — abre sozinha quando a etapa anterior fechar.';
+    p.appendChild(a); return;
+  }
+
+  // ── tarefa de coleta ──
+  if (String(t.tipo||'').startsWith('auto:levantamento')){
+    const fase = t.tipo.indexOf('_f2') >= 0 ? 2 : 1;
+    const b = document.createElement('button');
+    b.className = 'btn pri';
+    b.textContent = fase === 2 ? 'Registrar instalação' : 'Lançar acessórios';
+    b.addEventListener('click', () => abrirColeta(fase));
+    p.appendChild(b);
+    const d = LS.get(K_DRAFT + os.os_id, null);
+    if (d && d.itens && d.itens.length){
+      const n = document.createElement('p');
+      n.style.cssText='font-size:13.5px;color:var(--warn);margin:10px 0 0;font-weight:600';
+      n.textContent = 'Você tem ' + d.itens.length + ' item(ns) salvos no aparelho, ainda não enviados.';
+      p.appendChild(n);
+    }
+    return;
+  }
+
+  // ── tarefa com checklist (fechar com o cliente) ──
+  const req = t.requisitos || {};
+  if ((req.checklist||[]).length || (req.fotos||[]).length){
+    const box = document.createElement('div'); box.className = 'painel';
+    const resp = { checklist:{}, fotos:{} };
+    const guardadas = {};   // slot -> dataURL, só sobe na hora de concluir
+
+    (req.checklist||[]).forEach(q => {
+      const l = document.createElement('label'); l.className = 'check';
+      const i = document.createElement('input'); i.type = 'checkbox';
+      i.addEventListener('change', () => { resp.checklist[q.id] = i.checked ? 'sim' : ''; });
+      l.appendChild(i);
+      const sp = document.createElement('span'); sp.textContent = q.pergunta;
+      l.appendChild(sp); box.appendChild(l);
+    });
+
+    (req.fotos||[]).forEach(f => {
+      const d = document.createElement('div'); d.className = 'campo';
+      d.innerHTML = '<label></label><button class="btn" type="button" style="margin:0"></button>'
+        + '<p style="font-size:12px;color:var(--ink-3);margin:6px 0 0"></p>';
+      d.querySelector('label').textContent = f.rotulo + (f.min ? ' · obrigatória' : '');
+      const bt = d.querySelector('button'), tx = d.querySelector('p');
+      const pinta = () => {
+        bt.textContent = guardadas[f.id] ? 'Trocar foto' : 'Tirar foto';
+        tx.textContent = guardadas[f.id] ? 'Foto pronta — sobe ao concluir a etapa.'
+          : (driveLigado() ? '' : 'O Drive ainda não foi configurado.');
+        bt.disabled = !driveLigado();
+      };
+      pinta();
+      bt.addEventListener('click', async () => {
+        const img = await tirarFoto(); if (!img) return;
+        guardadas[f.id] = img; pinta();
+      });
+      box.appendChild(d);
+    });
+
+    const b = document.createElement('button');
+    b.className = 'btn pri'; b.style.marginTop = '10px';
+    b.textContent = 'Concluir etapa';
+    b.addEventListener('click', async () => {
+      // requisito que falta é barrado aqui e também no banco — a tela só
+      // adianta a mensagem, quem manda é o servidor
+      const faltando = (req.fotos||[]).find(f => (f.min||0) > 0 && !guardadas[f.id]);
+      if (faltando){ toast('Falta a foto: ' + faltando.rotulo, 'err'); return; }
+      const faltaCk = (req.checklist||[]).find(q => q.obrigatoria && !resp.checklist[q.id]);
+      if (faltaCk){ toast('Responda: ' + faltaCk.pergunta, 'err'); return; }
+
+      const slots = Object.keys(guardadas);
+      if (slots.length && !DEMO && (navigator.onLine === false || !conectado)){
+        toast('Fechar com o cliente precisa de sinal para guardar o aceite. '
+            + 'Lance os itens agora e feche quando pegar rede.', 'err');
+        return;
+      }
+
+      document.querySelectorAll('#main .btn').forEach(x => x.disabled = true);
+      try{
+        for (const slot of slots){
+          setConn('sync','enviando foto…');
+          const r = await subirArquivo(guardadas[slot], {
+            os_id: atual.os.os_id, cliente: atual.os.cliente, os_numero: atual.os.numero,
+            categoria: slot === 'assinatura' ? 'assinatura' : 'foto_tarefa',
+            nome: slot + '-' + atual.os.numero + '.jpg', tarefa_id: t.tarefa_id, slot,
+            client_uid: 'anx-' + atual.os.os_id + '-' + t.tarefa_id + '-' + slot
+          });
+          resp.fotos[slot] = [ r.drive_url ];
+        }
+        setConn('ok','conectado');
+        await agir('concluir', t, resp);
+      }catch(e){
+        setConn('ok','conectado');
+        toast(e.message, 'err');
+        document.querySelectorAll('#main .btn').forEach(x => x.disabled = false);
+      }
+    });
+    box.appendChild(b);
+    m.appendChild(box);
+    return;
+  }
+
+  // ── tarefa manual simples ──
+  if (t.status === 'pendente' && !t.lock_por){
+    const b = document.createElement('button');
+    b.className = 'btn pri'; b.textContent = 'Assumir esta OS';
+    b.addEventListener('click', () => agir('assumir', t));
+    p.appendChild(b);
+  }
+  const c = document.createElement('button');
+  c.className = 'btn' + (t.status === 'em_andamento' ? ' pri' : '');
+  c.textContent = 'Concluir etapa';
+  c.addEventListener('click', () => agir('concluir', t));
+  p.appendChild(c);
+}
+
+async function agir(acao, t, respostas){
+  const { os } = atual;
+  document.querySelectorAll('#main .btn').forEach(b => b.disabled = true);
+  try{
+    if (DEMO) demoAgir(os.os_id, t.tarefa_id, acao);
+    else if (acao === 'assumir')
+      await rpc('tf_assumir_tarefa', { p_os_id: os.os_id, p_tarefa_id: t.tarefa_id });
+    else
+      await rpc('tf_concluir_tarefa', { p_os_id: os.os_id, p_tarefa_id: t.tarefa_id,
+                                        p_respostas: respostas || {} });
+    await carregar(true);
+    const novo = listaOS.find(x => x.os_id === os.os_id);
+    if (!novo){ toast('Etapa concluída — a OS saiu do campo.', 'ok'); pintarLista(); return; }
+    toast(acao === 'assumir' ? 'OS assumida.' : 'Etapa concluída.', 'ok');
+    abrirOS(novo);
+  }catch(e){
+    toast(e.message, 'err');
+    document.querySelectorAll('#main .btn').forEach(b => b.disabled = false);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// TELA: COLETA
+// ----------------------------------------------------------------------------
+// O client_uid nasce aqui e vive no rascunho. Todo reenvio usa o MESMO — é ele
+// que faz o banco recusar a duplicata em vez de criar material dobrado.
+// ════════════════════════════════════════════════════════════════════════════
+const TIPOS = [
+  ['manometro','Manômetro'], ['valvula','Válvula de segurança'], ['purgador','Purgador'],
+  ['dcbi','DCBI'], ['conexao','Conexão'], ['outro','Outro']
+];
+
+function abrirColeta(fase){
+  const { os } = atual;
+  const d = LS.get(K_DRAFT + os.os_id, null);
+  coleta = (d && d.fase === fase) ? d : { client_uid: uid(), fase, itens: [] };
+  salvarDraft();
+  tela = 'coleta';
+  pintarColeta();
+}
+
+function salvarDraft(){
+  if (!coleta || !atual) return;
+  if (!LS.set(K_DRAFT + atual.os.os_id, coleta))
+    toast('Sem espaço no aparelho para salvar o rascunho. Envie o que já lançou.', 'err');
+}
+
+function pintarColeta(){
+  const { os } = atual;
+  document.getElementById('hTit').textContent = coleta.fase === 2 ? 'Instalação' : 'Lançamento';
+  document.getElementById('hSub').textContent = os.numero + ' · ' + os.cliente;
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+
+  if (!coleta.itens.length){
+    const v = document.createElement('div'); v.className = 'vazio';
+    v.innerHTML = '<b>Nenhum item ainda</b><p>Toque em “Adicionar item” para começar.<br>' +
+      'O que você lançar fica salvo no aparelho mesmo sem sinal.</p>';
+    m.appendChild(v);
+  } else {
+    coleta.itens.forEach((it, i) => m.appendChild(itemEl(it, i)));
+  }
+
+  const barra = document.createElement('div'); barra.className = 'barra';
+  const total = coleta.itens.reduce((s,i) => s + (Number(i.quantidade)||0), 0);
+  barra.innerHTML =
+    '<div class="resumo">' + coleta.itens.length + ' tipo(s) · ' + total + ' peça(s)</div>' +
+    '<button class="btn" id="bAdd">Adicionar item</button>' +
+    '<button class="btn pri" id="bEnv">Enviar levantamento</button>';
+  m.appendChild(barra);
+
+  document.getElementById('bAdd').addEventListener('click', () => formItem(null));
+  const be = document.getElementById('bEnv');
+  be.disabled = !coleta.itens.length;
+  be.addEventListener('click', enviar);
+}
+
+function itemEl(it, i){
+  const d = document.createElement('div'); d.className = 'itemRow';
+  const flags = [];
+  if (it.requer_calibracao) flags.push('calibração');
+  if (it.requer_lacre) flags.push('lacre');
+  if (it.instalado_imediatamente) flags.push('instalado na hora');
+  if (it.tag) flags.unshift(it.tag);
+  if (it.fotoKey) flags.push('com foto');
+  d.innerHTML = '<div class="q"></div><div class="d"><b></b><small></small></div>' +
+                '<button class="x" aria-label="Remover">×</button>';
+  d.querySelector('.q').textContent = it.quantidade;
+  d.querySelector('b').textContent = it.descricao;
+  d.querySelector('small').textContent = flags.join(' · ') || (it.tipo_rotulo || '');
+  d.querySelector('.x').addEventListener('click', () => {
+    if (!confirm('Remover "' + it.descricao + '"?')) return;
+    coleta.itens.splice(i,1); salvarDraft(); pintarColeta();
+  });
+  d.querySelector('.d').addEventListener('click', () => formItem(i));
+  return d;
+}
+
+function formItem(idx){
+  const it = idx == null
+    ? { tipo_acessorio:'manometro', descricao:'', quantidade:1, equipamento_id:'', tag:'',
+        requer_calibracao:false, requer_lacre:false, instalado_imediatamente:false }
+    : Object.assign({}, coleta.itens[idx]);
+
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+  const box = document.createElement('div'); box.className = 'painel';
+
+  const eqOpts = ['<option value="">— sem equipamento —</option>'].concat(
+    atual.equipamentos.map(e => '<option value="'+e.id+'">'+ esc(e.tag) +
+      (e.localizacao ? ' · ' + esc(e.localizacao) : '') + '</option>'));
+
+  box.innerHTML =
+    '<div class="campo"><label>Tipo</label><div class="tog" id="tg"></div></div>' +
+    '<div class="campo"><label for="fD">Descrição</label>' +
+      '<input id="fD" type="text" placeholder="ex.: Manômetro 63mm 0-14 kgf/cm² · 1/4&quot; NPT"></div>' +
+    '<div class="campo"><label for="fQ">Quantidade</label>' +
+      '<input id="fQ" type="number" inputmode="numeric" min="1" step="1"></div>' +
+    '<div class="campo"><label for="fE">Equipamento</label>' +
+      '<select id="fE">' + eqOpts.join('') + '</select></div>' +
+    '<label class="check"><input type="checkbox" id="fC"><span>Exige calibração</span></label>' +
+    '<label class="check"><input type="checkbox" id="fL"><span>Exige lacre</span></label>' +
+    '<label class="check"><input type="checkbox" id="fI"><span>Instalado agora, em campo</span></label>' +
+    '<p style="font-size:12.5px;color:var(--ink-3);margin:2px 0 14px;line-height:1.45">' +
+      'Item instalado agora sai do orçamento — entra na OS como executado, não como algo a cotar.</p>' +
+    '<div class="campo"><label>Foto do ponto (opcional)</label>' +
+      '<button class="btn" id="fFoto" type="button" style="margin:0"></button>' +
+      '<p class="dicaFoto" id="fFotoTxt" style="font-size:12px;color:var(--ink-3);margin:6px 0 0"></p></div>' +
+    '<button class="btn pri" id="fOk">' + (idx==null ? 'Adicionar' : 'Salvar') + '</button>' +
+    '<button class="btn" id="fCa">Cancelar</button>';
+  m.appendChild(box);
+
+  const tg = document.getElementById('tg');
+  TIPOS.forEach(([v,l]) => {
+    const b = document.createElement('button'); b.type='button'; b.textContent = l;
+    b.className = (v === it.tipo_acessorio ? 'on' : '');
+    b.addEventListener('click', () => {
+      it.tipo_acessorio = v;
+      [...tg.children].forEach(c => c.classList.toggle('on', c === b));
+      const dd = document.getElementById('fD');
+      if (!dd.value.trim()) dd.value = l + ' ';
+      dd.focus();
+    });
+    tg.appendChild(b);
+  });
+
+  document.getElementById('fD').value = it.descricao;
+  document.getElementById('fQ').value = it.quantidade;
+  document.getElementById('fE').value = it.equipamento_id || '';
+  document.getElementById('fC').checked = !!it.requer_calibracao;
+  document.getElementById('fL').checked = !!it.requer_lacre;
+  document.getElementById('fI').checked = !!it.instalado_imediatamente;
+
+  // ── foto do ponto ──
+  const btF = document.getElementById('fFoto'), txF = document.getElementById('fFotoTxt');
+  const pintaFoto = () => {
+    btF.textContent = it.fotoKey ? 'Trocar foto' : 'Tirar foto';
+    txF.textContent = it.fotoKey
+      ? 'Foto guardada no aparelho — sobe junto com o levantamento.'
+      : (driveLigado() ? 'Ajuda o escritório a entender o ponto na hora de cotar.'
+                       : 'O Drive ainda não foi configurado — sem fotos por enquanto.');
+    btF.disabled = !driveLigado();
+  };
+  pintaFoto();
+  btF.addEventListener('click', async () => {
+    const d = await tirarFoto(); if (!d) return;
+    const k = 'f_' + uid();
+    try{ await IDB.put(k, d); if (it.fotoKey) await IDB.del(it.fotoKey).catch(()=>{});
+         it.fotoKey = k; pintaFoto(); toast('Foto guardada.','ok'); }
+    catch(e){ toast('Não consegui guardar a foto no aparelho.','err'); }
+  });
+
+  document.getElementById('fCa').addEventListener('click', pintarColeta);
+  document.getElementById('fOk').addEventListener('click', () => {
+    const desc = document.getElementById('fD').value.trim();
+    const q = parseInt(document.getElementById('fQ').value, 10);
+    if (!desc){ toast('Escreva a descrição do item.','err'); return; }
+    if (!q || q < 1){ toast('Quantidade tem que ser 1 ou mais.','err'); return; }
+    const sel = document.getElementById('fE');
+    Object.assign(it, {
+      descricao: desc, quantidade: q,
+      equipamento_id: sel.value || '',
+      tag: sel.value ? sel.options[sel.selectedIndex].text.split(' · ')[0] : '',
+      tipo_rotulo: (TIPOS.find(t => t[0] === it.tipo_acessorio)||[])[1] || '',
+      requer_calibracao: document.getElementById('fC').checked,
+      requer_lacre: document.getElementById('fL').checked,
+      instalado_imediatamente: document.getElementById('fI').checked
+    });
+    if (idx == null) coleta.itens.push(it); else coleta.itens[idx] = it;
+    salvarDraft(); pintarColeta();
+  });
+}
+
+async function enviar(){
+  const { os } = atual;
+  if (!coleta.itens.length) return;
+  const payload = {
+    p_os_id: os.os_id,
+    p_client_uid: coleta.client_uid,
+    p_fase: coleta.fase,
+    p_itens: coleta.itens.map(i => ({
+      descricao: i.descricao, tipo_acessorio: i.tipo_acessorio, quantidade: i.quantidade,
+      equipamento_id: i.equipamento_id || null,
+      requer_calibracao: !!i.requer_calibracao, requer_lacre: !!i.requer_lacre,
+      instalado_imediatamente: !!i.instalado_imediatamente,
+      dados: {}
+    }))
+  };
+  const assinatura = 'lev|' + os.os_id + '|' + coleta.client_uid;
+
+  // as fotos viajam à parte: primeiro o levantamento (que devolve os ids dos
+  // itens), depois cada imagem ligada ao seu item
+  const fotos = coleta.itens.map((i, indice) => !i.fotoKey ? null : ({
+    indice, idbKey: i.fotoKey,
+    meta: { os_id: os.os_id, cliente: os.cliente, os_numero: os.numero,
+            categoria: 'foto_item', nome: 'item-' + (indice+1) + '.jpg',
+            client_uid: 'anx-' + coleta.client_uid + '-' + indice }
+  })).filter(Boolean);
+
+  document.querySelectorAll('#main .btn').forEach(b => b.disabled = true);
+
+  // Sem rede? nem tenta: enfileira e diz a verdade.
+  if (!DEMO && (navigator.onLine === false || !conectado)){
+    filaAdd({ tipo:'levantamento', funcao:'tf_enviar_levantamento', payload, assinatura,
+              osId: os.os_id, rotulo: os.numero, fotos });
+    toast('Sem sinal — salvo e na fila' + (fotos.length ? ', com as fotos' : '') +
+          '. Sobe sozinho quando conectar.', 'err');
+    await carregar(true); pintarLista(); return;
+  }
+
+  setConn('sync','enviando…');
+  try{
+    let resp = null;
+    if (DEMO) demoEnviar(os.os_id);
+    else resp = await rpc('tf_enviar_levantamento', payload);
+    LS.del(K_DRAFT + os.os_id);            // só depois do OK do servidor
+    setConn('ok','conectado');
+    await enfileirarFotosDoEnvio({ osId: os.os_id, rotulo: os.numero, fotos }, resp);
+    toast('Levantamento enviado — ' + coleta.itens.length + ' item(ns)' +
+          (fotos.length ? ' e ' + fotos.length + ' foto(s)' : '') + '.', 'ok');
+    await carregar(true);
+    pintarLista();
+  }catch(e){
+    if (e.negocio){
+      setConn('ok','conectado');
+      toast('Recusado: ' + e.message, 'err');
+      document.querySelectorAll('#main .btn').forEach(b => b.disabled = false);
+    } else {
+      filaAdd({ tipo:'levantamento', funcao:'tf_enviar_levantamento', payload, assinatura,
+                osId: os.os_id, rotulo: os.numero, fotos });
+      toast('Não deu para enviar agora — ficou na fila, nada se perdeu.', 'err');
+      await carregar(true); pintarLista();
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// AUXILIARES
+// ════════════════════════════════════════════════════════════════════════════
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let toastT = null;
+function toast(msg, tipo){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast on' + (tipo ? ' '+tipo : '');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => el.className = 'toast', 4600);
+}
+
+document.getElementById('btnBack').addEventListener('click', () => {
+  if (tela === 'coleta') { pintarOS(); tela = 'os'; document.getElementById('hTit').textContent = atual.os.cliente;
+    document.getElementById('hSub').textContent = atual.os.numero + ' · ' + atual.os.coluna; return; }
+  pintarLista();
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// MODO DEMO
+// ════════════════════════════════════════════════════════════════════════════
+let DB = null;
+function demoSeed(){
+  const T=(id,nome,tipo,fase,fo,ord,st,pf,desc)=>({tarefa_id:id,nome,tipo,fase,fase_ordem:fo,ordem:ord,
+    status:st,perfis_responsaveis:pf||[],lock_por:null,descricao:desc||'',requisitos:{}});
+  const modelo = () => [
+    T('T01','Aceitar OS e deslocar','manual','Aberta',10,1,'pendente',['inspetor','auxiliar'],
+      'O inspetor assume a OS e confirma a saída para o cliente.'),
+    T('T02','Executar levantamento','auto:levantamento','Em campo',20,1,'bloqueado',['inspetor','auxiliar'],
+      'Levantamento dos acessórios em campo.'),
+    Object.assign(T('T03','Fechar levantamento com o cliente','manual','Concluída em campo',30,1,'bloqueado',['inspetor'],
+      'Conferência final com o responsável da planta.'),
+      {requisitos:{
+        fotos:[{id:'assinatura',rotulo:'Aceite do responsável (assinatura ou print)',min:1,max:3}],
+        checklist:[{id:'conferiu',pergunta:'Conferiu a lista com o responsável da planta?',obrigatoria:true}]}}),
+    T('T04','Conferir levantamento','manual','Orçamento',40,1,'bloqueado',['tecnico_adm','compras','comercial'])
+  ];
+  const avancar = (ts, alvo) => { const i = ts.findIndex(t=>t.tarefa_id===alvo);
+    ts.forEach((t,k)=>{ if(k<i) t.status='completo'; else if(k===i) t.status='pendente'; }); return ts; };
+  DB = {
+    d1:{ meta:{os_id:'d1',numero:'OS-2026-0007',cliente:'Gerdau — Divinópolis',dias:1}, tarefas:avancar(modelo(),'T01') },
+    d2:{ meta:{os_id:'d2',numero:'OS-2026-0006',cliente:'Fundição Santana',dias:0},     tarefas:avancar(modelo(),'T02') },
+    d3:{ meta:{os_id:'d3',numero:'OS-2026-0005',cliente:'Uau Ingleza',dias:2},          tarefas:avancar(modelo(),'T03') }
+  };
+}
+const EXEC = { inspetor:'campo', auxiliar:'campo', comercial:'adm', compras:'adm', tecnico_adm:'adm', admin:'adm' };
+function demoLista(){
+  if (!DB) demoSeed();
+  return Object.values(DB).map(({meta,tarefas}) => {
+    const a = tarefas.find(t => t.status!=='completo' && t.status!=='dispensado');
+    if (!a || EXEC[(a.perfis_responsaveis||[])[0]] !== 'campo') return null;
+    const naFase = tarefas.filter(t => t.fase === a.fase);
+    return { os_id:meta.os_id, numero:meta.numero, cliente:meta.cliente, cliente_id:'c1',
+      coluna:a.fase, coluna_ordem:a.fase_ordem, quadro:'campo',
+      tarefa_atual_id:a.tarefa_id, tarefa_atual:a.nome, tarefa_atual_tipo:a.tipo,
+      tarefa_atual_status:a.status, tarefa_atual_perfis:a.perfis_responsaveis,
+      tarefa_atual_lock:a.lock_por, minha:true,
+      tarefas_na_coluna:naFase.length, dias_na_coluna:meta.dias };
+  }).filter(Boolean);
+}
+const demoTarefas = id => (DB || (demoSeed(), DB))[id].tarefas;
+const demoColeta = id => (id === 'd3'
+  ? [{inspetor:'Inspetor 1', total_itens:6, fase:1, enviado_em:new Date().toISOString()}]
+  : []);
+const demoEquip = () => ([
+  {id:'e1',tag:'VP-01',tipo:'vaso',localizacao:'Sala de utilidades'},
+  {id:'e2',tag:'CL-01',tipo:'caldeira',localizacao:'Casa de caldeiras'},
+  {id:'e3',tag:'TQ-01',tipo:'tanque',localizacao:'Pátio externo'}
+]);
+function demoAgir(osId, tid, acao){
+  const t = DB[osId].tarefas.find(x => x.tarefa_id === tid);
+  if (acao === 'assumir'){ t.lock_por = 'eu'; t.status = 'em_andamento'; return; }
+  t.status = 'completo';
+  const p = DB[osId].tarefas.find(x => x.status === 'bloqueado');
+  if (p) p.status = 'pendente';
+  DB[osId].meta.dias = 0;
+}
+function demoEnviar(osId){
+  const t = DB[osId].tarefas.find(x => x.tipo === 'auto:levantamento');
+  if (t) t.status = 'completo';
+  const p = DB[osId].tarefas.find(x => x.status === 'bloqueado');
+  if (p) p.status = 'pendente';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// LOGIN E BOOT
+// ════════════════════════════════════════════════════════════════════════════
+async function entrar(email, senha){
+  const r = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=password', {
+    method:'POST', headers:{ apikey:SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
+    body: JSON.stringify({ email, password: senha }), signal: sinal(true)
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error_description || j.msg || j.message || 'E-mail ou senha inválidos');
+  sessao.token = j.access_token;
+  const eu = await get('usuarios?select=nome,perfil_id,perfis(is_admin)&limit=1');
+  if (!eu || !eu.length) throw new Error('Login criado, mas você ainda não tem perfil no sistema. Fale com o Fernando.');
+  sessao.nome = eu[0].nome; sessao.perfil = eu[0].perfil_id;
+  sessao.admin = !!(eu[0].perfis && eu[0].perfis.is_admin);
+  LS.set(K_SESSAO, sessao);
+}
+document.getElementById('lgBtn').addEventListener('click', async () => {
+  const b = document.getElementById('lgBtn'), er = document.getElementById('lgErr');
+  b.disabled = true; er.textContent = '';
+  try{
+    await entrar(document.getElementById('lgE').value.trim(), document.getElementById('lgS').value);
+    document.getElementById('login').hidden = true;
+    iniciar();
+  }catch(e){ er.textContent = e.message; }
+  finally{ b.disabled = false; }
+});
+document.getElementById('lgS').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('lgBtn').click();
+});
+
+function iniciar(){
+  pintarFila();
+  carregarParametros().finally(() => {
+    carregar().then(pintarLista).catch(()=>pintarLista());
+    flushFila().catch(()=>{});
+  });
+}
+
+(function boot(){
+  document.getElementById('barDemo').hidden = !DEMO;
+  if (DEMO){ sessao = { token:null, nome:'Inspetor (demo)', perfil:'inspetor', admin:false }; iniciar(); return; }
+  if (sessao.token) iniciar();
+  else document.getElementById('login').hidden = false;
+})();
+</script>
+</body>
+</html>
