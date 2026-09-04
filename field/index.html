@@ -149,6 +149,17 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
   border-radius:5px;background:var(--surface);margin-bottom:8px;font-size:15px}
 .check input{width:22px;height:22px;flex:0 0 auto;accent-color:var(--accent)}
 
+.itemCat{display:block;width:100%;text-align:left;background:var(--surface);
+  border:1px solid var(--rule);border-radius:5px;padding:13px 14px;margin-bottom:7px}
+.itemCat:active{background:var(--accent-soft);border-color:var(--accent)}
+.itemCat b{display:block;font-size:15px;font-weight:600;line-height:1.3}
+.itemCat small{display:block;font-size:12.5px;color:var(--ink-3);margin-top:3px;line-height:1.35}
+.doCatalogo{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--accent-soft);
+  border-radius:5px;padding:11px 13px;margin-bottom:14px;font-size:13.5px;color:var(--accent)}
+.doCatalogo b{font-weight:700}
+.lnk{background:none;border:none;color:var(--accent);font-size:13px;font-weight:600;
+  text-decoration:underline;padding:2px 0}
+
 .barra{
   position:sticky;bottom:0;margin:14px -12px -28px;margin-top:auto;padding:12px 12px calc(12px + env(safe-area-inset-bottom));
   background:var(--surface);border-top:1px solid var(--rule);
@@ -207,15 +218,16 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 // CONFIGURAÇÃO — Supabase → Settings → API. Vazio = modo demo.
 // ════════════════════════════════════════════════════════════════════════════
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';
+const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S2';
+const APP_VERSION = 'S3';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
 const K_SESSAO = 'tff_sessao';
 const K_FILA   = 'tff_fila';
 const K_DRAFT  = 'tff_draft_';
 const K_PARAM  = 'tff_param';
+const K_CAT    = 'tff_catalogo';
 
 // ── armazenamento tolerante a falha ─────────────────────────────────────────
 const LS = {
@@ -828,6 +840,160 @@ async function agir(acao, t, respostas){
 // O client_uid nasce aqui e vive no rascunho. Todo reenvio usa o MESMO — é ele
 // que faz o banco recusar a duplicata em vez de criar material dobrado.
 // ════════════════════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════════════════════
+// CATÁLOGO EM CAMPO
+// ----------------------------------------------------------------------------
+// O catálogo fica GUARDADO NO APARELHO. Em campo o sinal cai, e um inspetor que
+// não consegue abrir a lista de itens volta a digitar à mão — que é justamente
+// o que o catálogo veio resolver.
+//
+// Para não baixar tudo a cada abertura, o app pergunta antes o HASH do
+// catálogo. Se não mudou, usa o que já tem. Ideia herdada do TapControl
+// (getCatalogosHash).
+// ════════════════════════════════════════════════════════════════════════════
+// Busca sem acento e sem caixa: em campo ninguém digita "válvula" com acento,
+// e o item não pode sumir por causa disso.
+const norm = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+
+let CAT = LS.get(K_CAT, { hash:null, itens:[], familias:[] });
+
+// catálogo do modo demo — os mesmos exemplos que o 12b_catalogo_seed.sql cria
+function demoCatalogo(){
+  return { hash:'demo', familias:[
+    {id:'manometro',nome_plural:'Manômetros',icone:'🕐'},
+    {id:'valvula',  nome_plural:'Válvulas',  icone:'🔧'},
+    {id:'purgador', nome_plural:'Purgadores',icone:'💧'},
+    {id:'conexao',  nome_plural:'Conexões',  icone:'🔩'},
+    {id:'servico',  nome_plural:'Serviços',  icone:'🛠️'}
+  ], itens:[
+    {id:'k1',codigo:'MAN-0001',familia_id:'manometro',familia:'Manômetro',
+     descricao:'Manômetro 0-16 bar, caixa 100mm, glicerina',marca:'Wika',modelo:'213.53',
+     requer_calibracao:true,requer_lacre:false,
+     especificacoes:{tipo:'Glicerina',caixa_mm:100,rosca:'1/2"'}},
+    {id:'k1b',codigo:'MAN-0002',familia_id:'manometro',familia:'Manômetro',
+     descricao:'Manômetro 0-10 bar, caixa 63mm, seco',marca:'Famabras',modelo:'M63',
+     requer_calibracao:true,requer_lacre:false,
+     especificacoes:{tipo:'Seco',caixa_mm:63,rosca:'1/4"'}},
+    {id:'k2',codigo:'VAL-0001',familia_id:'valvula',familia:'Válvula',
+     descricao:'Válvula de segurança 1" x 1.1/2", 8,5 kgf/cm²',marca:'Bermo',modelo:'VS-1000',
+     requer_calibracao:true,requer_lacre:true,
+     especificacoes:{bitola_ent:'1"',material:'Bronze',pa_alivio:8.5}},
+    {id:'k3',codigo:'PUR-0001',familia_id:'purgador',familia:'Purgador',
+     descricao:'Purgador automático de boia 1/2"',marca:'Metalplan',modelo:'PB-12',
+     requer_calibracao:false,requer_lacre:false,
+     especificacoes:{tipo:'Boia',bitola:'1/2"'}},
+    {id:'k5',codigo:'CON-0001',familia_id:'conexao',familia:'Conexão',
+     descricao:'Niple 1/2" latão',marca:null,modelo:null,
+     requer_calibracao:false,requer_lacre:false,
+     especificacoes:{tipo:'Niple',bitola:'1/2"',material:'Latão'}},
+    {id:'k4',codigo:'SRV-0001',familia_id:'servico',familia:'Serviço',
+     descricao:'Calibração de manômetro com certificado RBC',marca:null,modelo:null,
+     requer_calibracao:false,requer_lacre:false,
+     especificacoes:{natureza:'Calibração',prazo_dias:10}}
+  ]};
+}
+
+async function sincronizarCatalogo(){
+  if (DEMO){ CAT = demoCatalogo(); return; }
+  try{
+    const h = await rpc('tf_catalogo_hash', {});
+    if (h && h === CAT.hash && CAT.itens.length) return;   // nada mudou
+
+    const [itens, familias] = await Promise.all([
+      get('v_catalogo?select=id,codigo,familia_id,familia,familia_ordem,descricao,marca,modelo,'
+        + 'unidade,requer_calibracao,requer_lacre,especificacoes&ativo=is.true&order=familia_ordem,codigo'),
+      get('catalogo_familias?select=id,nome_plural,ordem,icone&ativo=is.true&order=ordem')
+    ]);
+    CAT = { hash: h, itens: itens || [], familias: familias || [] };
+    if (!LS.set(K_CAT, CAT))
+      toast('Catálogo carregado, mas não coube no aparelho — vai precisar de sinal.', 'err');
+  }catch(e){
+    // sem rede: segue com o que estava guardado. Não é erro que mereça alarme.
+  }
+}
+
+const catalogoPronto = () => CAT.itens && CAT.itens.length > 0;
+
+// ── o seletor ───────────────────────────────────────────────────────────────
+// Uma tela inteira, não um <select>: em campo, com luva e sol na tela, lista
+// grande com busca é o que funciona.
+function abrirSeletorCatalogo(aoEscolher){
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+  const box = document.createElement('div'); box.className = 'painel';
+  box.innerHTML =
+    '<div class="campo"><label for="cB">Buscar no catálogo</label>' +
+      '<input id="cB" type="search" inputmode="search" autocomplete="off" ' +
+      'placeholder="manômetro, 1/2, Wika, MAN-0001…"></div>' +
+    '<div class="tog" id="cF" style="margin-bottom:10px"></div>' +
+    '<div id="cL"></div>' +
+    '<button class="btn" id="cCa" style="margin-top:12px">Voltar</button>';
+  m.appendChild(box);
+
+  let fam = null;
+  const tg = document.getElementById('cF');
+  [{id:null,nome_plural:'Todos'}].concat(CAT.familias).forEach(f => {
+    const b = document.createElement('button'); b.type = 'button';
+    b.textContent = (f.icone ? f.icone + ' ' : '') + f.nome_plural;
+    b.className = (fam === f.id ? 'on' : '');
+    b.addEventListener('click', () => {
+      fam = f.id;
+      [...tg.children].forEach(c => c.classList.toggle('on', c === b));
+      lista();
+    });
+    tg.appendChild(b);
+  });
+  tg.firstChild.classList.add('on');
+
+  function lista(){
+    const t = norm(document.getElementById('cB').value).trim();
+    const el = document.getElementById('cL');
+    // cada palavra digitada tem que aparecer em algum lugar do item: "valv 1/2"
+    // acha a válvula de 1/2 sem depender da ordem em que foi escrito
+    const termos = t ? t.split(/\s+/) : [];
+    const achados = CAT.itens.filter(i => {
+      if (fam && i.familia_id !== fam) return false;
+      if (!termos.length) return true;
+      const alvo = norm([i.descricao, i.marca, i.modelo, i.codigo, i.familia,
+        Object.values(i.especificacoes||{}).join(' ')].join(' '));
+      return termos.every(w => alvo.includes(w));
+    });
+
+    el.innerHTML = '';
+    if (!achados.length){
+      el.innerHTML = '<p style="font-size:13px;color:var(--ink-3);padding:8px 0">'
+        + (t ? 'Nada encontrado. Use “Item fora do catálogo” para lançar mesmo assim.'
+             : 'O catálogo está vazio.') + '</p>';
+      return;
+    }
+    achados.slice(0, 80).forEach(i => {
+      const d = document.createElement('button');
+      d.type = 'button'; d.className = 'itemCat';
+      d.innerHTML = '<b></b><small></small>';
+      d.querySelector('b').textContent = i.descricao;
+      const p = [i.codigo];
+      if (i.marca || i.modelo) p.push([i.marca,i.modelo].filter(Boolean).join(' '));
+      const e = i.especificacoes || {};
+      Object.keys(e).slice(0,3).forEach(k => p.push(String(e[k])));
+      d.querySelector('small').textContent = p.join(' · ');
+      d.addEventListener('click', () => aoEscolher(i));
+      el.appendChild(d);
+    });
+    if (achados.length > 80){
+      const p = document.createElement('p');
+      p.style.cssText = 'font-size:12px;color:var(--ink-3);padding:8px 0';
+      p.textContent = achados.length + ' itens encontrados. Mostrando os 80 primeiros — refine a busca.';
+      el.appendChild(p);
+    }
+  }
+
+  document.getElementById('cB').addEventListener('input', lista);
+  document.getElementById('cCa').addEventListener('click', pintarColeta);
+  lista();
+  setTimeout(() => document.getElementById('cB').focus(), 60);
+}
+
 const TIPOS = [
   ['manometro','Manômetro'], ['valvula','Válvula de segurança'], ['purgador','Purgador'],
   ['dcbi','DCBI'], ['conexao','Conexão'], ['outro','Outro']
@@ -899,11 +1065,11 @@ function itemEl(it, i){
   return d;
 }
 
-function formItem(idx){
-  const it = idx == null
+function formItem(idx, preenchido){
+  const it = preenchido ? preenchido : (idx == null
     ? { tipo_acessorio:'manometro', descricao:'', quantidade:1, equipamento_id:'', tag:'',
         requer_calibracao:false, requer_lacre:false, instalado_imediatamente:false }
-    : Object.assign({}, coleta.itens[idx]);
+    : Object.assign({}, coleta.itens[idx]));
 
   const m = document.getElementById('main');
   m.innerHTML = '';
@@ -913,7 +1079,18 @@ function formItem(idx){
     atual.equipamentos.map(e => '<option value="'+e.id+'">'+ esc(e.tag) +
       (e.localizacao ? ' · ' + esc(e.localizacao) : '') + '</option>'));
 
-  box.innerHTML =
+  // A origem do item aparece no topo: escolhido do catálogo ou digitado.
+  // Sem isso o inspetor não sabe se o escritório vai receber a peça certa.
+  const origem = it.catalogo_item_id
+    ? '<div class="doCatalogo">✓ <b>' + esc(it.catalogo_codigo||'do catálogo') + '</b>'
+      + '<button type="button" class="lnk" id="fTrocar">trocar</button>'
+      + '<button type="button" class="lnk" id="fSoltar">digitar à mão</button></div>'
+    : (catalogoPronto()
+        ? '<button class="btn" type="button" id="fCat" style="margin:0 0 14px">'
+          + '🔎 Escolher do catálogo</button>'
+        : '');
+
+  box.innerHTML = origem +
     '<div class="campo"><label>Tipo</label><div class="tog" id="tg"></div></div>' +
     '<div class="campo"><label for="fD">Descrição</label>' +
       '<input id="fD" type="text" placeholder="ex.: Manômetro 63mm 0-14 kgf/cm² · 1/4&quot; NPT"></div>' +
@@ -953,6 +1130,32 @@ function formItem(idx){
   document.getElementById('fC').checked = !!it.requer_calibracao;
   document.getElementById('fL').checked = !!it.requer_lacre;
   document.getElementById('fI').checked = !!it.instalado_imediatamente;
+
+  // ── catálogo ──
+  // Escolher preenche descrição, tipo, calibração e lacre — e guarda o vínculo,
+  // que é o que faz o custo e o preço de referência chegarem no orçamento.
+  // O que for digitado depois continua valendo: o catálogo é o padrão, não a
+  // camisa de força.
+  const escolher = (i) => {
+    Object.assign(it, {
+      catalogo_item_id: i.id,
+      catalogo_codigo: i.codigo,
+      descricao: i.descricao,
+      tipo_acessorio: i.familia_id,
+      requer_calibracao: !!i.requer_calibracao,
+      requer_lacre: !!i.requer_lacre
+    });
+    formItem(idx, it);
+  };
+  const bCat = document.getElementById('fCat');
+  if (bCat) bCat.addEventListener('click', () => abrirSeletorCatalogo(escolher));
+  const bTro = document.getElementById('fTrocar');
+  if (bTro) bTro.addEventListener('click', () => abrirSeletorCatalogo(escolher));
+  const bSol = document.getElementById('fSoltar');
+  if (bSol) bSol.addEventListener('click', () => {
+    delete it.catalogo_item_id; delete it.catalogo_codigo;
+    formItem(idx, it);
+  });
 
   // ── foto do ponto ──
   const btF = document.getElementById('fFoto'), txF = document.getElementById('fFotoTxt');
@@ -1003,6 +1206,7 @@ async function enviar(){
     p_fase: coleta.fase,
     p_itens: coleta.itens.map(i => ({
       descricao: i.descricao, tipo_acessorio: i.tipo_acessorio, quantidade: i.quantidade,
+      catalogo_item_id: i.catalogo_item_id || null,
       equipamento_id: i.equipamento_id || null,
       requer_calibracao: !!i.requer_calibracao, requer_lacre: !!i.requer_lacre,
       instalado_imediatamente: !!i.instalado_imediatamente,
@@ -1180,6 +1384,8 @@ function iniciar(){
   carregarParametros().finally(() => {
     carregar().then(pintarLista).catch(()=>pintarLista());
     flushFila().catch(()=>{});
+    // o catálogo vem por último: se falhar, o app funciona igual, só sem a lista
+    sincronizarCatalogo().catch(()=>{});
   });
 }
 

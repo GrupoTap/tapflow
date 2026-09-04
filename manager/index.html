@@ -142,6 +142,25 @@ main{flex:1;overflow-x:auto;overflow-y:hidden;padding:14px}
 .bar{height:3px;background:var(--rule-2);border-radius:2px;margin-top:8px;overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent)}
 
+
+/* ── catálogo ─────────────────────────────────────── */
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px}
+.fchip{font-size:12px;font-weight:600;padding:5px 10px;border-radius:3px;
+  background:var(--surface-2);color:var(--ink-2);border:1px solid var(--rule);cursor:pointer}
+.fchip:hover{border-color:var(--accent)}
+.fchip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.linhaCli.off{opacity:.55}
+.secTit{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-3);margin:16px 0 8px;padding-top:12px;border-top:1px solid var(--rule)}
+.grelha{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0 12px}
+.linhaBtns{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
+.linhaBtns .btn{flex:1 1 auto}
+.btn.perigo{color:var(--crit);border-color:var(--crit)}
+.btn.perigo:hover{background:var(--crit-soft)}
+.chk{display:flex;align-items:center;gap:7px;font-size:13.5px;margin-bottom:12px;cursor:pointer}
+.chk input{width:16px;height:16px;flex:0 0 auto}
+.nota{font-size:12px;color:var(--ink-3);line-height:1.45;margin:8px 0 0}
+
 /* ── gaveta ───────────────────────────────────────── */
 .scrim{position:fixed;inset:0;background:rgba(16,26,28,.42);opacity:0;pointer-events:none;transition:opacity .18s}
 .scrim.on{opacity:1;pointer-events:auto}
@@ -282,13 +301,14 @@ main{flex:1;overflow-x:auto;overflow-y:hidden;padding:14px}
 <header>
   <div>
     <div class="brand">Tap<span>Flow</span></div>
-    <div class="ver mono">MANAGER · S3</div>
+    <div class="ver mono">MANAGER · S4</div>
   </div>
 
   <div class="switch" id="sw">
     <button data-q="campo"  class="on">Campo <span class="n" id="nCampo">0</span></button>
     <button data-q="adm">Gestão <span class="n" id="nAdm">0</span></button>
     <button data-q="cad">Cadastros</button>
+    <button data-q="cat">Catálogo</button>
   </div>
 
   <button class="btn pri" id="btnNovaOS">+ Nova OS</button>
@@ -356,13 +376,13 @@ main{flex:1;overflow-x:auto;overflow-y:hidden;padding:14px}
 // Estão em: Supabase → seu projeto → Settings → API
 // Deixe vazio para rodar em modo demo.
 // ════════════════════════════════════════════════════════════════════════════
-const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';
+const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';   // ex.: 'https://xxxxxxxx.supabase.co'
+const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
                                 // Serve também a antiga "anon public" (eyJ...),
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S3';
+const APP_VERSION = 'S4';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -735,7 +755,36 @@ function pintarDrawer(){
   pintarAcoes();
 }
 
+// Excluir OS fica junto das ações, mas discreto e só para admin: é a única
+// exclusão do sistema que apaga histórico de verdade, e existe para tirar OS de
+// teste. Fica registrado no livro de exclusões quem apagou o quê.
+function botaoExcluirOS(cx, card){
+  if (!sessao.admin) return;
+  const w = document.createElement('div');
+  w.style.cssText = 'margin-top:10px;padding-top:10px;border-top:1px solid var(--rule)';
+  w.innerHTML = '<button class="btn perigo" id="osDel" style="width:100%">Excluir esta OS</button>';
+  cx.appendChild(w);
+  document.getElementById('osDel').addEventListener('click', async () => {
+    const motivo = prompt('Excluir ' + card.numero + ' definitivamente.\n\n'
+      + 'Some com tarefas, itens, levantamentos, propostas e anexos. '
+      + 'Os arquivos no Drive NÃO são apagados.\n\nPor quê? (fica registrado)');
+    if (motivo === null) return;
+    try{
+      if (!DEMO) await rpc('tf_excluir_os', { p_os_id: card.os_id, p_motivo: motivo || null });
+      toast(card.numero + ' excluída.','ok');
+      fecharDrawer(); carregar();
+    }catch(e){ toast(e.message,'err'); }
+  });
+}
+
+// O wrapper garante que o botão de excluir apareça em QUALQUER caminho de
+// pintarAcoes — e ela tem seis `return` diferentes.
 function pintarAcoes(){
+  pintarAcoes_(); 
+  botaoExcluirOS(document.getElementById('dAcoes'), osAberta.card);
+}
+
+function pintarAcoes_(){
   const { card, tarefas } = osAberta;
   const cx = document.getElementById('dAcoes');
   const t = tarefas.find(x => x.tarefa_id === card.tarefa_atual_id);
@@ -1487,6 +1536,267 @@ async function modalNovaOS(){
      }}]);
 }
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// CATÁLOGO
+// ----------------------------------------------------------------------------
+// O formulário NÃO é escrito aqui. Ele é montado a partir de
+// `catalogo_familias.campos`, que vem do banco. Acrescentar um campo em
+// válvulas — ou uma família inteira — é um UPDATE no banco, e a tela passa a
+// mostrar. Sem app novo, sem esperar por mim.
+// ════════════════════════════════════════════════════════════════════════════
+// Busca sem acento e sem caixa: em campo ninguém digita "válvula" com acento,
+// e o item não pode sumir por causa disso.
+const norm = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+
+let CAT_FAM = [];          // famílias, com a descrição dos campos
+let catFamSel = null;      // família aberta na tela
+let catEdit = null;        // item em edição (null = novo)
+
+async function carregarFamilias(){
+  if (CAT_FAM.length) return CAT_FAM;
+  CAT_FAM = DEMO ? demoFamilias()
+    : await get('catalogo_familias?select=*&ativo=eq.true&order=ordem');
+  return CAT_FAM;
+}
+
+async function pintarCatalogo(){
+  visao = 'cat';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="cadWrap">'
+    + '<div class="painel"><h3>Catálogo</h3>'
+    +   '<div id="catFams" class="chips"></div>'
+    +   '<div class="campo" style="margin:10px 0 6px"><input id="catBusca" type="text" '
+    +     'placeholder="Buscar por descrição, marca, modelo ou código"></div>'
+    +   '<div class="lista" id="catLista"></div></div>'
+    + '<div class="painel" id="catDet"></div></div>';
+
+  await carregarFamilias();
+
+  const chips = document.getElementById('catFams');
+  chips.innerHTML = '';
+  const todas = [{ id:null, nome_plural:'Todas', icone:'' }].concat(CAT_FAM);
+  todas.forEach(f => {
+    const b = document.createElement('button');
+    b.className = 'fchip' + (catFamSel === f.id ? ' on' : '');
+    b.textContent = (f.icone ? f.icone + ' ' : '') + f.nome_plural;
+    b.addEventListener('click', () => { catFamSel = f.id; pintarCatalogo(); });
+    chips.appendChild(b);
+  });
+
+  document.getElementById('catBusca').addEventListener('input', debounce(listarCatalogo, 250));
+  await listarCatalogo();
+  formCatalogo(null);
+}
+
+const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(()=>fn(...a), ms); }; };
+
+async function listarCatalogo(){
+  const el = document.getElementById('catLista');
+  if (!el) return;
+  const termo = (document.getElementById('catBusca')||{}).value || '';
+
+  // A família filtra no servidor; o texto filtra aqui. O catálogo tem centenas
+  // de itens, não milhões — e filtrar aqui deixa a busca igual à do celular,
+  // sem acento e por palavra solta.
+  let itens = [];
+  try{
+    if (DEMO) itens = demoCatalogo(catFamSel, '');
+    else {
+      let q = 'v_catalogo?select=*&order=familia_ordem,codigo';
+      if (catFamSel) q += '&familia_id=eq.' + catFamSel;
+      itens = await get(q);
+    }
+  }catch(e){ toast(e.message,'err'); return; }
+
+  const termos = norm(termo).trim().split(/\s+/).filter(Boolean);
+  if (termos.length){
+    itens = itens.filter(i => {
+      const alvo = norm([i.descricao, i.marca, i.modelo, i.codigo, i.familia,
+        Object.values(i.especificacoes||{}).join(' ')].join(' '));
+      return termos.every(w => alvo.includes(w));
+    });
+  }
+
+  el.innerHTML = '';
+  if (!itens.length){
+    el.innerHTML = '<p style="font-size:13px;color:var(--ink-3)">'
+      + (termo ? 'Nada encontrado para “' + esc(termo) + '”.' : 'Nenhum item nesta família ainda.')
+      + '</p>';
+    return;
+  }
+  itens.forEach(i => {
+    const b = document.createElement('button');
+    b.className = 'linhaCli' + (catEdit && catEdit.id === i.id ? ' on' : '') + (i.ativo ? '' : ' off');
+    b.innerHTML = '<b></b><small></small>';
+    b.querySelector('b').textContent = (i.ativo ? '' : '📦 ') + i.descricao;
+    const partes = [i.codigo];
+    if (i.marca || i.modelo) partes.push([i.marca, i.modelo].filter(Boolean).join(' '));
+    if (i.preco_referencia) partes.push(BRL(i.preco_referencia));
+    if (i.vezes_usado) partes.push(i.vezes_usado + '× usado');
+    if (!i.ativo) partes.push('arquivado');
+    b.querySelector('small').textContent = partes.join(' · ');
+    b.addEventListener('click', () => formCatalogo(i));
+    el.appendChild(b);
+  });
+}
+
+// ── formulário: os campos vêm da família ────────────────────────────────────
+function formCatalogo(item){
+  catEdit = item;
+  const d = document.getElementById('catDet');
+  if (!d) return;
+
+  const famId = item ? item.familia_id : (catFamSel || (CAT_FAM[0]||{}).id);
+  const fam = CAT_FAM.find(f => f.id === famId) || { campos: [] };
+  const espec = (item && item.especificacoes) || {};
+
+  let h = '<h3>' + (item ? esc(item.codigo) + ' · editar' : 'Novo item de catálogo') + '</h3>';
+
+  if (!item){
+    h += '<div class="campo"><label for="fFam">Família</label><select id="fFam">'
+      + CAT_FAM.map(f => '<option value="' + f.id + '"' + (f.id===famId?' selected':'') + '>'
+          + esc(f.nome) + '</option>').join('') + '</select></div>';
+  }
+
+  h += '<div class="campo"><label for="fDesc">Descrição</label>'
+    +  '<input id="fDesc" type="text" value="' + esc(item ? item.descricao : '') + '"></div>'
+    +  '<div class="dupla">'
+    +    '<div class="campo"><label for="fMarca">Marca</label><input id="fMarca" type="text" value="'
+    +      esc(item ? (item.marca||'') : '') + '"></div>'
+    +    '<div class="campo"><label for="fModelo">Modelo</label><input id="fModelo" type="text" value="'
+    +      esc(item ? (item.modelo||'') : '') + '"></div></div>';
+
+  // os campos técnicos da família
+  if (fam.campos && fam.campos.length){
+    h += '<div class="secTit">Detalhes técnicos</div><div class="grelha">';
+    fam.campos.forEach(c => {
+      const v = espec[c.chave];
+      const id = 'esp_' + c.chave;
+      h += '<div class="campo"><label for="' + id + '">' + esc(c.rotulo) + '</label>';
+      if (c.tipo === 'lista'){
+        h += '<select id="' + id + '" data-esp="' + esc(c.chave) + '"><option value=""></option>'
+          + (c.opcoes||[]).map(o => '<option' + (v===o?' selected':'') + '>' + esc(o) + '</option>').join('')
+          + '</select>';
+      } else if (c.tipo === 'booleano'){
+        h += '<label class="chk"><input type="checkbox" id="' + id + '" data-esp="' + esc(c.chave) + '"'
+          + (v ? ' checked' : '') + '> sim</label>';
+      } else {
+        h += '<input id="' + id + '" data-esp="' + esc(c.chave) + '" data-tipo="' + esc(c.tipo||'texto')
+          + '" type="' + (c.tipo==='numero'?'number':'text') + '" step="any" value="'
+          + esc(v==null?'':v) + '">';
+      }
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+
+  h += '<div class="secTit">Campo e orçamento</div>'
+    +  '<div class="dupla">'
+    +   '<label class="chk"><input type="checkbox" id="fCalib"'
+    +     (item && item.requer_calibracao ? ' checked':'') + '> Requer calibração</label>'
+    +   '<label class="chk"><input type="checkbox" id="fLacre"'
+    +     (item && item.requer_lacre ? ' checked':'') + '> Requer lacre</label></div>'
+    +  '<div class="campo"><label for="fForn">Fornecedor padrão</label><input id="fForn" type="text" value="'
+    +    esc(item ? (item.fornecedor_padrao||'') : '') + '"></div>'
+    +  '<div class="dupla">'
+    +   '<div class="campo"><label for="fCusto">Custo de referência</label><input id="fCusto" type="number" '
+    +     'step="0.01" value="' + (item && item.custo_referencia != null ? item.custo_referencia : '') + '"></div>'
+    +   '<div class="campo"><label for="fPreco">Preço de referência</label><input id="fPreco" type="number" '
+    +     'step="0.01" value="' + (item && item.preco_referencia != null ? item.preco_referencia : '') + '"></div>'
+    +  '</div>'
+    +  '<p class="nota">Estes valores entram preenchidos quando o item é lançado em campo — '
+    +  'para o orçamento começar de algum lugar. Continuam editáveis em cada OS.</p>'
+    +  '<div class="campo"><label for="fObs">Observações</label><input id="fObs" type="text" value="'
+    +    esc(item ? (item.observacoes||'') : '') + '"></div>';
+
+  h += '<div class="linhaBtns">'
+    +  '<button class="btn pri" id="fSalvar">' + (item ? 'Salvar alterações' : 'Adicionar ao catálogo') + '</button>';
+  if (item){
+    h += '<button class="btn" id="fNovo">Novo item</button>'
+      +  '<button class="btn" id="fArquivar">' + (item.ativo ? 'Arquivar' : 'Reativar') + '</button>'
+      +  '<button class="btn perigo" id="fExcluir">Excluir</button>';
+  }
+  h += '</div>';
+
+  if (item && item.vezes_usado){
+    h += '<p class="nota">Já lançado em <b>' + item.vezes_usado + '</b> item(ns) de OS. '
+      +  'Por isso não pode ser excluído — arquivar tira ele da lista do campo e mantém as OS antigas certas.</p>';
+  }
+
+  d.innerHTML = h;
+
+  const fs = document.getElementById('fFam');
+  if (fs) fs.addEventListener('change', () => { catFamSel = fs.value; formCatalogo(null); });
+
+  document.getElementById('fSalvar').addEventListener('click', salvarCatalogo);
+  const bn = document.getElementById('fNovo');
+  if (bn) bn.addEventListener('click', () => formCatalogo(null));
+  const ba = document.getElementById('fArquivar');
+  if (ba) ba.addEventListener('click', () => arquivarCatalogo(item));
+  const bx = document.getElementById('fExcluir');
+  if (bx) bx.addEventListener('click', () => excluirCatalogo(item));
+}
+
+function lerEspecificacoes(){
+  const o = {};
+  document.querySelectorAll('[data-esp]').forEach(el => {
+    let v;
+    if (el.type === 'checkbox') v = el.checked;
+    else if (el.dataset.tipo === 'numero') v = el.value === '' ? null : Number(el.value);
+    else v = el.value.trim() || null;
+    if (v !== null && v !== '' && v !== false) o[el.dataset.esp] = v;
+  });
+  return o;
+}
+
+async function salvarCatalogo(e){
+  const desc = document.getElementById('fDesc').value.trim();
+  if (!desc){ toast('A descrição é obrigatória.','err'); return; }
+  e.target.disabled = true;
+  const num = id => { const v = document.getElementById(id).value; return v === '' ? null : Number(v); };
+  const p = {
+    p_id: catEdit ? catEdit.id : null,
+    p_familia_id: catEdit ? catEdit.familia_id : document.getElementById('fFam').value,
+    p_descricao: desc,
+    p_marca:  document.getElementById('fMarca').value.trim()  || null,
+    p_modelo: document.getElementById('fModelo').value.trim() || null,
+    p_especificacoes: lerEspecificacoes(),
+    p_requer_calibracao: document.getElementById('fCalib').checked,
+    p_requer_lacre:      document.getElementById('fLacre').checked,
+    p_fornecedor_padrao: document.getElementById('fForn').value.trim() || null,
+    p_custo_referencia: num('fCusto'),
+    p_preco_referencia: num('fPreco'),
+    p_observacoes: document.getElementById('fObs').value.trim() || null
+  };
+  try{
+    const r = DEMO ? demoSalvarCat(p) : await rpc('tf_salvar_item_catalogo', p);
+    toast(catEdit ? 'Item atualizado.' : 'Item ' + (r.codigo||'') + ' adicionado.', 'ok');
+    catEdit = null;
+    await listarCatalogo(); formCatalogo(null);
+  }catch(err){ toast(err.message,'err'); e.target.disabled = false; }
+}
+
+async function arquivarCatalogo(item){
+  try{
+    if (DEMO) demoArquivarCat(item); 
+    else await rpc('tf_arquivar', { p_tabela:'catalogo_itens', p_id:item.id, p_ativo: !item.ativo });
+    toast(item.ativo ? 'Item arquivado — sai da lista do campo.' : 'Item reativado.', 'ok');
+    catEdit = null; await listarCatalogo(); formCatalogo(null);
+  }catch(err){ toast(err.message,'err'); }
+}
+
+async function excluirCatalogo(item){
+  if (!confirm('Excluir "' + item.descricao + '" do catálogo?\n\nIsso é definitivo. '
+      + 'Se o item já foi usado em alguma OS, o sistema vai recusar e sugerir arquivar.')) return;
+  try{
+    const r = DEMO ? demoExcluirCat(item) : await rpc('tf_excluir_item_catalogo', { p_id: item.id });
+    if (r && r.status === 'recusado'){ toast(r.mensagem, 'err'); return; }
+    toast('Item excluído.', 'ok');
+    catEdit = null; await listarCatalogo(); formCatalogo(null);
+  }catch(err){ toast(err.message,'err'); }
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // CADASTROS
 // ════════════════════════════════════════════════════════════════════════════
@@ -1632,6 +1942,42 @@ async function detalheCliente(c){
     catch(err){ toast(/duplicate|ux_equip/i.test(err.message)
         ? 'Já existe essa TAG neste cliente.' : err.message,'err'); e.target.disabled = false; }
   });
+
+  // ── arquivar / excluir ──
+  // Dois botões diferentes de propósito. Arquivar é o que se usa quase sempre:
+  // o cliente sai das listas e o histórico fica. Excluir só existe para o
+  // cliente que você digitou para testar — e o banco recusa se houver OS.
+  const fim = document.createElement('div');
+  fim.className = 'linhaBtns';
+  fim.style.borderTop = '1px solid var(--rule)';
+  fim.style.paddingTop = '14px';
+  fim.innerHTML = '<button class="btn" id="cliArq">Arquivar cliente</button>'
+                + '<button class="btn perigo" id="cliDel">Excluir</button>';
+  d.appendChild(fim);
+  const nota = document.createElement('p');
+  nota.className = 'nota';
+  nota.textContent = 'Arquivar tira o cliente das listas e mantém o histórico. '
+                   + 'Excluir só funciona enquanto ele não tem nenhuma OS.';
+  d.appendChild(nota);
+
+  document.getElementById('cliArq').addEventListener('click', async () => {
+    if (!confirm('Arquivar "' + c.nome + '"?\n\nEle sai das listas de escolha. '
+        + 'As OS existentes continuam como estão, e dá para reativar depois.')) return;
+    try{
+      if (!DEMO) await rpc('tf_arquivar', { p_tabela:'clientes', p_id:c.id, p_ativo:false });
+      toast('Cliente arquivado.','ok'); cadSel = null; pintarCadastros();
+    }catch(e){ toast(e.message,'err'); }
+  });
+
+  document.getElementById('cliDel').addEventListener('click', async () => {
+    if (!confirm('Excluir "' + c.nome + '" definitivamente?\n\n'
+        + 'Contatos e equipamentos vão junto. Se o cliente tiver OS, o sistema recusa.')) return;
+    try{
+      const r = DEMO ? {status:'ok'} : await rpc('tf_excluir_cliente', { p_id:c.id });
+      if (r && r.status === 'recusado'){ toast(r.mensagem,'err'); return; }
+      toast('Cliente excluído.','ok'); cadSel = null; pintarCadastros();
+    }catch(e){ toast(e.message,'err'); }
+  });
 }
 
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, ch =>
@@ -1659,6 +2005,87 @@ function demoCad(){
   ]};
   D_PR = {};
 }
+// ── catálogo no modo demo ───────────────────────────────────────────────────
+let D_FAM = null, D_CAT = null;
+function demoCat(){
+  if (D_FAM) return;
+  D_FAM = [
+    {id:'manometro',nome:'Manômetro',nome_plural:'Manômetros',ordem:10,prefixo:'MAN',icone:'🕐',campos:[
+      {chave:'tipo',rotulo:'Tipo',tipo:'lista',opcoes:['Seco','Glicerina','Diafragma','Capsular']},
+      {chave:'caixa_mm',rotulo:'Caixa (mm)',tipo:'numero'},
+      {chave:'escala_padrao',rotulo:'Escala',tipo:'texto'},
+      {chave:'rosca',rotulo:'Rosca',tipo:'texto'},
+      {chave:'tipo_rosca',rotulo:'Tipo de rosca',tipo:'lista',opcoes:['NPT','BSP','G','Métrica']}]},
+    {id:'valvula',nome:'Válvula de segurança',nome_plural:'Válvulas',ordem:20,prefixo:'VAL',icone:'🔧',campos:[
+      {chave:'tipo_valvula',rotulo:'Tipo de válvula',tipo:'lista',opcoes:['Segurança','Alívio','Segurança e alívio','Vácuo']},
+      {chave:'bitola_ent',rotulo:'Bitola entrada',tipo:'texto'},
+      {chave:'material',rotulo:'Material',tipo:'lista',opcoes:['Latão','Bronze','Aço carbono','Inox 304','Inox 316']},
+      {chave:'pa_alivio',rotulo:'PA alívio',tipo:'numero'}]},
+    {id:'purgador',nome:'Purgador',nome_plural:'Purgadores',ordem:30,prefixo:'PUR',icone:'💧',campos:[
+      {chave:'tipo',rotulo:'Tipo',tipo:'lista',opcoes:['Boia','Termodinâmico','Bimetálico','Eletrônico']},
+      {chave:'bitola',rotulo:'Bitola',tipo:'texto'}]},
+    {id:'servico',nome:'Serviço',nome_plural:'Serviços',ordem:70,prefixo:'SRV',icone:'🛠️',campos:[
+      {chave:'natureza',rotulo:'Natureza',tipo:'lista',opcoes:['Calibração','Instalação','Inspeção','Ensaio','Laudo']},
+      {chave:'prazo_dias',rotulo:'Prazo típico (dias)',tipo:'numero'}]}
+  ];
+  D_CAT = [
+    {id:'k1',codigo:'MAN-0001',familia_id:'manometro',familia:'Manômetro',familia_ordem:10,
+     descricao:'EXEMPLO · Manômetro 0-16 bar, caixa 100mm, glicerina',marca:'Wika',modelo:'213.53',
+     unidade:'pc',especificacoes:{tipo:'Glicerina',caixa_mm:100,escala_padrao:'0-16 bar',rosca:'1/2"',tipo_rosca:'NPT'},
+     requer_calibracao:true,requer_lacre:false,fornecedor_padrao:'Proper Compressores',
+     custo_referencia:148,preco_referencia:265,ativo:true,vezes_usado:3},
+    {id:'k2',codigo:'VAL-0001',familia_id:'valvula',familia:'Válvula de segurança',familia_ordem:20,
+     descricao:'EXEMPLO · Válvula de segurança 1" x 1.1/2", 8,5 kgf/cm²',marca:'Bermo',modelo:'VS-1000',
+     unidade:'pc',especificacoes:{tipo_valvula:'Segurança',bitola_ent:'1"',material:'Bronze',pa_alivio:8.5},
+     requer_calibracao:true,requer_lacre:true,fornecedor_padrao:'Proper Compressores',
+     custo_referencia:420,preco_referencia:720,ativo:true,vezes_usado:0},
+    {id:'k3',codigo:'PUR-0001',familia_id:'purgador',familia:'Purgador',familia_ordem:30,
+     descricao:'EXEMPLO · Purgador automático de boia 1/2"',marca:'Metalplan',modelo:'PB-12',
+     unidade:'pc',especificacoes:{tipo:'Boia',bitola:'1/2"'},
+     requer_calibracao:false,requer_lacre:false,fornecedor_padrao:'Proper Compressores',
+     custo_referencia:195,preco_referencia:340,ativo:true,vezes_usado:0},
+    {id:'k4',codigo:'SRV-0001',familia_id:'servico',familia:'Serviço',familia_ordem:70,
+     descricao:'EXEMPLO · Calibração de manômetro com certificado RBC',marca:null,modelo:null,
+     unidade:'un',especificacoes:{natureza:'Calibração',prazo_dias:10},
+     requer_calibracao:false,requer_lacre:false,fornecedor_padrao:'Laboratório RBC',
+     custo_referencia:85,preco_referencia:180,ativo:true,vezes_usado:0}
+  ];
+}
+const demoFamilias = () => (demoCat(), D_FAM);
+function demoCatalogo(fam, termo){
+  demoCat();
+  const t = (termo||'').trim().toLowerCase();
+  return D_CAT.filter(i => (!fam || i.familia_id === fam) &&
+    (!t || [i.descricao,i.marca,i.modelo,i.codigo].some(x => (x||'').toLowerCase().includes(t))));
+}
+function demoSalvarCat(p){
+  demoCat();
+  if (p.p_id){ Object.assign(D_CAT.find(x=>x.id===p.p_id), {
+      descricao:p.p_descricao, marca:p.p_marca, modelo:p.p_modelo,
+      especificacoes:p.p_especificacoes, requer_calibracao:p.p_requer_calibracao,
+      requer_lacre:p.p_requer_lacre, fornecedor_padrao:p.p_fornecedor_padrao,
+      custo_referencia:p.p_custo_referencia, preco_referencia:p.p_preco_referencia,
+      observacoes:p.p_observacoes }); return {status:'ok'}; }
+  const f = D_FAM.find(x=>x.id===p.p_familia_id) || D_FAM[0];
+  const n = D_CAT.filter(x=>x.familia_id===f.id).length + 1;
+  const cod = f.prefixo + '-' + String(n).padStart(4,'0');
+  D_CAT.push({id:'k'+Date.now(),codigo:cod,familia_id:f.id,familia:f.nome,familia_ordem:f.ordem,
+    descricao:p.p_descricao,marca:p.p_marca,modelo:p.p_modelo,unidade:'pc',
+    especificacoes:p.p_especificacoes,requer_calibracao:p.p_requer_calibracao,
+    requer_lacre:p.p_requer_lacre,fornecedor_padrao:p.p_fornecedor_padrao,
+    custo_referencia:p.p_custo_referencia,preco_referencia:p.p_preco_referencia,
+    observacoes:p.p_observacoes,ativo:true,vezes_usado:0});
+  return {status:'ok',codigo:cod};
+}
+function demoArquivarCat(it){ demoCat(); const x=D_CAT.find(y=>y.id===it.id); if(x) x.ativo=!x.ativo; }
+function demoExcluirCat(it){
+  demoCat();
+  if (it.vezes_usado) return {status:'recusado',
+    mensagem: it.codigo + ' já foi lançado em ' + it.vezes_usado + ' item(ns) de OS. Arquive em vez de excluir.'};
+  D_CAT = D_CAT.filter(y => y.id !== it.id);
+  return {status:'ok'};
+}
+
 const demoClientes = () => (demoCad(), D_CLI);
 const demoContatos = id => (demoCad(), D_CT.filter(x => x.cliente_id === id));
 const demoEquips   = id => (demoCad(), D_EQ.filter(x => x.cliente_id === id));
@@ -1700,6 +2127,7 @@ document.getElementById('sw').addEventListener('click', e => {
   const b = e.target.closest('button[data-q]'); if (!b) return;
   [...document.querySelectorAll('#sw button')].forEach(x => x.classList.toggle('on', x === b));
   if (b.dataset.q === 'cad'){ visao = 'cad'; pintarCadastros(); return; }
+  if (b.dataset.q === 'cat'){ visao = 'cat'; pintarCatalogo(); return; }
   visao = 'quadro'; quadro = b.dataset.q; pintar();
 });
 document.getElementById('btnNovaOS').addEventListener('click', modalNovaOS);
