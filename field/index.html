@@ -242,7 +242,53 @@ const uid = () => (crypto.randomUUID ? crypto.randomUUID()
 // ════════════════════════════════════════════════════════════════════════════
 // REDE — mesmo endurecimento do TFM
 // ════════════════════════════════════════════════════════════════════════════
-let sessao = LS.get(K_SESSAO, { token:null, nome:null, perfil:null, admin:false });
+let sessao = LS.get(K_SESSAO, { token:null, refresh:null, nome:null, perfil:null, admin:false });
+
+// ── RENOVAÇÃO DO TOKEN ──────────────────────────────────────────────────────
+// O token do Supabase vale ~1 hora. Em campo isso é pior que no escritório: o
+// inspetor está no meio da planta, com meia barra de sinal, e o app manda
+// "JWT expired" no momento de enviar o levantamento. O refresh_token troca o
+// token vencido por um novo sem pedir senha.
+let renovando = null;
+
+async function renovarToken(){
+  if (!sessao.refresh) return false;
+  if (renovando) return renovando;
+  renovando = (async () => {
+    try{
+      const r = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
+        method:'POST',
+        headers:{ apikey:SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
+        body: JSON.stringify({ refresh_token: sessao.refresh }),
+        signal: sinal(true)
+      });
+      const j = await r.json().catch(()=>null);
+      if (!r.ok || !j || !j.access_token) return false;
+      sessao.token = j.access_token;
+      if (j.refresh_token) sessao.refresh = j.refresh_token;
+      LS.set(K_SESSAO, sessao);
+      return true;
+    }catch(e){ return false; }
+    finally{ setTimeout(() => { renovando = null; }, 0); }
+  })();
+  return renovando;
+}
+
+const tokenVencido = e =>
+  e && (e.status === 401 || /jwt expired|invalid jwt|token.*expired|not authenticated/i.test(e.message||''));
+
+// Sem renovação possível: volta para o login. O RASCUNHO E A FILA FICAM —
+// nunca se apaga o que o inspetor lançou porque a sessão venceu.
+function sessaoExpirou(){
+  sessao = { token:null, refresh:null, nome:null, perfil:null, admin:false };
+  LS.set(K_SESSAO, sessao);
+  const lg = document.getElementById('login');
+  if (lg){
+    lg.hidden = false;
+    const er = document.getElementById('lgErr');
+    if (er) er.textContent = 'Sua sessão expirou. Entre de novo — o que você lançou está guardado.';
+  }
+}
 let conectado = false, reconT = null, reconP = 0;
 const BACKOFF = [5000,10000,20000,40000,60000];
 
@@ -265,6 +311,7 @@ function agendarRecon(){
 async function req(caminho, opts={}, tentativas=2){
   const escrita = (opts.method||'GET').toUpperCase() !== 'GET';
   let ultimo;
+  let jaRenovou = false;
   for (let i=0;i<=tentativas;i++){
     try{
       const r = await fetch(SUPABASE_URL + caminho, Object.assign({}, opts, {
@@ -283,6 +330,14 @@ async function req(caminho, opts={}, tentativas=2){
       if (!r.ok){
         const msg = (corpo && (corpo.message||corpo.error_description||corpo.error||corpo.hint)) || ('HTTP '+r.status);
         const err = new Error(msg); err.negocio = (r.status>=400 && r.status<500); err.status = r.status;
+
+        // sessão velha: renova UMA vez e repete. Vale também para o item na
+        // fila offline — ele volta a subir sozinho em vez de virar erro.
+        if (tokenVencido(err) && !jaRenovou && sessao.refresh){
+          jaRenovou = true;
+          if (await renovarToken()){ i--; continue; }
+          sessaoExpirou();
+        }
         throw err;
       }
       return corpo;
@@ -1359,6 +1414,7 @@ async function entrar(email, senha){
   const j = await r.json();
   if (!r.ok) throw new Error(j.error_description || j.msg || j.message || 'E-mail ou senha inválidos');
   sessao.token = j.access_token;
+  sessao.refresh = j.refresh_token || null;
   const eu = await get('usuarios?select=nome,perfil_id,perfis(is_admin)&limit=1');
   if (!eu || !eu.length) throw new Error('Login criado, mas você ainda não tem perfil no sistema. Fale com o Fernando.');
   sessao.nome = eu[0].nome; sessao.perfil = eu[0].perfil_id;

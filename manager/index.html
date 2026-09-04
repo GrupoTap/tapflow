@@ -439,7 +439,7 @@ function falhaDeRede(e){
 
 async function req(caminho, opts = {}, tentativas = 2){
   const escrita = (opts.method || 'GET').toUpperCase() !== 'GET';
-  let ultimo;
+  let ultimo, jaRenovou = false;
   for (let i = 0; i <= tentativas; i++){
     try{
       const s = sinal(escrita);
@@ -464,6 +464,14 @@ async function req(caminho, opts = {}, tentativas = 2){
         // erro de NEGÓCIO (o banco recusou): não retenta e não derruba o verde
         const msg = (corpo && (corpo.message || corpo.error_description || corpo.error || corpo.hint)) || ('HTTP ' + r.status);
         const err = new Error(msg); err.negocio = (r.status >= 400 && r.status < 500); err.status = r.status;
+
+        // token vencido não é erro de negócio nem de rede: é sessão velha.
+        // Renova UMA vez e repete a chamada — o usuário não percebe nada.
+        if (tokenVencido(err) && !jaRenovou && sessao.refresh){
+          jaRenovou = true;
+          if (await renovarToken()){ i--; continue; }
+          sessaoExpirou();
+        }
         throw err;
       }
       return corpo;
@@ -503,9 +511,59 @@ document.addEventListener('visibilitychange', () => {
 // SESSÃO
 // ════════════════════════════════════════════════════════════════════════════
 const SESSAO_KEY = 'tapflow_sessao';
-let sessao = { token:null, nome:null, email:null, perfil:null, admin:false };
+let sessao = { token:null, refresh:null, nome:null, email:null, perfil:null, admin:false };
+
+// ── RENOVAÇÃO DO TOKEN ──────────────────────────────────────────────────────
+// O token de acesso do Supabase vale cerca de 1 hora. Sem renovar, o app morre
+// no meio do expediente com "JWT expired" — e, pior, com os quadros vazios, que
+// parece perda de dado. O refresh_token existe justamente para isso: uma
+// chamada troca o token vencido por um novo, sem pedir senha de novo.
+//
+// A promessa é memoizada: se cinco requisições vencerem ao mesmo tempo, todas
+// esperam a MESMA renovação em vez de dispararem cinco.
+let renovando = null;
+
+async function renovarToken(){
+  if (!sessao.refresh) return false;
+  if (renovando) return renovando;
+  renovando = (async () => {
+    try{
+      const r = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
+        method:'POST',
+        headers:{ apikey: SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
+        body: JSON.stringify({ refresh_token: sessao.refresh }),
+        signal: sinal(true)
+      });
+      const j = await r.json().catch(()=>null);
+      if (!r.ok || !j || !j.access_token) return false;
+      sessao.token = j.access_token;
+      if (j.refresh_token) sessao.refresh = j.refresh_token;
+      salvarSessao();
+      return true;
+    }catch(e){ return false; }
+    finally{ setTimeout(() => { renovando = null; }, 0); }
+  })();
+  return renovando;
+}
+
+const tokenVencido = e =>
+  e && (e.status === 401 || /jwt expired|invalid jwt|token.*expired|not authenticated/i.test(e.message||''));
 
 function salvarSessao(){ try{ localStorage.setItem(SESSAO_KEY, JSON.stringify(sessao)); }catch(e){} }
+
+// Renovar falhou (refresh também venceu, ou a senha mudou): não adianta
+// insistir. Volta para o login dizendo o que houve, em vez de deixar a tela
+// vazia parecendo que os dados sumiram.
+function sessaoExpirou(){
+  sessao = { token:null, refresh:null, nome:null, email:null, perfil:null, admin:false };
+  salvarSessao();
+  const lg = document.getElementById('login');
+  if (lg){
+    lg.hidden = false;
+    const m = document.getElementById('lgErro');
+    if (m) m.textContent = 'Sua sessão expirou. Entre de novo.';
+  }
+}
 function lerSessao(){ try{ const r = localStorage.getItem(SESSAO_KEY); if(r) sessao = JSON.parse(r); }catch(e){} }
 
 async function entrar(email, senha){
@@ -518,6 +576,7 @@ async function entrar(email, senha){
   const j = await r.json();
   if (!r.ok) throw new Error(j.error_description || j.msg || j.message || 'E-mail ou senha inválidos');
   sessao.token = j.access_token;
+  sessao.refresh = j.refresh_token || null;
   const eu = await get('usuarios?select=nome,email,perfil_id,perfis(is_admin)&limit=1');
   if (!eu || !eu.length)
     throw new Error('Login existe, mas você não está na tabela usuarios — veja o Passo 3b do guia.');
