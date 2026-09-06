@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S7</title>
+<title>TapFlow Field · S8</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -111,6 +111,13 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
   box-shadow:var(--sh);margin-bottom:10px;display:block;
 }
 .osCard.outro{border-left-color:var(--rule)}
+/* O cartão do roteiro se distingue por ÊNFASE, não por outra cor de marca:
+   inventar uma terceira cor faria o inspetor decorar mais um código. */
+.osCard.doDia{border-left-width:6px}
+.osCard.atrasadaDia{border-left-color:var(--crit)}
+.osCard[disabled]{opacity:.55}
+.chip.urg{background:var(--crit-soft);color:var(--crit)}
+.chip.atr{background:var(--crit-soft);color:var(--crit)}
 .osCard .n{font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.03em}
 .osCard .c{font-size:17px;font-weight:600;line-height:1.25;margin:3px 0 7px}
 .osCard .t{font-size:13.5px;color:var(--ink-2);display:flex;gap:6px;align-items:flex-start}
@@ -187,6 +194,15 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 .itemCat:active{background:var(--accent-soft);border-color:var(--accent)}
 .itemCat b{display:block;font-size:15px;font-weight:600;line-height:1.3}
 .itemCat small{display:block;font-size:12.5px;color:var(--ink-3);margin-top:3px;line-height:1.35}
+/* A foto entra ao lado, e a linha NÃO muda de altura quando ela chega: o
+   quadrado já está reservado. Lista que pula enquanto carrega faz o dedo
+   errar o item — e em campo o dedo já erra o suficiente com luva. */
+.itemCat.comFoto{display:flex;gap:12px;align-items:center}
+.itemCat .fotoP{width:56px;height:56px;flex:0 0 auto;border-radius:5px;
+  border:1px solid var(--rule);background:var(--surface-2);overflow:hidden;
+  display:flex;align-items:center;justify-content:center}
+.itemCat .fotoP img{width:100%;height:100%;object-fit:cover;display:block}
+.itemCat .txtP{flex:1;min-width:0}
 .doCatalogo{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--accent-soft);
   border-radius:5px;padding:11px 13px;margin-bottom:14px;font-size:13.5px;color:var(--accent)}
 .doCatalogo b{font-weight:700}
@@ -286,7 +302,7 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S7';
+const APP_VERSION = 'S8';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
 // rodando outra, e é o número que eu peço quando algo dá errado
@@ -715,7 +731,14 @@ async function carregar(silencioso){
   if (DEMO){ listaOS = demoLista(); setConn('ok','demo'); if(tela==='lista') pintarLista(); return; }
   if (!silencioso) setConn('sync','carregando…');
   try{
-    listaOS = await get('v_os_campo?select=*&order=coluna_ordem,numero');
+    // As duas juntas: a lista de OS do campo e o ROTEIRO de hoje desta pessoa.
+    // O roteiro não substitui a lista — ele diz por onde começar.
+    const [lst, dia] = await Promise.all([
+      get('v_os_campo?select=*&order=coluna_ordem,numero'),
+      get('v_meu_dia?select=*').catch(() => [])   // sem roteiro, o app segue igual
+    ]);
+    listaOS = lst || [];
+    MEU_DIA = dia || [];
     falhaCarga = null;
     pararRecon(); setConn('ok','conectado');
     if (tela === 'lista') pintarLista();
@@ -757,16 +780,114 @@ function pintarLista(){
     return;
   }
 
-  const minhas = listaOS.filter(o => o.minha);
-  const outras = listaOS.filter(o => !o.minha);
+  // O roteiro vem primeiro e leva as OS dele para fora dos outros blocos: a
+  // mesma OS aparecendo em "Hoje" e em "Para você" faz a pessoa achar que são
+  // duas coisas diferentes.
+  let noDia = new Set();
+  try{ noDia = new Set((MEU_DIA || []).map(t => t.os_id)); }catch(e){ noDia = new Set(); }
+  const minhas = listaOS.filter(o => o.minha  && !noDia.has(o.os_id));
+  const outras = listaOS.filter(o => !o.minha && !noDia.has(o.os_id));
+
   const bloco = (titulo, arr, outro) => {
     if (!arr.length) return;
     const h = document.createElement('div'); h.className = 'sec'; h.textContent = titulo;
     m.appendChild(h);
     arr.forEach(o => m.appendChild(cardOS(o, outro)));
   };
+
+  // O roteiro é um ACRÉSCIMO: se ele quebrar, a lista de OS ainda tem que
+  // aparecer. Sem esta trava, um erro dentro do roteiro deixava a tela com o
+  // título "Hoje" e mais nada — e o `.catch(()=>pintarLista())` do boot
+  // engolia o erro, então nem no console aparecia. Foi assim que um dataBR
+  // que faltava virou tela em branco no teste.
+  try{ pintarMeuDia(m); }
+  catch(e){
+    console.error('[roteiro]', e);
+    const av = document.createElement('div');
+    av.className = 'sec'; av.textContent = 'Roteiro de hoje indisponível';
+    m.appendChild(av);
+  }
   bloco('Para você', minhas, false);
   bloco('Da equipe', outras, true);
+}
+
+/* ── O ROTEIRO DE HOJE ──────────────────────────────────────────────────────
+   O que o escritório marcou para esta pessoa, para hoje ou para antes.
+   Tarefa de ontem não resolvida CONTINUA aqui: roteiro que se limpa sozinho à
+   meia-noite esconde justamente o que atrasou.
+
+   A ordem: o que já foi começado primeiro (termine antes de pegar outra), depois
+   o que ficou de trás, depois quem vence antes, e a prioridade só desempata. */
+let MEU_DIA = [];
+
+/* Data pura (YYYY-MM-DD) ganha T12:00 antes de virar Date. Sem isso,
+   `new Date('2026-09-06')` é meia-noite UTC, que em Brasília ainda é dia 5 — e
+   o roteiro mostraria "era 05/09" para uma tarefa marcada no dia 6. O Manager
+   já tinha essa função; o Field não, e o teste de tela pegou. */
+const dataBR = d => {
+  if (!d) return new Date().toLocaleDateString('pt-BR');
+  const t = String(d);
+  return new Date(/^\d{4}-\d{2}-\d{2}$/.test(t) ? t + 'T12:00' : t).toLocaleDateString('pt-BR');
+};
+
+function ordemDoDia(a, b){
+  const ca = a.ja_comecou ? 1 : 0, cb = b.ja_comecou ? 1 : 0;
+  if (ca !== cb) return cb - ca;
+  const aa = a.atrasada_no_roteiro ? 1 : 0, ab = b.atrasada_no_roteiro ? 1 : 0;
+  if (aa !== ab) return ab - aa;
+  const da = a.dias_restantes == null ?  9999 : Number(a.dias_restantes);
+  const db = b.dias_restantes == null ?  9999 : Number(b.dias_restantes);
+  if (da !== db) return da - db;
+  return Number(b.prioridade_rank || 1) - Number(a.prioridade_rank || 1);
+}
+
+function pintarMeuDia(m){
+  const itens = (MEU_DIA || []).slice().sort(ordemDoDia);
+  if (!itens.length) return;
+
+  const total = itens.reduce((s,t) => s + Number(t.tempo_estimado_min || 0), 0);
+  const semEst = itens.filter(t => !t.tempo_estimado_min).length;
+
+  const h = document.createElement('div');
+  h.className = 'sec';
+  h.textContent = 'Hoje · ' + itens.length + (itens.length > 1 ? ' tarefas' : ' tarefa')
+    + (total ? ' · ' + (total >= 60 ? (Math.round(total/6)/10) + 'h' : total + 'min') : '')
+    + (semEst ? ' (+' + semEst + ' sem estimativa)' : '');
+  m.appendChild(h);
+
+  itens.forEach(t => {
+    const os = listaOS.find(o => o.os_id === t.os_id);
+    const b = document.createElement('button');
+    b.className = 'osCard doDia' + (t.atrasada_no_roteiro ? ' atrasadaDia' : '');
+    b.type = 'button';
+
+    const chips = [];
+    if (t.ja_comecou) chips.push('<span class="chip eu">você começou</span>');
+    if (t.atrasada_no_roteiro)
+      chips.push('<span class="chip atr">era ' + dataBR(t.data_prevista) + '</span>');
+    if (Number(t.prioridade_rank) >= 3) chips.push('<span class="chip urg">🔴 urgente</span>');
+    if (t.dias_restantes != null){
+      const d = Number(t.dias_restantes);
+      chips.push('<span class="chip' + (d < 0 ? ' atr' : '') + '">'
+        + (d < 0 ? Math.abs(d) + 'd de atraso' : d === 0 ? 'vence hoje' : 'faltam ' + d + 'd')
+        + '</span>');
+    }
+    if (t.tempo_estimado_min)
+      chips.push('<span class="chip">' + (t.tempo_estimado_min >= 60
+        ? (Math.round(t.tempo_estimado_min/6)/10) + 'h' : t.tempo_estimado_min + 'min') + '</span>');
+
+    b.innerHTML = '<div class="n mono"></div><div class="c"></div>' +
+      '<div class="t"><span>›</span><span class="tn"></span></div>' +
+      '<div class="chips">' + chips.join('') + '</div>';
+    b.querySelector('.n').textContent  = t.os_numero;
+    b.querySelector('.c').textContent  = t.cliente;
+    b.querySelector('.tn').textContent = t.tarefa || '—';
+    // Sem a OS na lista do campo (tarefa administrativa, por exemplo) o cartão
+    // ainda aparece — só não abre. Sumir seria pior: a pessoa fica sem saber.
+    if (os) b.addEventListener('click', () => abrirOS(os));
+    else { b.disabled = true; b.title = 'Esta etapa não é de campo — é no escritório.'; }
+    m.appendChild(b);
+  });
 }
 
 function cardOS(o, outro){
@@ -1121,19 +1242,86 @@ async function sincronizarCatalogo(){
     if (h && h === CAT.hash && CAT.itens.length) return;   // nada mudou
 
     const [itens, familias] = await Promise.all([
+      // tem_foto e foto_versao são baratos e viajam com a lista; a IMAGEM não.
+      // 300 miniaturas dentro do catálogo estouram o localStorage (~5 MB) e o
+      // app fica sem catálogo nenhum em campo — que é o pior resultado possível.
       get('v_catalogo?select=id,codigo,familia_id,familia,familia_ordem,descricao,marca,modelo,'
-        + 'unidade,requer_calibracao,requer_lacre,especificacoes&ativo=is.true&order=familia_ordem,codigo'),
+        + 'unidade,requer_calibracao,requer_lacre,especificacoes,tem_foto,foto_versao'
+        + '&ativo=is.true&order=familia_ordem,codigo'),
       get('catalogo_familias?select=id,nome_plural,ordem,icone&ativo=is.true&order=ordem')
     ]);
     CAT = { hash: h, itens: itens || [], familias: familias || [] };
     if (!LS.set(K_CAT, CAT))
       toast('Catálogo carregado, mas não coube no aparelho — vai precisar de sinal.', 'err');
+    // Em segundo plano, e sem await: a lista de peças nunca espera por foto.
+    sincronizarFotos().catch(()=>{});
   }catch(e){
     // sem rede: segue com o que estava guardado. Não é erro que mereça alarme.
   }
 }
 
 const catalogoPronto = () => CAT.itens && CAT.itens.length > 0;
+
+/* ── FOTOS DAS PEÇAS ────────────────────────────────────────────────────────
+   A foto ajuda a reconhecer a FAMÍLIA de olho — purgador, tipo de conexão,
+   mostrador do manômetro. Quem decide continua sendo a medida e o código:
+   válvula 1" e 1½" são a mesma foto.
+
+   As miniaturas moram no IndexedDB, onde as fotos do levantamento já moram, e
+   NÃO no localStorage junto do catálogo — lá elas estourariam os ~5 MB e o app
+   ficaria sem catálogo em campo.
+
+   Regra que vale mais que o código: item sem foto mostra espaço vazio. Nunca
+   herda a foto do vizinho de família — foto de outro modelo faz escolher errado
+   com confiança, que é pior do que escolher errado na dúvida. */
+const FOTO_MEM = {};                 // item_id → data URI já lida do IndexedDB
+const kFoto = id => 'catfoto:' + id;
+
+/** Lê a miniatura do aparelho. Sem rede, sem espera: ou tem, ou não tem. */
+async function fotoPeca(id){
+  if (FOTO_MEM[id] !== undefined) return FOTO_MEM[id];
+  try{
+    const r = await IDB.get(kFoto(id));
+    FOTO_MEM[id] = (r && r.thumb) || null;
+  }catch(e){ FOTO_MEM[id] = null; }
+  return FOTO_MEM[id];
+}
+
+/** Busca as miniaturas que faltam, em lotes pequenos, sem travar nada.
+ *  Um lote por vez e com pausa: numa planta com meia barra de sinal, 300
+ *  imagens de uma vez derrubam a conexão que o envio do levantamento precisa. */
+async function sincronizarFotos(){
+  if (DEMO) return;
+  const comFoto = (CAT.itens || []).filter(i => i.tem_foto);
+  const faltam = [];
+  for (const i of comFoto){
+    let g = null;
+    try{ g = await IDB.get(kFoto(i.id)); }catch(e){}
+    if (!g || g.versao !== i.foto_versao) faltam.push(i);
+  }
+  // Item que perdeu a foto no servidor (trocou de modelo) some do aparelho também.
+  for (const i of (CAT.itens || [])){
+    if (i.tem_foto) continue;
+    try{ if (await IDB.get(kFoto(i.id))) { await IDB.del(kFoto(i.id)); delete FOTO_MEM[i.id]; } }catch(e){}
+  }
+  const LOTE = 20;
+  for (let k = 0; k < faltam.length; k += LOTE){
+    const lote = faltam.slice(k, k + LOTE);
+    let linhas;
+    try{
+      linhas = await get('catalogo_fotos?select=item_id,thumb&item_id=in.('
+                         + lote.map(x => x.id).join(',') + ')');
+    }catch(e){ return; }          // sem rede: fica para a próxima sincronização
+    const ver = {}; lote.forEach(x => ver[x.id] = x.foto_versao);
+    for (const l of (linhas || [])){
+      try{
+        await IDB.put(kFoto(l.item_id), { thumb: l.thumb, versao: ver[l.item_id] || '' });
+        FOTO_MEM[l.item_id] = l.thumb;
+      }catch(e){ return; }        // aparelho cheio: para de tentar, não alarma
+    }
+    await new Promise(r => setTimeout(r, 120));
+  }
+}
 
 // ── o seletor ───────────────────────────────────────────────────────────────
 // Uma tela inteira, não um <select>: em campo, com luva e sol na tela, lista
@@ -1189,14 +1377,23 @@ function abrirSeletorCatalogo(aoEscolher){
     }
     achados.slice(0, 80).forEach(i => {
       const d = document.createElement('button');
-      d.type = 'button'; d.className = 'itemCat';
-      d.innerHTML = '<b></b><small></small>';
+      d.type = 'button'; d.className = 'itemCat' + (i.tem_foto ? ' comFoto' : '');
+      d.innerHTML = (i.tem_foto ? '<span class="fotoP"></span>' : '')
+                  + '<span class="txtP"><b></b><small></small></span>';
       d.querySelector('b').textContent = i.descricao;
       const p = [i.codigo];
       if (i.marca || i.modelo) p.push([i.marca,i.modelo].filter(Boolean).join(' '));
       const e = i.especificacoes || {};
       Object.keys(e).slice(0,3).forEach(k => p.push(String(e[k])));
       d.querySelector('small').textContent = p.join(' · ');
+      if (i.tem_foto){
+        const cx = d.querySelector('.fotoP');
+        fotoPeca(i.id).then(src => {
+          if (!src || !cx.isConnected) return;
+          const im = document.createElement('img');
+          im.src = src; im.alt = ''; cx.appendChild(im);
+        }).catch(()=>{});
+      }
       d.addEventListener('click', () => aoEscolher(i));
       el.appendChild(d);
     });
