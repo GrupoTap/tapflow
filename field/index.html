@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S8</title>
+<title>TapFlow Field · S9</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -116,8 +116,24 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 .osCard.doDia{border-left-width:6px}
 .osCard.atrasadaDia{border-left-color:var(--crit)}
 .osCard[disabled]{opacity:.55}
+/* Mesmas duas cores do Manager para os mesmos dois fatos: atraso é vermelho,
+   risco é âmbar. O mesmo time olha as duas telas. */
 .chip.urg{background:var(--crit-soft);color:var(--crit)}
 .chip.atr{background:var(--crit-soft);color:var(--crit)}
+.chip.alt{background:var(--warn-soft);color:var(--warn)}
+.chip.risc{background:var(--warn-soft);color:var(--warn)}
+.osCard.sitAtr{border-left-color:var(--crit)}
+.osCard.sitRis{border-left-color:var(--warn)}
+.semAbrir{font-size:12px;color:var(--ink-3);margin-top:7px;padding-top:7px;
+  border-top:1px dashed var(--rule)}
+.fotoZoom{position:fixed;inset:0;background:rgba(10,20,30,.82);z-index:90;display:flex;
+  align-items:center;justify-content:center;padding:18px}
+.fotoZoom .fzBox{background:var(--surface);border-radius:10px;padding:14px;max-width:420px;width:100%}
+.fotoZoom img{width:100%;height:auto;border-radius:6px;display:block;
+  image-rendering:auto;background:var(--surface-2)}
+.fotoZoom p{font-size:13.5px;margin:10px 0;line-height:1.35}
+.fotoZoom .btn{width:100%}
+.itemCat .fotoP{cursor:zoom-in}
 .osCard .n{font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.03em}
 .osCard .c{font-size:17px;font-weight:600;line-height:1.25;margin:3px 0 7px}
 .osCard .t{font-size:13.5px;color:var(--ink-2);display:flex;gap:6px;align-items:flex-start}
@@ -302,7 +318,7 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S8';
+const APP_VERSION = 'S9';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
 // rodando outra, e é o número que eu peço quando algo dá errado
@@ -728,7 +744,8 @@ let execForm = null;  // item aberto no formulario, ou 'fim' na conferencia
 // CARREGAR
 // ════════════════════════════════════════════════════════════════════════════
 async function carregar(silencioso){
-  if (DEMO){ listaOS = demoLista(); setConn('ok','demo'); if(tela==='lista') pintarLista(); return; }
+  if (DEMO){ listaOS = demoLista(); MEU_DIA = demoMeuDia(); setConn('ok','demo');
+             if(tela==='lista') pintarLista(); return; }
   if (!silencioso) setConn('sync','carregando…');
   try{
     // As duas juntas: a lista de OS do campo e o ROTEIRO de hoje desta pessoa.
@@ -754,6 +771,43 @@ async function carregar(silencioso){
 // ════════════════════════════════════════════════════════════════════════════
 // TELA: LISTA
 // ════════════════════════════════════════════════════════════════════════════
+/** O roteiro em modo demonstração. Sem isto, abrir o arquivo por duplo clique
+ *  mostrava um Field sem o "Hoje" — ou seja, sem a novidade da rodada. */
+function demoMeuDia(){
+  const hoje = new Date();
+  const iso = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0')
+                 + '-' + String(d.getDate()).padStart(2,'0');
+  const ontem = new Date(hoje.getTime() - 2*86400000);
+  return [
+    { os_id:'d2', os_numero:'OS-2026-102', cliente:'Farmax Ind. Farmacêutica',
+      tarefa_id:'T02', tarefa:'Executar levantamento', fase:'Em campo', status:'em_andamento',
+      executor:'campo', tempo_estimado_min:180, data_prevista:iso(ontem), alerta_dias:3,
+      prioridade:'urgente', prioridade_rank:3, prazo_saida:iso(hoje), dias_restantes:0,
+      atrasada_no_roteiro:true, ja_comecou:true },
+    { os_id:'d1', os_numero:'OS-2026-101', cliente:'Gerdau — Divinópolis',
+      tarefa_id:'T01', tarefa:'Aceitar OS e deslocar', fase:'Aberta', status:'pendente',
+      executor:'campo', tempo_estimado_min:30, data_prevista:iso(hoje), alerta_dias:2,
+      prioridade:'normal', prioridade_rank:1, prazo_saida:null, dias_restantes:null,
+      atrasada_no_roteiro:false, ja_comecou:false },
+  ];
+}
+
+/** Amplia a miniatura. É a que está no aparelho — funciona sem sinal, que é
+ *  o único jeito que serve dentro de uma planta. */
+function ampliarFoto(src, titulo){
+  const w = document.createElement('div');
+  w.className = 'fotoZoom';
+  w.innerHTML = '<div class="fzBox"><img alt=""><p></p>'
+              + '<button type="button" class="btn">Fechar</button></div>';
+  w.querySelector('img').src = src;
+  w.querySelector('img').alt = 'Foto de ' + (titulo || 'peça');
+  w.querySelector('p').textContent = titulo || '';
+  const fecha = () => w.remove();
+  w.addEventListener('click', e => { if (e.target === w) fecha(); });
+  w.querySelector('button').addEventListener('click', fecha);
+  document.body.appendChild(w);
+}
+
 function pintarLista(){
   tela = 'lista'; atual = null; coleta = null;
   document.getElementById('btnBack').hidden = true;
@@ -820,6 +874,15 @@ function pintarLista(){
    o que ficou de trás, depois quem vence antes, e a prioridade só desempata. */
 let MEU_DIA = [];
 
+/** 90 → "1h30". A MESMA função do Manager: o mesmo número tinha duas caras
+ *  ("1h30" lá, "1.5h" aqui), e é o mesmo time olhando as duas telas. */
+function minHora(m){
+  m = Number(m || 0);
+  if (!m) return '—';
+  const h = Math.floor(m / 60), r = m % 60;
+  return h ? (h + 'h' + (r ? String(r).padStart(2,'0') : '')) : (r + 'min');
+}
+
 /* Data pura (YYYY-MM-DD) ganha T12:00 antes de virar Date. Sem isso,
    `new Date('2026-09-06')` é meia-noite UTC, que em Brasília ainda é dia 5 — e
    o roteiro mostraria "era 05/09" para uma tarefa marcada no dia 6. O Manager
@@ -851,7 +914,7 @@ function pintarMeuDia(m){
   const h = document.createElement('div');
   h.className = 'sec';
   h.textContent = 'Hoje · ' + itens.length + (itens.length > 1 ? ' tarefas' : ' tarefa')
-    + (total ? ' · ' + (total >= 60 ? (Math.round(total/6)/10) + 'h' : total + 'min') : '')
+    + (total ? ' · ' + minHora(total) : '')
     + (semEst ? ' (+' + semEst + ' sem estimativa)' : '');
   m.appendChild(h);
 
@@ -873,8 +936,7 @@ function pintarMeuDia(m){
         + '</span>');
     }
     if (t.tempo_estimado_min)
-      chips.push('<span class="chip">' + (t.tempo_estimado_min >= 60
-        ? (Math.round(t.tempo_estimado_min/6)/10) + 'h' : t.tempo_estimado_min + 'min') + '</span>');
+      chips.push('<span class="chip">' + minHora(t.tempo_estimado_min) + '</span>');
 
     b.innerHTML = '<div class="n mono"></div><div class="c"></div>' +
       '<div class="t"><span>›</span><span class="tn"></span></div>' +
@@ -885,18 +947,38 @@ function pintarMeuDia(m){
     // Sem a OS na lista do campo (tarefa administrativa, por exemplo) o cartão
     // ainda aparece — só não abre. Sumir seria pior: a pessoa fica sem saber.
     if (os) b.addEventListener('click', () => abrirOS(os));
-    else { b.disabled = true; b.title = 'Esta etapa não é de campo — é no escritório.'; }
+    else {
+      // `disabled` + `title` num app de celular = cartão cinza sem explicação:
+      // celular não tem hover e elemento desabilitado não recebe foco.
+      b.disabled = true;
+      const av = document.createElement('div');
+      av.className = 'semAbrir';
+      av.textContent = 'Etapa do escritório — não abre aqui.';
+      b.appendChild(av);
+    }
     m.appendChild(b);
   });
 }
 
 function cardOS(o, outro){
   const b = document.createElement('button');
-  b.className = 'osCard' + (outro ? ' outro' : '');
+  b.className = 'osCard' + (outro ? ' outro' : '')
+    + (o.situacao === 'atrasada' ? ' sitAtr' : o.situacao === 'risco' ? ' sitRis' : '');
   b.type = 'button';
   const naFila = filaLer().some(e => e.osId === o.os_id);
   const chips = [];
   if (naFila) chips.push('<span class="chip fila">na fila de envio</span>');
+  // A urgência e o prazo estavam SÓ no roteiro. Uma OS urgente ainda não
+  // agendada — justamente a que o escritório precisa que alguém pegue — chegava
+  // ao campo idêntica a qualquer outra.
+  if (Number(o.prioridade_rank) >= 3) chips.push('<span class="chip urg">🔴 urgente</span>');
+  else if (Number(o.prioridade_rank) === 2) chips.push('<span class="chip alt">alta</span>');
+  if (o.dias_restantes != null){
+    const d = Number(o.dias_restantes);
+    if (d < 0)       chips.push('<span class="chip atr">' + Math.abs(d) + 'd de atraso</span>');
+    else if (d === 0) chips.push('<span class="chip atr">vence hoje</span>');
+    else if (d <= 2)  chips.push('<span class="chip risc">faltam ' + d + 'd</span>');
+  }
   if (o.tarefa_atual_lock) chips.push('<span class="chip eu">assumida</span>');
   chips.push('<span class="chip">' + o.coluna + '</span>');
   if (o.dias_na_coluna != null) chips.push('<span class="chip">' + o.dias_na_coluna + 'd</span>');
@@ -1317,7 +1399,16 @@ async function sincronizarFotos(){
       try{
         await IDB.put(kFoto(l.item_id), { thumb: l.thumb, versao: ver[l.item_id] || '' });
         FOTO_MEM[l.item_id] = l.thumb;
-      }catch(e){ return; }        // aparelho cheio: para de tentar, não alarma
+      }catch(e){
+        // Aparelho cheio: para de tentar — mas AVISA uma vez. Antes, o técnico
+        // via quadrados vazios para sempre sem jeito de saber por quê, e o app
+        // já sabe avisar disso em outros pontos.
+        if (!sincronizarFotos._avisou){
+          sincronizarFotos._avisou = true;
+          toast('Sem espaço no aparelho para as fotos das peças. A lista funciona sem elas.', 'err');
+        }
+        return;
+      }
     }
     await new Promise(r => setTimeout(r, 120));
   }
@@ -1391,7 +1482,13 @@ function abrirSeletorCatalogo(aoEscolher){
         fotoPeca(i.id).then(src => {
           if (!src || !cx.isConnected) return;
           const im = document.createElement('img');
-          im.src = src; im.alt = ''; cx.appendChild(im);
+          im.src = src; im.alt = 'Foto de ' + (i.descricao || 'peça');
+          cx.appendChild(im);
+          // Tocar no QUADRADO amplia; tocar no resto da linha escolhe a peça.
+          // Sem o stopPropagation, olhar a foto de perto lançaria o item.
+          cx.setAttribute('role','button');
+          cx.setAttribute('aria-label','Ampliar a foto');
+          cx.addEventListener('click', ev => { ev.stopPropagation(); ampliarFoto(src, i.descricao); });
         }).catch(()=>{});
       }
       d.addEventListener('click', () => aoEscolher(i));
@@ -2107,9 +2204,12 @@ function demoSeed(){
          : cal ? 'precisa do número do certificado'
          : lac ? 'precisa do número do lacre' : null });
   DB = {
-    d1:{ meta:{os_id:'d1',numero:'OS-2026-0007',cliente:'Gerdau — Divinópolis',dias:1}, tarefas:avancar(modelo(),'T01') },
-    d2:{ meta:{os_id:'d2',numero:'OS-2026-0006',cliente:'Fundição Santana',dias:0},     tarefas:avancar(modelo(),'T02') },
-    d3:{ meta:{os_id:'d3',numero:'OS-2026-0005',cliente:'Uau Ingleza',dias:2},          tarefas:avancar(modelo(),'T03') },
+    d1:{ meta:{os_id:'d1',numero:'OS-2026-0007',cliente:'Gerdau — Divinópolis',dias:1,
+               prioridade:'urgente', dias_restantes:0, situacao:'risco'}, tarefas:avancar(modelo(),'T01') },
+    d2:{ meta:{os_id:'d2',numero:'OS-2026-0006',cliente:'Fundição Santana',dias:0,
+               dias_restantes:-2, situacao:'atrasada'},                   tarefas:avancar(modelo(),'T02') },
+    d3:{ meta:{os_id:'d3',numero:'OS-2026-0005',cliente:'Uau Ingleza',dias:2,
+               prioridade:'alta', dias_restantes:6, situacao:'ok'},        tarefas:avancar(modelo(),'T03') },
     d4:{ meta:{os_id:'d4',numero:'OS-2026-0003',cliente:'Farmax — Divinópolis',dias:0},
          tarefas: modeloF2(),
          execItens: [
@@ -2135,7 +2235,14 @@ function demoLista(){
       tarefa_atual_id:a.tarefa_id, tarefa_atual:a.nome, tarefa_atual_tipo:a.tipo,
       tarefa_atual_status:a.status, tarefa_atual_perfis:a.perfis_responsaveis,
       tarefa_atual_lock:a.lock_por, minha:true,
-      tarefas_na_coluna:naFase.length, dias_na_coluna:meta.dias };
+      tarefas_na_coluna:naFase.length, dias_na_coluna:meta.dias,
+      // Os campos do S13 também na demonstração: sem eles o cartão de exemplo
+      // não mostra urgência nem prazo, e a demo aprova uma tela que não é a real.
+      prioridade: meta.prioridade || 'normal',
+      prioridade_rank: meta.prioridade === 'urgente' ? 3 : meta.prioridade === 'alta' ? 2 : 1,
+      prazo_saida: meta.prazo || null,
+      dias_restantes: meta.dias_restantes == null ? null : meta.dias_restantes,
+      situacao: meta.situacao || 'ok' };
   }).filter(Boolean);
 }
 const demoTarefas = id => (DB || (demoSeed(), DB))[id].tarefas;

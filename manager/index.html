@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S13</title>
+<title>TapFlow Manager · S14</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all';this.onload=null">
@@ -231,7 +231,10 @@ main.rolaY{overflow-y:auto}
 }
 .chip.prog{background:var(--accent-soft);color:var(--accent);border-color:transparent}
 .chip.travada{background:var(--crit-soft);color:var(--crit);border-color:transparent}
-.chip.atras{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+/* Atraso é vermelho, risco é âmbar. Eram idênticos, e no card "5d de atraso"
+   ficava com a mesma cor de "faltam 2d" — dois fatos diferentes, um só sinal.
+   O Field usa as mesmas duas cores para os mesmos dois fatos. */
+.chip.atras{background:var(--crit-soft);color:var(--crit);border-color:transparent}
 .chip.lock{background:var(--gestao-soft);color:var(--gestao);border-color:transparent}
 .chip.urg{background:var(--crit-soft);color:var(--crit);border-color:transparent}
 .chip.altaP{background:var(--warn-soft);color:var(--warn);border-color:transparent}
@@ -241,6 +244,12 @@ main.rolaY{overflow-y:auto}
    prazo ficaria igual a uma OS normal atrasada — e são problemas diferentes. */
 .card.sit-atrasada{border-left-color:var(--crit)}
 .card.sit-risco{border-left-color:var(--warn)}
+/* ⚠ Estas DUAS últimas vêm depois de propósito: `travada` e `atrasada` são
+   estados mais graves que "risco de prazo", e como a especificidade é a mesma
+   quem estiver por último no arquivo vence. Antes, uma OS TRAVADA com prazo a
+   dois dias ficava âmbar — a borda mentia. */
+.card.atrasada{border-left-color:var(--warn)}
+.card.travada{border-left-color:var(--crit)}
 .card.urgente{box-shadow:inset 3px 0 0 -1px var(--crit), var(--shadow)}
 
 /* ── faixa de prazo e prioridade na gaveta ─────────────────────────────── */
@@ -256,6 +265,14 @@ main.rolaY{overflow-y:auto}
 .tkDes{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink-3);
   margin:5px 0 0 30px;padding-top:5px;border-top:1px dashed var(--rule-2)}
 .tkDes i{color:var(--ink-3);opacity:.75}
+.histL{display:flex;flex-direction:column;gap:2px}
+.histI{border-left:2px solid var(--rule);padding:8px 0 8px 11px;position:relative}
+.histI:before{content:'';position:absolute;left:-4px;top:13px;width:6px;height:6px;
+  border-radius:50%;background:var(--accent)}
+.histT{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent-ink);
+  font-weight:700}
+.histD{font-size:13px;margin-top:1px;line-height:1.4}
+.histQ{font-size:11.5px;color:var(--ink-3);margin-top:2px}
 
 /* ── agenda da equipe ──────────────────────────────────────────────────── */
 .agGrade{overflow-x:auto;border:1px solid var(--rule);border-radius:5px;background:var(--surface)}
@@ -275,6 +292,12 @@ main.rolaY{overflow-y:auto}
 .agCel.cheio .agH{color:var(--crit);font-weight:600}
 .agCel.quase .agH{color:var(--warn)}
 .agSem{font-size:10.5px;color:var(--warn)}
+.agCel.temItens{cursor:pointer}
+.agCel.temItens:hover{background:var(--accent-soft)}
+.agCel.temItens:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.agNav{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+.agNav .btn.mini{margin-left:0}
+.agNav span{font-size:12.5px;color:var(--ink-3)}
 
 /* ── foto do item de catálogo ──────────────────────────────────────────── */
 .fotoCat{width:56px;height:56px;object-fit:cover;border-radius:4px;border:1px solid var(--rule);
@@ -806,7 +829,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S13';
+const APP_VERSION = 'S14';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -1262,14 +1285,23 @@ const PRIO_ROT = { urgente:'urgente', alta:'alta', normal:'' };
  *  Prazo sem procedência vira crença: ninguém sabe se aquele 05/08 é promessa
  *  de alguém ou meta de contrato, e os dois se discute de um jeito diferente. */
 function chipPrazo(c){
-  if (!c.prazo_saida || c.dias_restantes == null) return '';
+  // Sem prazo NENHUM não é silêncio: a OS aparece marcada "sem meta", e o chip
+  // aponta para o que falta cadastrar. Card mudo faz o problema passar batido.
+  if (!c.prazo_saida || c.dias_restantes == null){
+    if (c.encerrada) return '';
+    return '<span class="chip" title="Sem data prevista e sem meta no tipo de OS">sem meta</span>';
+  }
   const d = Number(c.dias_restantes);
-  const de = c.prazo_origem === 'digitado' ? 'prazo digitado por alguém do escritório'
-           : c.prazo_origem === 'meta_do_tipo' ? 'meta do tipo de OS (não foi digitado)'
-           : 'sem procedência';
+  // ⚠ A procedência e a data ficam NO TEXTO, não só no `title`: celular não tem
+  // hover, e é no celular que a fila é varrida. O título continua, para quem
+  // usa mouse — mas ele nunca é o único lugar onde a informação existe.
+  const de = c.prazo_origem === 'digitado' ? 'digitado' : 'meta';
   const cls = d < 0 ? ' atras' : d <= 2 ? ' risco' : '';
   const txt = d < 0 ? Math.abs(d) + 'd de atraso' : d === 0 ? 'vence hoje' : 'faltam ' + d + 'd';
-  return '<span class="chip' + cls + '" title="' + esc(dataBR(c.prazo_saida) + ' — ' + de) + '">📅 ' + txt + '</span>';
+  const dica = c.prazo_origem === 'digitado' ? 'prazo digitado por alguém do escritório'
+             : 'meta do tipo de OS — ninguém digitou esta data';
+  return '<span class="chip' + cls + '" title="' + esc(dataBR(c.prazo_saida) + ' — ' + dica) + '">📅 '
+       + esc(dataBR(c.prazo_saida).slice(0,5)) + ' · ' + txt + ' · ' + de + '</span>';
 }
 
 function cardEl(c){
@@ -1377,12 +1409,13 @@ async function abrirOS(c){
 function montarTabsOS(){
   const t = document.getElementById('dTabs');
   t.innerHTML = [['tarefas','Tarefas'],['itens','Itens'],['proposta','Proposta'],
-                 ['custos','Custos'],['arquivos','Arquivos']]
+                 ['custos','Custos'],['arquivos','Arquivos'],['hist','Histórico']]
     .map(([k,r]) => '<button type="button" data-t="' + k + '"'
       + (abaDrawer === k ? ' class="on"' : '') + '>' + r + '</button>').join('');
 }
 
 function pintarDrawer(){
+  if (abaDrawer === 'hist')     return pintarHistorico();
   if (abaDrawer === 'itens')    return pintarItens();
   if (abaDrawer === 'proposta') return pintarProposta();
   if (abaDrawer === 'custos')   return pintarCustos();
@@ -1430,6 +1463,59 @@ function pintarDrawer(){
   });
 
   pintarAcoes();
+}
+
+/* ── HISTÓRICO DA OS ────────────────────────────────────────────────────────
+   Prioridade, prazo e designação gravam em `eventos` desde o S13 — e não
+   apareciam em tela nenhuma. Registrar sem mostrar é o mesmo que não registrar:
+   a justificativa inteira ("daqui a três meses 'sempre foi urgente' tem que ter
+   dono") depende de existir onde ler. */
+const HIST_ROT = {
+  prioridade:'Prioridade', prazo:'Prazo', designacao:'Designação',
+  os_aberta:'OS aberta', tarefa_concluida:'Tarefa concluída',
+  tarefa_assumida:'Tarefa assumida', decisao:'Decisão',
+  levantamento:'Levantamento', execucao:'Execução', proposta:'Proposta',
+  pedido_compra:'Pedido de compra', pipeline_instanciado:'Pipeline criado'
+};
+
+async function pintarHistorico(){
+  const { card } = osAberta;
+  const body = document.getElementById('dBody');
+  body.innerHTML = '<p style="color:var(--ink-3);font-size:13px">Carregando…</p>';
+  let linhas = [];
+  try{
+    linhas = DEMO ? demoHistorico()
+      : await get('v_os_historico?select=*&os_id=eq.' + card.os_id
+                  + '&order=ocorrido_em.desc&limit=200');
+  }catch(e){
+    body.innerHTML = '<div class="vazio2"><b>Não deu para ler o histórico</b><p></p></div>';
+    body.querySelector('p').textContent = e.message;
+    return;
+  }
+  if (!linhas.length){
+    body.innerHTML = '<div class="vazio2"><b>Sem histórico</b>'
+      + '<p>Nada foi registrado nesta OS ainda.</p></div>';
+    return;
+  }
+  body.innerHTML = '<div class="histL">' + linhas.map(l =>
+      '<div class="histI">'
+    +   '<div class="histT">' + esc(HIST_ROT[l.tipo] || l.tipo) + '</div>'
+    +   '<div class="histD">' + esc(l.descricao || '') + '</div>'
+    +   '<div class="histQ">' + esc(l.quem || '') + ' · '
+    +     esc(new Date(l.ocorrido_em).toLocaleString('pt-BR')) + '</div>'
+    + '</div>').join('') + '</div>';
+  pintarAcoes();
+}
+
+function demoHistorico(){
+  const agora = new Date();
+  const menos = m => new Date(agora.getTime() - m*60000).toISOString();
+  return [
+    { tipo:'prioridade', descricao:'Prioridade: normal → urgente', quem:'Fernando Sousa', ocorrido_em:menos(30) },
+    { tipo:'prazo', descricao:'Prazo: (sem prazo) → 2026-09-12', quem:'Fernando Sousa', ocorrido_em:menos(95) },
+    { tipo:'designacao', descricao:'Designada a Inspetor 1 para 2026-09-08', quem:'Túlio', ocorrido_em:menos(240) },
+    { tipo:'os_aberta', descricao:'OS aberta', quem:'Túlio', ocorrido_em:menos(3000) },
+  ];
 }
 
 // Excluir OS fica junto das ações, mas discreto e só para admin: é a única
@@ -1605,14 +1691,25 @@ function demoSeed(){
     return ts;
   };
 
+  // A demonstração precisa exercitar TODOS os estados que a tela sabe desenhar:
+  // urgente, alta, atrasada, em risco, sem meta. Demo que só mostra o caso feliz
+  // é demo que aprova a tela errada.
+  const dPara = n => { const d = new Date(); d.setDate(d.getDate() + n);
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0')
+         + '-' + String(d.getDate()).padStart(2,'0'); };
   const os = [
-    { os_id:'d1', numero:'OS-2026-101', cliente:'Gerdau — Divinópolis', alvo:'T01', dias:1,  alerta:2 },
-    { os_id:'d2', numero:'OS-2026-102', cliente:'Farmax Ind. Farmacêutica', alvo:'T02', dias:0, alerta:3 },
-    { os_id:'d3', numero:'OS-2026-098', cliente:'Fundição Santana', alvo:'T05', dias:7,  alerta:5 },
-    { os_id:'d4', numero:'OS-2026-095', cliente:'Uau Ingleza', alvo:'T09', dias:12, alerta:7 },
+    { os_id:'d1', numero:'OS-2026-101', cliente:'Gerdau — Divinópolis', alvo:'T01', dias:1,  alerta:2,
+      prioridade:'urgente', prazo:dPara(4), prazo_origem:'digitado', situacao:'ok' },
+    { os_id:'d2', numero:'OS-2026-102', cliente:'Farmax Ind. Farmacêutica', alvo:'T02', dias:0, alerta:3,
+      prazo:dPara(1), situacao:'risco' },
+    { os_id:'d3', numero:'OS-2026-098', cliente:'Fundição Santana', alvo:'T05', dias:7,  alerta:5,
+      prioridade:'alta', prazo:dPara(9), situacao:'atrasada' },
+    { os_id:'d4', numero:'OS-2026-095', cliente:'Uau Ingleza', alvo:'T09', dias:12, alerta:7,
+      prazo:dPara(-3), prazo_origem:'digitado', situacao:'atrasada', atrasada:true },
     { os_id:'d5', numero:'OS-2026-090', cliente:'Bauminas Agro — Itapecerica', alvo:'T14', dias:2, alerta:3,
-      dispensar:['T10'] },
-    { os_id:'d6', numero:'OS-2026-088', cliente:'LAX Soluções', alvo:'T15', dias:1, alerta:3, dispensar:['T10'] }
+      dispensar:['T10'], prazo:null, situacao:'sem_meta' },
+    { os_id:'d6', numero:'OS-2026-088', cliente:'LAX Soluções', alvo:'T15', dias:1, alerta:3,
+      dispensar:['T10'], prazo:dPara(20), situacao:'ok' }
   ];
 
   DEMO_DB = {};
@@ -1647,7 +1744,23 @@ function demoCards(){
       tarefas_na_coluna: naFase.length,
       resolvidas_na_coluna: naFase.filter(t => t.status==='completo'||t.status==='dispensado').length,
       travada: !!travada,
-      dias_na_coluna: meta.dias, alerta_dias: meta.alerta
+      dias_na_coluna: meta.dias, alerta_dias: meta.alerta,
+      // ⚠ A demonstração TEM que trazer os campos novos. Sem eles a demo do S13
+      // desenhava um quadro do S12 com crachá S13 — e "sem erro no console" é a
+      // métrica errada para dizer que a demo está certa.
+      data_abertura: meta.aberta || isoHoje(),
+      prioridade: meta.prioridade || 'normal',
+      prioridade_rank: meta.prioridade === 'urgente' ? 3 : meta.prioridade === 'alta' ? 2 : 1,
+      fura_fila: meta.prioridade === 'urgente',
+      prazo_saida: meta.prazo || null,
+      prazo_origem: meta.prazo ? (meta.prazo_origem || 'meta_do_tipo') : 'sem_meta',
+      dias_restantes: meta.prazo == null ? null
+        : Math.round((new Date(meta.prazo + 'T12:00') - new Date(isoHoje() + 'T12:00')) / 864e5),
+      situacao: meta.situacao || 'ok',
+      situacao_os: meta.situacao || 'ok',
+      situacao_fase: 'ok',
+      atrasada: !!meta.atrasada,
+      encerrada: false
     };
   });
 }
@@ -1752,7 +1865,7 @@ function faixaPrazo(card){
   const d = card.dias_restantes;
   const origem = card.prazo_origem === 'digitado' ? 'digitado'
                : card.prazo_origem === 'meta_do_tipo' ? 'meta do tipo' : null;
-  const prazoTxt = !card.prazo_saida ? 'sem prazo'
+  const prazoTxt = !card.prazo_saida ? 'sem meta — nem data digitada, nem meta no tipo de OS'
     : dataBR(card.prazo_saida) + (d == null ? '' :
         d < 0 ? ' · ' + Math.abs(d) + 'd de atraso' : d === 0 ? ' · vence hoje' : ' · faltam ' + d + 'd');
 
@@ -1793,6 +1906,7 @@ function modalPrioridade(card){
     [{ label:'Cancelar', onClick: fecharModal },
      { label:'Gravar', pri:true, onClick: async () => {
         try{
+          if (DEMO) throw new Error('Modo demonstração: a prioridade não é gravada.');
           await rpc('tf_definir_prioridade', {
             p_os_id: card.os_id, p_prioridade: document.getElementById('mpP').value });
           fecharModal(); toast('Prioridade gravada.','ok');
@@ -1812,6 +1926,7 @@ function modalPrazo(card){
     [{ label:'Cancelar', onClick: fecharModal },
      { label:'Gravar', pri:true, onClick: async () => {
         try{
+          if (DEMO) throw new Error('Modo demonstração: o prazo não é gravado.');
           await rpc('tf_definir_prazo_os', {
             p_os_id: card.os_id, p_data: document.getElementById('mzD').value || null });
           fecharModal(); toast('Prazo gravado.','ok');
@@ -1831,11 +1946,17 @@ function modalDesignar(card, t, aposGravar){
       '<option value="">— ninguém —</option>' +
       opts.map(u => '<option value="'+u.id+'"' + (u.id === t.usuario_designado ? ' selected' : '') +
                     '>' + esc(u.nome) + '</option>').join('') +
-    '</select>' + (opts.length ? '' :
-      '<small style="color:var(--crit)">Ninguém do time executa em ' +
-      esc(t.executor) + '. Confira os perfis.</small>') + '</div>' +
+    '</select>' + (opts.length ? '' : (EQUIPE.length
+      ? '<small style="color:var(--crit)">Ninguém do time executa em ' +
+        esc(t.executor) + '. Confira os perfis.</small>'
+      // "não achei ninguém" e "não consegui perguntar" são coisas diferentes.
+      // A primeira manda mexer em perfis; a segunda, em nada.
+      : '<small style="color:var(--crit)">Não consegui carregar o time — ' +
+        'recarregue a página antes de mexer em perfil.</small>')) + '</div>' +
     '<div class="campo"><label for="mdD">Em que dia</label>' +
       '<input id="mdD" type="date" value="' + esc(t.data_prevista || isoHoje()) + '"></div>' +
+    '<p style="font-size:12px;color:var(--ink-3);margin:-4px 0 0;line-height:1.45">' +
+      'Escolher <b>— ninguém —</b> devolve a tarefa para "Sem dia marcado", com dia e tudo.</p>' +
     '<div class="campo"><label for="mdM">Quanto tempo (minutos)</label>' +
       '<input id="mdM" type="number" min="5" max="1440" step="5" value="' +
       esc(t.tempo_estimado_min || '') + '" placeholder="deixe vazio para usar a estimativa do template"></div>' +
@@ -1847,11 +1968,15 @@ function modalDesignar(card, t, aposGravar){
      { label:'Gravar', pri:true, onClick: async () => {
         try{
           const m = document.getElementById('mdM').value;
+          const quem = document.getElementById('mdU').value || null;
+          const dia  = document.getElementById('mdD').value || null;
+          // Dia sem dono some das TRÊS listas (pool, carga e roteiro). O banco
+          // recusa; a tela avisa antes, para não gastar uma ida ao servidor.
+          if (quem && !dia) throw new Error('Escolha também o dia — sem ele a tarefa não entra em agenda nenhuma.');
+          if (DEMO) throw new Error('Modo demonstração: designação não é gravada.');
           await rpc('tf_designar_tarefa', {
             p_os_id: card.os_id, p_tarefa_id: t.tarefa_id,
-            p_usuario: document.getElementById('mdU').value || null,
-            p_data: document.getElementById('mdD').value || null,
-            p_minutos: m ? Number(m) : null });
+            p_usuario: quem, p_data: dia, p_minutos: m ? Number(m) : null });
           fecharModal(); toast('Designação gravada.','ok');
           if (aposGravar) await aposGravar();
           else await abrirOSPorId(card.os_id);
@@ -3973,7 +4098,7 @@ async function pintarConfig(){
     + '<div class="chips" id="cfgTabs"></div>'
     + '<div id="cfgCorpo"></div></div>';
 
-  const abas = [['usuarios','Usuários'],['perfis','Perfis'],
+  const abas = [['usuarios','Usuários'],['perfis','Perfis'],['turno','Turno'],
                 ['docs','Documentos'],['param','Google Drive'],['exc','Exclusões']];
   const t = document.getElementById('cfgTabs');
   abas.forEach(([id,rot]) => {
@@ -3987,6 +4112,7 @@ async function pintarConfig(){
   if (abaCfg === 'usuarios') return cfgUsuarios();
   if (abaCfg === 'perfis')   return cfgPerfis();
   if (abaCfg === 'docs')     return cfgDocumentos();
+  if (abaCfg === 'turno')    return cfgTurno();
   if (abaCfg === 'param')    return cfgParametros();
   if (abaCfg === 'exc')      return cfgExclusoes();
 }
@@ -4208,6 +4334,91 @@ async function cfgDocumentos(){
 }
 
 // ── GOOGLE DRIVE ────────────────────────────────────────────────────────────
+// ── TURNO ───────────────────────────────────────────────────────────────────
+// A capacidade do dia é DADO, e dado precisa de tela. Eu tinha escrito na nota
+// de entrega "ajuste parametros_turno" sem dizer que isso era SQL na mão — o que
+// é o mesmo que não ter entregue.
+async function cfgTurno(){
+  const c = document.getElementById('cfgCorpo');
+  c.innerHTML = '<p class="nota">Carregando…</p>';
+  let t = null;
+  try{
+    if (DEMO) t = { turno_inicio:'08:00:00', turno_fim:'18:00:00', intervalo_min:60,
+                    dias_uteis:[1,2,3,4,5] };
+    else {
+      const r = await get('parametros_turno?select=*&id=eq.GLOBAL&limit=1');
+      t = (r && r[0]) || null;
+    }
+  }catch(e){
+    c.innerHTML = '<div class="painel"><h3>Turno</h3><p class="nota" style="color:var(--crit)"></p></div>';
+    c.querySelector('p').textContent = 'Não deu para ler o turno: ' + e.message;
+    return;
+  }
+  if (!t){
+    c.innerHTML = '<div class="painel"><h3>Turno</h3>'
+      + '<p class="nota">A tabela <code>parametros_turno</code> está vazia. '
+      + 'Rode o <code>28_prazo_prioridade.sql</code>.</p></div>';
+    return;
+  }
+
+  const DIAS = [[1,'seg'],[2,'ter'],[3,'qua'],[4,'qui'],[5,'sex'],[6,'sáb'],[7,'dom']];
+  const hhmm = v => String(v || '').slice(0,5);
+  c.innerHTML = '<div class="painel"><h3>Turno de trabalho</h3>'
+    + '<p class="nota">É daqui que sai a <b>capacidade do dia</b> na Agenda da equipe. '
+      + 'Mudar aqui recalcula todas as barras — nenhuma versão nova de app é necessária.</p>'
+    + '<div class="dupla">'
+    +   '<div class="campo"><label for="tuI">Começa</label>'
+    +     '<input id="tuI" type="time" value="' + esc(hhmm(t.turno_inicio)) + '"></div>'
+    +   '<div class="campo"><label for="tuF">Termina</label>'
+    +     '<input id="tuF" type="time" value="' + esc(hhmm(t.turno_fim)) + '"></div>'
+    + '</div>'
+    + '<div class="campo"><label for="tuP">Intervalo no dia (minutos)</label>'
+    +   '<input id="tuP" type="number" min="0" max="599" step="5" value="'
+    +   esc(String(t.intervalo_min == null ? 60 : t.intervalo_min)) + '">'
+    +   '<small>Almoço e paradas. Sai do total do dia.</small></div>'
+    + '<div class="campo"><label>Dias úteis</label><div class="chips" id="tuD">'
+    +   DIAS.map(([n,r]) => '<button type="button" class="fchip'
+    +     + ((t.dias_uteis||[]).indexOf(n) >= 0 ? ' on' : '') + '" data-d="' + n + '">'
+    +     + r + '</button>').join('')
+    + '</div></div>'
+    + '<p class="nota" id="tuCap"></p>'
+    + '<button class="btn pri" id="tuSalvar" type="button">Salvar turno</button></div>';
+
+  const sel = new Set((t.dias_uteis || []).map(Number));
+  const capTxt = () => {
+    const m = v => { const p = String(v||'').split(':'); return (+p[0]||0)*60 + (+p[1]||0); };
+    const cap = Math.max(0, m(document.getElementById('tuF').value)
+                          - m(document.getElementById('tuI').value)
+                          - (Number(document.getElementById('tuP').value) || 0));
+    document.getElementById('tuCap').textContent =
+      'Capacidade por dia: ' + minHora(cap) + ' · ' + sel.size + ' dia(s) útil(eis) na semana.';
+  };
+  ['tuI','tuF','tuP'].forEach(id => document.getElementById(id).addEventListener('input', capTxt));
+  c.querySelectorAll('#tuD button').forEach(b => b.addEventListener('click', () => {
+    const n = Number(b.dataset.d);
+    if (sel.has(n)) sel.delete(n); else sel.add(n);
+    b.classList.toggle('on', sel.has(n)); capTxt();
+  }));
+  capTxt();
+
+  document.getElementById('tuSalvar').addEventListener('click', e =>
+    _semDuploEnvio_(e.target, async () => {
+      const i = document.getElementById('tuI').value, f = document.getElementById('tuF').value;
+      if (!i || !f) return toast('Preencha os dois horários.','err');
+      if (f <= i)   return toast('O fim do turno tem que ser depois do começo.','err');
+      if (!sel.size) return toast('Marque pelo menos um dia útil — sem nenhum, a agenda fica vazia.','err');
+      if (DEMO) return toast('Modo demonstração: o turno não é gravado.','err');
+      try{
+        await patch('parametros_turno', 'id=eq.GLOBAL', {
+          turno_inicio: i, turno_fim: f,
+          intervalo_min: Number(document.getElementById('tuP').value) || 0,
+          dias_uteis: [...sel].sort((a,b)=>a-b), updated_at: new Date().toISOString() });
+        await carregarEquipe();
+        toast('Turno gravado. A Agenda já usa a capacidade nova.','ok');
+      }catch(err){ toast(err.message,'err'); }
+    }));
+}
+
 async function cfgParametros(){
   const c = document.getElementById('cfgCorpo');
   let par = {};
@@ -4370,16 +4581,21 @@ const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = se
 
    A redução acontece AQUI, no navegador, antes de subir. Sem isso alguém sobe
    uma foto de 6 MB do celular e o catálogo inteiro para de sincronizar em campo. */
-const FOTO_CACHE = {};   // item_id → data URI, para a lista não repetir consulta
+/* O cache guarda a MINIATURA e a VERSÃO dela. Sem a versão, trocar o modelo
+   (que derruba a foto no banco, por gatilho) deixava a foto do modelo VELHO na
+   tela do formulário — exatamente o caso que o gatilho existe para evitar.
+   E falha de rede NÃO vira "não tem foto": "não achei" e "não consegui
+   perguntar" são coisas diferentes, e a segunda tem que poder tentar de novo. */
+const FOTO_CACHE = {};   // item_id → { thumb, versao }
 
-async function fotoDoItem(id){
-  if (FOTO_CACHE[id] !== undefined) return FOTO_CACHE[id];
-  if (DEMO){ FOTO_CACHE[id] = null; return null; }
-  try{
-    const r = await get('catalogo_fotos?select=thumb&item_id=eq.' + id + '&limit=1');
-    FOTO_CACHE[id] = (r && r[0] && r[0].thumb) || null;
-  }catch(e){ FOTO_CACHE[id] = null; }
-  return FOTO_CACHE[id];
+async function fotoDoItem(id, versao){
+  const c = FOTO_CACHE[id];
+  if (c && (versao === undefined || c.versao === versao)) return c.thumb;
+  if (DEMO){ FOTO_CACHE[id] = { thumb:null, versao:versao || '' }; return null; }
+  const r = await get('catalogo_fotos?select=thumb&item_id=eq.' + id + '&limit=1');
+  const thumb = (r && r[0] && r[0].thumb) || null;
+  FOTO_CACHE[id] = { thumb, versao: versao || '' };
+  return thumb;
 }
 
 /** Reduz para miniatura: 160px no maior lado. Tenta webp, cai para jpeg. */
@@ -4410,19 +4626,69 @@ function reduzirParaMiniatura(file){
   });
 }
 
+/** Sobe a foto CHEIA para o bucket privado `catalogo` e devolve o caminho.
+ *  Devolve null (sem estourar) quando não dá: a miniatura, que é o que o
+ *  técnico usa em campo, não pode ser perdida porque o Storage recusou. */
+async function subirFotoCheia(item, file){
+  try{
+    const ext  = (file.type.split('/')[1] || 'jpg').replace('jpeg','jpg');
+    const path = item.id + '.' + ext;
+    const url  = SUPABASE_URL + '/storage/v1/object/catalogo/' + encodeURIComponent(path)
+               + '?upsert=true';
+    const envia = () => fetch(url, {
+      method:'POST',
+      headers: Object.assign({ apikey: SUPABASE_ANON_KEY, 'Content-Type': file.type,
+                               'x-upsert':'true' },
+        sessao.token ? { Authorization:'Bearer ' + sessao.token } : {}),
+      body: file
+    });
+    let r = await envia();
+    if (r.status === 401 && sessao.refresh && await renovarToken()) r = await envia();
+    return r.ok ? path : null;
+  }catch(e){ return null; }
+}
+
+/** Baixa a foto cheia (bucket privado: precisa do token, não abre por URL). */
+async function verFotoCheia(path, titulo){
+  try{
+    const url = SUPABASE_URL + '/storage/v1/object/catalogo/' + encodeURIComponent(path);
+    const r = await fetch(url, { headers: Object.assign({ apikey: SUPABASE_ANON_KEY },
+      sessao.token ? { Authorization:'Bearer ' + sessao.token } : {}) });
+    if (!r.ok) throw new Error('A foto cheia não está mais no bucket (HTTP ' + r.status + ').');
+    const b = URL.createObjectURL(await r.blob());
+    abrirModal(titulo || 'Foto',
+      '<img src="' + b + '" alt="' + esc(titulo || '') + '" '
+      + 'style="width:100%;height:auto;border-radius:5px;display:block">',
+      [{ label:'Fechar', pri:true, onClick: () => { URL.revokeObjectURL(b); fecharModal(); } }]);
+  }catch(e){ toast(e.message,'err'); }
+}
+
 function montarFoto(item){
   const box = document.getElementById('fFotoBox');
   const inp = document.getElementById('fFotoIn');
   const del = document.getElementById('fFotoDel');
   if (!box || !inp) return;
 
-  const desenhar = (src) => {
+  const desenhar = (src, caminho) => {
     box.innerHTML = '';
     if (src){
       const im = document.createElement('img');
       im.className = 'fotoCat'; im.style.width = '84px'; im.style.height = '84px';
       im.src = src; im.alt = 'Foto de ' + (item.descricao || '');
+      if (caminho){
+        im.style.cursor = 'zoom-in';
+        im.title = 'Ver a foto em tamanho real';
+        im.addEventListener('click', () => verFotoCheia(caminho, item.descricao));
+      }
       box.appendChild(im);
+      if (caminho){
+        const lk = document.createElement('button');
+        lk.type = 'button'; lk.className = 'btn mini';
+        lk.style.cssText = 'display:block;margin:6px 0 0';
+        lk.textContent = 'ver em tamanho real';
+        lk.addEventListener('click', () => verFotoCheia(caminho, item.descricao));
+        box.appendChild(lk);
+      }
     } else {
       const v = document.createElement('div');
       v.className = 'fotoVazia'; v.style.width = '84px'; v.style.height = '84px';
@@ -4432,7 +4698,21 @@ function montarFoto(item){
     if (del) del.hidden = !src;
   };
   desenhar(null);
-  fotoDoItem(item.id).then(desenhar).catch(() => desenhar(null));
+  // Busca miniatura e caminho juntos: a foto cheia só existe se alguém subiu.
+  (async () => {
+    try{
+      const r = DEMO ? [] : await get('catalogo_fotos?select=thumb,path&item_id=eq.' + item.id + '&limit=1');
+      const f = (r && r[0]) || null;
+      FOTO_CACHE[item.id] = { thumb: f ? f.thumb : null, versao: item.foto_versao || '' };
+      desenhar(f ? f.thumb : null, f ? f.path : null);
+    }catch(e){
+      box.innerHTML = '';
+      const v = document.createElement('div');
+      v.className = 'fotoVazia'; v.style.width = '84px'; v.style.height = '84px';
+      v.textContent = 'não carregou';
+      box.appendChild(v);
+    }
+  })();
 
   inp.addEventListener('change', async () => {
     const f = inp.files && inp.files[0];
@@ -4442,19 +4722,30 @@ function montarFoto(item){
       const thumb = await reduzirParaMiniatura(f);
       if (thumb.length > 61440)
         throw new Error('Mesmo reduzida a imagem ficou grande demais. Tente uma foto mais simples.');
-      await rpc('tf_salvar_foto_item', { p_item_id:item.id, p_thumb:thumb, p_bytes:f.size });
-      FOTO_CACHE[item.id] = thumb;
-      desenhar(thumb);
-      toast('Foto gravada.','ok');
+      if (DEMO) throw new Error('Modo demonstração: a foto não é gravada.');
+      // A CHEIA vai para o bucket privado; a miniatura, para a tabela. Quem
+      // escolhe peça numa lista não precisa de 2 MB — mas quem confere um
+      // detalhe no escritório precisa, e é para isso que ela existe.
+      const caminho = await subirFotoCheia(item, f);
+      await rpc('tf_salvar_foto_item',
+        { p_item_id:item.id, p_thumb:thumb, p_path:caminho, p_bytes:f.size });
+      FOTO_CACHE[item.id] = { thumb, versao:'' };
+      desenhar(thumb, caminho);
+      toast(caminho ? 'Foto gravada.' : 'Miniatura gravada — a foto cheia não subiu.',
+            caminho ? 'ok' : 'err');
       listarCatalogo();
     }catch(e){ toast(e.message,'err'); }
     finally{ inp.value = ''; }
   });
 
   if (del) del.addEventListener('click', async () => {
+    // A miniatura só existe no banco: apagada, alguém tem que ir tirar outra.
+    if (!confirm('Remover a foto de ' + (item.codigo || 'este item') + '? '
+               + 'Não dá para desfazer — vai ser preciso tirar outra.')) return;
     try{
+      if (DEMO) throw new Error('Modo demonstração: a foto não é alterada.');
       await rpc('tf_remover_foto_item', { p_item_id:item.id });
-      FOTO_CACHE[item.id] = null; desenhar(null);
+      FOTO_CACHE[item.id] = { thumb:null, versao:'' }; desenhar(null);
       toast('Foto removida.','ok'); listarCatalogo();
     }catch(e){ toast(e.message,'err'); }
   });
@@ -4508,7 +4799,8 @@ async function listarCatalogo(){
       im.className = 'fotoCat'; im.alt = ''; im.loading = 'lazy';
       // A lista NUNCA espera pela foto: ela é buscada depois, item a item, e
       // encaixa quando chega. Foto que atrasa lista é foto que atrapalha.
-      fotoDoItem(i.id).then(src => { if (src) im.src = src; }).catch(()=>{});
+      fotoDoItem(i.id, i.foto_versao).then(src => { if (src) im.src = src; })
+        .catch(() => { im.alt = 'foto não carregou'; });
       b.insertBefore(im, b.firstChild);
       b.style.display = 'flex'; b.style.gap = '10px'; b.style.alignItems = 'center';
     }
@@ -4533,6 +4825,19 @@ function formCatalogo(item){
     h += '<div class="campo"><label for="fFam">Família</label><select id="fFam">'
       + CAT_FAM.map(f => '<option value="' + f.id + '"' + (f.id===famId?' selected':'') + '>'
           + esc(f.nome) + '</option>').join('') + '</select></div>';
+  }
+
+  if (!item){
+    // O campo não some sem explicação: a foto precisa de um item para pertencer,
+    // e sumir calado faz a pessoa procurar num lugar que não existe.
+    h += '<div class="campo"><label>Foto</label>'
+      +  '<div style="display:flex;gap:10px;align-items:center">'
+      +    '<div class="fotoVazia" style="width:84px;height:84px">sem foto</div>'
+      +    '<p style="flex:1;font-size:12px;color:var(--ink-3);margin:0;line-height:1.45">'
+      +      'A foto entra <b>depois de adicionar o item</b> — ela pertence a um '
+      +      'modelo, e o modelo precisa existir primeiro. Ao salvar, o item abre '
+      +      'para edição já com o campo de foto.</p>'
+      +  '</div></div>';
   }
 
   if (item){
@@ -4663,9 +4968,18 @@ async function salvarCatalogo(e){
   };
   try{
     const r = DEMO ? demoSalvarCat(p) : await rpc('tf_salvar_item_catalogo', p);
+    const criou = !catEdit;
     toast(catEdit ? 'Item atualizado.' : 'Item ' + (r.codigo||'') + ' adicionado.', 'ok');
     catEdit = null;
-    await listarCatalogo(); formCatalogo(null);
+    await listarCatalogo();
+    // Item novo volta ABERTO, não para um formulário em branco: é onde está o
+    // campo de foto, e mandar a pessoa achar o item na lista sem avisar era o
+    // caminho morto que a revisão pegou.
+    if (criou && r && r.id){
+      const novo = await get('v_catalogo?select=*&id=eq.' + r.id + '&limit=1').catch(() => []);
+      if (novo && novo[0]) return formCatalogo(novo[0]);
+    }
+    formCatalogo(null);
   }catch(err){ toast(err.message,'err'); e.target.disabled = false; }
 }
 
@@ -5702,7 +6016,7 @@ function irPara(v){
 // acontecem, e quem decide é quem está olhando a tela.
 // ════════════════════════════════════════════════════════════════════════════
 
-const AGENDA = { dias: 10, base: null, carga: [], pool: [] };
+const AGENDA = { dias: 10, base: null, carga: [], pool: [], itens: [] };
 
 function agDias(){
   // Começa em HOJE e anda só por dia útil: mostrar sábado numa grade de
@@ -5740,18 +6054,47 @@ async function pintarAgenda(){
   // disparar consulta nova, senão digitar devagar vira uma consulta por letra.
   REPINTA.age = agPintarCorpo;
   board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Agenda da equipe</h2>'
-    + '<p>Quem faz o quê, em que dia. A barra é a carga do dia contra o turno.</p></div>'
+    + '<p>Quem faz o quê, em que dia. A barra é a carga do dia contra o turno. '
+    + 'Clique numa célula para ver as tarefas dela.</p>'
+    + '<div class="agNav">'
+    +   '<button class="btn mini" type="button" id="agAnt">‹ 10 dias antes</button>'
+    +   '<button class="btn mini" type="button" id="agHoje">hoje</button>'
+    +   '<button class="btn mini" type="button" id="agProx">10 dias depois ›</button>'
+    +   '<span id="agPer"></span>'
+    + '</div></div>'
     + '<div id="agCorpo"><p style="color:var(--ink-3);font-size:13px">Carregando…</p></div></div>';
 
-  if (DEMO){ AGENDA.carga = demoAgendaEquipe(); AGENDA.pool = demoAgendaEquipePool(); return agPintarCorpo(); }
+  // A grade era sempre "os próximos 10 dias úteis", e quem quisesse olhar a
+  // semana seguinte não tinha como. `AGENDA.base` existia e nunca era atribuído.
+  const anda = n => {
+    const d = new Date((AGENDA.base || isoHoje()) + 'T12:00');
+    d.setDate(d.getDate() + n);
+    const iso = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0')
+              + '-' + String(d.getDate()).padStart(2,'0');
+    AGENDA.base = (n === 0 || iso <= isoHoje()) ? null : iso;
+    pintarAgenda();
+  };
+  document.getElementById('agAnt').addEventListener('click', () => anda(-14));
+  document.getElementById('agProx').addEventListener('click', () => anda(14));
+  document.getElementById('agHoje').addEventListener('click', () => { AGENDA.base = null; pintarAgenda(); });
+
+  if (DEMO){
+    AGENDA.carga = demoAgendaEquipe(); AGENDA.pool = demoAgendaEquipePool();
+    AGENDA.itens = demoAgendaItens();
+    return agPintarCorpo();
+  }
   try{
     const dias = agDias();
-    const [carga, pool] = await Promise.all([
+    const [carga, pool, itens] = await Promise.all([
       get('v_agenda_carga?select=*&dia=gte.' + dias[0] + '&dia=lte.' + dias[dias.length-1]
           + '&order=usuario,dia'),
-      get('v_agenda_pool?select=*&order=prioridade_rank.desc,prazo_saida.nullslast&limit=200')
+      get('v_agenda_pool?select=*&order=prioridade_rank.desc,prazo_saida.nullslast&limit=200'),
+      // O que tem DENTRO de cada célula. Sem isto a barra dizia "10h / 9h ⚠" e
+      // não havia como perguntar de quê — barra que não abre é enfeite.
+      get('v_agenda_itens?select=*&dia=gte.' + dias[0] + '&dia=lte.' + dias[dias.length-1]
+          + '&order=dia,prioridade_rank.desc').catch(() => [])
     ]);
-    AGENDA.carga = carga || []; AGENDA.pool = pool || [];
+    AGENDA.carga = carga || []; AGENDA.pool = pool || []; AGENDA.itens = itens || [];
   }catch(e){
     document.getElementById('agCorpo').innerHTML =
       '<div class="vazio2"><b>Não deu para carregar a agenda</b><p></p></div>';
@@ -5782,6 +6125,10 @@ function agPintarCorpo(){
     .sort((a,b) => a[1].localeCompare(b[1]));
 
   const hoje = isoHoje();
+  const per = document.getElementById('agPer');
+  if (per) per.textContent = dias.length
+    ? dataBR(dias[0]) + ' a ' + dataBR(dias[dias.length-1])
+      + (AGENDA.base ? '' : ' · a partir de hoje') : '';
   let html = '<div class="agGrade"><table><thead><tr><th>Pessoa</th>'
     + dias.map(d => '<th class="' + (d === hoje ? 'hoje' : '') + '">'
         + esc(dataBR(d).slice(0,5)) + (d === hoje ? ' · hoje' : '') + '</th>').join('')
@@ -5799,7 +6146,9 @@ function agPintarCorpo(){
       const min = c ? Number(c.minutos || 0) : 0;
       const ocup = cap > 0 ? min / cap : 0;
       const cls = 'agCel' + (ocup > 1 ? ' cheio' : ocup > 0.7 ? ' quase' : '');
-      html += '<td class="' + cls + '">'
+      html += '<td class="' + cls + (c ? ' temItens' : '') + '"'
+        + (c ? ' data-u="' + esc(id) + '" data-d="' + esc(d) + '" tabindex="0" role="button"'
+             + ' title="Ver as tarefas deste dia"' : '') + '>'
         + (c ? '<span class="agH">' + minHora(min) + ' / ' + minHora(cap)
                + (ocup > 1 ? ' ⚠' : '') + '</span>'
                + '<div class="agBar"><i style="width:' + Math.min(100, Math.round(ocup*100)) + '%"></i></div>'
@@ -5838,13 +6187,22 @@ function agPintarCorpo(){
         + '<td>' + esc(t.fase || '') + '</td>'
         + '<td>' + esc(t.usuario || '—') + '</td>'
         + '<td>' + esc(t.prazo_saida ? dataBR(t.prazo_saida) : '—') + '</td>'
-        + '<td><button class="btn mini" data-i="' + i + '">marcar dia</button></td></tr>').join('')
+        + '<td><button class="btn mini" type="button" data-i="' + i + '">marcar dia</button></td></tr>').join('')
       + '</tbody></table></div>';
   }
 
   cx.innerHTML = html;
   // O contador da lateral mostra o que dói: tarefa sem dia, não o total.
   contador('nAge', (AGENDA.pool || []).length || '');
+
+  const abrirCel = el => agCelula(el.dataset.u, el.dataset.d);
+  cx.querySelectorAll('td.temItens').forEach(td => {
+    td.addEventListener('click', () => abrirCel(td));
+    // Teclado também abre: a grade é varrida com Tab por quem não usa mouse.
+    td.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); abrirCel(td); }
+    });
+  });
   cx.querySelectorAll('button[data-i]').forEach(b => {
     b.addEventListener('click', async () => {
       const t = pool[Number(b.dataset.i)];
@@ -5858,6 +6216,59 @@ function agPintarCorpo(){
       }, pintarAgenda);
     });
   });
+}
+
+/** O que a célula conta, item a item — e o caminho para tirar do dia. */
+function agCelula(usuarioId, dia){
+  const itens = (AGENDA.itens || []).filter(i => String(i.usuario_id) === String(usuarioId) && i.dia === dia);
+  const nome = (itens[0] && itens[0].usuario) || NOMES[usuarioId] || 'esta pessoa';
+  const cap = TURNO.capacidade_min || 540;
+  const min = itens.reduce((s,i) => s + Number(i.tempo_estimado_min || 0), 0);
+  const sem = itens.filter(i => !i.tempo_estimado_min).length;
+
+  const corpo = !itens.length
+    ? '<p style="font-size:13px;color:var(--ink-3);margin:0">Não consegui ler as tarefas deste dia. '
+      + 'Recarregue a Agenda.</p>'
+    : '<p style="font-size:12.5px;color:var(--ink-3);margin:0 0 10px">'
+      + minHora(min) + ' de ' + minHora(cap) + (min > cap ? ' — <b>o dia estourou</b>' : '')
+      + (sem ? ' · ' + sem + ' sem estimativa' : '') + '</p>'
+      + '<div class="lista">' + itens.map((i,k) =>
+          '<div class="linhaCli" style="cursor:default">'
+        + '<b>' + esc(i.tarefa || '') + (Number(i.prioridade_rank) >= 3
+            ? ' <span class="chip urg">urgente</span>' : '') + '</b>'
+        + '<small>' + esc([i.os_numero, i.cliente, i.fase].filter(Boolean).join(' · '))
+        + (i.tempo_estimado_min ? ' · ' + minHora(i.tempo_estimado_min) : ' · sem estimativa')
+        + '</small>'
+        + '<button class="btn mini" type="button" data-k="' + k + '" style="margin-top:6px">'
+        + 'mudar dia ou pessoa</button></div>').join('') + '</div>';
+
+  abrirModal(nome + ' · ' + dataBR(dia), corpo,
+    [{ label:'Fechar', pri:true, onClick: fecharModal }]);
+
+  document.querySelectorAll('#mBody button[data-k]').forEach(b => {
+    b.addEventListener('click', () => {
+      const i = itens[Number(b.dataset.k)];
+      const card = cards.find(c => c.os_id === i.os_id)
+                || { os_id:i.os_id, numero:i.os_numero, cliente:i.cliente };
+      modalDesignar(card, {
+        tarefa_id:i.tarefa_id, nome:i.tarefa, executor:i.executor,
+        usuario_designado:i.usuario_id, data_prevista:i.dia,
+        tempo_estimado_min:i.tempo_estimado_min
+      }, pintarAgenda);
+    });
+  });
+}
+
+function demoAgendaItens(){
+  const d = agDias();
+  return [
+    { usuario_id:'u3', usuario:'Inspetor 1', dia:d[0], os_id:'d1', os_numero:'OS-2026-101',
+      cliente:'Gerdau — Divinópolis', tarefa_id:'T01', tarefa:'Aceitar OS e deslocar',
+      fase:'Aberta', executor:'campo', tempo_estimado_min:30, prioridade:'urgente', prioridade_rank:3 },
+    { usuario_id:'u3', usuario:'Inspetor 1', dia:d[0], os_id:'d2', os_numero:'OS-2026-102',
+      cliente:'Farmax Ind. Farmacêutica', tarefa_id:'T02', tarefa:'Executar levantamento',
+      fase:'Em campo', executor:'campo', tempo_estimado_min:180, prioridade:'normal', prioridade_rank:1 },
+  ];
 }
 
 // ── busca por tela ──────────────────────────────────────────────────────────
