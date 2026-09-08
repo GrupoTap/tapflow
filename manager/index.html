@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S15</title>
+<title>TapFlow Manager · S16</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -427,6 +427,15 @@ main.rolaY{overflow-y:auto}
 .linhaU b{display:block;font-size:14.5px;font-weight:600}
 .linhaU small{display:block;font-size:12px;color:var(--ink-3);margin-top:2px}
 .acoesU{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+/* formulário de cadastro de pessoa: fica aberto, não escondido atrás de botão */
+.formNovo{border:1px solid var(--rule);border-radius:4px;padding:14px;background:var(--bg)}
+.formNovo .campo{margin-bottom:0}
+.linhaSenha{display:flex;gap:6px;align-items:center}
+.linhaSenha input{flex:1 1 auto;min-width:0;font-family:'JetBrains Mono',ui-monospace,monospace;
+  letter-spacing:.02em}
+.linhaSenha .btn.mini{margin-left:0;flex:0 0 auto}
+.listaHist{margin:10px 0 0;padding-left:20px;font-size:13px;line-height:1.7;color:var(--ink-2)}
+.aviso.ok .btn.mini{margin-left:8px;vertical-align:baseline}
 .mini{font-size:13px;padding:6px 9px;border:1px solid var(--rule);border-radius:3px;
   background:var(--surface);max-width:190px}
 button.mini{padding:6px 12px;font-weight:600}
@@ -918,7 +927,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S15';
+const APP_VERSION = 'S16';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -4207,114 +4216,406 @@ async function pintarConfig(){
 }
 
 // ── USUÁRIOS ────────────────────────────────────────────────────────────────
+// Desde o S16 esta tela faz a gestão INTEIRA: cria o login, define a senha,
+// troca o e-mail, muda o perfil, desativa e exclui. Nada disso passa mais pelo
+// painel do Supabase — que era o único lugar onde a Engetap ainda dependia de
+// alguém "que sabe mexer" para dar acesso a um funcionário novo.
+//
+// Quem faz o trabalho pesado é o servidor (31_admin_usuarios.sql). O app aqui
+// só pergunta: a chave que ele carrega é a Publishable e ela, sozinha, não
+// cria login nenhum. Cada função lá confere `tf_is_admin()` antes de mexer.
+//
+// Uma regra de tela que vale para tudo abaixo: quando uma ação é IMPOSSÍVEL, o
+// app descobre ANTES e explica; não oferece o botão para o servidor recusar
+// depois. Excluir é o exemplo — ele consulta o histórico primeiro e, se houver,
+// nem chega a tentar: mostra onde está o rastro e oferece Desativar no lugar.
+
+// Senha fácil de ditar no telefone. Sem 'l', '1', 'O' e '0', que geram o
+// clássico "é ele minúsculo ou um?" e uma segunda ligação. Sílabas em vez de
+// caracteres aleatórios porque quem recebe vai DIGITAR isso uma vez.
+const _SIL = ['ba','be','bi','bo','ca','ce','co','da','de','do','fa','fe','fi','fo',
+              'ga','ge','go','ja','je','ma','me','mi','mo','na','ne','ni','no',
+              'pa','pe','pi','po','ra','re','ri','ro','sa','se','si','so',
+              'ta','te','ti','to','va','ve','vi','zo'];
+function senhaSugerida(){
+  const r = n => Math.floor(Math.random() * n);
+  const p = () => _SIL[r(_SIL.length)] + _SIL[r(_SIL.length)] + _SIL[r(_SIL.length)];
+  return p() + '-' + p() + '-' + (100 + r(900));
+}
+
+// nomes de tabela → português, para a recusa da exclusão ser legível.
+// O que não estiver aqui aparece com o nome cru, sem underline: melhor mostrar
+// "os itens" do que esconder um lugar onde o nome da pessoa está gravado.
+const _TABELA_PT = {
+  pipeline_tarefas:'tarefas do quadro', eventos:'registros de histórico',
+  aprovacoes:'aprovações de cliente', documentos:'documentos emitidos',
+  ordens_servico:'ordens de serviço', levantamentos:'levantamentos de campo',
+  anexos:'arquivos anexados', exclusoes:'exclusões registradas',
+  os_itens:'itens de OS', propostas:'propostas', notificacoes:'notificações'
+};
+const _rotuloTabela = t => _TABELA_PT[t] || String(t||'').replace(/_/g,' ');
+
 async function cfgUsuarios(){
   const c = document.getElementById('cfgCorpo');
   c.innerHTML = '<p class="nota">Carregando…</p>';
 
   let users = [], perfis = [], pendentes = [];
   try{
-    if (DEMO){ users = demoUsuarios(); perfis = demoPerfis(); pendentes = []; }
+    if (DEMO){ users = demoUsuarios(); perfis = demoPerfis(); pendentes = demoPendentes(); }
     else [users, perfis, pendentes] = await Promise.all([
       get('v_usuarios?select=*&order=ativo.desc,nome'),
       get('v_perfis?select=*&ativo=is.true&order=id'),
       rpc('tf_logins_sem_perfil', {})
     ]);
-  }catch(e){ c.innerHTML = ''; toast(e.message,'err'); return; }
+  }catch(e){
+    // Nunca deixar a tela vazia por causa de um erro: sem isto, um JWT vencido
+    // vira "não tem ninguém cadastrado" e o susto é grande.
+    c.innerHTML = '<div class="painel"><h3>Quem usa o TapFlow</h3>'
+      + '<div class="aviso"><b>Não deu para carregar a lista.</b><br>' + esc(e.message) + '</div>'
+      + '<button class="btn" id="uRetry">Tentar de novo</button></div>';
+    document.getElementById('uRetry').addEventListener('click', cfgUsuarios);
+    return;
+  }
+
+  const opcoesPerfil = (sel) => perfis.map(x =>
+    '<option value="' + esc(x.id) + '"' + (x.id === sel ? ' selected' : '') + '>'
+    + esc(x.nome) + '</option>').join('');
 
   let h = '<div class="painel"><h3>Quem usa o TapFlow</h3>';
 
-  // logins criados no Supabase que ainda não têm perfil
+  // ── logins criados por fora (painel do Supabase, versão antiga do sistema) ──
+  // Continua existindo porque continua acontecendo: um login pode ter nascido
+  // antes desta tela. Sem perfil ele não entra em lugar nenhum.
   if (pendentes && pendentes.length){
     h += '<div class="aviso"><b>' + pendentes.length + ' login(s) sem perfil.</b> '
-      + 'Foram criados na Authentication do Supabase mas ainda não entram no sistema — '
+      + 'Existem na Authentication do Supabase mas ainda não entram no sistema — '
       + 'quem manda no acesso é esta lista, não o login.</div>';
     pendentes.forEach(p => {
       h += '<div class="linhaU pend"><div><b>' + esc(p.email) + '</b>'
-        + '<small>' + (p.confirmado ? 'e-mail confirmado' : '⚠ e-mail NÃO confirmado — não consegue entrar') + '</small></div>'
+        + '<small>' + (p.confirmado ? 'e-mail confirmado'
+                     : '⚠ e-mail NÃO confirmado — não consegue entrar') + '</small></div>'
         + '<div class="acoesU">'
-        +   '<input class="mini" id="nm_' + p.auth_id + '" placeholder="Nome da pessoa">'
-        +   '<select class="mini" id="pf_' + p.auth_id + '">'
-        +     perfis.map(x => '<option value="' + x.id + '">' + esc(x.nome) + '</option>').join('')
-        +   '</select>'
-        +   '<button class="btn pri mini" data-vinc="' + p.auth_id + '">Dar acesso</button>'
+        +   '<input class="mini" id="nm_' + esc(p.auth_id) + '" placeholder="Nome da pessoa"'
+        +     ' aria-label="Nome de quem usa ' + esc(p.email) + '">'
+        +   '<select class="mini" id="pf_' + esc(p.auth_id) + '"'
+        +     ' aria-label="Perfil de ' + esc(p.email) + '">' + opcoesPerfil(null) + '</select>'
+        +   '<button class="btn pri mini" data-vinc="' + esc(p.auth_id) + '">Dar acesso</button>'
+        +   '<button class="btn mini" data-excl-login="' + esc(p.auth_id) + '"'
+        +     ' data-nome="' + esc(p.email) + '">Excluir</button>'
         + '</div></div>';
     });
   }
 
+  // ── quem já tem acesso ──
   h += '<div class="secTit">Com acesso</div>';
   users.forEach(u => {
     h += '<div class="linhaU' + (u.ativo ? '' : ' off') + '">'
       + '<div><b>' + esc(u.nome) + (u.sou_eu ? ' <span class="tag">você</span>' : '')
       +   (u.is_admin ? ' <span class="tag adm">admin</span>' : '') + '</b>'
-      + '<small>' + esc(u.email||'') + ' · ' + esc(u.perfil||'sem perfil')
+      + '<small>' + esc(u.email||'sem e-mail') + ' · ' + esc(u.perfil||'sem perfil')
       +   (u.tarefas_concluidas ? ' · ' + u.tarefas_concluidas + ' tarefa(s) concluída(s)' : '')
       +   (u.ativo ? '' : ' · DESATIVADO') + '</small></div>'
       + '<div class="acoesU">'
-      +   '<select class="mini" data-perfil="' + u.id + '" data-antes="' + esc(u.perfil_id||'') + '"'
-      +     ' aria-label="Perfil de ' + esc(u.nome) + '">'
-      +     perfis.map(x => '<option value="' + x.id + '"' + (x.id===u.perfil_id?' selected':'') + '>'
-              + esc(x.nome) + '</option>').join('') + '</select>'
-      +   (u.sou_eu ? '' : '<button class="btn mini" data-ativo="' + u.id + '" data-v="'
-              + (u.ativo?'0':'1') + '">' + (u.ativo ? 'Desativar' : 'Reativar') + '</button>')
+      +   '<select class="mini" data-perfil="' + esc(u.id) + '" data-antes="' + esc(u.perfil_id||'') + '"'
+      +     ' aria-label="Perfil de ' + esc(u.nome) + '">' + opcoesPerfil(u.perfil_id) + '</select>'
+      +   '<button class="btn mini" data-senha="' + esc(u.id) + '" data-nome="' + esc(u.nome) + '">Senha</button>'
+      +   '<button class="btn mini" data-email="' + esc(u.id) + '" data-nome="' + esc(u.nome) + '"'
+      +     ' data-atual="' + esc(u.email||'') + '">E-mail</button>'
+      +   (u.sou_eu ? '' :
+             '<button class="btn mini" data-ativo="' + esc(u.id) + '" data-v="' + (u.ativo?'0':'1') + '">'
+           + (u.ativo ? 'Desativar' : 'Reativar') + '</button>'
+           + '<button class="btn mini" data-excluir="' + esc(u.id) + '" data-nome="' + esc(u.nome) + '">Excluir</button>')
       + '</div></div>';
   });
 
-  h += '<div class="secTit">Adicionar alguém</div>'
-    +  '<p class="nota">O login é criado uma vez, no painel do Supabase: <b>Authentication → '
-    +  'Users → Add user</b>, com <b>Auto Confirm User</b> marcado. Assim que existir, ele '
-    +  'aparece aqui em cima para você dar o perfil.<br>'
-    +  'Desativar aqui fecha o acesso na hora e mantém o histórico com o nome da pessoa — '
-    +  'é o que se usa quando alguém sai, não apagar.</p>'
+  // ── cadastrar alguém, aqui mesmo ──
+  // Formulário aberto, não escondido atrás de um botão: cadastrar gente é a
+  // razão de esta aba existir, e um passo a menos é um esquecimento a menos.
+  h += '<div class="secTit">Cadastrar uma pessoa nova</div>'
+    +  '<div class="formNovo">'
+    +   '<div class="dupla">'
+    +    '<div class="campo"><label for="nuNome">Nome</label>'
+    +     '<input id="nuNome" type="text" placeholder="Como aparece no quadro"'
+    +      ' autocomplete="off" name="nu_nome_nofill"></div>'
+    +    '<div class="campo"><label for="nuEmail">E-mail (é o login)</label>'
+    +     '<input id="nuEmail" type="email" placeholder="nome@engetap.com.br"'
+    +      ' autocomplete="off" name="nu_email_nofill"></div>'
+    +   '</div>'
+    +   '<div class="dupla">'
+    +    '<div class="campo"><label for="nuPerfil">Perfil</label>'
+    +     '<select id="nuPerfil">' + opcoesPerfil(null) + '</select></div>'
+    +    '<div class="campo"><label for="nuSenha">Senha inicial</label>'
+    +     '<div class="linhaSenha">'
+    +      '<input id="nuSenha" type="text" autocomplete="off" name="nu_senha_nofill"'
+    +       ' spellcheck="false" value="' + esc(senhaSugerida()) + '">'
+    +      '<button class="btn mini" type="button" id="nuOutra" title="Sortear outra">Outra</button>'
+    +      '<button class="btn mini" type="button" id="nuCopiar">Copiar</button>'
+    +     '</div></div>'
+    +   '</div>'
+    +   '<p class="nota">A senha aparece à mostra de propósito: você precisa passá-la à '
+    +   'pessoa. Ela entra com esse e-mail e essa senha, e o e-mail já nasce confirmado — '
+    +   'não há link para clicar nem confirmação para esperar.</p>'
+    +   '<button class="btn pri" id="nuCriar">Criar acesso</button>'
     +  '</div>';
+
+  h += '<p class="nota" style="margin-top:14px">'
+    +  '<b>Desativar</b> fecha o acesso na hora e mantém o histórico com o nome da pessoa — '
+    +  'é o que se usa quando alguém sai da empresa. <b>Excluir</b> apaga o cadastro e só '
+    +  'funciona para quem ainda não trabalhou no sistema (cadastro feito errado, pessoa que '
+    +  'nunca chegou a usar).</p></div>';
 
   c.innerHTML = h;
 
-  c.querySelectorAll('[data-vinc]').forEach(b => b.addEventListener('click', async () => {
-    const id = b.dataset.vinc;
-    const nome = (document.getElementById('nm_'+id)||{}).value || '';
-    if (!nome.trim()){ toast('Escreva o nome da pessoa.','err'); return; }
-    b.disabled = true;
-    try{
-      await rpc('tf_vincular_usuario', { p_auth_id:id, p_nome:nome.trim(),
-        p_perfil_id: document.getElementById('pf_'+id).value });
-      toast('Acesso liberado para ' + nome.trim() + '.','ok'); cfgUsuarios();
-    }catch(e){ toast(e.message,'err'); b.disabled = false; }
-  }));
+  // ── criar ──
+  const sortear = () => { document.getElementById('nuSenha').value = senhaSugerida(); };
+  document.getElementById('nuOutra').addEventListener('click', sortear);
+  document.getElementById('nuCopiar').addEventListener('click', () => {
+    const v = document.getElementById('nuSenha').value;
+    copiar(v, 'Senha copiada.');
+  });
+  document.getElementById('nuCriar').addEventListener('click', function(){
+    _semDuploEnvio_(this, async () => {
+      const nome  = document.getElementById('nuNome').value.trim();
+      const email = document.getElementById('nuEmail').value.trim();
+      const senha = document.getElementById('nuSenha').value;
+      const perfil= document.getElementById('nuPerfil').value;
+      if (!nome)  { toast('Escreva o nome da pessoa.','err'); document.getElementById('nuNome').focus(); return; }
+      if (!email) { toast('Escreva o e-mail — é com ele que a pessoa entra.','err');
+                    document.getElementById('nuEmail').focus(); return; }
+      if (senha.length < 8){ toast('A senha precisa de pelo menos 8 caracteres.','err'); return; }
+      try{
+        if (DEMO) demoCriarUsuario(nome, email, perfil);
+        else await rpc('tf_criar_usuario',
+          { p_nome:nome, p_email:email, p_perfil_id:perfil, p_senha:senha });
+        // A senha some da tela junto com o formulário. Ela é mostrada de novo
+        // aqui, no aviso, porque este é o único momento em que existe em texto:
+        // depois disto só há hash, e nem o admin consegue ver.
+        toast('Acesso criado para ' + nome + '.','ok');
+        await cfgUsuarios();
+        avisoNoTopo('Anote antes de sair desta tela: <b>' + esc(email) + '</b> · senha '
+          + '<b>' + esc(senha) + '</b>. A partir de agora a senha não pode mais ser '
+          + 'consultada — só trocada, no botão Senha.');
+      }catch(e){ toast(e.message,'err'); }
+    });
+  });
 
+  // ── trocar o perfil ──
+  // Passa por `tf_definir_perfil` e não por um UPDATE direto: é a função que
+  // recusa deixar o TapFlow sem nenhum admin, inclusive quando quem se rebaixa
+  // é você mesmo. O <select> volta ao valor antigo quando a gravação falha —
+  // deixá-lo mostrando o perfil novo seria o app mentindo sobre a permissão.
   c.querySelectorAll('[data-perfil]').forEach(sel => sel.addEventListener('change', async () => {
     const antes = sel.dataset.antes || '';
     sel.disabled = true;
     try{
-      if (!DEMO) await patch('usuarios', 'id=eq.' + sel.dataset.perfil, { perfil_id: sel.value });
+      if (DEMO) demoDefinirPerfil(sel.dataset.perfil, sel.value);
+      else await rpc('tf_definir_perfil', { p_id: sel.dataset.perfil, p_perfil_id: sel.value });
       sel.dataset.antes = sel.value;
       toast('Perfil alterado.','ok');
-    }catch(e){
-      // devolve o <select> ao valor antigo: deixá-lo mostrando o perfil novo
-      // depois de a gravação falhar é o app mentindo sobre a permissão da pessoa
-      sel.value = antes;
-      toast(e.message,'err');
-    }
+      cfgUsuarios();
+    }catch(e){ sel.value = antes; toast(e.message,'err'); }
     finally{ sel.disabled = false; }
   }));
 
+  // ── dar acesso a login que já existia ──
+  c.querySelectorAll('[data-vinc]').forEach(b => b.addEventListener('click',
+    () => _semDuploEnvio_(b, async () => {
+      const id = b.dataset.vinc;
+      const nome = (document.getElementById('nm_'+id)||{}).value || '';
+      if (!nome.trim()){ toast('Escreva o nome da pessoa.','err'); return; }
+      try{
+        if (DEMO) demoVincular(id, nome.trim(), document.getElementById('pf_'+id).value);
+        else await rpc('tf_vincular_usuario', { p_auth_id:id, p_nome:nome.trim(),
+          p_perfil_id: document.getElementById('pf_'+id).value });
+        toast('Acesso liberado para ' + nome.trim() + '.','ok'); cfgUsuarios();
+      }catch(e){ toast(e.message,'err'); }
+    })));
+
+  // ── ativar / desativar ──
   c.querySelectorAll('[data-ativo]').forEach(b => b.addEventListener('click',
     () => _semDuploEnvio_(b, async () => {
       try{
-        if (!DEMO) await rpc('tf_usuario_ativo', { p_id:b.dataset.ativo, p_ativo: b.dataset.v === '1' });
+        if (DEMO) demoAtivo(b.dataset.ativo, b.dataset.v === '1');
+        else await rpc('tf_usuario_ativo', { p_id:b.dataset.ativo, p_ativo: b.dataset.v === '1' });
         toast(b.dataset.v === '1' ? 'Reativado.' : 'Acesso encerrado.','ok'); cfgUsuarios();
       }catch(e){ toast(e.message,'err'); }
     })));
+
+  // ── senha ──
+  c.querySelectorAll('[data-senha]').forEach(b => b.addEventListener('click',
+    () => modalSenha(b.dataset.senha, b.dataset.nome)));
+
+  // ── e-mail ──
+  c.querySelectorAll('[data-email]').forEach(b => b.addEventListener('click',
+    () => modalEmail(b.dataset.email, b.dataset.nome, b.dataset.atual)));
+
+  // ── excluir ──
+  c.querySelectorAll('[data-excluir]').forEach(b => b.addEventListener('click',
+    () => modalExcluirUsuario(b.dataset.excluir, b.dataset.nome, false)));
+  c.querySelectorAll('[data-excl-login]').forEach(b => b.addEventListener('click',
+    () => modalExcluirUsuario(b.dataset.exclLogin, b.dataset.nome, true)));
+}
+
+// Aviso que fica na tela até alguém fechar. Toast some em segundos, e a senha
+// recém-criada é a única informação desta tela que não dá para recuperar
+// depois — ela não pode depender de o Fernando estar olhando na hora certa.
+function avisoNoTopo(html){
+  const c = document.getElementById('cfgCorpo');
+  if (!c) return;
+  const d = document.createElement('div');
+  d.className = 'aviso ok';
+  d.innerHTML = html + ' <button class="btn mini" type="button">Entendi</button>';
+  d.querySelector('button').addEventListener('click', () => d.remove());
+  const painel = c.querySelector('.painel');
+  if (painel) painel.insertBefore(d, painel.children[1] || null); else c.prepend(d);
+  d.scrollIntoView({ block:'nearest' });
+}
+
+function copiar(texto, msgOk){
+  const feito = () => toast(msgOk || 'Copiado.','ok');
+  // navigator.clipboard não existe fora de https (o app aberto do disco, no
+  // modo demo, cai aqui) — sem o plano B o botão simplesmente não faria nada.
+  if (navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(texto).then(feito, () => copiarVelho(texto, feito));
+  } else copiarVelho(texto, feito);
+}
+function copiarVelho(texto, feito){
+  try{
+    const t = document.createElement('textarea');
+    t.value = texto; t.setAttribute('readonly','');
+    t.style.cssText = 'position:fixed;left:-9999px';
+    document.body.appendChild(t); t.select();
+    document.execCommand('copy'); t.remove(); feito();
+  }catch(e){ toast('Não deu para copiar — selecione e copie à mão.','err'); }
+}
+
+function modalSenha(id, nome){
+  const sugerida = senhaSugerida();
+  abrirModal('Nova senha de ' + nome,
+    '<p class="nota">Não existe "ver a senha atual", nem para o admin: o que fica guardado '
+    + 'é um embaralhamento que não volta a ser texto. O que dá para fazer é definir uma '
+    + 'nova e passar para a pessoa.</p>'
+    + '<div class="campo"><label for="msSenha">Senha nova</label>'
+    + '<div class="linhaSenha">'
+    + '<input id="msSenha" type="text" autocomplete="off" name="ms_nofill" spellcheck="false" value="'
+    + esc(sugerida) + '">'
+    + '<button class="btn mini" type="button" id="msOutra">Outra</button>'
+    + '<button class="btn mini" type="button" id="msCopiar">Copiar</button></div></div>'
+    + '<p class="nota">Ao gravar, os aparelhos onde ' + esc(nome) + ' estiver logado são '
+    + 'desconectados — senão o celular dela continuaria dentro com a senha antiga.</p>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Gravar senha', pri:true, onClick: async () => {
+        const s = document.getElementById('msSenha').value;
+        if (s.length < 8){ toast('A senha precisa de pelo menos 8 caracteres.','err'); return; }
+        try{
+          if (!DEMO) await rpc('tf_definir_senha', { p_id:id, p_senha:s });
+          fecharModal();
+          toast('Senha trocada.','ok');
+          avisoNoTopo('Senha nova de <b>' + esc(nome) + '</b>: <b>' + esc(s) + '</b>. '
+            + 'Passe para ela antes de fechar esta tela — depois daqui não dá mais para consultar.');
+        }catch(e){ toast(e.message,'err'); }
+     }}]);
+  document.getElementById('msOutra').addEventListener('click',
+    () => { document.getElementById('msSenha').value = senhaSugerida(); });
+  document.getElementById('msCopiar').addEventListener('click',
+    () => copiar(document.getElementById('msSenha').value, 'Senha copiada.'));
+}
+
+function modalEmail(id, nome, atual){
+  abrirModal('E-mail de ' + nome,
+    '<p class="nota">O e-mail é o login. Trocar aqui muda o endereço em todos os lugares '
+    + 'de uma vez; a senha continua a mesma.</p>'
+    + '<div class="campo"><label for="meEmail">E-mail</label>'
+    + '<input id="meEmail" type="email" autocomplete="off" name="me_nofill" value="'
+    + esc(atual||'') + '"></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Gravar e-mail', pri:true, onClick: async () => {
+        const e1 = document.getElementById('meEmail').value.trim();
+        if (!e1){ toast('Escreva o e-mail.','err'); return; }
+        try{
+          if (DEMO) demoTrocarEmail(id, e1);
+          else await rpc('tf_trocar_email', { p_id:id, p_email:e1 });
+          fecharModal(); toast('E-mail alterado.','ok'); cfgUsuarios();
+        }catch(err){ toast(err.message,'err'); }
+     }}]);
+}
+
+// Consulta o histórico ANTES de oferecer o botão vermelho. Se houver rastro,
+// esta tela nem chega a tentar: mostra onde está e oferece Desativar. O
+// servidor recusaria de todo jeito — mas descobrir isso depois de clicar
+// "Excluir" e ler um erro é uma experiência pior do que ser avisado antes.
+async function modalExcluirUsuario(id, nome, semPerfil){
+  let hist = [];
+  if (!semPerfil){
+    try{ hist = DEMO ? demoHistorico(id) : await rpc('tf_usuario_historico', { p_id:id }); }
+    catch(e){ toast(e.message,'err'); return; }
+  }
+
+  if (hist && hist.length){
+    const total = hist.reduce((s,r) => s + Number(r.n||0), 0);
+    abrirModal('Não dá para excluir ' + nome,
+      '<div class="aviso"><b>' + esc(nome) + ' já trabalhou no sistema.</b> '
+      + 'O nome dela está em ' + total + ' registro(s):</div>'
+      + '<ul class="listaHist">' + hist.map(r =>
+          '<li><b>' + r.n + '</b> em ' + esc(_rotuloTabela(r.tabela)) + '</li>').join('') + '</ul>'
+      + '<p class="nota">Excluir apagaria a assinatura desses registros — o histórico ficaria '
+      + 'sem dono. O caminho para quem sai da empresa é <b>Desativar</b>: o acesso fecha na '
+      + 'hora e tudo que ela fez continua com o nome dela.</p>',
+      [{ label:'Fechar', onClick: fecharModal },
+       { label:'Desativar em vez disso', pri:true, onClick: async () => {
+          try{
+            if (DEMO) demoAtivo(id, false);
+            else await rpc('tf_usuario_ativo', { p_id:id, p_ativo:false });
+            fecharModal(); toast('Acesso encerrado.','ok'); cfgUsuarios();
+          }catch(e){ toast(e.message,'err'); }
+       }}]);
+    return;
+  }
+
+  abrirModal('Excluir ' + nome + '?',
+    '<p class="nota">' + esc(nome) + ' ainda não deixou nenhum registro no sistema, então '
+    + 'não há histórico a preservar. O login e o cadastro são apagados de vez.</p>'
+    + '<div class="aviso"><b>Isso não tem como desfazer.</b> Se a pessoa voltar, é preciso '
+    + 'cadastrar de novo.</div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Excluir de vez', pri:true, onClick: async () => {
+        try{
+          if (DEMO) demoExcluirUsuario(id);
+          else await rpc('tf_excluir_usuario', { p_id:id });
+          fecharModal(); toast(nome + ' foi excluída.','ok'); cfgUsuarios();
+        }catch(e){ toast(e.message,'err'); }
+     }}]);
 }
 
 // ── PERFIS ──────────────────────────────────────────────────────────────────
+// A lista tem SETE módulos, não seis. 'documentos' passou a existir no
+// 26_acesso.sql e a tela nunca o mostrou: quem salvasse um perfil por aqui
+// apagava o acesso à aba Documentos sem ter clicado em nada, porque o
+// formulário mandava a lista do que estava marcado — e o que não aparece não
+// pode estar marcado. Checkbox que falta não é uma opção a menos; é um
+// apagamento silencioso.
 const MODULOS = [['os','OS e quadros'],['comercial','Comercial'],['compras','Compras'],
-                 ['campo','Campo'],['cadastros','Cadastros'],['relatorios','Relatórios']];
+                 ['campo','Campo'],['cadastros','Cadastros'],['relatorios','Relatórios'],
+                 ['documentos','Documentos']];
+
+// Quantas pessoas SEGURAM este perfil — ativas e desativadas. É diferente do
+// que a lista mostra (`pessoas`, só as ativas) e é o número que o banco usa
+// para recusar a exclusão. `pessoas_total` chega da v_perfis desde o S16; o
+// `??` cobre o caso de o app novo rodar contra um banco que ainda não recebeu
+// a migration — aí ele erra para o lado de não oferecer o botão.
+const _pessoasDoPerfil = p => (p && p.pessoas_total != null) ? p.pessoas_total : (p ? p.pessoas : 0);
 
 async function cfgPerfis(){
   const c = document.getElementById('cfgCorpo');
   let perfis = [];
   try{ perfis = DEMO ? demoPerfis() : await get('v_perfis?select=*&order=id'); }
-  catch(e){ toast(e.message,'err'); return; }
+  catch(e){
+    c.innerHTML = '<div class="painel"><h3>Perfis</h3>'
+      + '<div class="aviso"><b>Não deu para carregar os perfis.</b><br>' + esc(e.message) + '</div>'
+      + '<button class="btn" id="pRetry">Tentar de novo</button></div>';
+    document.getElementById('pRetry').addEventListener('click', cfgPerfis);
+    return;
+  }
 
   let h = '<div class="cadWrap"><div class="painel"><h3>Perfis</h3>'
     + '<p class="nota">Perfil é dado, não código: criar “Estagiário de campo” é preencher '
@@ -4359,22 +4660,48 @@ function formPerfil(p){
     + '<label class="chk"><input type="checkbox" id="pfAtivo"' + (!p||p.ativo?' checked':'')
     +  '> Perfil ativo</label>'
     + '<div class="linhaBtns"><button class="btn pri" id="pfSalvar">'
-    +  (p?'Salvar':'Criar perfil') + '</button></div>';
+    +  (p?'Salvar':'Criar perfil') + '</button>'
+    +  (p ? '<button class="btn" id="pfExcluir">Excluir perfil</button>' : '')
+    + '</div>'
+    + (p ? '<p class="nota">Excluir só funciona com o perfil vazio. Enquanto houver gente '
+         + 'apontando para ele — inclusive gente desativada, que precisa dele para o histórico '
+         + 'continuar legível — o caminho é desmarcar “Perfil ativo”: ele some das listas de '
+         + 'escolha e continua existindo para quem já o tem.</p>' : '');
 
-  document.getElementById('pfSalvar').addEventListener('click', async (e) => {
-    const id = document.getElementById('pfId').value.trim().toLowerCase().replace(/[^a-z0-9_]/g,'_');
-    const nome = document.getElementById('pfNome').value.trim();
-    if (!id || !nome){ toast('Código e nome são obrigatórios.','err'); return; }
-    e.target.disabled = true;
-    try{
-      if (!DEMO) await rpc('tf_salvar_perfil', {
-        p_id:id, p_nome:nome,
-        p_executa_em: document.getElementById('pfEx').value,
-        p_is_admin: document.getElementById('pfAdm').checked,
-        p_modulos: [...d.querySelectorAll('[data-mod]:checked')].map(x => x.dataset.mod),
-        p_ativo: document.getElementById('pfAtivo').checked });
-      toast('Perfil salvo.','ok'); cfgPerfis();
-    }catch(err){ toast(err.message,'err'); e.target.disabled = false; }
+  document.getElementById('pfSalvar').addEventListener('click', function(){
+    _semDuploEnvio_(this, async () => {
+      const id = document.getElementById('pfId').value.trim().toLowerCase().replace(/[^a-z0-9_]/g,'_');
+      const nome = document.getElementById('pfNome').value.trim();
+      if (!id || !nome){ toast('Código e nome são obrigatórios.','err'); return; }
+      try{
+        const dados = { p_id:id, p_nome:nome,
+          p_executa_em: document.getElementById('pfEx').value,
+          p_is_admin: document.getElementById('pfAdm').checked,
+          p_modulos: [...d.querySelectorAll('[data-mod]:checked')].map(x => x.dataset.mod),
+          p_ativo: document.getElementById('pfAtivo').checked };
+        if (DEMO) demoSalvarPerfil(dados); else await rpc('tf_salvar_perfil', dados);
+        toast('Perfil salvo.','ok'); cfgPerfis();
+      }catch(err){ toast(err.message,'err'); }
+    });
+  });
+
+  const bx = document.getElementById('pfExcluir');
+  if (bx) bx.addEventListener('click', () => {
+    abrirModal('Excluir o perfil “' + p.nome + '”?',
+      (_pessoasDoPerfil(p)
+        ? '<div class="aviso"><b>Este perfil tem ' + _pessoasDoPerfil(p) + ' pessoa(s)'
+          + (_pessoasDoPerfil(p) > (p.pessoas||0) ? ', contando as desativadas' : '') + '.</b> '
+          + 'Mova essas pessoas para outro perfil antes — ou desmarque “Perfil ativo”, '
+          + 'que tira ele das listas sem apagar nada.</div>'
+        : '<p class="nota">Nenhuma pessoa aponta para este perfil, então nada deixa de '
+          + 'funcionar. Isso não tem como desfazer.</p>'),
+      [{ label:'Cancelar', onClick: fecharModal }].concat(_pessoasDoPerfil(p) ? [] : [
+       { label:'Excluir perfil', pri:true, onClick: async () => {
+          try{
+            if (DEMO) demoExcluirPerfil(p.id); else await rpc('tf_excluir_perfil', { p_id:p.id });
+            fecharModal(); toast('Perfil excluído.','ok'); cfgPerfis();
+          }catch(e){ toast(e.message,'err'); }
+       }}]));
   });
 }
 
@@ -4588,23 +4915,114 @@ async function cfgExclusoes(){
     + '</div>';
 }
 
-// dados do modo demo
-const demoUsuarios = () => ([
+// ── dados do modo demo ──────────────────────────────────────────────────────
+// Aqui eles são ESTADO, não literal: criar, excluir e trocar perfil precisam
+// aparecer na tela seguinte para o modo demo servir de alguma coisa. Lista que
+// se refaz igual a cada render mostra o botão funcionando e o efeito sumindo —
+// que é pior do que não ter demo. Nada disso sai do navegador.
+let _demoU = [
   {id:'u1',nome:'Fernando Sousa',email:'fernando@engetap.com.br',perfil_id:'admin',perfil:'Administração',
    is_admin:true,ativo:true,sou_eu:true,tarefas_concluidas:12},
   {id:'u2',nome:'Glênio Arantes',email:'glenio@engetap.com.br',perfil_id:'comercial',perfil:'Comercial',
    is_admin:false,ativo:true,sou_eu:false,tarefas_concluidas:5},
   {id:'u3',nome:'Inspetor 1',email:'inspetor1@engetap.com.br',perfil_id:'inspetor',perfil:'Inspetor de Campo',
-   is_admin:false,ativo:true,sou_eu:false,tarefas_concluidas:31}
-]);
-const demoPerfis = () => ([
-  {id:'admin',nome:'Administração',executa_em:'ambos',is_admin:true,ativo:true,pessoas:2,
-   modulos:['os','comercial','compras','campo','cadastros','relatorios']},
+   is_admin:false,ativo:true,sou_eu:false,tarefas_concluidas:31},
+  {id:'u4',nome:'Auxiliar 2',email:'auxiliar2@engetap.com.br',perfil_id:'auxiliar',perfil:'Auxiliar de Campo',
+   is_admin:false,ativo:true,sou_eu:false,tarefas_concluidas:0}
+];
+let _demoP = [
+  {id:'admin',nome:'Administração',executa_em:'ambos',is_admin:true,ativo:true,pessoas:1,
+   modulos:['os','comercial','compras','campo','cadastros','relatorios','documentos']},
   {id:'comercial',nome:'Comercial',executa_em:'adm',is_admin:false,ativo:true,pessoas:1,
-   modulos:['os','comercial','relatorios']},
-  {id:'inspetor',nome:'Inspetor de Campo',executa_em:'campo',is_admin:false,ativo:true,pessoas:2,
+   modulos:['os','comercial','relatorios','documentos']},
+  {id:'inspetor',nome:'Inspetor de Campo',executa_em:'campo',is_admin:false,ativo:true,pessoas:1,
+   modulos:['campo']},
+  {id:'auxiliar',nome:'Auxiliar de Campo',executa_em:'campo',is_admin:false,ativo:true,pessoas:1,
    modulos:['campo']}
-]);
+];
+let _demoPend = [
+  {auth_id:'p1', email:'tulio@engetap.com.br', confirmado:true, criado_em:new Date().toISOString()}
+];
+
+const _demoContar = () => _demoP.forEach(p => {
+  p.pessoas       = _demoU.filter(u => u.perfil_id === p.id && u.ativo).length;
+  p.pessoas_total = _demoU.filter(u => u.perfil_id === p.id).length;
+});
+
+const demoUsuarios  = () => { _demoContar();
+  return _demoU.slice().sort((a,b) => (b.ativo-a.ativo) || a.nome.localeCompare(b.nome)); };
+const demoPerfis    = () => { _demoContar(); return _demoP.slice(); };
+const demoPendentes = () => _demoPend.slice();
+
+// As mesmas recusas do banco, para o demo não prometer o que a produção nega.
+function demoCriarUsuario(nome, email, perfil){
+  const e = String(email||'').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw new Error('E-mail inválido: "' + email + '". Confira a digitação.');
+  if (_demoU.some(u => u.email === e)) throw new Error('Já existe alguém cadastrado com o e-mail ' + e + '.');
+  if (_demoPend.some(u => u.email === e)) throw new Error('Já existe um login com o e-mail ' + e + ' sem perfil.');
+  const pf = _demoP.find(x => x.id === perfil);
+  _demoU.push({ id:'u'+(Date.now()%100000), nome:nome, email:e, perfil_id:perfil,
+    perfil: pf ? pf.nome : perfil, is_admin: !!(pf && pf.is_admin),
+    ativo:true, sou_eu:false, tarefas_concluidas:0 });
+}
+function demoDefinirPerfil(id, perfil){
+  const u = _demoU.find(x => x.id === id); if (!u) throw new Error('Essa pessoa não está cadastrada.');
+  const pf = _demoP.find(x => x.id === perfil);
+  const eraAdmin = u.is_admin, viraAdmin = !!(pf && pf.is_admin);
+  if (eraAdmin && !viraAdmin && !_demoU.some(x => x.is_admin && x.ativo && x.id !== id)){
+    throw new Error(u.sou_eu
+      ? 'Você é a única pessoa com acesso de admin. Trocar o seu perfil agora trancaria você para fora do próprio sistema — dê o perfil admin a outra pessoa primeiro.'
+      : u.nome + ' é a única pessoa com acesso de admin. Ficaria ninguém para administrar o TapFlow.');
+  }
+  u.perfil_id = perfil; u.perfil = pf ? pf.nome : perfil; u.is_admin = viraAdmin;
+}
+function demoVincular(authId, nome, perfil){
+  const i = _demoPend.findIndex(x => x.auth_id === authId); if (i < 0) return;
+  const pend = _demoPend.splice(i,1)[0];
+  const pf = _demoP.find(x => x.id === perfil);
+  _demoU.push({ id:'u'+(Date.now()%100000), nome:nome, email:pend.email, perfil_id:perfil,
+    perfil: pf ? pf.nome : perfil, is_admin: !!(pf && pf.is_admin),
+    ativo:true, sou_eu:false, tarefas_concluidas:0 });
+}
+function demoAtivo(id, ativo){
+  const u = _demoU.find(x => x.id === id); if (!u) return;
+  if (!ativo && u.is_admin && !_demoU.some(x => x.is_admin && x.ativo && x.id !== id))
+    throw new Error('Ficaria ninguém com acesso de admin.');
+  u.ativo = ativo;
+}
+function demoTrocarEmail(id, email){
+  const e = String(email||'').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw new Error('E-mail inválido: "' + email + '". Confira a digitação.');
+  if (_demoU.some(u => u.email === e && u.id !== id)) throw new Error('O e-mail ' + e + ' já é de outro login.');
+  const u = _demoU.find(x => x.id === id); if (u) u.email = e;
+}
+// quem já concluiu tarefa tem rastro; é o que trava a exclusão
+function demoHistorico(id){
+  const u = _demoU.find(x => x.id === id);
+  if (!u || !u.tarefas_concluidas) return [];
+  return [{tabela:'pipeline_tarefas', coluna:'concluido_por', n:u.tarefas_concluidas},
+          {tabela:'eventos', coluna:'quem', n:u.tarefas_concluidas * 2}];
+}
+function demoExcluirUsuario(id){
+  const u = _demoU.find(x => x.id === id);
+  if (u && u.sou_eu) throw new Error('Você não pode excluir a si mesmo.');
+  if (demoHistorico(id).length) throw new Error('Essa pessoa já trabalhou no sistema.');
+  _demoU = _demoU.filter(x => x.id !== id);
+  _demoPend = _demoPend.filter(x => x.auth_id !== id);
+}
+function demoSalvarPerfil(d){
+  const i = _demoP.findIndex(x => x.id === d.p_id);
+  const reg = { id:d.p_id, nome:d.p_nome, executa_em:d.p_executa_em, is_admin:d.p_is_admin,
+                modulos:d.p_modulos, ativo:d.p_ativo,
+                pessoas: i>=0 ? _demoP[i].pessoas : 0,
+                pessoas_total: i>=0 ? _demoP[i].pessoas_total : 0 };
+  if (i >= 0) _demoP[i] = reg; else _demoP.push(reg);
+  _demoU.forEach(u => { if (u.perfil_id === reg.id){ u.perfil = reg.nome; u.is_admin = reg.is_admin; } });
+}
+function demoExcluirPerfil(id){
+  if (_demoU.some(u => u.perfil_id === id)) throw new Error('Esse perfil tem gente dentro.');
+  _demoP = _demoP.filter(x => x.id !== id);
+}
 const demoDocs = () => ([
   {id:'d1',origem:'documento',tipo:'proposta',identificacao:'ORC-4417',url:'#',
    quando:new Date().toISOString(),os:'OS-2026-0005',cliente:'Fundição Pará de Minas',quem:'Glênio Arantes'},
