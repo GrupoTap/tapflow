@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S17</title>
+<title>TapFlow Manager · S18</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -487,6 +487,8 @@ button.mini{padding:6px 12px;font-weight:600}
 /* onde o cliente fica — mesmo desenho no card do negócio e na gaveta da OS */
 /* a régua antes do botão que destrói: separação visual é o que impede o
    clique por inércia depois de dois botões inofensivos */
+.listaItens{max-height:210px;overflow-y:auto;border:1px solid var(--rule);border-radius:4px;padding:8px 10px}
+.listaItens .chk{padding:4px 0}
 .reguaPerigo{border:0;border-top:1px solid var(--rule);margin:22px 0 4px}
 .blocoLocal{border:1px solid var(--rule);border-radius:4px;padding:10px 12px;margin-bottom:16px;
   background:var(--bg)}
@@ -960,7 +962,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S17';
+const APP_VERSION = 'S18';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -1831,14 +1833,28 @@ function pintarAcoes_(){
   }
 
   if (t.tipo === 'decisao'){
+    // A resposta do CLIENTE é uma decisão especial: ela precisa de evidência.
+    // Reconhecida pelas opções, não pelo id da tarefa — id muda quando o
+    // template muda, e a regra tem que sobreviver a isso.
+    const ehAprovacao = (t.opcoes || []).some(o => o.valor === 'aprovado_total');
     (t.opcoes || []).forEach(o => {
       const b = document.createElement('button');
       b.className = 'btn' + (o.valor === 'reprovado' ? '' : ' pri');
       b.textContent = o.label || o.valor;
-      b.addEventListener('click', () => agir('decisao', t, o.valor));
+      // Até o S17 estes botões chamavam `tf_resolver_decisao` direto: o card
+      // andava e não sobrava evidência de quem aprovou, por onde, em que dia.
+      // Era o buraco COM-05 do TapControl de volta, e a dica embaixo pedia à
+      // pessoa que lembrasse de fazer um segundo passo que não existia em tela
+      // nenhuma. Agora abrem o formulário, que grava as duas coisas juntas.
+      b.addEventListener('click', () => ehAprovacao
+        ? modalAprovacao(card, o.valor)
+        : agir('decisao', t, o.valor));
       row.appendChild(b);
     });
-    hint.textContent = 'A resposta do cliente. Registre também contato, canal e data no módulo de propostas.';
+    hint.textContent = ehAprovacao
+      ? 'A resposta do cliente. Contato, canal e data são pedidos junto — é o que faz '
+        + '"o cliente aprovou" ser conferível daqui a seis meses.'
+      : 'Escolher move o card. A opção fica registrada no histórico.';
     return;
   }
 
@@ -2953,6 +2969,11 @@ async function montarGerador(caixa){
     // pena: é o defeito mais caro de todos, e descobrir depois de enviar não
     // adianta. Fica em cache para a hora de gerar.
     est.logos = 0; pintarLogo();
+    // Em modo demo não há Storage: `SUPABASE_URL` é vazio, então a URL virava
+    // `file:///storage/...` e o navegador registrava um erro de CORS no console
+    // a cada abertura da aba. Erro de console em demonstração é ruído que
+    // esconde erro de verdade — e aqui não havia o que baixar mesmo.
+    if (DEMO){ pintarLogo(); return; }
     try{
       const b = await baixarModelo(est.modelo.storage_path || (est.modelo.id + '.docx'));
       est.logos = await logoDeClienteNoModelo(b);
@@ -3027,6 +3048,194 @@ async function montarGerador(caixa){
 // ════════════════════════════════════════════════════════════════════════════
 // ABA PROPOSTA — gerar aqui, ou registrar a que veio de fora
 // ════════════════════════════════════════════════════════════════════════════
+// ── REGISTRAR A RESPOSTA DO CLIENTE ─────────────────────────────────────────
+// A maior lacuna do TapFlow até o S18: existia `tf_aprovar_proposta` no banco,
+// completa, e não existia tela. Na prática a aprovação era registrada pelo SQL
+// Editor — ou não era registrada, e alguém clicava direto em "Aprovou tudo" no
+// quadro, que movia o card SEM evidência nenhuma.
+//
+// Isso é o buraco COM-05 do TapControl voltando: lá o responsável pela
+// aprovação era a string 'ADM' e não havia com quem conferir. A decisão 7 de
+// 04/09 diz o contrário — contato, canal e data são obrigatórios. Esta tela é
+// onde essa decisão passa a existir de verdade.
+//
+// Duas portas para o mesmo lugar, de propósito:
+//   · os botões da tarefa "Cliente aprovou?" no rodapé da gaveta;
+//   · o botão na linha da proposta, na aba Proposta.
+// Quem está olhando o quadro chega pela primeira; quem está olhando a proposta
+// chega pela segunda. As duas abrem o MESMO formulário e gravam pela MESMA
+// função — que faz evidência e pipeline juntos, sem meio-caminho.
+
+const APROV_ROT = { aprovado_total:'Aprovou tudo', aprovado_parcial:'Aprovou em parte',
+                    reprovado:'Não aprovou' };
+
+/** A proposta desta OS que está esperando resposta. */
+function propostaEmJogo(props){
+  const vivas = (props||[]).filter(p => p.status === 'emitida' || p.status === 'enviada');
+  if (!vivas.length) return null;
+  // a de maior versão; empate resolve pela mais recente
+  return vivas.sort((a,b) => (b.versao||0) - (a.versao||0))[0];
+}
+
+async function modalAprovacao(card, tipoInicial){
+  if (DEMO){
+    abrirModal('Registrar resposta do cliente',
+      '<div class="aviso">No modo demonstração esta tela não grava — ela depende de '
+      + 'proposta emitida e de contato cadastrado no banco real.</div>'
+      + '<p class="nota">O que ela pede: quem respondeu, por qual canal, em que dia, e '
+      + '(quando o cliente aprova em parte) quais itens entraram.</p>',
+      [{ label:'Fechar', onClick: fecharModal }]);
+    return;
+  }
+
+  let props = [], contatos = [], motivos = [];
+  try{
+    [props, contatos, motivos] = await Promise.all([
+      get('v_propostas?select=*&os_id=eq.' + card.os_id + '&order=versao.desc'),
+      get('contatos?select=id,nome,telefone,email,papeis&cliente_id=eq.' + card.cliente_id
+          + '&ativo=eq.true&order=nome'),
+      get('motivos_perda?select=id,nome&ativo=is.true&order=nome')
+    ]);
+  }catch(e){ toast(e.message,'err'); return; }
+
+  const pr = propostaEmJogo(props);
+  if (!pr){
+    // Recusar explicando o que falta vale mais que um formulário que não grava.
+    abrirModal('Ainda não há proposta para responder',
+      '<p class="nota">A resposta do cliente é a resposta a uma PROPOSTA — e esta OS ainda '
+      + 'não tem nenhuma emitida' + (props.length ? ' e não respondida' : '') + '.</p>'
+      + '<p class="nota">Registre a proposta na aba <b>Proposta</b> primeiro. É ela que '
+      + 'congela o que foi ofertado, e é sobre esse escopo que a aprovação se aplica, '
+      + 'item a item.</p>',
+      [{ label:'Entendi', onClick: fecharModal }]);
+    return;
+  }
+
+  let dados = null;
+  try{ dados = await rpc('tf_proposta_para_decidir', { p_proposta_id: pr.id }); }
+  catch(e){ toast(e.message,'err'); return; }
+
+  // já respondida: mostra o que foi, não oferece formulário
+  if (dados && dados.ja_decidida){
+    const d = dados.decisao || {};
+    abrirModal('A proposta ' + pr.numero + ' já foi respondida',
+      '<div class="aviso"><b>' + esc(APROV_ROT[d.tipo] || d.tipo) + '</b> em '
+      + esc(dataBR(d.quando)) + (d.contato ? ', por ' + esc(d.contato) : '')
+      + (d.canal ? ' (' + esc(d.canal) + ')' : '') + '.</div>'
+      + '<p class="nota">Registrado por ' + esc(d.quem || '—') + '.'
+      + (d.observacao ? '<br>' + esc(d.observacao) : '') + '</p>'
+      + '<p class="nota">Se o cliente mudou de ideia, emita uma <b>versão nova</b> da proposta e '
+      + 'registre a resposta nela: os itens são corrigidos e as duas respostas ficam no '
+      + 'histórico. O card <b>não</b> volta nem anda de novo — ele já passou por esta etapa, '
+      + 'e quadro que desanda deixa de ser confiável.</p>',
+      [{ label:'Fechar', onClick: fecharModal }]);
+    return;
+  }
+
+  const itens = (dados && dados.itens) || [];
+  // quem aprova a proposta é papel de contato: esse vem primeiro na lista
+  const ordenados = contatos.slice().sort((a,b) =>
+    ((b.papeis||[]).includes('aprova') ? 1 : 0) - ((a.papeis||[]).includes('aprova') ? 1 : 0));
+
+  const corpo =
+      '<p class="nota">Proposta <b>' + esc(pr.numero) + '</b> v' + pr.versao
+    + ' · ' + BRL(pr.valor_total) + (pr.enviada_em ? ' · enviada ' + esc(dataBR(pr.enviada_em)) : '')
+    + '</p>'
+    + '<div class="secTit" style="margin-top:0">O que o cliente respondeu</div>'
+    + '<div class="grelha">'
+    + ['aprovado_total','aprovado_parcial','reprovado'].map(v =>
+        '<label class="chk"><input type="radio" name="apTipo" value="' + v + '"'
+        + (v === tipoInicial ? ' checked' : '') + '> ' + APROV_ROT[v] + '</label>').join('')
+    + '</div>'
+    + (ordenados.length
+        ? '<div class="campo"><label for="apCt">Quem respondeu</label><select id="apCt">'
+          + ordenados.map(x => '<option value="' + esc(x.id) + '">' + esc(x.nome)
+              + ((x.papeis||[]).includes('aprova') ? ' · aprova propostas' : '')
+              + '</option>').join('') + '</select></div>'
+        : '<div class="aviso"><b>Este cliente não tem contato cadastrado.</b> A resposta '
+          + 'precisa ter um nome — cadastre o contato em Cadastros → Clientes antes.</div>')
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="apCanal">Por onde</label><select id="apCanal">'
+    +   ['email','whatsapp','telefone','presencial','outro'].map(k =>
+         '<option value="' + k + '">' + ({email:'E-mail',whatsapp:'WhatsApp',
+           telefone:'Telefone',presencial:'Presencial',outro:'Outro'})[k] + '</option>').join('')
+    +  '</select></div>'
+    +  '<div class="campo"><label for="apData">Quando</label><input id="apData" type="date" value="'
+    +   new Date().toISOString().slice(0,10) + '"></div></div>'
+    + '<div id="apParcial"></div>'
+    + '<div class="campo"><label for="apEv">Link da evidência (opcional)</label>'
+    + '<input id="apEv" type="text" placeholder="E-mail, pedido de compra, print no Drive…"'
+    + ' autocomplete="off" name="apev_nofill"></div>'
+    + '<div class="campo"><label for="apObs">Observação (opcional)</label>'
+    + '<input id="apObs" type="text" autocomplete="off" name="apobs_nofill"></div>'
+    + '<p class="nota">Contato, canal e data são obrigatórios de propósito. É o que '
+    + 'transforma “o cliente aprovou” em algo que se confere daqui a seis meses.</p>';
+
+  abrirModal('Resposta do cliente · ' + card.numero, corpo,
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Registrar resposta', pri:true, onClick: async () => {
+        const tipo = (document.querySelector('input[name="apTipo"]:checked')||{}).value;
+        if (!tipo){ toast('Marque o que o cliente respondeu.','err'); return; }
+        const ct = (document.getElementById('apCt')||{}).value;
+        if (!ct){ toast('A resposta precisa ter um contato. Cadastre um antes.','err'); return; }
+        const data = (document.getElementById('apData')||{}).value;
+        if (!data){ toast('Informe a data da resposta.','err'); return; }
+
+        let motivo = null, aprovados = null;
+        if (tipo !== 'aprovado_total'){
+          motivo = (document.getElementById('apMot')||{}).value;
+          if (!motivo){ toast('Escolha o motivo do que não entrou.','err'); return; }
+          aprovados = [...document.querySelectorAll('[data-it]:checked')].map(x => x.dataset.it);
+          if (tipo === 'aprovado_parcial' && !aprovados.length){
+            toast('Marque ao menos um item aprovado — senão a resposta é “não aprovou”.','err');
+            return;
+          }
+          if (tipo === 'reprovado') aprovados = [];
+        }
+        try{
+          await rpc('tf_aprovar_proposta', { p_proposta_id: pr.id, p_tipo: tipo,
+            p_contato_id: ct, p_canal: document.getElementById('apCanal').value,
+            p_decidido_em: data, p_itens_aprovados: aprovados,
+            p_motivo_perda: motivo,
+            p_evidencia_url: (document.getElementById('apEv')||{}).value.trim() || null,
+            p_observacao: (document.getElementById('apObs')||{}).value.trim() || null });
+          fecharModal();
+          toast('Resposta registrada. O card andou.','ok');
+          await carregar();
+          fecharDrawer();
+        }catch(e){ toast(e.message,'err'); }
+     }}]);
+
+  // ── a parte que só aparece quando não foi "aprovou tudo" ──
+  // Escolher item a item é o que faz "aprovou em parte" significar alguma
+  // coisa: sem isso a OS seguiria comprando o que o cliente cortou.
+  const pintarParcial = () => {
+    const tipo = (document.querySelector('input[name="apTipo"]:checked')||{}).value;
+    const alvo = document.getElementById('apParcial');
+    if (!alvo) return;
+    if (tipo === 'aprovado_total'){ alvo.innerHTML = ''; return; }
+    alvo.innerHTML =
+        '<div class="campo"><label for="apMot">Motivo do que não entrou</label>'
+      + '<select id="apMot">' + motivos.map(m =>
+          '<option value="' + esc(m.id) + '">' + esc(m.nome) + '</option>').join('')
+      + '</select></div>'
+      + (tipo === 'aprovado_parcial'
+          ? '<div class="secTit">O que o cliente aprovou</div>'
+            + (itens.length
+                ? '<div class="listaItens">' + itens.map(i =>
+                    '<label class="chk"><input type="checkbox" data-it="' + esc(i.os_item_id) + '" checked> '
+                    + esc(i.descricao) + ' <span class="nota">· ' + i.quantidade + ' un · '
+                    + BRL(i.total) + '</span></label>').join('') + '</div>'
+                  + '<p class="nota">Desmarque o que ficou de fora. O que sobrar desmarcado é '
+                  + 'registrado como perdido, com o motivo acima — e a OS deixa de comprá-lo.</p>'
+                : '<p class="nota">Esta proposta não congelou itens, então não há o que escolher.</p>')
+          : '');
+  };
+  document.querySelectorAll('input[name="apTipo"]').forEach(r =>
+    r.addEventListener('change', pintarParcial));
+  pintarParcial();
+}
+
 // ── REGISTRAR O ENVIO DA PROPOSTA ───────────────────────────────────────────
 // É o passo que faltava para o quadro comercial andar. Exige contato e canal
 // de propósito: "enviada" sem dizer para quem e por onde é o mesmo buraco do
@@ -3123,13 +3332,26 @@ async function pintarProposta(){
       // parecia ter cinco colunas e parar ali. Foi a auditoria inversa desta
       // rodada (coluna que o banco tem e nenhuma tela lê) que apontou.
       const td = document.createElement('td');
+      td.style.whiteSpace = 'nowrap';
       if (pr.status === 'emitida' && !DEMO){
         const b = document.createElement('button');
         b.className = 'btn mini'; b.type = 'button'; b.textContent = 'Registrar envio';
         b.addEventListener('click', () => modalEnvioProposta(card, pr));
         td.appendChild(b);
-      } else if (pr.enviada_em){
-        td.className = 'nota'; td.textContent = 'enviada ' + dataBR(pr.enviada_em);
+      }
+      // A segunda porta para o formulário de aprovação. A primeira são os
+      // botões da tarefa "Cliente aprovou?"; esta serve a quem está olhando a
+      // proposta e não o quadro — e a quem precisa registrar a resposta antes
+      // de o card chegar naquela etapa.
+      if ((pr.status === 'emitida' || pr.status === 'enviada') && !DEMO){
+        const b2 = document.createElement('button');
+        b2.className = 'btn mini pri'; b2.type = 'button'; b2.textContent = 'Resposta do cliente';
+        b2.addEventListener('click', () => modalAprovacao(card, null));
+        td.appendChild(b2);
+      }
+      if (!td.children.length){
+        td.className = 'nota';
+        td.textContent = pr.enviada_em ? 'enviada ' + dataBR(pr.enviada_em) : '';
       }
       tr.appendChild(td);
       tb.appendChild(tr);
