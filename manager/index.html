@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S16</title>
+<title>TapFlow Manager · S17</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -472,7 +472,40 @@ button.mini{padding:6px 12px;font-weight:600}
 .cardCom:hover{border-color:var(--accent)}
 .cardCom.morno{border-left:3px solid var(--warn)}
 .cardCom.parado{border-left:3px solid var(--crit)}
-.cardCom .logo{position:absolute;top:9px;right:9px;width:34px;height:22px;object-fit:contain;opacity:.9}
+.cardCom .logo{position:absolute;top:9px;right:9px;width:34px;height:26px}
+/* O quadrado da logo: com imagem ou com as iniciais, o tamanho é o mesmo —
+   é o que mantém o card do mesmo tamanho antes e depois de a foto chegar. */
+.logoCli{display:grid;place-items:center;overflow:hidden;border-radius:3px;flex:0 0 auto;
+  background:hsl(var(--h,210) 38% 93%);color:hsl(var(--h,210) 42% 30%)}
+.logoCli i{font-style:normal;font-weight:700;font-size:11px;letter-spacing:.02em}
+.logoCli img{width:100%;height:100%;object-fit:contain;background:#fff}
+.card .cli{display:flex;align-items:center;gap:7px}
+.logoOS{width:22px;height:22px}
+.logoOS i{font-size:9.5px}
+.logoFicha{width:64px;height:64px;border-radius:4px}
+.logoFicha i{font-size:22px}
+/* onde o cliente fica — mesmo desenho no card do negócio e na gaveta da OS */
+/* a régua antes do botão que destrói: separação visual é o que impede o
+   clique por inércia depois de dois botões inofensivos */
+.reguaPerigo{border:0;border-top:1px solid var(--rule);margin:22px 0 4px}
+.blocoLocal{border:1px solid var(--rule);border-radius:4px;padding:10px 12px;margin-bottom:16px;
+  background:var(--bg)}
+.blocoLocal .lin{display:flex;gap:10px;padding:5px 0;font-size:13px;line-height:1.4}
+.blocoLocal .lin+.lin{border-top:1px solid var(--rule-2)}
+.blocoLocal .rot{flex:0 0 92px;color:var(--ink-3);font-size:11.5px;text-transform:uppercase;
+  letter-spacing:.05em;font-weight:700;padding-top:2px}
+.blocoLocal .falta{color:var(--ink-3);opacity:.75}
+.tripla{display:grid;grid-template-columns:2fr 1fr 1.2fr;gap:10px}
+@media(max-width:560px){.tripla{grid-template-columns:1fr}}
+.mini.ag{background:var(--accent-soft);color:var(--accent)}
+.mini.ok{background:var(--ok-soft);color:var(--ok)}
+.fichaTopo{display:flex;gap:14px;align-items:flex-start;margin-bottom:16px}
+.fichaTopo .lado{flex:0 0 auto;display:flex;flex-direction:column;gap:6px;align-items:center}
+.fichaTopo .lado .btn.mini{margin-left:0}
+.fichaTopo .campos{flex:1 1 auto;min-width:0}
+.linhaCt{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;
+  padding:8px 0;border-bottom:1px solid var(--rule-2);font-size:13.5px}
+.linhaCt .papeis{display:flex;gap:4px;flex-wrap:wrap}
 .cardCom .num{font-family:ui-monospace,monospace;font-size:10.5px;font-weight:700;color:var(--ink-3)}
 .cardCom .cli{font-size:14px;font-weight:600;line-height:1.25;margin:2px 0 1px;padding-right:40px}
 .cardCom .tit{font-size:12.5px;color:var(--ink-2);line-height:1.3}
@@ -927,7 +960,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S16';
+const APP_VERSION = 'S17';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -1315,6 +1348,9 @@ function pintar(){
     dados.itens.forEach(c => body.appendChild(cardEl(c)));
     board.appendChild(col);
   });
+
+  // depois de a tela estar pronta, nunca antes
+  carregarLogos(doQuadro.map(c => c.cliente_id));
 }
 
 // ── registro de colunas ─────────────────────────────────────────────────────
@@ -1425,13 +1461,13 @@ function cardEl(c){
 
   el.innerHTML =
     '<div class="num mono"></div>' +
-    '<div class="cli"></div>' +
+    '<div class="cli">' + logoHTML(c.cliente_id, c.cliente, 'logoOS') + '<span class="nm"></span></div>' +
     '<div class="tar"><span class="ic">' + icone(c.tarefa_atual_status, c.tarefa_atual_tipo) + '</span><span class="tn"></span></div>' +
     (total > 1 ? '<div class="bar"><i style="width:' + pct + '%"></i></div>' : '') +
     '<div class="foot">' + chips.join('') + '</div>';
 
   el.querySelector('.num').textContent = c.numero;
-  el.querySelector('.cli').textContent = c.cliente;
+  el.querySelector('.cli .nm').textContent = c.cliente;
   el.querySelector('.tn').textContent  = c.tarefa_atual || '—';
   el.addEventListener('click', () => abrirOS(c));
   return el;
@@ -1506,13 +1542,14 @@ async function abrirOS(c){
  *  Comercial, que troca o conteúdo do #dTabs pelas abas dele. */
 function montarTabsOS(){
   const t = document.getElementById('dTabs');
-  t.innerHTML = [['tarefas','Tarefas'],['itens','Itens'],['proposta','Proposta'],
+  t.innerHTML = [['tarefas','Tarefas'],['cliente','Cliente'],['itens','Itens'],['proposta','Proposta'],
                  ['custos','Custos'],['arquivos','Arquivos'],['hist','Histórico']]
     .map(([k,r]) => '<button type="button" data-t="' + k + '"'
       + (abaDrawer === k ? ' class="on"' : '') + '>' + r + '</button>').join('');
 }
 
 function pintarDrawer(){
+  if (abaDrawer === 'cliente')  return pintarClienteOS();
   if (abaDrawer === 'hist')     return pintarHistorico();
   if (abaDrawer === 'itens')    return pintarItens();
   if (abaDrawer === 'proposta') return pintarProposta();
@@ -1561,6 +1598,112 @@ function pintarDrawer(){
   });
 
   pintarAcoes();
+}
+
+// ── ABA CLIENTE DA OS ───────────────────────────────────────────────────────
+// Decisão do Fernando (08/09): se a fase comercial não preencheu endereço,
+// localização e contato de agendamento, quem está executando a OS completa por
+// aqui. Sem isso, o inspetor liga para o escritório do portão errado.
+//
+// O caminho NÃO é dar ao campo a escrita em `clientes` — isso lhe daria também
+// renomear cliente e mexer em CNPJ. É `tf_completar_dados_cliente`, que recebe
+// a OS e toca em TRÊS campos.
+//
+// E campo já preenchido não vira caixa de texto: vira texto com um "corrigir"
+// ao lado. Sobrescrever o endereço que o comercial conferiu tem que ser um ato
+// deliberado, não o efeito de alguém tabular por cima de um formulário no
+// celular, com pressa, na portaria.
+async function pintarClienteOS(){
+  const { card } = osAberta;
+  const body = document.getElementById('dBody');
+  body.innerHTML = '<p class="nota">Carregando…</p>';
+
+  let cli = null, contatos = [];
+  try{
+    if (DEMO){
+      cli = (demoClientes().find(x => x.id === card.cliente_id)) || { nome: card.cliente };
+      contatos = demoContatos(card.cliente_id);
+    } else {
+      const [f, ct] = await Promise.all([
+        get('clientes?select=id,nome,cnpj,endereco,cidade,uf,localizacao,tem_logo&id=eq.' + card.cliente_id),
+        get('contatos?select=id,nome,telefone,email,papeis&cliente_id=eq.' + card.cliente_id
+            + '&ativo=eq.true&order=nome')
+      ]);
+      cli = (f && f[0]) || { nome: card.cliente }; contatos = ct || [];
+    }
+  }catch(e){
+    body.innerHTML = '<div class="aviso"><b>Não deu para carregar o cliente.</b><br>'
+      + esc(e.message) + '</div>';
+    return;
+  }
+
+  const agenda = contatos.find(x => (x.papeis||[]).includes('agenda'));
+  const agendaTxt = agenda
+    ? agenda.nome + (agenda.telefone || agenda.email ? ' · ' + (agenda.telefone || agenda.email) : '')
+    : null;
+
+  body.innerHTML =
+      '<div class="fichaTopo">'
+    +   '<div class="lado">' + logoHTML(cli.id, cli.nome, 'logoFicha') + '</div>'
+    +   '<div class="campos"><h3 style="margin:0 0 4px"></h3>'
+    +     '<p class="nota" style="margin:0">' + esc([cli.cnpj, cli.cidade, cli.uf].filter(Boolean).join(' · ') || 'sem CNPJ') + '</p>'
+    +   '</div></div>'
+    + blocoLocal({ endereco: cli.endereco, localizacao: cli.localizacao, contato_agenda: agendaTxt })
+    + '<div id="osCliEdit"></div>';
+  body.querySelector('h3').textContent = cli.nome;
+  carregarLogos([cli.id]);
+
+  const falta = !cli.endereco || !cli.localizacao || !agenda;
+  const alvo = document.getElementById('osCliEdit');
+
+  const desenharForm = (sobrescrever) => {
+    alvo.innerHTML =
+        '<div class="secTit">' + (sobrescrever ? 'Corrigir' : 'Completar o que falta') + '</div>'
+      + (sobrescrever
+          ? '<div class="aviso">Você está <b>corrigindo dados já preenchidos</b>. O que você '
+            + 'gravar substitui o que está lá.</div>'
+          : '<p class="nota">Só o que está em branco é preenchido — o que já existe não é '
+            + 'tocado. Para mudar algo já preenchido, use “Corrigir”.</p>')
+      + (sobrescrever || !cli.endereco
+          ? '<div class="campo"><label for="ocEnd">Endereço</label><input id="ocEnd" type="text"'
+            + ' value="' + (sobrescrever ? esc(cli.endereco||'') : '') + '"'
+            + ' placeholder="Rua, número, bairro" autocomplete="off" name="oce_nofill"></div>' : '')
+      + (sobrescrever || !cli.localizacao
+          ? '<div class="campo"><label for="ocLoc">Localização no mapa</label><input id="ocLoc" type="text"'
+            + ' value="' + (sobrescrever ? esc(cli.localizacao||'') : '') + '"'
+            + ' placeholder="Cole o link do Google Maps" autocomplete="off" name="ocl_nofill"></div>' : '')
+      + (contatos.length
+          ? '<div class="campo"><label for="ocCt">Quem se procura para agendar</label>'
+            + '<select id="ocCt"><option value="">— não mexer —</option>'
+            + contatos.map(x => '<option value="' + esc(x.id) + '"'
+                + (agenda && agenda.id === x.id ? ' selected' : '') + '>' + esc(x.nome)
+                + (x.telefone ? ' · ' + esc(x.telefone) : '') + '</option>').join('')
+            + '</select></div>'
+          : '<p class="nota">Este cliente ainda não tem contato cadastrado — quem cadastra é o '
+            + 'escritório, em Cadastros → Clientes.</p>')
+      + '<button class="btn pri" id="ocSalvar" style="width:100%">Gravar</button>'
+      + (sobrescrever ? '' : '<button class="btn" id="ocCorrigir" style="width:100%;margin-top:8px">Corrigir dados já preenchidos</button>');
+
+    const bc = document.getElementById('ocCorrigir');
+    if (bc) bc.addEventListener('click', () => desenharForm(true));
+
+    document.getElementById('ocSalvar').addEventListener('click', function(){
+      _semDuploEnvio_(this, async () => {
+        const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+        const end = v('ocEnd'), loc = v('ocLoc'), ct = v('ocCt');
+        if (!end && !loc && !ct){ toast('Não há nada para gravar.','err'); return; }
+        try{
+          if (!DEMO) await rpc('tf_completar_dados_cliente', {
+            p_os_id: card.os_id, p_endereco: end || null, p_localizacao: loc || null,
+            p_contato_agenda_id: ct || null, p_sobrescrever: !!sobrescrever });
+          toast('Dados do cliente atualizados.','ok');
+          pintarClienteOS();
+        }catch(e){ toast(e.message,'err'); }
+      });
+    });
+  };
+
+  desenharForm(!falta);
 }
 
 /* ── HISTÓRICO DA OS ────────────────────────────────────────────────────────
@@ -1796,11 +1939,11 @@ function demoSeed(){
     return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0')
          + '-' + String(d.getDate()).padStart(2,'0'); };
   const os = [
-    { os_id:'d1', numero:'OS-2026-101', cliente:'Gerdau — Divinópolis', alvo:'T01', dias:1,  alerta:2,
+    { os_id:'d1', numero:'OS-2026-101', cliente:'Gerdau — Divinópolis', cliente_id:'c1', alvo:'T01', dias:1,  alerta:2,
       prioridade:'urgente', prazo:dPara(4), prazo_origem:'digitado', situacao:'ok' },
     { os_id:'d2', numero:'OS-2026-102', cliente:'Farmax Ind. Farmacêutica', alvo:'T02', dias:0, alerta:3,
       prazo:dPara(1), situacao:'risco' },
-    { os_id:'d3', numero:'OS-2026-098', cliente:'Fundição Santana', alvo:'T05', dias:7,  alerta:5,
+    { os_id:'d3', numero:'OS-2026-098', cliente:'Fundição Santana', cliente_id:'c2', alvo:'T05', dias:7,  alerta:5,
       prioridade:'alta', prazo:dPara(9), situacao:'atrasada' },
     { os_id:'d4', numero:'OS-2026-095', cliente:'Uau Ingleza', alvo:'T09', dias:12, alerta:7,
       prazo:dPara(-3), prazo_origem:'digitado', situacao:'atrasada', atrasada:true },
@@ -1829,10 +1972,11 @@ function demoCards(){
   return Object.values(DEMO_DB).map(({meta, tarefas, travada}) => {
     const abertas = tarefas.filter(t => t.status !== 'completo' && t.status !== 'dispensado');
     const atual = abertas[0];
-    if (!atual) return { os_id:meta.os_id, numero:meta.numero, cliente:meta.cliente, coluna:null };
+    if (!atual) return { os_id:meta.os_id, numero:meta.numero, cliente:meta.cliente,
+                         cliente_id:meta.cliente_id, coluna:null };
     const naFase = tarefas.filter(t => t.fase === atual.fase);
     return {
-      os_id: meta.os_id, numero: meta.numero, cliente: meta.cliente,
+      os_id: meta.os_id, numero: meta.numero, cliente: meta.cliente, cliente_id: meta.cliente_id,
       status_os: 'em_andamento',
       coluna: atual.fase, coluna_ordem: atual.fase_ordem,
       quadro: EXECUTOR[(atual.perfis_responsaveis||[])[0]] || 'adm',
@@ -2883,6 +3027,54 @@ async function montarGerador(caixa){
 // ════════════════════════════════════════════════════════════════════════════
 // ABA PROPOSTA — gerar aqui, ou registrar a que veio de fora
 // ════════════════════════════════════════════════════════════════════════════
+// ── REGISTRAR O ENVIO DA PROPOSTA ───────────────────────────────────────────
+// É o passo que faltava para o quadro comercial andar. Exige contato e canal
+// de propósito: "enviada" sem dizer para quem e por onde é o mesmo buraco do
+// TapControl, onde o responsável era a string 'ADM' e não havia evidência de
+// nada. Daqui também sai o relógio do follow-up ("11 dias sem resposta").
+function modalEnvioProposta(card, pr){
+  abrirModal('Registrar envio de ' + pr.numero,
+      '<p class="nota">Isto não envia nada — registra que VOCÊ enviou, para o '
+    + 'quadro comercial andar e o follow-up começar a contar.</p>'
+    + '<div class="campo"><label for="epC">Para quem</label>'
+    + '<select id="epC"><option value="">carregando…</option></select></div>'
+    + '<div class="campo"><label for="epK">Por onde</label><select id="epK">'
+    +   ['email','whatsapp','telefone','presencial','outro'].map(k =>
+        '<option value="' + k + '">' + ({email:'E-mail',whatsapp:'WhatsApp',
+          telefone:'Telefone',presencial:'Presencial',outro:'Outro'})[k] + '</option>').join('')
+    + '</select></div>'
+    + '<div class="campo"><label for="epD">Quando</label><input id="epD" type="date" value="'
+    +   new Date().toISOString().slice(0,10) + '"></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Registrar envio', pri:true, onClick: async () => {
+        const ct = document.getElementById('epC').value;
+        if (!ct){ toast('Escolha para quem a proposta foi.','err'); return; }
+        try{
+          await rpc('tf_registrar_envio_proposta', { p_proposta_id: pr.id,
+            p_contato_id: ct, p_canal: document.getElementById('epK').value,
+            p_quando: document.getElementById('epD').value || null });
+          fecharModal(); toast('Envio registrado.','ok');
+          pintarProposta(); carregar({silencioso:true});
+        }catch(e){ toast(e.message,'err'); }
+     }}]);
+
+  // os contatos chegam depois; o modal já está na tela
+  get('contatos?select=id,nome,email,telefone&cliente_id=eq.' + card.cliente_id
+      + '&ativo=eq.true&order=nome').then(cts => {
+    const sel = document.getElementById('epC');
+    if (!sel) return;
+    if (!cts || !cts.length){
+      sel.innerHTML = '<option value="">— este cliente não tem contato cadastrado —</option>';
+      return;
+    }
+    sel.innerHTML = cts.map(x => '<option value="' + esc(x.id) + '">' + esc(x.nome)
+      + (x.email || x.telefone ? ' · ' + esc(x.email || x.telefone) : '') + '</option>').join('');
+  }).catch(e => {
+    const sel = document.getElementById('epC');
+    if (sel) sel.innerHTML = '<option value="">não deu para carregar os contatos</option>';
+  });
+}
+
 async function pintarProposta(){
   const { card } = osAberta;
   const body = document.getElementById('dBody');
@@ -2911,7 +3103,7 @@ async function pintarProposta(){
   if (props.length){
     const w = document.createElement('div'); w.style.marginBottom = '18px';
     w.innerHTML = '<div style="overflow-x:auto"><table class="tbl"><thead><tr>'
-      + '<th>Número</th><th>V.</th><th>Status</th><th>Valor</th><th>Parada</th>'
+      + '<th>Número</th><th>V.</th><th>Status</th><th>Valor</th><th>Parada</th><th></th>'
       + '</tr></thead><tbody></tbody></table></div>';
     const tb = w.querySelector('tbody');
     props.forEach(pr => {
@@ -2923,6 +3115,23 @@ async function pintarProposta(){
       tr.querySelector('.s').textContent = pr.status;
       tr.querySelector('.t').textContent = BRL(pr.valor_total);
       tr.querySelector('.d').textContent = pr.dias_sem_resposta != null ? pr.dias_sem_resposta + 'd' : '—';
+      // ── registrar o envio ──
+      // `tf_registrar_envio_proposta` existe no banco desde o 05_propostas e
+      // NENHUMA tela a chamava. Consequência: `propostas.enviada_em` ficava
+      // sempre nulo, e como a coluna "Proposta enviada" do quadro comercial é
+      // derivada dele, ela NUNCA enchia — nem ela nem as depois dela. O quadro
+      // parecia ter cinco colunas e parar ali. Foi a auditoria inversa desta
+      // rodada (coluna que o banco tem e nenhuma tela lê) que apontou.
+      const td = document.createElement('td');
+      if (pr.status === 'emitida' && !DEMO){
+        const b = document.createElement('button');
+        b.className = 'btn mini'; b.type = 'button'; b.textContent = 'Registrar envio';
+        b.addEventListener('click', () => modalEnvioProposta(card, pr));
+        td.appendChild(b);
+      } else if (pr.enviada_em){
+        td.className = 'nota'; td.textContent = 'enviada ' + dataBR(pr.enviada_em);
+      }
+      tr.appendChild(td);
       tb.appendChild(tr);
     });
     body.appendChild(w);
@@ -3812,6 +4021,140 @@ function desenharCom(){
     doCol.forEach(n => body.appendChild(cardNegocio(n)));
     q.appendChild(el);
   });
+
+  carregarLogos(vis.map(n => n.cliente_id));
+}
+
+// ── A LOGOMARCA DO CLIENTE NO CARD ──────────────────────────────────────────
+// Duas regras, as duas herdadas do S13 (fotos do catálogo), e as duas valem
+// mais aqui do que lá — são 519 clientes contra 300 itens:
+//
+// 1. A LISTA NUNCA ESPERA PELA IMAGEM. O card é desenhado inteiro com o
+//    espaço da logo já reservado (`.cardCom .logo` sempre existe, com ou sem
+//    imagem), mostrando as iniciais. A foto entra depois, por cima, sem
+//    mexer no tamanho de nada. Quadro que reflui quando as imagens chegam é
+//    quadro em que se clica no card errado.
+// 2. A IMAGEM NÃO VIAJA COM A LISTA. `v_negocios_kanban` traz `tem_logo`, que
+//    são 4 bytes; o base64 é buscado em UMA consulta separada, só para os
+//    clientes que apareceram na tela, e fica em memória pela sessão.
+//
+// Cliente sem logo não é buraco: as iniciais num quadrado colorido. A cor sai
+// do NOME, sempre a mesma para o mesmo cliente — é o que faz "aquele card
+// verde" significar alguma coisa depois de uma semana de uso.
+
+const _LOGOS = new Map();          // cliente_id → data URI, ou null (não tem)
+let _logosPedindo = false;
+
+function iniciaisCliente(nome){
+  const partes = String(nome||'?').replace(/[^\p{L}\p{N}\s]/gu,' ').trim().split(/\s+/)
+    // "Ltda", "S/A" e companhia não identificam ninguém: "Gerdau Aços Ltda"
+    // tem que virar GA, não GL.
+    .filter(p => !/^(de|da|do|das|dos|e|ltda|me|epp|eireli|sa|s|cia|com|ind)$/i.test(p));
+  if (!partes.length) return '?';
+  if (partes.length === 1) return partes[0].slice(0,2).toUpperCase();
+  return (partes[0][0] + partes[1][0]).toUpperCase();
+}
+
+/** Mesmo nome, mesma cor, sempre. Sem isso a identificação visual não se forma. */
+function matizDoNome(nome){
+  let h = 0;
+  const s = String(nome||'');
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+  return h;
+}
+
+function logoHTML(clienteId, nome, classe){
+  const cache = clienteId ? _LOGOS.get(clienteId) : null;
+  const dentro = cache
+    ? '<img alt="" src="' + esc(cache) + '">'
+    : '<i>' + esc(iniciaisCliente(nome)) + '</i>';
+  return '<span class="' + (classe || 'logo') + ' logoCli" data-logo="'
+    + esc(clienteId || '') + '" style="--h:' + matizDoNome(nome) + '">' + dentro + '</span>';
+}
+
+/** Busca as que faltam e pinta por cima. Nada aqui bloqueia o desenho da tela. */
+async function carregarLogos(ids){
+  const faltam = [...new Set((ids||[]).filter(id => id && !_LOGOS.has(id)))];
+  if (!faltam.length || DEMO || _logosPedindo) return;
+  _logosPedindo = true;
+  try{
+    // pedaços de 60: uma URL com 500 uuids estoura o limite de tamanho do GET
+    for (let i = 0; i < faltam.length; i += 60){
+      const lote = faltam.slice(i, i + 60);
+      const r = await get('clientes_logo?select=cliente_id,thumb&cliente_id=in.('
+                          + lote.join(',') + ')');
+      lote.forEach(id => _LOGOS.set(id, null));            // quem não veio, não tem
+      (r||[]).forEach(x => _LOGOS.set(x.cliente_id, x.thumb));
+      pintarLogosNaTela();
+    }
+  }catch(e){
+    // Falhar aqui não pode estragar o quadro: as iniciais continuam servindo.
+    // Marcar como "sem logo" evita ficar pedindo de novo a cada repintura.
+    faltam.forEach(id => { if (!_LOGOS.has(id)) _LOGOS.set(id, null); });
+  }finally{ _logosPedindo = false; }
+}
+
+function pintarLogosNaTela(){
+  document.querySelectorAll('[data-logo]').forEach(el => {
+    const url = _LOGOS.get(el.dataset.logo);
+    if (!url || el.querySelector('img')) return;
+    const img = document.createElement('img');
+    img.alt = ''; img.src = url;
+    el.innerHTML = ''; el.appendChild(img);
+  });
+}
+
+// ── REDUZIR A IMAGEM ANTES DE SUBIR ─────────────────────────────────────────
+// Ninguém vai pedir ao cliente uma logo em 96px: cada um manda o que tem, e o
+// que ele tem costuma ser um PNG de 4000px que veio da agência. A redução é
+// aqui, no navegador, antes de qualquer coisa subir — é o mesmo `reduzirFoto`
+// do Field, com dois destinos em vez de um.
+//
+// `contain`, nunca `cover`: a logo cabe inteira no quadrado, com o que sobrar
+// em branco. Cortar a logomarca de um cliente é o tipo de detalhe que ele nota
+// na primeira reunião.
+function reduzirImagem(file, lado, qualidade, comFundo){
+  return new Promise((ok, erro) => {
+    const fr = new FileReader();
+    fr.onerror = () => erro(new Error('Não deu para ler o arquivo.'));
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => erro(new Error('Esse arquivo não é uma imagem que o navegador abra.'));
+      img.onload = () => {
+        const e = Math.min(1, lado / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * e)), h = Math.max(1, Math.round(img.height * e));
+        const cv = document.createElement('canvas');
+        cv.width = lado; cv.height = lado;
+        const cx = cv.getContext('2d');
+        if (comFundo){ cx.fillStyle = '#fff'; cx.fillRect(0, 0, lado, lado); }
+        cx.drawImage(img, (lado - w) / 2, (lado - h) / 2, w, h);
+        // JPEG só quando há fundo branco: PNG transparente virando JPEG ganha
+        // fundo preto, e a logo do cliente aparece dentro de um quadrado preto.
+        ok({ dados: cv.toDataURL(comFundo ? 'image/jpeg' : 'image/png', qualidade),
+             largura: img.width, altura: img.height });
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+// ── O BLOCO "ONDE FICA E COM QUEM SE FALA" ──────────────────────────────────
+// Aparece no card do negócio e na gaveta da OS. É o mesmo desenho nos dois
+// lugares de propósito: quem procura o endereço não deveria ter que aprender
+// duas telas.
+function blocoLocal(d){
+  const linha = (rot, val, href) => '<div class="lin"><span class="rot">' + rot + '</span>'
+    + (val
+        ? (href ? '<a href="' + esc(href) + '" target="_blank" rel="noopener">' + esc(val) + '</a>'
+                : '<span>' + esc(val) + '</span>')
+        : '<i class="falta">não preenchido</i>') + '</div>';
+  const mapa = d.localizacao || '';
+  return '<div class="blocoLocal">'
+    + linha('Endereço', d.endereco)
+    + linha('No mapa', mapa ? 'abrir no mapa' : '', /^https?:/i.test(mapa) ? mapa : null)
+    + linha('Agendar com', d.contato_agenda)
+    + '</div>';
 }
 
 function cardNegocio(n){
@@ -3821,8 +4164,10 @@ function cardNegocio(n){
   const alerta = parado >= 14 ? ' parado' : (parado >= 7 ? ' morno' : '');
   d.className += alerta;
 
-  let logo = '';
-  if (n.logomarca_url) logo = '<img class="logo" alt="" src="' + esc(n.logomarca_url) + '">';
+  // O espaço da logo é SEMPRE desenhado — com a imagem, se já veio; com as
+  // iniciais, se ainda não. É isso que impede o quadro de refluir quando as
+  // imagens chegam.
+  const logo = logoHTML(n.cliente_id, n.cliente_nome);
 
   const chips = [];
   if (n.tarefas_atrasadas) chips.push('<span class="mini crit">' + n.tarefas_atrasadas + ' tarefa(s) atrasada(s)</span>');
@@ -3859,9 +4204,10 @@ async function abrirNegocio(n){
   document.getElementById('drawer').classList.add('on');
   document.getElementById('scrim').classList.add('on');
   document.getElementById('dTabs').innerHTML =
-    ['log','tarefas','agenda','acoes'].map(t =>
+    ['log','cliente','tarefas','agenda','acoes'].map(t =>
       '<button data-nt="' + t + '"' + (abaNeg===t?' class="on"':'') + '>'
-      + ({log:'Histórico',tarefas:'Tarefas',agenda:'Agenda',acoes:'Ações'})[t] + '</button>').join('');
+      + ({log:'Histórico',cliente:'Cliente',tarefas:'Tarefas',agenda:'Agenda',acoes:'Ações'})[t]
+      + '</button>').join('');
   document.querySelectorAll('#dTabs [data-nt]').forEach(b =>
     b.addEventListener('click', () => { abaNeg = b.dataset.nt; abrirNegocio(negAberto); }));
   document.getElementById('dAcoes').innerHTML = '';
@@ -3873,6 +4219,7 @@ async function pintarNeg(){
   b.innerHTML = '<p class="nota">Carregando…</p>';
   const n = negAberto;
   if (abaNeg === 'log')     return negLog(n, b);
+  if (abaNeg === 'cliente') return negCliente(n, b);
   if (abaNeg === 'tarefas') return negTarefas(n, b);
   if (abaNeg === 'agenda')  return negAgenda(n, b);
   return negAcoes(n, b);
@@ -4070,45 +4417,158 @@ async function negAgenda(n, b){
   });
 }
 
+// ── cliente ─────────────────────────────────────────────────────────────────
+// Onde o cliente fica e com quem se agenda, dentro do card — que era o pedido:
+// hoje isso vive no card do Trello e some quando o negócio entra no TapFlow.
+//
+// Aqui é só LEITURA com um atalho para editar. A edição de verdade é na tela
+// de Cadastros, e o botão leva para lá: manter dois formulários para o mesmo
+// cliente é como os dois passam a discordar.
+async function negCliente(n, b){
+  if (!n.cliente_id){
+    b.innerHTML = '<div class="aviso">Este negócio ainda é um <b>lead solto</b> — '
+      + esc(n.lead_nome || 'sem nome') + '. O cliente é criado quando ele virar OS, '
+      + 'e a partir daí os dados dele aparecem aqui.</div>'
+      + (n.lead_contato || n.lead_telefone || n.lead_email
+          ? '<div class="blocoLocal"><div class="lin"><span class="rot">Contato</span><span>'
+            + esc([n.lead_contato, n.lead_telefone, n.lead_email].filter(Boolean).join(' · '))
+            + '</span></div></div>'
+          : '');
+    return;
+  }
+
+  b.innerHTML = '<div class="fichaTopo">'
+    + '<div class="lado">' + logoHTML(n.cliente_id, n.cliente_nome, 'logoFicha') + '</div>'
+    + '<div class="campos"><h3 style="margin:0 0 4px"></h3>'
+    + '<p class="nota" style="margin:0">' + esc(n.numero) + ' · ' + esc(n.coluna) + '</p></div></div>'
+    + blocoLocal({ endereco:n.cliente_endereco, localizacao:n.cliente_localizacao,
+                   contato_agenda:n.contato_agenda })
+    + ((!n.cliente_endereco || !n.contato_agenda)
+        ? '<p class="nota">O que está em branco não impede nada — mas é o que o campo vai '
+          + 'procurar no dia da visita. Vale preencher antes de virar OS.</p>' : '')
+    + '<button class="btn" id="ngCad" style="width:100%">Abrir no cadastro de clientes</button>';
+  b.querySelector('h3').textContent = n.cliente_nome;
+  carregarLogos([n.cliente_id]);
+
+  document.getElementById('ngCad').addEventListener('click', () => {
+    cadSel = n.cliente_id;
+    fecharDrawer();
+    irPara('cad');
+  });
+}
+
 // ── ações ───────────────────────────────────────────────────────────────────
 async function negAcoes(n, b){
+  const perdido = !!n.perdido_em;
+
   b.innerHTML =
-    '<div class="secTit" style="margin-top:0">Transformar em OS</div>'
-    + '<p class="nota">Abre a OS já ligada a este negócio. Se ainda é lead, o cliente é '
-    + 'criado agora — é quando ele deixa de ser “alguém que ligou”.</p>'
-    + (n.oss ? '<p class="nota"><b>' + n.oss + ' OS</b> já aberta(s) neste negócio.</p>' : '')
-    + '<button class="btn pri" id="ngOS" style="width:100%;margin-bottom:18px">Abrir OS</button>'
-    + '<div class="secTit">Marcar como perdido</div>'
-    + '<div class="campo"><label for="ngM">Motivo</label><select id="ngM"></select></div>'
-    + '<button class="btn perigo" id="ngPerde" style="width:100%">Registrar perda</button>'
-    + '<p class="nota">Perder não apaga: o negócio vai para “Recusadas” com o motivo, e é '
-    + 'isso que alimenta o funil depois.</p>';
+      (perdido
+        ? '<div class="aviso"><b>Este negócio está marcado como perdido</b> desde '
+          + esc(dataBR(n.perdido_em)) + '. Ele fica em “Recusadas” e continua contando no funil.</div>'
+          + '<div class="secTit" style="margin-top:0">Reabrir</div>'
+          + '<p class="nota">O cliente pode voltar. Reabrir devolve o negócio ao fluxo — a coluna '
+          + 'volta a ser calculada pelos fatos, como em qualquer outro card. A passagem pela perda '
+          + '<b>não</b> é apagada: ela fica no histórico.</p>'
+          + '<div class="campo"><label for="ngRM">O que mudou (opcional)</label>'
+          + '<input id="ngRM" type="text" placeholder="Ex.: cliente voltou a procurar"></div>'
+          + '<button class="btn pri" id="ngReabre" style="width:100%;margin-bottom:18px">Reabrir negócio</button>'
+        : '<div class="secTit" style="margin-top:0">Transformar em OS</div>'
+          + '<p class="nota">Abre a OS já ligada a este negócio. Se ainda é lead, o cliente é '
+          + 'criado agora — é quando ele deixa de ser “alguém que ligou”.</p>'
+          + (n.oss ? '<p class="nota"><b>' + n.oss + ' OS</b> já aberta(s) neste negócio.</p>' : '')
+          + '<button class="btn pri" id="ngOS" style="width:100%;margin-bottom:18px">Abrir OS</button>'
+          + '<div class="secTit">Marcar como perdido</div>'
+          + '<div class="campo"><label for="ngM">Motivo</label><select id="ngM"></select></div>'
+          + '<div class="campo"><label for="ngMO">Observação (opcional)</label>'
+          + '<input id="ngMO" type="text" placeholder="Ex.: fechou com o concorrente"></div>'
+          + '<button class="btn perigo" id="ngPerde" style="width:100%">Registrar perda</button>'
+          + '<p class="nota">Perder não apaga: o negócio vai para “Recusadas” com o motivo, e é '
+          + 'isso que alimenta o funil depois.</p>')
+      // ── excluir ──
+      // Separado por uma régua e no fim, porque é o único botão desta tela que
+      // destrói. E a diferença para "perder" está escrita: card de teste que
+      // vira "perdido" conta como negócio que a Engetap não fechou, e a taxa de
+      // conversão passa a mentir para sempre.
+    + '<hr class="reguaPerigo">'
+    + '<div class="secTit">Excluir este negócio</div>'
+    + '<p class="nota"><b>Não é o mesmo que perder.</b> Perder é desfecho de negócio real e '
+    + 'continua no funil. Excluir é para lixo — card de teste, duplicado, criado por engano — '
+    + 'e some de todos os relatórios, inclusive das perdas.</p>'
+    + (n.oss
+        ? '<div class="aviso">Este negócio já gerou <b>' + n.oss + ' OS</b>, então não é lixo: '
+          + 'há trabalho preso a ele. Se a OS também for de teste, exclua a OS primeiro.</div>'
+        : '<button class="btn perigo" id="ngExcluir" style="width:100%">Excluir negócio</button>');
 
-  let motivos = [];
-  try{ motivos = DEMO ? [{id:'preco',nome:'Preço'}] : await get('motivos_perda?select=*&ativo=is.true&order=nome'); }
-  catch(e){}
-  const sel = document.getElementById('ngM');
-  motivos.forEach(m => { const o = document.createElement('option');
-    o.value = m.id; o.textContent = m.nome; sel.appendChild(o); });
+  // ── reabrir ──
+  const bR = document.getElementById('ngReabre');
+  if (bR) bR.addEventListener('click', () => _semDuploEnvio_(bR, async () => {
+    try{
+      if (!DEMO) await rpc('tf_reabrir_negocio',
+        { p_id:n.id, p_motivo: (document.getElementById('ngRM')||{}).value || null });
+      toast('Negócio reaberto.','ok'); fecharDrawer(); pintarComercial();
+    }catch(e){ toast(e.message,'err'); }
+  }));
 
-  document.getElementById('ngOS').addEventListener('click', async (e) => {
-    e.target.disabled = true;
+  // ── abrir OS ──
+  const bO = document.getElementById('ngOS');
+  if (bO) bO.addEventListener('click', () => _semDuploEnvio_(bO, async () => {
     try{
       const r = DEMO ? {numero:'OS-DEMO'} : await rpc('tf_negocio_abrir_os', { p_negocio_id:n.id });
       toast('OS ' + (r.numero||'') + ' aberta.','ok');
       fecharDrawer(); carregar();
-    }catch(err){ toast(err.message,'err'); e.target.disabled = false; }
-  });
+    }catch(e){ toast(e.message,'err'); }
+  }));
 
-  document.getElementById('ngPerde').addEventListener('click', async (e) => {
-    if (!confirm('Marcar ' + n.numero + ' como perdido?')) return;
-    e.target.disabled = true;
-    try{
-      if (!DEMO) await patch('negocios', 'id=eq.' + n.id,
-        { perdido_em: new Date().toISOString().slice(0,10), motivo_perda_id: sel.value });
-      toast('Registrado como perdido.','ok');
-      fecharDrawer(); pintarComercial();
-    }catch(err){ toast(err.message,'err'); e.target.disabled = false; }
+  // ── perder ──
+  const sel = document.getElementById('ngM');
+  if (sel){
+    let motivos = [];
+    try{ motivos = DEMO ? [{id:'preco',nome:'Preço'}]
+        : await get('motivos_perda?select=*&ativo=is.true&order=nome'); }catch(e){}
+    motivos.forEach(m => { const o = document.createElement('option');
+      o.value = m.id; o.textContent = m.nome; sel.appendChild(o); });
+
+    const bP = document.getElementById('ngPerde');
+    bP.addEventListener('click', () => {
+      if (!sel.value){ toast('Escolha o motivo da perda.','err'); return; }
+      abrirModal('Marcar ' + n.numero + ' como perdido?',
+        '<p class="nota">O card vai para “Recusadas” com o motivo <b>'
+        + esc(sel.options[sel.selectedIndex].textContent) + '</b> e continua contando no funil. '
+        + 'Dá para reabrir depois, se o cliente voltar.</p>',
+        [{ label:'Cancelar', onClick: fecharModal },
+         { label:'Registrar perda', pri:true, onClick: async () => {
+            try{
+              // passa por função, não por gravação direta na tabela: é ela que
+              // exige o motivo e escreve a perda no histórico do card
+              if (!DEMO) await rpc('tf_marcar_negocio_perdido', { p_id:n.id,
+                p_motivo_id: sel.value,
+                p_observacao: (document.getElementById('ngMO')||{}).value || null });
+              fecharModal(); toast('Registrado como perdido.','ok');
+              fecharDrawer(); pintarComercial();
+            }catch(e){ toast(e.message,'err'); }
+         }}]);
+    });
+  }
+
+  // ── excluir ──
+  const bX = document.getElementById('ngExcluir');
+  if (bX) bX.addEventListener('click', () => {
+    abrirModal('Excluir ' + n.numero + '?',
+        '<p class="nota">' + esc(n.titulo || n.numero) + ' — '
+      + esc(n.cliente_nome) + '.</p>'
+      + '<div class="aviso"><b>Isso não tem como desfazer.</b> O card, o histórico e as tarefas '
+      + 'dele são apagados. Fica registrado no livro das exclusões quem apagou e quando.</div>'
+      + '<div class="campo"><label for="ngXM">Por quê? (fica no registro)</label>'
+      + '<input id="ngXM" type="text" placeholder="Ex.: card de teste"></div>',
+      [{ label:'Cancelar', onClick: fecharModal },
+       { label:'Excluir de vez', pri:true, onClick: async () => {
+          try{
+            if (!DEMO) await rpc('tf_excluir_negocio',
+              { p_id:n.id, p_motivo: (document.getElementById('ngXM')||{}).value || null });
+            fecharModal(); toast(n.numero + ' excluído.','ok');
+            fecharDrawer(); pintarComercial();
+          }catch(e){ toast(e.message,'err'); }
+       }}]);
   });
 }
 
@@ -5536,8 +5996,14 @@ async function pintarCadastros(){
     e.target.disabled = true;
     try{
       const cnpj = document.getElementById('cC').value.trim() || null;
-      if (DEMO) demoAddCliente(nome, cnpj); else await post('clientes', { nome, cnpj });
-      toast('Cliente cadastrado.','ok');
+      // passa por tf_salvar_cliente e não por um POST: é a mesma função que a
+      // ficha usa, com a mesma checagem de CNPJ repetido. Dois caminhos de
+      // gravação para o mesmo registro é como duas telas passam a discordar.
+      let novo = null;
+      if (DEMO) demoAddCliente(nome, cnpj);
+      else novo = await rpc('tf_salvar_cliente', { p_id:null, p_nome:nome, p_cnpj:cnpj });
+      toast('Cliente cadastrado. Complete o endereço ao lado.','ok');
+      if (novo && novo.id) cadSel = novo.id;
       pintarCadastros();
     }catch(err){
       toast(/duplicate|unique|ux_clientes/i.test(err.message)
@@ -5548,8 +6014,8 @@ async function pintarCadastros(){
 
   let todos = [];
   try{ todos = DEMO ? demoClientes()
-      : await get('clientes?select=id,nome,cnpj,cidade,observacoes,contatos(count),equipamentos(count)'
-                  + '&ativo=eq.true&order=nome&limit=2000'); }
+      : await get('clientes?select=id,nome,cnpj,cidade,endereco,localizacao,tem_logo,observacoes,'
+                  + 'contatos(count),equipamentos(count)&ativo=eq.true&order=nome&limit=2000'); }
   catch(e){
     // sem `return`, seguia com a lista vazia e escrevia "Nenhum cliente ainda"
     // em cima de uma falha de rede — com 516 clientes cadastrados
@@ -5602,9 +6068,13 @@ function desenharClientes(todos){
     b.querySelector('b').textContent = c.nome;
     const nc = (c.contatos && c.contatos[0] ? c.contatos[0].count : (c._contatos||0));
     const ne = (c.equipamentos && c.equipamentos[0] ? c.equipamentos[0].count : (c._equip||0));
+    // "sem endereço" aparece na lista de propósito: dado que falta e não
+    // aparece em lugar nenhum é dado que nunca vai ser preenchido.
     b.querySelector('small').textContent =
-      (c.cnpj ? c.cnpj + ' · ' : '') + nc + ' contato(s) · ' + ne + ' equipamento(s)';
+      (c.cnpj ? c.cnpj + ' · ' : '') + nc + ' contato(s) · ' + ne + ' equipamento(s)'
+      + (c.endereco ? '' : ' · sem endereço');
     if (c.observacoes && /incompleto/i.test(c.observacoes)) b.classList.add('incompleto');
+    if (!c.endereco) b.classList.add('incompleto');
     b.addEventListener('click', () => { cadSel = c.id; pintarCadastros(); detalheCliente(c); });
     lista.appendChild(b);
   });
@@ -5619,127 +6089,252 @@ function desenharClientes(todos){
   if (sel) detalheCliente(sel);
 }
 
+// ── A FICHA DO CLIENTE ──────────────────────────────────────────────────────
+// Até o S16 esta tela LIA o cliente e não deixava mudar nada dele: dava para
+// acrescentar contato e equipamento, e não dava para corrigir o nome, o CNPJ
+// nem o endereço. E `endereco`, `cidade`, `uf` e `cep` existem no banco desde
+// a primeira migration — estavam lá, sem tela.
+//
+// Foi o terceiro caso do mesmo tipo em duas rodadas (o módulo `documentos`, as
+// colunas Aprovadas/Recusadas do Comercial, e agora isto). Por isso a auditoria
+// desta rodada passou a acusar coluna que o banco tem e nenhuma tela lê.
 async function detalheCliente(c){
   const d = document.getElementById('cadDet');
   d.innerHTML = '<h3></h3><p style="color:var(--ink-3);font-size:13px">Carregando…</p>';
   d.querySelector('h3').textContent = c.nome;
 
-  let contatos = [], equips = [];
+  let cli = c, contatos = [], equips = [];
   try{
-    [contatos, equips] = DEMO ? [demoContatos(c.id), demoEquips(c.id)] : await Promise.all([
-      get('contatos?select=id,nome,email,telefone,papeis&cliente_id=eq.' + c.id + '&ativo=eq.true&order=nome'),
-      get('equipamentos?select=id,tag,tipo,localizacao,pmta&cliente_id=eq.' + c.id + '&ativo=eq.true&order=tag')
-    ]);
-  }catch(e){ toast(e.message,'err'); }
+    if (DEMO){ contatos = demoContatos(c.id); equips = demoEquips(c.id); }
+    else {
+      const [f, ct, eq] = await Promise.all([
+        get('clientes?select=*&id=eq.' + c.id),
+        get('contatos?select=id,nome,email,telefone,cargo,papeis&cliente_id=eq.' + c.id
+            + '&ativo=eq.true&order=nome'),
+        get('equipamentos?select=id,tag,tipo,localizacao,pmta&cliente_id=eq.' + c.id
+            + '&ativo=eq.true&order=tag')
+      ]);
+      cli = (f && f[0]) || c; contatos = ct; equips = eq;
+    }
+  }catch(e){
+    d.innerHTML = '<h3></h3><div class="aviso"><b>Não deu para carregar este cliente.</b><br>'
+      + esc(e.message) + '</div><button class="btn" id="clRetry">Tentar de novo</button>';
+    d.querySelector('h3').textContent = c.nome;
+    document.getElementById('clRetry').addEventListener('click', () => detalheCliente(c));
+    return;
+  }
 
-  d.innerHTML = '';
-  const h = document.createElement('h3'); h.textContent = c.nome; d.appendChild(h);
+  const cp = (id, rot, val, ph, tipo) =>
+    '<div class="campo"><label for="' + id + '">' + rot + '</label>'
+    + '<input id="' + id + '" type="' + (tipo||'text') + '" value="' + esc(val||'') + '"'
+    + ' autocomplete="off" name="' + id + '_nofill"'
+    + (ph ? ' placeholder="' + esc(ph) + '"' : '') + '></div>';
 
-  const bloco = (titulo, linhas, vazio) => {
-    const s = document.createElement('div'); s.style.marginBottom = '18px';
-    s.innerHTML = '<div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;'
-      + 'text-transform:uppercase;color:var(--ink-3);margin:0 0 8px"></div>';
-    s.firstChild.textContent = titulo;
-    if (!linhas.length){
-      const p = document.createElement('p');
-      p.style.cssText='font-size:13px;color:var(--ink-3);margin:0'; p.textContent = vazio;
-      s.appendChild(p);
-    } else linhas.forEach(l => {
-      const r = document.createElement('div');
-      r.style.cssText='font-size:13.5px;padding:7px 0;border-bottom:1px solid var(--rule-2)';
-      r.innerHTML = '<b></b> <span style="color:var(--ink-3)"></span>';
-      r.querySelector('b').textContent = l.b; r.querySelector('span').textContent = l.s;
-      s.appendChild(r);
+  d.innerHTML =
+      '<div class="fichaTopo">'
+    +   '<div class="lado">' + logoHTML(cli.id, cli.nome, 'logoFicha')
+    +     '<input type="file" id="clLogoF" accept="image/png,image/jpeg,image/webp" hidden>'
+    +     '<button class="btn mini" type="button" id="clLogoB">'
+    +       (cli.tem_logo ? 'Trocar' : 'Logomarca') + '</button>'
+    +     (cli.tem_logo ? '<button class="btn mini" type="button" id="clLogoX">Tirar</button>' : '')
+    +   '</div>'
+    +   '<div class="campos">'
+    +     '<div class="dupla">' + cp('clNome','Nome', cli.nome) + cp('clCnpj','CNPJ', cli.cnpj, 'opcional') + '</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="secTit" style="margin-top:0">Onde fica</div>'
+    + cp('clEnd','Endereço', cli.endereco, 'Rua, número, bairro')
+    + '<div class="tripla">' + cp('clCid','Cidade', cli.cidade) + cp('clUf','UF', cli.uf)
+    +   cp('clCep','CEP', cli.cep) + '</div>'
+    + cp('clLoc','Localização no mapa', cli.localizacao, 'Cole aqui o link do Google Maps')
+    + '<p class="nota">O endereço é para o documento; a localização é para chegar lá. '
+    + 'Metade das plantas não tem número que o GPS ache — é o link do mapa que evita o '
+    + 'inspetor ligando do portão errado.</p>'
+    + '<div class="campo"><label for="clObs">Observações</label>'
+    + '<textarea id="clObs" rows="2">' + esc(cli.observacoes||'') + '</textarea></div>'
+    + '<button class="btn pri" id="clSalvar" style="width:100%;margin-bottom:20px">Salvar cliente</button>'
+    + '<div id="clContatos"></div><div id="clEquips"></div>';
+
+  // ── gravar a ficha ──
+  document.getElementById('clSalvar').addEventListener('click', function(){
+    _semDuploEnvio_(this, async () => {
+      const v = id => (document.getElementById(id)||{}).value || '';
+      if (!v('clNome').trim()){ toast('O nome do cliente é obrigatório.','err'); return; }
+      try{
+        if (DEMO) demoSalvarCliente(cli.id, v('clNome').trim(), v('clCnpj').trim());
+        else await rpc('tf_salvar_cliente', { p_id: cli.id, p_nome: v('clNome').trim(),
+          p_cnpj: v('clCnpj').trim() || null, p_endereco: v('clEnd').trim() || null,
+          p_cidade: v('clCid').trim() || null, p_uf: v('clUf').trim() || null,
+          p_cep: v('clCep').trim() || null, p_localizacao: v('clLoc').trim() || null,
+          p_observacoes: v('clObs').trim() || null });
+        toast('Cliente salvo.','ok');
+        pintarCadastros();
+      }catch(e){ toast(e.message,'err'); }
     });
-    d.appendChild(s);
-    return s;
-  };
-
-  bloco('Contatos', contatos.map(x => ({ b:x.nome,
-    s: [x.email, x.telefone, (x.papeis||[]).join('/')].filter(Boolean).join(' · ') })),
-    'Nenhum contato. O contato que APROVA proposta é obrigatório na hora de registrar a aprovação.');
-
-  const fc = document.createElement('div');
-  fc.innerHTML = '<div class="dupla"><div class="campo"><label>Nome</label><input id="ctN" type="text"></div>'
-    + '<div class="campo"><label>Telefone / e-mail</label><input id="ctT" type="text"></div></div>'
-    + '<label class="campo" style="display:flex;align-items:center;gap:8px;font-size:13.5px">'
-    + '<input id="ctA" type="checkbox" style="width:18px;height:18px"> Este contato aprova propostas</label>'
-    + '<button class="btn" id="ctAdd" style="width:100%;padding:9px;margin-bottom:20px">Adicionar contato</button>';
-  d.appendChild(fc);
-  document.getElementById('ctAdd').addEventListener('click', async (e) => {
-    const nome = document.getElementById('ctN').value.trim();
-    if (!nome){ toast('Informe o nome do contato.','err'); return; }
-    e.target.disabled = true;
-    const t = document.getElementById('ctT').value.trim();
-    const obj = { cliente_id: c.id, nome,
-      email: t.includes('@') ? t : null, telefone: t.includes('@') ? null : (t||null),
-      papeis: document.getElementById('ctA').checked ? ['aprova'] : [] };
-    try{ if (DEMO) demoAddContato(obj); else await post('contatos', obj);
-         toast('Contato cadastrado.','ok'); detalheCliente(c); }
-    catch(err){ toast(err.message,'err'); e.target.disabled = false; }
   });
 
-  bloco('Equipamentos', equips.map(x => ({ b:x.tag,
-    s: [x.tipo, x.localizacao, x.pmta ? 'PMTA ' + x.pmta : ''].filter(Boolean).join(' · ') })),
-    'Nenhum equipamento. Sem TAG cadastrada, o inspetor lança o item sem vínculo com o vaso.');
-
-  const fe = document.createElement('div');
-  fe.innerHTML = '<div class="dupla"><div class="campo"><label>TAG</label><input id="eqT" type="text" placeholder="VP-01"></div>'
-    + '<div class="campo"><label>Tipo</label><select id="eqK">'
-    + '<option value="vaso">Vaso de pressão</option><option value="caldeira">Caldeira</option>'
-    + '<option value="tanque">Tanque</option><option value="tubulacao">Tubulação</option>'
-    + '<option value="outro">Outro</option></select></div></div>'
-    + '<div class="dupla"><div class="campo"><label>Local</label><input id="eqL" type="text"></div>'
-    + '<div class="campo"><label>PMTA</label><input id="eqP" type="number" step="0.01" inputmode="decimal"></div></div>'
-    + '<button class="btn" id="eqAdd" style="width:100%;padding:9px">Adicionar equipamento</button>';
-  d.appendChild(fe);
-  document.getElementById('eqAdd').addEventListener('click', async (e) => {
-    const tag = document.getElementById('eqT').value.trim();
-    if (!tag){ toast('Informe a TAG.','err'); return; }
-    e.target.disabled = true;
-    const obj = { cliente_id: c.id, tag, tipo: document.getElementById('eqK').value,
-      localizacao: document.getElementById('eqL').value.trim() || null,
-      pmta: document.getElementById('eqP').value ? Number(document.getElementById('eqP').value) : null };
-    try{ if (DEMO) demoAddEquip(obj); else await post('equipamentos', obj);
-         toast('Equipamento cadastrado.','ok'); detalheCliente(c); }
-    catch(err){ toast(/duplicate|ux_equip/i.test(err.message)
-        ? 'Já existe essa TAG neste cliente.' : err.message,'err'); e.target.disabled = false; }
-  });
-
-  // ── arquivar / excluir ──
-  // Dois botões diferentes de propósito. Arquivar é o que se usa quase sempre:
-  // o cliente sai das listas e o histórico fica. Excluir só existe para o
-  // cliente que você digitou para testar — e o banco recusa se houver OS.
-  const fim = document.createElement('div');
-  fim.className = 'linhaBtns';
-  fim.style.borderTop = '1px solid var(--rule)';
-  fim.style.paddingTop = '14px';
-  fim.innerHTML = '<button class="btn" id="cliArq">Arquivar cliente</button>'
-                + '<button class="btn perigo" id="cliDel">Excluir</button>';
-  d.appendChild(fim);
-  const nota = document.createElement('p');
-  nota.className = 'nota';
-  nota.textContent = 'Arquivar tira o cliente das listas e mantém o histórico. '
-                   + 'Excluir só funciona enquanto ele não tem nenhuma OS.';
-  d.appendChild(nota);
-
-  document.getElementById('cliArq').addEventListener('click', async () => {
-    if (!confirm('Arquivar "' + c.nome + '"?\n\nEle sai das listas de escolha. '
-        + 'As OS existentes continuam como estão, e dá para reativar depois.')) return;
+  // ── logomarca ──
+  const bLogo = document.getElementById('clLogoB');
+  const fLogo = document.getElementById('clLogoF');
+  bLogo.addEventListener('click', () => fLogo.click());
+  fLogo.addEventListener('change', async () => {
+    const f = fLogo.files && fLogo.files[0];
+    if (!f) return;
+    if (f.size > 8 * 1024 * 1024){ toast('Arquivo acima de 8 MB. Use um menor.','err'); return; }
+    bLogo.disabled = true; bLogo.textContent = 'Enviando…';
     try{
-      if (!DEMO) await rpc('tf_arquivar', { p_tabela:'clientes', p_id:c.id, p_ativo:false });
-      toast('Cliente arquivado.','ok'); cadSel = null; pintarCadastros();
+      // duas versões: a do card (com fundo, leve) e a de guardar (transparência
+      // preservada, para quando o gerador de proposta puser a logo no cabeçalho)
+      const thumb    = await reduzirImagem(f, 128,  0.82, true);
+      const original = await reduzirImagem(f, 600,  0.92, false);
+      if (DEMO) _LOGOS.set(cli.id, thumb.dados);
+      else await rpc('tf_salvar_logo_cliente', { p_cliente_id: cli.id,
+        p_thumb: thumb.dados, p_original: original.dados,
+        p_largura: thumb.largura, p_altura: thumb.altura, p_bytes: f.size });
+      _LOGOS.set(cli.id, thumb.dados);
+      toast('Logomarca gravada.','ok');
+      cli.tem_logo = true;
+      detalheCliente(cli);
     }catch(e){ toast(e.message,'err'); }
+    finally{ bLogo.disabled = false; bLogo.textContent = 'Trocar'; fLogo.value = ''; }
   });
-
-  document.getElementById('cliDel').addEventListener('click', async () => {
-    if (!confirm('Excluir "' + c.nome + '" definitivamente?\n\n'
-        + 'Contatos e equipamentos vão junto. Se o cliente tiver OS, o sistema recusa.')) return;
+  const xLogo = document.getElementById('clLogoX');
+  if (xLogo) xLogo.addEventListener('click', () => _semDuploEnvio_(xLogo, async () => {
     try{
-      const r = DEMO ? {status:'ok'} : await rpc('tf_excluir_cliente', { p_id:c.id });
-      if (r && r.status === 'recusado'){ toast(r.mensagem,'err'); return; }
-      toast('Cliente excluído.','ok'); cadSel = null; pintarCadastros();
+      if (!DEMO) await rpc('tf_remover_logo_cliente', { p_cliente_id: cli.id });
+      _LOGOS.set(cli.id, null); cli.tem_logo = false;
+      toast('Logomarca removida.','ok'); detalheCliente(cli);
     }catch(e){ toast(e.message,'err'); }
+  }));
+
+  pintarContatos(cli, contatos);
+  pintarEquipamentos(cli, equips);
+}
+
+// ── CONTATOS ────────────────────────────────────────────────────────────────
+// Dois papéis na tela, não um. Quem aprova a proposta e quem marca a visita
+// costumam ser pessoas diferentes — e até o S16 só existia o primeiro, o que
+// deixava "com quem se agenda" vivendo no card do Trello.
+//
+// A gravação passa por `tf_salvar_contato`, e não por um POST com a lista de
+// papéis montada aqui. O motivo está na migration: a lista SUBSTITUI a
+// anterior, então um contato que fosse `recebe` e `paga` perderia os dois no
+// primeiro salvamento — a tela não mostra esses papéis, logo não poderia
+// mandá-los. Tela que não mostra um dado não pode apagá-lo.
+const _PAPEL_ROT = { aprova:'aprova proposta', agenda:'agenda visita',
+                     recebe:'recebe', paga:'paga', tecnico:'técnico' };
+
+function pintarContatos(cli, contatos){
+  const el = document.getElementById('clContatos');
+  if (!el) return;
+  let h = '<div class="secTit">Contatos</div>';
+  if (!contatos.length){
+    h += '<p class="nota">Nenhum contato. O contato que APROVA é obrigatório na hora de '
+      +  'registrar a aprovação; o que AGENDA é quem o campo procura para marcar a visita.</p>';
+  }
+  contatos.forEach(x => {
+    const ps = (x.papeis||[]).map(p =>
+      '<span class="mini' + (p==='aprova'?' ok':(p==='agenda'?' ag':'')) + '">'
+      + esc(_PAPEL_ROT[p] || p) + '</span>').join('');
+    h += '<div class="linhaCt"><div><b>' + esc(x.nome) + '</b>'
+      + '<small style="display:block;color:var(--ink-3);font-size:12px">'
+      + esc([x.cargo, x.telefone, x.email].filter(Boolean).join(' · ') || 'sem telefone nem e-mail')
+      + '</small></div>'
+      + '<div class="papeis">' + ps
+      + '<button class="btn mini" type="button" data-ct="' + esc(x.id) + '">Editar</button></div></div>';
+  });
+  h += '<button class="btn" id="ctNovo" style="width:100%;padding:9px;margin:12px 0 20px">'
+    +  'Adicionar contato</button>';
+  el.innerHTML = h;
+
+  el.querySelectorAll('[data-ct]').forEach(b => b.addEventListener('click',
+    () => modalContato(cli, contatos.find(x => x.id === b.dataset.ct))));
+  document.getElementById('ctNovo').addEventListener('click', () => modalContato(cli, null));
+}
+
+function modalContato(cli, ct){
+  const p = (ct && ct.papeis) || [];
+  const outros = p.filter(x => x !== 'aprova' && x !== 'agenda');
+  abrirModal(ct ? 'Contato de ' + cli.nome : 'Novo contato de ' + cli.nome,
+      '<div class="campo"><label for="ctN">Nome</label><input id="ctN" type="text" value="'
+    +   esc(ct ? ct.nome : '') + '" autocomplete="off" name="ctn_nofill"></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="ctT">Telefone</label><input id="ctT" type="text" value="'
+    +   esc(ct ? ct.telefone : '') + '" autocomplete="off" name="ctt_nofill"></div>'
+    +  '<div class="campo"><label for="ctE">E-mail</label><input id="ctE" type="text" value="'
+    +   esc(ct ? ct.email : '') + '" autocomplete="off" name="cte_nofill"></div></div>'
+    + '<div class="campo"><label for="ctC">Cargo</label><input id="ctC" type="text" value="'
+    +   esc(ct ? ct.cargo : '') + '" autocomplete="off" name="ctc_nofill"></div>'
+    + '<div class="secTit">O que esta pessoa faz</div>'
+    + '<label class="chk"><input type="checkbox" id="ctA"' + (p.includes('aprova')?' checked':'')
+    +   '> Aprova propostas</label>'
+    + '<label class="chk"><input type="checkbox" id="ctG"' + (p.includes('agenda')?' checked':'')
+    +   '> É responsável pelo agendamento</label>'
+    + (outros.length
+        ? '<p class="nota">Esta pessoa também é: <b>'
+          + esc(outros.map(x => _PAPEL_ROT[x] || x).join(', '))
+          + '</b>. Isso não se edita por aqui e <b>não</b> se perde ao salvar.</p>'
+        : ''),
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label: ct ? 'Salvar' : 'Adicionar', pri:true, onClick: async () => {
+        const v = id => (document.getElementById(id)||{}).value.trim();
+        if (!v('ctN')){ toast('O nome do contato é obrigatório.','err'); return; }
+        try{
+          if (DEMO) demoSalvarContato(cli.id, ct && ct.id, v('ctN'),
+            document.getElementById('ctA').checked, document.getElementById('ctG').checked);
+          else await rpc('tf_salvar_contato', { p_id: ct ? ct.id : null, p_cliente_id: cli.id,
+            p_nome: v('ctN'), p_email: v('ctE') || null, p_telefone: v('ctT') || null,
+            p_cargo: v('ctC') || null,
+            p_aprova: document.getElementById('ctA').checked,
+            p_agenda: document.getElementById('ctG').checked });
+          fecharModal(); toast('Contato salvo.','ok'); detalheCliente(cli);
+        }catch(e){ toast(e.message,'err'); }
+     }}]);
+}
+
+// ── EQUIPAMENTOS ────────────────────────────────────────────────────────────
+function pintarEquipamentos(cli, equips){
+  const el = document.getElementById('clEquips');
+  if (!el) return;
+  let h = '<div class="secTit">Equipamentos</div>';
+  if (!equips.length){
+    h += '<p class="nota">Nenhum equipamento. Sem TAG cadastrada, o inspetor lança o item '
+      +  'sem vínculo com o vaso.</p>';
+  }
+  equips.forEach(x => {
+    h += '<div class="linhaCt"><div><b>' + esc(x.tag) + '</b>'
+      + '<small style="display:block;color:var(--ink-3);font-size:12px">'
+      + esc([x.tipo, x.localizacao, x.pmta ? 'PMTA ' + x.pmta : ''].filter(Boolean).join(' · '))
+      + '</small></div></div>';
+  });
+  h += '<div class="dupla"><div class="campo"><label for="eqT">TAG</label>'
+    +  '<input id="eqT" type="text" placeholder="VP-01"></div>'
+    +  '<div class="campo"><label for="eqK">Tipo</label><select id="eqK">'
+    +  '<option value="vaso">Vaso de pressão</option><option value="caldeira">Caldeira</option>'
+    +  '<option value="tanque">Tanque</option><option value="tubulacao">Tubulação</option>'
+    +  '<option value="outro">Outro</option></select></div></div>'
+    +  '<div class="dupla"><div class="campo"><label for="eqL">Local</label>'
+    +  '<input id="eqL" type="text"></div>'
+    +  '<div class="campo"><label for="eqP">PMTA</label>'
+    +  '<input id="eqP" type="number" step="0.01" inputmode="decimal"></div></div>'
+    +  '<button class="btn" id="eqAdd" style="width:100%;padding:9px">Adicionar equipamento</button>';
+  el.innerHTML = h;
+
+  document.getElementById('eqAdd').addEventListener('click', function(){
+    _semDuploEnvio_(this, async () => {
+      const tag = document.getElementById('eqT').value.trim();
+      if (!tag){ toast('Informe a TAG.','err'); return; }
+      const obj = { cliente_id: cli.id, tag, tipo: document.getElementById('eqK').value,
+        localizacao: document.getElementById('eqL').value.trim() || null,
+        pmta: parseFloat(document.getElementById('eqP').value) || null };
+      try{
+        if (DEMO) demoAddEquip(obj); else await post('equipamentos', obj);
+        toast('Equipamento cadastrado.','ok'); detalheCliente(cli);
+      }catch(err){
+        toast(/duplicate|unique|ux_equip/i.test(err.message)
+          ? 'Este cliente já tem um equipamento com essa TAG.' : err.message, 'err');
+      }
+    });
   });
 }
 
@@ -5750,9 +6345,17 @@ const esc = s => String(s==null?'':s).replace(/[&<>"']/g, ch =>
 let D_CLI = null, D_CT = null, D_EQ = null, D_IT = null, D_PR = null;
 function demoCad(){
   if (D_CLI) return;
-  D_CLI = [{id:'c1',nome:'Gerdau — Divinópolis',cnpj:'26.668.182/0001-85',_contatos:1,_equip:2},
-           {id:'c2',nome:'Fundição Santana',cnpj:null,_contatos:0,_equip:1}];
-  D_CT  = [{id:'t1',cliente_id:'c1',nome:'Heliton Coutinho',email:'heliton@cliente',papeis:['aprova']}];
+  D_CLI = [{id:'c1',nome:'Gerdau — Divinópolis',cnpj:'26.668.182/0001-85',_contatos:2,_equip:2,
+            endereco:'Rod. MG-050, km 12',cidade:'Divinópolis',uf:'MG',cep:'35500-000',
+            localizacao:'https://maps.google.com/?q=-20.14,-44.88',tem_logo:false},
+           {id:'c2',nome:'Fundição Santana',cnpj:null,_contatos:0,_equip:1,
+            endereco:null,localizacao:null,tem_logo:false}];
+  // um contato com papéis que a TELA NÃO MOSTRA: é o que prova, no modo demo,
+  // que salvar pela tela não apaga o que ela não sabe editar
+  D_CT  = [{id:'t1',cliente_id:'c1',nome:'Heliton Coutinho',email:'heliton@cliente',
+            cargo:'Manutenção',papeis:['aprova','paga']},
+           {id:'t2',cliente_id:'c1',nome:'Patrícia',telefone:'(37) 99999-0000',
+            cargo:'Planejamento',papeis:['agenda']}];
   D_EQ  = [{id:'e1',cliente_id:'c1',tag:'VP-01',tipo:'vaso',localizacao:'Utilidades',pmta:10.5},
            {id:'e2',cliente_id:'c1',tag:'CL-01',tipo:'caldeira',localizacao:'Casa de caldeiras',pmta:8},
            {id:'e3',cliente_id:'c2',tag:'TQ-01',tipo:'tanque',localizacao:'Pátio',pmta:6}];
@@ -5896,16 +6499,21 @@ const demoNegocios = () => {
   D_NEG = [
    {id:'n1',numero:'NEG-2026-0001',cliente_nome:'Metalúrgica Rio Verde',titulo:'Acessórios NR-13 para a caldeira',
     coluna:'Contato realizado',coluna_ordem:20,interacoes:2,tarefas_abertas:1,tarefas_atrasadas:0,
-    dias_parado:3,valor_estimado:12000,valor_propostas:0,oss:0,e_contrato:false},
+    dias_parado:3,valor_estimado:12000,valor_propostas:0,oss:0,e_contrato:false,
+    cliente_id:'c9',cliente_endereco:null,cliente_localizacao:null,contato_agenda:null},
    {id:'n2',numero:'NEG-2026-0002',cliente_nome:'Laticínios Serra Azul',titulo:'Válvulas da linha de vapor',
     coluna:'Visita agendada',coluna_ordem:30,interacoes:4,tarefas_abertas:0,tarefas_atrasadas:0,
     dias_parado:1,valor_estimado:8000,valor_propostas:0,oss:0,proxima_agenda:new Date(Date.now()+2*864e5).toISOString()},
    {id:'n3',numero:'NEG-2026-0003',cliente_nome:'Fundição Pará de Minas',titulo:'Manômetros e válvulas — forno',
     coluna:'Proposta enviada',coluna_ordem:50,interacoes:7,tarefas_abertas:2,tarefas_atrasadas:1,
-    dias_parado:11,valor_estimado:0,valor_propostas:3550,oss:1},
+    dias_parado:11,valor_estimado:0,valor_propostas:3550,oss:1,cliente_id:'c8',
+    cliente_endereco:'Av. Industrial, 900',cliente_localizacao:'https://maps.google.com/?q=-19.8,-44.6',
+    contato_agenda:'Marcos · (37) 98888-1111'},
    {id:'n4',numero:'NEG-2026-0004',cliente_nome:'Gerdau — Divinópolis',titulo:'Recalibração anual',
     coluna:'Aprovadas',coluna_ordem:60,interacoes:12,tarefas_abertas:0,tarefas_atrasadas:0,
-    dias_parado:2,valor_propostas:18400,oss:1,e_contrato:true},
+    dias_parado:2,valor_propostas:18400,oss:1,e_contrato:true,cliente_id:'c1',
+    cliente_endereco:'Rod. MG-050, km 12',cliente_localizacao:'https://maps.google.com/?q=-20.14,-44.88',
+    contato_agenda:'Patrícia · (37) 99999-0000'},
    {id:'n5',numero:'NEG-2026-0005',cliente_nome:'Setormec',titulo:'Teste hidrostático',
     coluna:'Leads',coluna_ordem:10,interacoes:0,tarefas_abertas:0,tarefas_atrasadas:0,
     dias_parado:19,valor_estimado:2400,valor_propostas:0,oss:0}
@@ -6061,7 +6669,22 @@ const demoValores = card => ({
   'Nº_da_Proposta':'(ao gerar)', 'TítuloNatureza': card.descricao || 'Inspeção NR-13',
   'Natureza_do_Serviço': card.descricao || 'Inspeção NR-13'
 });
-function demoAddCliente(nome,cnpj){ demoCad(); D_CLI.push({id:'c'+Date.now(),nome,cnpj,_contatos:0,_equip:0}); }
+function demoAddCliente(nome,cnpj){ demoCad();
+  D_CLI.push({id:'c'+Date.now(),nome,cnpj,_contatos:0,_equip:0,tem_logo:false}); }
+function demoSalvarCliente(id,nome,cnpj){ demoCad();
+  const c=D_CLI.find(x=>x.id===id); if(!c) return;
+  if(!String(nome||'').trim()) throw new Error('O nome do cliente é obrigatório.');
+  if(cnpj && D_CLI.some(x=>x.cnpj===cnpj && x.id!==id))
+    throw new Error('Já existe outro cliente com o CNPJ '+cnpj+'.');
+  c.nome=nome; c.cnpj=cnpj||null; }
+/* Mesma regra da migration: a tela edita DOIS papéis e preserva os outros. */
+function demoSalvarContato(cliId,ctId,nome,aprova,agenda){ demoCad();
+  const ct = ctId ? D_CT.find(x=>x.id===ctId) : null;
+  const outros = ct ? (ct.papeis||[]).filter(p=>p!=='aprova'&&p!=='agenda') : [];
+  const papeis = outros.concat(aprova?['aprova']:[], agenda?['agenda']:[]);
+  if (ct){ ct.nome=nome; ct.papeis=papeis; }
+  else { D_CT.push({id:'t'+Date.now(),cliente_id:cliId,nome,papeis});
+         const c=D_CLI.find(x=>x.id===cliId); if(c) c._contatos++; } }
 function demoAddContato(o){ demoCad(); D_CT.push(Object.assign({id:'t'+Date.now()},o));
   const c=D_CLI.find(x=>x.id===o.cliente_id); if(c) c._contatos++; }
 function demoAddEquip(o){ demoCad(); D_EQ.push(Object.assign({id:'e'+Date.now()},o));
