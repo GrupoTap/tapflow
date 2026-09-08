@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S18</title>
+<title>TapFlow Manager · S19</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -962,7 +962,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S18';
+const APP_VERSION = 'S19';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -1877,7 +1877,24 @@ async function agir(acao, t, valor){
   document.querySelectorAll('#dAcoes .btn').forEach(b => b.disabled = true);
   try{
     if (DEMO){ demoAgir(card, t, acao, valor); toast('Modo demo: ' + acao + ' aplicado', 'ok'); }
-    else if (acao === 'assumir')  await rpc('tf_assumir_tarefa',  { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id });
+    else if (acao === 'assumir'){
+      // `tf_assumir_tarefa` NÃO levanta exceção quando recusa: ela devolve
+      // {status:'recusado'} ou {status:'locked'}. Até o S18 o app ignorava o
+      // retorno e dizia "OS assumida" de qualquer jeito — inclusive quando o
+      // servidor tinha acabado de negar. É o verde mentindo, que é o defeito
+      // que este projeto persegue desde o parecer do TapControl.
+      const r = await rpc('tf_assumir_tarefa', { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id });
+      if (r && r.status === 'recusado'){
+        throw new Error(r.motivo === 'perfil_nao_autorizado'
+          ? 'Esta tarefa é de ' + ((r.perfis||[]).join(' ou ') || 'outro perfil')
+            + '. O seu perfil não a assume.'
+          : 'O servidor recusou: ' + (r.motivo || 'motivo não informado')
+            + (r.status_atual ? ' (a tarefa está ' + r.status_atual + ')' : '') + '.');
+      }
+      if (r && r.status === 'locked'){
+        throw new Error('Outra pessoa assumiu esta tarefa agora há pouco. Atualize o quadro.');
+      }
+    }
     else if (acao === 'concluir') await rpc('tf_concluir_tarefa', { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id });
     else if (acao === 'decisao')  await rpc('tf_resolver_decisao',{ p_os_id: card.os_id, p_tarefa_id: t.tarefa_id, p_valor: valor });
 
@@ -3581,10 +3598,24 @@ async function modalNovaOS(){
     irPara('cad');
     return;
   }
+  // O TIPO decide o checklist inteiro: fornecimento e inspeção têm fluxos
+  // diferentes, e o pipeline é copiado do template na hora da abertura. Com um
+  // tipo só, o campo não precisava existir; com dois, escolher errado significa
+  // uma OS inteira com o roteiro do outro serviço.
+  let tipos = [];
+  try{ tipos = DEMO ? demoTipos() : await get('tipos_os?select=id,nome&ativo=eq.true&order=nome'); }
+  catch(e){ tipos = []; }
+  if (!tipos.length) tipos = [{ id:'FORNECIMENTO', nome:'Fornecimento de acessórios NR-13' }];
+
   abrirModal('Nova ordem de serviço',
     '<div class="campo"><label for="oC">Cliente</label><select id="oC">' +
       clientes.map(c => '<option value="'+c.id+'">'+esc(c.nome)+'</option>').join('') +
     '</select></div>' +
+    (tipos.length > 1
+      ? '<div class="campo"><label for="oT">Tipo de serviço</label><select id="oT">' +
+          tipos.map(t => '<option value="'+esc(t.id)+'">'+esc(t.nome)+'</option>').join('') +
+        '</select></div>'
+      : '') +
     '<div class="campo"><label for="oD">Descrição</label>' +
       '<input id="oD" type="text" placeholder="ex.: Acessórios NR-13 — parada anual"></div>' +
     '<div class="campo"><label for="oP">Data prevista (opcional)</label><input id="oP" type="date"></div>' +
@@ -3594,8 +3625,9 @@ async function modalNovaOS(){
       '<option value="urgente">Urgente — passa na frente de todas</option>' +
     '</select></div>' +
     '<p style="font-size:12.5px;color:var(--ink-3);margin:0;line-height:1.5">' +
-      'O número é gerado automaticamente e o pipeline de 16 etapas já nasce junto — ' +
-      'a OS aparece no quadro do campo, esperando um inspetor aceitar.<br>' +
+      'O número é gerado automaticamente e o checklist do tipo escolhido já nasce ' +
+      'junto. O fornecimento começa no campo, esperando um inspetor aceitar; a ' +
+      'inspeção NR-13 começa no administrativo, com as duas perguntas de escopo.<br>' +
       'Sem data prevista, o prazo vem da meta do tipo de OS. <b>Urgente é o único ' +
       'nível que fura a fila</b> — use pouco, senão ele deixa de significar alguma coisa.</p>',
     [{ label:'Cancelar', onClick: fecharModal },
@@ -3606,6 +3638,7 @@ async function modalNovaOS(){
             ? demoNovaOS(document.getElementById('oC').value, document.getElementById('oD').value)
             : await rpc('tf_abrir_os', {
                 p_cliente_id: document.getElementById('oC').value,
+                p_tipo_os_id: (document.getElementById('oT')||{}).value || 'FORNECIMENTO',
                 p_descricao: document.getElementById('oD').value.trim() || null,
                 p_data_prevista: document.getElementById('oP').value || null,
                 p_client_uid: 'os-' + Date.now() + '-' + Math.random().toString(36).slice(2,8)
@@ -4698,6 +4731,8 @@ async function negAcoes(n, b){
           + '<p class="nota">Abre a OS já ligada a este negócio. Se ainda é lead, o cliente é '
           + 'criado agora — é quando ele deixa de ser “alguém que ligou”.</p>'
           + (n.oss ? '<p class="nota"><b>' + n.oss + ' OS</b> já aberta(s) neste negócio.</p>' : '')
+          + '<div class="campo"><label for="ngTipo">Tipo de serviço</label>'
+          + '<select id="ngTipo"></select></div>'
           + '<button class="btn pri" id="ngOS" style="width:100%;margin-bottom:18px">Abrir OS</button>'
           + '<div class="secTit">Marcar como perdido</div>'
           + '<div class="campo"><label for="ngM">Motivo</label><select id="ngM"></select></div>'
@@ -4732,10 +4767,25 @@ async function negAcoes(n, b){
   }));
 
   // ── abrir OS ──
+  // O tipo escolhe o checklist, e os dois são bem diferentes: o fornecimento
+  // manda o inspetor levantar antes de orçar; a inspeção começa depois do "sim"
+  // do cliente, no administrativo. Escolher errado é uma OS inteira com o
+  // roteiro do outro serviço.
+  const selT = document.getElementById('ngTipo');
+  if (selT){
+    let tipos = [];
+    try{ tipos = DEMO ? demoTipos() : await get('tipos_os?select=id,nome&ativo=eq.true&order=nome'); }
+    catch(e){ tipos = [{ id:'FORNECIMENTO', nome:'Fornecimento de acessórios NR-13' }]; }
+    tipos.forEach(t => { const o = document.createElement('option');
+      o.value = t.id; o.textContent = t.nome; selT.appendChild(o); });
+  }
+
   const bO = document.getElementById('ngOS');
   if (bO) bO.addEventListener('click', () => _semDuploEnvio_(bO, async () => {
     try{
-      const r = DEMO ? {numero:'OS-DEMO'} : await rpc('tf_negocio_abrir_os', { p_negocio_id:n.id });
+      const r = DEMO ? {numero:'OS-DEMO'} : await rpc('tf_negocio_abrir_os',
+        { p_negocio_id:n.id, p_tipo_os_id: (selT && selT.value) || 'FORNECIMENTO',
+          p_client_uid: 'neg-' + n.id + '-' + Date.now() });
       toast('OS ' + (r.numero||'') + ' aberta.','ok');
       fecharDrawer(); carregar();
     }catch(e){ toast(e.message,'err'); }
@@ -6716,6 +6766,10 @@ const demoColsCom = () => ([
  {nome:'Concluídos',ordem:80,descricao:'Todas as OS do negócio encerradas.'}
 ]);
 let D_NEG = null;
+const demoTipos = () => ([
+  { id:'FORNECIMENTO', nome:'Fornecimento de acessórios NR-13' },
+  { id:'INSPECAO',     nome:'Inspeção NR-13' }
+]);
 const demoNegocios = () => {
   if (D_NEG) return D_NEG;
   D_NEG = [

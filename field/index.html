@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S9</title>
+<title>TapFlow Field · S10</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -326,7 +326,7 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S9';
+const APP_VERSION = 'S10';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
 // rodando outra, e é o número que eu peço quando algo dá errado
@@ -1249,8 +1249,20 @@ async function agir(acao, t, respostas){
   document.querySelectorAll('#main .btn').forEach(b => b.disabled = true);
   try{
     if (DEMO) demoAgir(os.os_id, t.tarefa_id, acao);
-    else if (acao === 'assumir')
-      await rpc('tf_assumir_tarefa', { p_os_id: os.os_id, p_tarefa_id: t.tarefa_id });
+    else if (acao === 'assumir'){
+      // `tf_assumir_tarefa` recusa DEVOLVENDO {status:'recusado'|'locked'} — não
+      // levantando erro. Ignorar o retorno fazia o app dizer "OS assumida" com o
+      // servidor tendo negado. É o mesmo "o verde nunca mente" que vale para o
+      // envio da coleta: sem resposta boa, não se pinta de verde.
+      const r = await rpc('tf_assumir_tarefa', { p_os_id: os.os_id, p_tarefa_id: t.tarefa_id });
+      if (r && r.status === 'recusado')
+        throw Object.assign(new Error(r.motivo === 'perfil_nao_autorizado'
+          ? 'Esta etapa é de ' + ((r.perfis||[]).join(' ou ') || 'outro perfil') + '.'
+          : 'O servidor recusou (' + (r.motivo || '?') + ').'), { negocio:true });
+      if (r && r.status === 'locked')
+        throw Object.assign(new Error('Outra pessoa assumiu esta OS agora há pouco.'),
+                            { negocio:true });
+    }
     else
       await rpc('tf_concluir_tarefa', { p_os_id: os.os_id, p_tarefa_id: t.tarefa_id,
                                         p_respostas: respostas || {} });
