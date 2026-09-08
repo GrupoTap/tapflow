@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S19</title>
+<title>TapFlow Manager · S20</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -962,7 +962,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S19';
+const APP_VERSION = 'S20';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -1847,7 +1847,8 @@ function pintarAcoes_(){
       // pessoa que lembrasse de fazer um segundo passo que não existia em tela
       // nenhuma. Agora abrem o formulário, que grava as duas coisas juntas.
       b.addEventListener('click', () => ehAprovacao
-        ? modalAprovacao(card, o.valor)
+        ? modalAprovacao({ os_id: card.os_id, cliente_id: card.cliente_id,
+                           numero: card.numero }, o.valor)
         : agir('decisao', t, o.valor));
       row.appendChild(b);
     });
@@ -3094,7 +3095,7 @@ function propostaEmJogo(props){
   return vivas.sort((a,b) => (b.versao||0) - (a.versao||0))[0];
 }
 
-async function modalAprovacao(card, tipoInicial){
+async function modalAprovacao(ctx, tipoInicial, prForcada){
   if (DEMO){
     abrirModal('Registrar resposta do cliente',
       '<div class="aviso">No modo demonstração esta tela não grava — ela depende de '
@@ -3108,18 +3109,20 @@ async function modalAprovacao(card, tipoInicial){
   let props = [], contatos = [], motivos = [];
   try{
     [props, contatos, motivos] = await Promise.all([
-      get('v_propostas?select=*&os_id=eq.' + card.os_id + '&order=versao.desc'),
-      get('contatos?select=id,nome,telefone,email,papeis&cliente_id=eq.' + card.cliente_id
+      // a proposta do negócio já vem escolhida pela lista; a da OS é procurada
+      prForcada ? Promise.resolve([prForcada])
+                : get('v_propostas?select=*&os_id=eq.' + ctx.os_id + '&order=versao.desc'),
+      get('contatos?select=id,nome,telefone,email,papeis&cliente_id=eq.' + ctx.cliente_id
           + '&ativo=eq.true&order=nome'),
       get('motivos_perda?select=id,nome&ativo=is.true&order=nome')
     ]);
   }catch(e){ toast(e.message,'err'); return; }
 
-  const pr = propostaEmJogo(props);
+  const pr = prForcada || propostaEmJogo(props);
   if (!pr){
     // Recusar explicando o que falta vale mais que um formulário que não grava.
     abrirModal('Ainda não há proposta para responder',
-      '<p class="nota">A resposta do cliente é a resposta a uma PROPOSTA — e esta OS ainda '
+      '<p class="nota">A resposta do cliente é a resposta a uma PROPOSTA — e este negócio ainda '
       + 'não tem nenhuma emitida' + (props.length ? ' e não respondida' : '') + '.</p>'
       + '<p class="nota">Registre a proposta na aba <b>Proposta</b> primeiro. É ela que '
       + 'congela o que foi ofertado, e é sobre esse escopo que a aprovação se aplica, '
@@ -3188,7 +3191,7 @@ async function modalAprovacao(card, tipoInicial){
     + '<p class="nota">Contato, canal e data são obrigatórios de propósito. É o que '
     + 'transforma “o cliente aprovou” em algo que se confere daqui a seis meses.</p>';
 
-  abrirModal('Resposta do cliente · ' + card.numero, corpo,
+  abrirModal('Resposta do cliente · ' + (ctx.numero || ''), corpo,
     [{ label:'Cancelar', onClick: fecharModal },
      { label:'Registrar resposta', pri:true, onClick: async () => {
         const tipo = (document.querySelector('input[name="apTipo"]:checked')||{}).value;
@@ -3210,14 +3213,19 @@ async function modalAprovacao(card, tipoInicial){
           if (tipo === 'reprovado') aprovados = [];
         }
         try{
-          await rpc('tf_aprovar_proposta', { p_proposta_id: pr.id, p_tipo: tipo,
+          const r = await rpc('tf_aprovar_proposta', { p_proposta_id: pr.id, p_tipo: tipo,
             p_contato_id: ct, p_canal: document.getElementById('apCanal').value,
             p_decidido_em: data, p_itens_aprovados: aprovados,
             p_motivo_perda: motivo,
             p_evidencia_url: (document.getElementById('apEv')||{}).value.trim() || null,
             p_observacao: (document.getElementById('apObs')||{}).value.trim() || null });
           fecharModal();
-          toast('Resposta registrada. O card andou.','ok');
+          // "o card andou" só é verdade quando andou. A função devolve o que
+          // aconteceu com o pipeline; sem OS ainda, nada andou — a OS nasce
+          // depois, a partir da proposta aprovada.
+          toast(r && r.pipeline === 'movido'
+            ? 'Resposta registrada. O card andou.'
+            : 'Resposta registrada.', 'ok');
           await carregar();
           fecharDrawer();
         }catch(e){ toast(e.message,'err'); }
@@ -3258,7 +3266,10 @@ async function modalAprovacao(card, tipoInicial){
 // de propósito: "enviada" sem dizer para quem e por onde é o mesmo buraco do
 // TapControl, onde o responsável era a string 'ADM' e não havia evidência de
 // nada. Daqui também sai o relógio do follow-up ("11 dias sem resposta").
-function modalEnvioProposta(card, pr){
+// `ctx` em vez do card da OS: desde o S20 a proposta pode viver só no negócio,
+// e o formulário é o mesmo. O que ele precisa saber é de qual CLIENTE são os
+// contatos — não de qual OS.
+function modalEnvioProposta(ctx, pr){
   abrirModal('Registrar envio de ' + pr.numero,
       '<p class="nota">Isto não envia nada — registra que VOCÊ enviou, para o '
     + 'quadro comercial andar e o follow-up começar a contar.</p>'
@@ -3285,7 +3296,7 @@ function modalEnvioProposta(card, pr){
      }}]);
 
   // os contatos chegam depois; o modal já está na tela
-  get('contatos?select=id,nome,email,telefone&cliente_id=eq.' + card.cliente_id
+  get('contatos?select=id,nome,email,telefone&cliente_id=eq.' + ctx.cliente_id
       + '&ativo=eq.true&order=nome').then(cts => {
     const sel = document.getElementById('epC');
     if (!sel) return;
@@ -3353,7 +3364,8 @@ async function pintarProposta(){
       if (pr.status === 'emitida' && !DEMO){
         const b = document.createElement('button');
         b.className = 'btn mini'; b.type = 'button'; b.textContent = 'Registrar envio';
-        b.addEventListener('click', () => modalEnvioProposta(card, pr));
+        b.addEventListener('click', () => modalEnvioProposta(
+          { os_id: card.os_id, cliente_id: card.cliente_id, numero: card.numero }, pr));
         td.appendChild(b);
       }
       // A segunda porta para o formulário de aprovação. A primeira são os
@@ -3363,7 +3375,8 @@ async function pintarProposta(){
       if ((pr.status === 'emitida' || pr.status === 'enviada') && !DEMO){
         const b2 = document.createElement('button');
         b2.className = 'btn mini pri'; b2.type = 'button'; b2.textContent = 'Resposta do cliente';
-        b2.addEventListener('click', () => modalAprovacao(card, null));
+        b2.addEventListener('click', () => modalAprovacao(
+          { os_id: card.os_id, cliente_id: card.cliente_id, numero: card.numero }, null));
         td.appendChild(b2);
       }
       if (!td.children.length){
@@ -4459,9 +4472,10 @@ async function abrirNegocio(n){
   document.getElementById('drawer').classList.add('on');
   document.getElementById('scrim').classList.add('on');
   document.getElementById('dTabs').innerHTML =
-    ['log','cliente','tarefas','agenda','acoes'].map(t =>
+    ['log','cliente','proposta','tarefas','agenda','acoes'].map(t =>
       '<button data-nt="' + t + '"' + (abaNeg===t?' class="on"':'') + '>'
-      + ({log:'Histórico',cliente:'Cliente',tarefas:'Tarefas',agenda:'Agenda',acoes:'Ações'})[t]
+      + ({log:'Histórico',cliente:'Cliente',proposta:'Proposta',tarefas:'Tarefas',
+          agenda:'Agenda',acoes:'Ações'})[t]
       + '</button>').join('');
   document.querySelectorAll('#dTabs [data-nt]').forEach(b =>
     b.addEventListener('click', () => { abaNeg = b.dataset.nt; abrirNegocio(negAberto); }));
@@ -4474,7 +4488,8 @@ async function pintarNeg(){
   b.innerHTML = '<p class="nota">Carregando…</p>';
   const n = negAberto;
   if (abaNeg === 'log')     return negLog(n, b);
-  if (abaNeg === 'cliente') return negCliente(n, b);
+  if (abaNeg === 'cliente')  return negCliente(n, b);
+  if (abaNeg === 'proposta') return negPropostas(n, b);
   if (abaNeg === 'tarefas') return negTarefas(n, b);
   if (abaNeg === 'agenda')  return negAgenda(n, b);
   return negAcoes(n, b);
@@ -4670,6 +4685,259 @@ async function negAgenda(n, b){
       if (at){ negAberto = at; pintarNeg(); }
     }catch(err){ toast(err.message,'err'); e.target.disabled = false; }
   });
+}
+
+// ── A PROPOSTA MONTADA NO NEGÓCIO ───────────────────────────────────────────
+// Fecha o caminho da inspeção: o comercial monta a proposta antes de existir
+// OS, o cliente responde, e só então a OS de execução nasce — já com os itens
+// que ele comprou dentro.
+//
+// De onde vêm os itens: dos EQUIPAMENTOS já cadastrados do cliente (é a fonte
+// boa — o cadastro tem TAG, tipo e PMTA, e o vaso inspecionado ano passado é o
+// mesmo deste ano) e de LINHAS DIGITADAS, para cliente novo, equipamento ainda
+// não cadastrado, ou serviço que não é equipamento. As duas na mesma tela: só
+// a primeira trava quem ainda não cadastrou, só a segunda joga fora um cadastro
+// de 519 clientes.
+let _propItens = [];       // o que está sendo montado agora
+
+async function negPropostas(n, b){
+  b.innerHTML = '<p class="nota">Carregando…</p>';
+  if (DEMO){
+    b.innerHTML = '<div class="aviso">No modo demonstração esta aba não monta proposta — '
+      + 'ela depende dos equipamentos cadastrados do cliente no banco real.</div>'
+      + '<p class="nota">O que ela faz: você marca os equipamentos do cliente, acrescenta '
+      + 'linhas digitadas se precisar, põe o preço de cada um e registra o número da '
+      + 'proposta. Depois o cliente responde aqui mesmo, e a OS nasce com os itens dentro.</p>';
+    return;
+  }
+
+  let props = [];
+  try{ props = await get('v_propostas_negocio?select=*&negocio_id=eq.' + n.id
+                         + '&order=emitida_em.desc'); }
+  catch(e){
+    b.innerHTML = '<div class="aviso"><b>Não deu para carregar as propostas.</b><br>'
+      + esc(e.message) + '</div>'; return;
+  }
+
+  const aprovadaSemOS = props.find(p =>
+    (p.status === 'aprovada' || p.status === 'aprovada_parcial') && !p.os_id);
+
+  let h = '';
+  if (props.length){
+    h += '<div class="secTit" style="margin-top:0">Propostas deste negócio</div>'
+      +  '<div style="overflow-x:auto"><table class="tbl"><thead><tr>'
+      +  '<th>Número</th><th>V.</th><th>Status</th><th class="num">Valor</th>'
+      +  '<th>Itens</th><th></th></tr></thead><tbody>'
+      + props.map(p => '<tr>'
+          + '<td class="mono">' + esc(p.numero) + '</td>'
+          + '<td class="num">' + p.versao + '</td>'
+          + '<td>' + esc(p.status) + (p.os ? ' · OS ' + esc(p.os) : '') + '</td>'
+          + '<td class="num">' + BRL(p.valor_total) + '</td>'
+          + '<td class="num">' + p.itens + '</td>'
+          + '<td data-p="' + esc(p.id) + '"></td></tr>').join('')
+      + '</tbody></table></div>';
+  } else {
+    h += '<p class="nota">Nenhuma proposta ainda. Monte a primeira abaixo — ou, se este '
+      +  'serviço precisa de levantamento em campo antes de orçar, abra a OS de '
+      +  'fornecimento pela aba Ações.</p>';
+  }
+
+  // ── a OS nasce daqui ──
+  if (aprovadaSemOS){
+    h += '<div class="aviso ok"><b>' + esc(aprovadaSemOS.numero) + ' foi aprovada e ainda '
+      +  'não virou OS.</b> Abrir a OS traz os ' + aprovadaSemOS.itens + ' item(ns) para '
+      +  'dentro dela, já aprovados — ninguém redigita o que o cliente comprou.</div>'
+      +  '<div class="campo"><label for="npTipo">Tipo de serviço</label>'
+      +  '<select id="npTipo"></select></div>'
+      +  '<button class="btn pri" id="npAbrirOS" style="width:100%;margin-bottom:20px">'
+      +  'Abrir OS a partir desta proposta</button>';
+  }
+
+  // ── montar uma nova ──
+  h += '<div class="secTit">Montar uma proposta</div>'
+    +  '<p class="nota">A proposta é feita no sistema de sempre; aqui se registra o número '
+    +  'e o que foi ofertado. É esse escopo que a resposta do cliente aplica, item a item.</p>'
+    +  '<div id="npMonta"></div>';
+
+  b.innerHTML = h;
+
+  // botões de ação por proposta
+  b.querySelectorAll('[data-p]').forEach(td => {
+    const p = props.find(x => x.id === td.dataset.p);
+    if (!p) return;
+    const ctx = { os_id: p.os_id, negocio_id: n.id, cliente_id: p.cliente_id,
+                  numero: n.numero, cliente: p.cliente };
+    if (p.status === 'emitida'){
+      const b1 = document.createElement('button');
+      b1.className = 'btn mini'; b1.type = 'button'; b1.textContent = 'Registrar envio';
+      b1.addEventListener('click', () => modalEnvioProposta(ctx, p));
+      td.appendChild(b1);
+    }
+    if ((p.status === 'emitida' || p.status === 'enviada')){
+      const b2 = document.createElement('button');
+      b2.className = 'btn mini pri'; b2.type = 'button'; b2.textContent = 'Resposta do cliente';
+      b2.addEventListener('click', () => modalAprovacao(ctx, null, p));
+      td.appendChild(b2);
+    }
+    if (!td.children.length && p.respondida){
+      td.className = 'nota'; td.textContent = APROV_ROT[p.resposta] || p.resposta || '';
+    }
+  });
+
+  if (aprovadaSemOS){
+    const selT = document.getElementById('npTipo');
+    let tipos = [];
+    try{ tipos = await get('tipos_os?select=id,nome&ativo=eq.true&order=nome'); }
+    catch(e){ tipos = [{ id:'INSPECAO', nome:'Inspeção NR-13' }]; }
+    tipos.forEach(t => { const o = document.createElement('option');
+      o.value = t.id; o.textContent = t.nome;
+      if (t.id === 'INSPECAO') o.selected = true;
+      selT.appendChild(o); });
+
+    const bA = document.getElementById('npAbrirOS');
+    bA.addEventListener('click', () => _semDuploEnvio_(bA, async () => {
+      try{
+        const r = await rpc('tf_negocio_abrir_os_da_proposta',
+          { p_negocio_id: n.id, p_tipo_os_id: selT.value,
+            p_client_uid: 'prop-' + aprovadaSemOS.id });
+        toast('OS ' + (r.numero||'') + ' aberta com ' + (r.itens||0) + ' item(ns).','ok');
+        fecharDrawer(); await carregar();
+      }catch(e){ toast(e.message,'err'); }
+    }));
+  }
+
+  await montarProposta(n);
+}
+
+// ── o formulário de montagem ────────────────────────────────────────────────
+async function montarProposta(n){
+  const alvo = document.getElementById('npMonta');
+  if (!alvo) return;
+  _propItens = [];
+
+  if (!n.cliente_id){
+    alvo.innerHTML = '<div class="aviso">Este negócio ainda é um <b>lead solto</b>. '
+      + 'A proposta precisa de um cliente cadastrado — o cliente nasce quando o negócio '
+      + 'vira OS, ou você o cadastra em Cadastros e liga o negócio a ele.</div>';
+    return;
+  }
+
+  let equip = [];
+  try{ equip = await rpc('tf_equipamentos_para_proposta', { p_cliente_id: n.cliente_id }); }
+  catch(e){ equip = []; }
+
+  alvo.innerHTML =
+      (equip.length
+        ? '<div class="secTit">Equipamentos deste cliente</div>'
+          + '<p class="nota">Marque o que entra na proposta. A TAG e o tipo já vêm do '
+          + 'cadastro — não se digita de novo o que já está lá.</p>'
+          + '<div class="listaItens">' + equip.map(e =>
+              '<label class="chk"><input type="checkbox" data-eq="' + esc(e.equipamento_id) + '"'
+              + ' data-tag="' + esc(e.tag) + '" data-tipo="' + esc(e.tipo||'') + '"> '
+              + '<b>' + esc(e.tag) + '</b> <span class="nota">· ' + esc(e.tipo||'—')
+              + (e.localizacao ? ' · ' + esc(e.localizacao) : '')
+              + (e.pmta ? ' · PMTA ' + e.pmta : '')
+              + (e.ultima_data ? ' · última: ' + esc(dataBR(e.ultima_data)) : ' · nunca inspecionado')
+              + '</span></label>').join('') + '</div>'
+          + '<button class="btn" id="npAdd" style="width:100%;margin:10px 0 6px">'
+          + 'Acrescentar os marcados</button>'
+        : '<div class="aviso">Este cliente não tem equipamento cadastrado. Dá para montar '
+          + 'a proposta com linhas digitadas — e vale cadastrar os equipamentos em '
+          + 'Cadastros → Clientes, porque no ano que vem eles já estarão aqui.</div>')
+    + '<div class="secTit">Acrescentar uma linha</div>'
+    + '<div class="dupla"><div class="campo"><label for="npDesc">Descrição</label>'
+    + '<input id="npDesc" type="text" placeholder="Ex.: Emissão de ART" autocomplete="off" name="npd_nofill"></div>'
+    + '<div class="campo"><label for="npQtd">Qtd.</label>'
+    + '<input id="npQtd" type="number" step="0.01" inputmode="decimal" value="1"></div></div>'
+    + '<button class="btn" id="npAddLinha" style="width:100%;margin-bottom:16px">Acrescentar linha</button>'
+    + '<div class="secTit">A proposta</div><div id="npLista"></div>'
+    + '<div class="dupla"><div class="campo"><label for="npNum">Número da proposta</label>'
+    + '<input id="npNum" type="text" placeholder="Ex.: ORC-5001" autocomplete="off" name="npn_nofill"></div>'
+    + '<div class="campo"><label for="npVal">Validade</label><input id="npVal" type="date"></div></div>'
+    + '<button class="btn pri" id="npGravar" style="width:100%">Registrar proposta</button>';
+
+  const bAdd = document.getElementById('npAdd');
+  if (bAdd) bAdd.addEventListener('click', () => {
+    const marcados = [...alvo.querySelectorAll('[data-eq]:checked')];
+    if (!marcados.length){ toast('Marque ao menos um equipamento.','err'); return; }
+    marcados.forEach(c => {
+      if (_propItens.some(i => i.equipamento_id === c.dataset.eq)) return;
+      _propItens.push({ equipamento_id: c.dataset.eq,
+        descricao: 'Inspeção NR-13 — ' + c.dataset.tag
+                   + (c.dataset.tipo ? ' (' + c.dataset.tipo + ')' : ''),
+        quantidade: 1, preco_unitario: null, e_servico: false });
+      c.checked = false;
+    });
+    pintarItensProposta();
+  });
+
+  document.getElementById('npAddLinha').addEventListener('click', () => {
+    const d = document.getElementById('npDesc').value.trim();
+    if (!d){ toast('Escreva a descrição da linha.','err'); return; }
+    _propItens.push({ equipamento_id: null, descricao: d,
+      quantidade: parseFloat(document.getElementById('npQtd').value) || 1,
+      preco_unitario: null, e_servico: true });
+    document.getElementById('npDesc').value = '';
+    document.getElementById('npQtd').value = '1';
+    pintarItensProposta();
+  });
+
+  document.getElementById('npGravar').addEventListener('click', function(){
+    _semDuploEnvio_(this, async () => {
+      const num = document.getElementById('npNum').value.trim();
+      if (!num){ toast('Informe o número da proposta.','err'); return; }
+      if (!_propItens.length){ toast('A proposta precisa de pelo menos um item.','err'); return; }
+      const semPreco = _propItens.filter(i => !(Number(i.preco_unitario) > 0));
+      if (semPreco.length){
+        toast(semPreco.length + ' item(ns) sem preço. Proposta com item a zero é proposta '
+              + 'que ninguém confere.','err');
+        return;
+      }
+      try{
+        const r = await rpc('tf_criar_proposta_negocio', { p_negocio_id: n.id,
+          p_numero: num, p_itens: _propItens,
+          p_validade: document.getElementById('npVal').value || null });
+        toast('Proposta ' + r.numero + ' registrada — ' + BRL(r.valor_total) + '.','ok');
+        _propItens = [];
+        negPropostas(n, document.getElementById('dBody'));
+      }catch(e){ toast(e.message,'err'); }
+    });
+  });
+
+  pintarItensProposta();
+}
+
+function pintarItensProposta(){
+  const el = document.getElementById('npLista');
+  if (!el) return;
+  if (!_propItens.length){
+    el.innerHTML = '<p class="nota">Nada ainda. Marque equipamentos ou acrescente uma linha.</p>';
+    return;
+  }
+  const total = _propItens.reduce((s,i) =>
+    s + (Number(i.preco_unitario)||0) * (Number(i.quantidade)||0), 0);
+  el.innerHTML = '<div style="overflow-x:auto"><table class="tbl"><thead><tr>'
+    + '<th>Item</th><th>Qtd.</th><th class="num">Preço unit.</th><th class="num">Total</th><th></th>'
+    + '</tr></thead><tbody>'
+    + _propItens.map((i, k) => '<tr>'
+        + '<td>' + esc(i.descricao) + (i.equipamento_id ? '' : ' <span class="mini">digitado</span>') + '</td>'
+        + '<td class="num">' + i.quantidade + '</td>'
+        + '<td class="num"><input class="mini" style="width:96px;text-align:right" type="number"'
+        +   ' step="0.01" inputmode="decimal" data-preco="' + k + '" value="'
+        +   (i.preco_unitario == null ? '' : i.preco_unitario) + '"></td>'
+        + '<td class="num">' + BRL((Number(i.preco_unitario)||0) * (Number(i.quantidade)||0)) + '</td>'
+        + '<td><button class="btn mini" type="button" data-tira="' + k + '">tirar</button></td>'
+        + '</tr>').join('')
+    + '</tbody></table></div>'
+    + '<p class="nota" style="text-align:right;font-size:14px"><b>Total: ' + BRL(total) + '</b></p>';
+
+  el.querySelectorAll('[data-preco]').forEach(inp => inp.addEventListener('change', () => {
+    _propItens[Number(inp.dataset.preco)].preco_unitario = parseFloat(inp.value) || null;
+    pintarItensProposta();
+  }));
+  el.querySelectorAll('[data-tira]').forEach(b => b.addEventListener('click', () => {
+    _propItens.splice(Number(b.dataset.tira), 1); pintarItensProposta();
+  }));
 }
 
 // ── cliente ─────────────────────────────────────────────────────────────────
