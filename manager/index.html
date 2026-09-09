@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S22</title>
+<title>TapFlow Manager · S24</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -641,7 +641,25 @@ button.mini{padding:6px 12px;font-weight:600}
 .gcTit{font-size:11.5px;font-weight:700;color:var(--ink-3);margin-bottom:5px}
 .linhaCot.on{border-color:var(--accent);background:var(--accent-soft)}
 .linhaCot.vencida{opacity:.6}
-.linhaCompra{grid-template-columns:1fr auto}
+/* Certificado e lacre: uma linha por peça que exige, cada campo rotulado. Era
+   coluna de tabela e nascia fora da largura da gaveta — ver pintarItens(). */
+.linhaCal{display:grid;grid-template-columns:1fr 190px 150px;gap:10px;align-items:end;
+  padding:9px 0;border-bottom:1px solid var(--rule)}
+.linhaCal:last-child{border-bottom:0}
+.linhaCal b{display:block;font-size:13px;font-weight:600;line-height:1.35}
+.linhaCal small{display:block;font-size:11.5px;color:var(--ink-3);margin-top:2px}
+.linhaCal label{display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink-3)}
+.linhaCal label input{display:block;width:100%;margin-top:3px;font:inherit;font-size:13px;
+  padding:5px 7px;border:1px solid var(--rule);border-radius:6px;background:var(--surface)}
+.linhaCal label input.falta{border-color:var(--warn);background:var(--warn-soft)}
+.linhaCal .nao{font-size:11.5px;color:var(--ink-3);padding-bottom:6px}
+@media (max-width:820px){ .linhaCal{grid-template-columns:1fr} }
+.linhaCompra{grid-template-columns:1fr auto auto}
+.linhaCompra .acaoCompra{display:flex;align-items:center;padding-left:4px}
+.linhaCompra .acaoCompra .btn.mini{margin-left:0;padding:3px 9px;font-size:11.5px;white-space:nowrap}
+.linhaCompra.recebido .acaoCompra .btn.mini{background:transparent;border-style:dashed}
+.linhaCompra.recebido:hover{opacity:1}
 .linhaCompra.atrasado{border-left:3px solid var(--crit);background:var(--crit-soft)}
 .linhaCompra.chega-logo{border-left:3px solid var(--warn)}
 .linhaCompra.recebido{opacity:.55}
@@ -717,7 +735,10 @@ button.mini{padding:6px 12px;font-weight:600}
 .tbl input{width:100%;padding:6px 7px;border:1px solid var(--rule);border-radius:3px;
   font-size:13px;background:var(--surface);min-width:64px}
 .tbl input:focus{outline:2px solid var(--accent);outline-offset:-1px}
-.tbl input.falta{border-color:var(--gestao);background:var(--gestao-soft)}
+.tbl input.falta,.tbl select.falta{border-color:var(--gestao);background:var(--gestao-soft)}
+.tbl select{font:inherit;font-size:12.5px;padding:5px 6px;border:1px solid var(--rule);
+  border-radius:5px;background:var(--surface);color:var(--ink);max-width:190px}
+.tbl select:disabled{opacity:.6}
 .tbl tr.fora{opacity:.55}
 .tbl tr.fora td:first-child::after{content:" · fora do orçamento";font-size:10.5px;color:var(--ink-3)}
 .totais{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--rule);
@@ -1009,7 +1030,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S22';
+const APP_VERSION = 'S24';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -1450,6 +1471,21 @@ function pintar(){
     dados.itens.forEach(c => body.appendChild(cardEl(c)));
     board.appendChild(col);
   });
+
+  // ── Onde o quadro começa a rolar ────────────────────────────────────────
+  // A Equipe Administrativa tem NOVE colunas: as seis do fornecimento e as três
+  // da inspeção. Abrindo sempre no zero, uma OS de inspeção nasce fora da tela,
+  // atrás de cinco colunas vazias — e quem abre o quadro conclui que não há
+  // nada. Coluna vazia continua na tela (é lei), mas a ROLAGEM passa a começar
+  // na primeira coluna que tem card. Quem quiser ver as anteriores rola para a
+  // esquerda, que é o gesto natural.
+  // ⚠ quem rola na horizontal é o <main>, não o #board — mexer no scrollLeft do
+  //   #board não move nada. `scrollIntoView` acha o pai certo sozinho.
+  const cheia = colunas.findIndex(([, d]) => d.itens.length);
+  if (cheia > 0){
+    const alvo = board.children[cheia + (q ? 1 : 0)];   // a fita da busca conta
+    if (alvo) alvo.scrollIntoView({ inline: 'start', block: 'nearest' });
+  }
 
   // depois de a tela estar pronta, nunca antes
   carregarLogos(doQuadro.map(c => c.cliente_id));
@@ -2653,7 +2689,8 @@ async function pintarItens(){
     itens = DEMO ? demoItens(card.os_id)
       : await get('os_itens?select=id,descricao,tipo_acessorio,quantidade,elegivel,fornecedor,'
         + 'custo_unitario,preco_unitario,total_custo,total_venda,margem_valor,aprovado,'
-        + 'requer_calibracao,recebido_em,certificado_num'
+        + 'requer_calibracao,recebido_em,certificado_num,calibrado_em,'
+        + 'requer_lacre,lacre_num,origem,e_servico'
         + '&os_id=eq.' + card.os_id + '&order=created_at');
   }catch(e){ body.innerHTML=''; const p=document.createElement('p');
              p.style.color='var(--crit)'; p.textContent=e.message; body.appendChild(p); return; }
@@ -2664,29 +2701,90 @@ async function pintarItens(){
     return;
   }
 
+  // ── ORIGEM ────────────────────────────────────────────────────────────────
+  // "De onde vem cada peça" é uma etapa do pipeline (T04B, gateway de agregação
+  // do 17_origem.sql) e até o S23 ela NÃO TINHA TELA em lugar nenhum: nem aqui,
+  // nem no Field, nem em Compras. A palavra "viatura" não existia em nenhum dos
+  // três apps. Resultado: toda OS de fornecimento parava ali para sempre, porque
+  // o gateway só fecha quando todo item tem origem — e metade do faturamento da
+  // Engetap passa por esse fluxo. Achado operando o sistema, não lendo código.
+  //
+  // A resposta é do escritório (a tarefa é de admin/compras/tecnico_adm), e é
+  // ela que decide se o item vira pedido de compra ou é instalado direto.
+  const ORIGENS = [['viatura','Já está na viatura'], ['estoque','Estoque da Engetap'],
+                   ['proper','Proper Compressores'], ['compra','Comprar'],
+                   ['servico','Serviço']];
+
   body.innerHTML = '<div style="overflow-x:auto"><table class="tbl"><thead><tr>'
-    + '<th>Item</th><th>Qtd</th><th>Fornecedor</th><th>Custo un.</th><th>Preço un.</th><th>Margem</th>'
+    + '<th>Item</th><th>Qtd</th><th>De onde vem</th><th>Fornecedor</th>'
+    + '<th>Custo un.</th><th>Preço un.</th><th>Margem</th>'
     + '</tr></thead><tbody></tbody></table></div>';
   const tb = body.querySelector('tbody');
+
+  // ── O REFRESCO DEPOIS DE GRAVAR, EM UM LUGAR SÓ ───────────────────────
+  // ⚠ Isto já esteve duplicado e a cópia esqueceu metade: a gravação de
+  //   certificado atualizava o card mas NÃO relia `osAberta.tarefas`, então a
+  //   aba Tarefas continuava mostrando a etapa velha, sem botão, como se a OS
+  //   tivesse travado. É exatamente o defeito que o comentário abaixo conta,
+  //   reintroduzido por cópia — por isso agora é uma função só.
+  const refrescar = async () => {
+    const colAntes = card.coluna;
+    const tarAntes = card.tarefa_atual;
+    await carregar({silencioso:true});
+    const novo = cards.find(x => x.os_id === card.os_id);
+    if (!novo) return;
+    // ⚠ Preencher origem, custo, preço ou certificado fecha etapas DENTRO da
+    //   mesma coluna (Orçamento tem seis). Até o S23 o card só era atualizado
+    //   quando a COLUNA mudava — então a pessoa preenchia o último preço,
+    //   três etapas fechavam, e a aba Tarefas continuava mostrando a anterior
+    //   até fechar e reabrir a OS. O card se atualiza sempre; o aviso é que
+    //   distingue "mudou de coluna" de "andou dentro dela".
+    osAberta.card = novo;
+    document.getElementById('dSub').textContent =
+      rotuloCol(novo) + ' · ' + nomeQuadros(novo);
+    if (novo.coluna !== colAntes)
+      toast('Etapa concluída — o card foi para "' + rotuloCol(novo) + '".', 'ok');
+    else if (novo.tarefa_atual !== tarAntes)
+      toast('Etapa concluída — agora é "' + novo.tarefa_atual + '".', 'ok');
+    if (novo.tarefa_atual !== tarAntes && !DEMO){
+      // a lista de tarefas foi carregada quando a OS abriu; se uma etapa
+      // fechou agora, ela está velha — e tarefa velha vem sem botão
+      try{
+        osAberta.tarefas = await get('pipeline_tarefas?select=tarefa_id,nome,tipo,fase,'
+          + 'fase_ordem,ordem,status,opcoes,perfis_responsaveis,lock_por,executor,'
+          + 'usuario_designado,data_prevista,tempo_estimado_min'
+          + '&os_id=eq.' + card.os_id + '&ativo=eq.SIM&order=camada,fase_ordem,ordem');
+      }catch(e){}
+    }
+  };
 
   itens.forEach(it => {
     const tr = document.createElement('tr');
     if (!it.elegivel) tr.className = 'fora';
     tr.innerHTML = '<td class="d"></td><td class="num q"></td>'
+      + '<td><select class="o">'
+      +   '<option value="">— responder —</option>'
+      +   ORIGENS.map(([v,r]) => '<option value="' + v + '">' + r + '</option>').join('')
+      + '</select></td>'
       + '<td><input class="f" type="text" placeholder="—"></td>'
       + '<td><input class="c" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0,00"></td>'
       + '<td><input class="p" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0,00"></td>'
       + '<td class="num m"></td>';
     tr.querySelector('.d').textContent = it.descricao;
     tr.querySelector('.q').textContent = Number(it.quantidade);
+    const oi = tr.querySelector('.o');
     const fi = tr.querySelector('.f'), ci = tr.querySelector('.c'), pi = tr.querySelector('.p');
+    oi.value = it.origem || '';
+    // serviço não é peça: a origem dele é decidida pelo banco e não se edita
+    if (it.e_servico) oi.disabled = true;
+    if (it.elegivel && !it.origem && !it.e_servico) oi.classList.add('falta');
     fi.value = it.fornecedor || '';
     ci.value = it.custo_unitario != null ? it.custo_unitario : '';
     pi.value = it.preco_unitario != null ? it.preco_unitario : '';
     if (it.elegivel && !(Number(it.custo_unitario) > 0)) ci.classList.add('falta');
     if (it.elegivel && !(Number(it.preco_unitario) > 0)) pi.classList.add('falta');
     tr.querySelector('.m').textContent = it.margem_valor != null ? BRL(it.margem_valor) : '—';
-    if (!it.elegivel){ [fi,ci,pi].forEach(x => x.disabled = true); }
+    if (!it.elegivel){ [oi,fi,ci,pi].forEach(x => x.disabled = true); }
 
     const grava = (campo, el, numerico) => el.addEventListener('change', async () => {
       const bruto = el.value.trim();
@@ -2696,18 +2794,11 @@ async function pintarItens(){
       try{
         if (DEMO) demoGravarItem(card.os_id, it.id, campo, valor);
         else await patch('os_itens', 'id=eq.' + it.id, { [campo]: valor });
-        const colAntes = card.coluna;
-        await carregar({silencioso:true});
-        const novo = cards.find(x => x.os_id === card.os_id);
-        if (novo && novo.coluna !== colAntes){
-          toast('Etapa concluída — o card foi para "' + rotuloCol(novo) + '".', 'ok');
-          osAberta.card = novo;
-          document.getElementById('dSub').textContent =
-            rotuloCol(novo) + ' · ' + nomeQuadros(novo);
-        }
+        await refrescar();
         pintarItens();
       }catch(e){ toast(e.message,'err'); el.disabled = false; }
     });
+    grava('origem', oi, false);
     grava('fornecedor', fi, false);
     grava('custo_unitario', ci, true);
     grava('preco_unitario', pi, true);
@@ -2727,13 +2818,116 @@ async function pintarItens(){
   t.querySelectorAll('.v')[2].textContent = BRL(somaM) + (somaV>0 ? '  ·  ' + Math.round(somaM/somaV*100) + '%' : '');
   body.appendChild(t);
 
+  // Atalho do caso comum: numa OS de fornecimento a maioria das peças é para
+  // comprar. Responder quatro selects um a um para depois cotar é atrito que a
+  // etapa não precisa ter — e é atrito que faz o campo parar de responder.
+  const semOrigem = el.filter(i => !i.origem && !i.e_servico);
+  if (semOrigem.length > 1 && !DEMO){
+    const bo = document.createElement('button');
+    bo.className = 'btn'; bo.type = 'button';
+    bo.style.cssText = 'width:100%;margin-top:12px';
+    bo.textContent = 'Marcar as ' + semOrigem.length + ' peças sem resposta como "Comprar"';
+    bo.addEventListener('click', function(){
+      _semDuploEnvio_(this, async () => {
+        try{
+          for (const i of semOrigem)
+            await patch('os_itens', 'id=eq.' + i.id, { origem: 'compra' });
+          const colAntes = card.coluna;
+          await carregar({silencioso:true});
+          const novo = cards.find(x => x.os_id === card.os_id);
+          if (novo){ osAberta.card = novo;
+            toast(novo.coluna !== colAntes
+              ? 'Etapa concluída — o card foi para "' + rotuloCol(novo) + '".'
+              : 'Origem definida.', 'ok'); }
+          pintarItens();
+        }catch(e){ toast(e.message,'err'); }
+      });
+    });
+    body.appendChild(bo);
+  }
+
+  // ── CERTIFICADO E LACRE, EM SEÇÃO PRÓPRIA ─────────────────────────────────
+  // A T13 ("Calibrar e lacrar") é agregação sobre `certificado_num`, e até o
+  // S24 o ÚNICO lugar do sistema que gravava essa coluna era o app de campo —
+  // numa tarefa cujo executor é `adm`, ou seja, que o campo nem enxerga. A OS
+  // de fornecimento morria aqui, uma etapa depois de "Receber material".
+  //
+  // ⚠ A primeira versão disto eram duas COLUNAS na tabela acima. Com nove
+  //   colunas, elas nasciam fora da largura da gaveta: existiam, roláveis, e
+  //   ninguém veria. Campo que só aparece se a pessoa rolar para o lado é o
+  //   mesmo que campo nenhum — e foi assim que a etapa ia continuar "travada".
+  //   Vira seção própria, embaixo, listando SÓ quem exige.
+  //
+  // A seção só cobra o que o cliente aprovou: item recusado não vai ser
+  // instalado, e pedir certificado dele prenderia a OS por nada.
+  const apr = el.filter(i => i.aprovado === true);
+  const exigem = apr.filter(i => i.requer_calibracao || i.requer_lacre);
+  const faltaC = apr.filter(i => i.requer_calibracao && !i.certificado_num).length;
+  const faltaL = apr.filter(i => i.requer_lacre && !i.lacre_num).length;
+
+  if (exigem.length){
+    const cx = document.createElement('div');
+    cx.style.cssText = 'margin-top:20px;border-top:1px solid var(--rule);padding-top:14px';
+    cx.innerHTML = '<div class="secTit" style="margin:0 0 4px">Certificado e lacre</div>'
+      + '<p class="nota" style="margin:0 0 10px">O escritório lança aqui o número do '
+      + 'certificado de calibração e o do lacre. É isto que fecha a etapa '
+      + '<b>Calibrar e lacrar</b>. Deixar o campo vazio apaga o número — é assim que '
+      + 'se corrige um dígito errado.</p>';
+    exigem.forEach(it => {
+      const l = document.createElement('div');
+      l.className = 'linhaCal';
+      l.innerHTML = '<div><b></b><small></small></div>'
+        + (it.requer_calibracao
+            ? '<label>Nº do certificado<input class="cert" type="text" maxlength="40" placeholder="como está no certificado"></label>'
+            : '<span class="nao">não exige calibração</span>')
+        + (it.requer_lacre
+            ? '<label>Nº do lacre<input class="lac" type="text" maxlength="40" placeholder="—"></label>'
+            : '<span class="nao">não exige lacre</span>');
+      l.querySelector('b').textContent = it.descricao;
+      l.querySelector('small').textContent = 'Qtd ' + Number(it.quantidade)
+        + (it.calibrado_em
+            ? ' · calibrado em ' + new Date(it.calibrado_em + 'T12:00').toLocaleDateString('pt-BR')
+            : '');
+      const cei = l.querySelector('.cert'), lai = l.querySelector('.lac');
+      if (cei){ cei.value = it.certificado_num || '';
+                if (!it.certificado_num) cei.classList.add('falta'); }
+      if (lai){ lai.value = it.lacre_num || '';
+                if (!it.lacre_num) lai.classList.add('falta'); }
+
+      // Certificado e lacre NÃO são `patch` direto como os campos da tabela:
+      // passam por `tf_registrar_calibracao`, que carimba a data, registra no
+      // histórico e RECUSA número em peça que não exige. Certificado é o papel
+      // que o cliente mostra na fiscalização — não é campo de anotação.
+      const gravaCal = (elc, chave) => elc && elc.addEventListener('change', async () => {
+        const v = elc.value.trim();
+        elc.disabled = true;
+        try{
+          if (DEMO) throw new Error('Modo demonstração: calibração não é gravada.');
+          await rpc('tf_registrar_calibracao', { p_os_item_id: it.id, [chave]: v });
+          await refrescar();
+          pintarItens();
+        }catch(e){ toast(e.message,'err'); elc.disabled = false; }
+      });
+      gravaCal(cei, 'p_certificado');
+      gravaCal(lai, 'p_lacre');
+      cx.appendChild(l);
+    });
+    body.appendChild(cx);
+  }
+
   const falta = el.filter(i => !(Number(i.custo_unitario)>0)).length;
   const faltaP = el.filter(i => !(Number(i.preco_unitario)>0)).length;
+  const faltaO = semOrigem.length;
   const n = document.createElement('p');
   n.style.cssText = 'font-size:12.5px;color:var(--ink-3);margin:12px 0 0;line-height:1.5';
-  n.textContent = falta ? falta + ' item(ns) ainda sem custo — a etapa de cotação só fecha no último.'
+  n.textContent = faltaO ? faltaO + ' item(ns) sem responder de onde vêm — é esta resposta que '
+      + 'decide se a peça vira pedido de compra, e a etapa só fecha no último.'
+    : falta ? falta + ' item(ns) ainda sem custo — a etapa de cotação só fecha no último.'
     : faltaP ? faltaP + ' item(ns) sem preço de venda — a etapa de precificação fecha quando todos tiverem.'
-    : 'Todos os itens elegíveis têm custo e preço.';
+    : faltaC ? faltaC + ' item(ns) aprovado(s) ainda sem número de certificado — '
+             + 'a etapa "Calibrar e lacrar" fecha quando todos tiverem.'
+    : faltaL ? faltaL + ' item(ns) aprovado(s) ainda sem número de lacre.'
+    : 'Todos os itens elegíveis têm origem, custo e preço.';
   body.appendChild(n);
 }
 
@@ -3438,8 +3632,18 @@ async function modalAprovacao(ctx, tipoInicial, prForcada){
           toast(r && r.pipeline === 'movido'
             ? 'Resposta registrada. O card andou.'
             : 'Resposta registrada.', 'ok');
-          await carregar();
-          fecharDrawer();
+          // Mesmo motivo do registro de envio: vindo da gaveta do NEGÓCIO,
+          // `carregar()` recarrega os cards de OS e o quadro comercial fica
+          // como estava — parado na coluna anterior à resposta que acabou de
+          // ser registrada.
+          if (ctx && ctx.negocio_id){
+            await pintarComercial();
+            const n = (negocios || []).find(x => x.id === ctx.negocio_id);
+            if (n){ abaNeg = 'proposta'; abrirNegocio(n); }
+          } else {
+            await carregar();
+            fecharDrawer();
+          }
         }catch(e){ toast(e.message,'err'); }
      }}]);
 
@@ -3503,7 +3707,19 @@ function modalEnvioProposta(ctx, pr){
             p_contato_id: ct, p_canal: document.getElementById('epK').value,
             p_quando: document.getElementById('epD').value || null });
           fecharModal(); toast('Envio registrado.','ok');
-          pintarProposta(); carregar({silencioso:true});
+          // ⚠ Este modal é chamado de DOIS lugares: da aba Proposta da OS e da
+          //   gaveta do NEGÓCIO. Até o S22 ele repintava sempre a aba da OS e
+          //   recarregava só os cards de OS — então, vindo do negócio, a pessoa
+          //   registrava o envio, lia "Envio registrado" e via o card parado em
+          //   "Em conferência" até apertar Atualizar. O quadro mentia justo no
+          //   passo em que ele deveria andar.
+          if (ctx && ctx.negocio_id){
+            await pintarComercial();
+            const n = (negocios || []).find(x => x.id === ctx.negocio_id);
+            if (n){ abaNeg = 'proposta'; abrirNegocio(n); }
+          } else {
+            pintarProposta(); carregar({silencioso:true});
+          }
         }catch(e){ toast(e.message,'err'); }
      }}]);
 
@@ -4417,19 +4633,93 @@ function desenharCompras(todos){
     }
     const el = document.createElement('div');
     el.className = 'linhaCompra ' + i.situacao.replace(/\s/g,'-');
-    el.innerHTML = '<div><b></b><small></small></div><div class="dt"></div>';
+    el.innerHTML = '<div><b></b><small></small></div><div class="dt"></div>'
+                 + '<div class="acaoCompra"></div>';
     el.querySelector('b').textContent = i.descricao;
     el.querySelector('small').textContent = i.os + ' · ' + i.cliente
       + (i.fornecedor ? ' · ' + i.fornecedor : ' · sem fornecedor')
-      + (i.pedido_numero ? ' · ' + i.pedido_numero : '');
+      // pedido interno da Proper não tem PC: dizer "sem pedido" ali seria falso
+      + (i.pedido_numero ? ' · ' + i.pedido_numero
+                         : (i.origem === 'proper' ? ' · pedido interno' : ''));
     el.querySelector('.dt').innerHTML = i.recebido_em
       ? 'recebido<br><b>' + new Date(i.recebido_em+'T12:00').toLocaleDateString('pt-BR') + '</b>'
       : (i.previsto_para
           ? (i.dias_atraso > 0 ? '<b class="atr">' + i.dias_atraso + ' dias<br>de atraso</b>'
                                : 'previsto<br><b>' + new Date(i.previsto_para+'T12:00').toLocaleDateString('pt-BR') + '</b>')
           : '<span class="nota">sem data</span>');
+
+    // ── A AÇÃO QUE FALTAVA ATÉ O S24 ────────────────────────────────────────
+    // `recebido_em` era lido em quatro lugares e escrito em ZERO: a T12 é
+    // agregação sobre este campo, então toda OS de fornecimento parava aqui
+    // para sempre. O botão abaixo é o caminho que não existia.
+    const cx = el.querySelector('.acaoCompra');
+    const bt = document.createElement('button');
+    bt.className = 'btn mini' + (i.recebido_em ? '' : ' pri');
+    bt.textContent = i.recebido_em ? 'desfazer' : 'Recebi';
+    bt.addEventListener('click', () => i.recebido_em
+      ? _semDuploEnvio_(bt, () => desfazerRecebimento(i))
+      : modalReceber(i, todos));
+    cx.appendChild(bt);
     L.appendChild(el);
   });
+}
+
+/**
+ * RECEBER — uma data, e a opção de levar o resto do pedido junto.
+ *
+ * O caminhão chega com o pedido inteiro, não com uma peça. Marcar item a item
+ * é como se marca metade e esquece o resto — e o resto é justamente o que
+ * segura a T12. Por isso o modal já vem com "o pedido todo" marcado quando há
+ * mais de um item pendente no mesmo pedido.
+ *
+ * A lista vai para `tf_receber_itens`, que recusa OS misturada. Como pedido é
+ * por OS, agrupar por pedido nunca mistura — e o item da Proper, que não tem
+ * PC, agrupa pela OS mesmo.
+ */
+function modalReceber(i, todos){
+  const mesmoLote = x => !x.recebido_em && x.item_id !== i.item_id && x.os_id === i.os_id
+    && (i.pedido_numero ? x.pedido_numero === i.pedido_numero
+                        : (!x.pedido_numero && x.origem === i.origem));
+  const irmaos = (todos || []).filter(mesmoLote);
+  const lote = i.pedido_numero || (i.origem === 'proper' ? 'pedido interno da Proper' : 'esta OS');
+
+  abrirModal('Recebi · ' + i.descricao,
+    '<div class="campo"><label for="rcD">Quando chegou</label>'
+    + '<input id="rcD" type="date" max="' + esc(isoHoje()) + '" value="' + esc(isoHoje()) + '"></div>'
+    + (irmaos.length
+        ? '<label class="chk" style="display:flex;gap:8px;align-items:flex-start;margin:2px 0 8px">'
+          + '<input type="checkbox" id="rcTodos" checked style="margin-top:2px">'
+          + '<span>Marcar também os outros <b>' + irmaos.length + '</b> item(ns) de '
+          + esc(lote) + '<br><small style="color:var(--ink-3)">'
+          + esc(irmaos.map(x => x.descricao).join(' · ')) + '</small></span></label>'
+        : '')
+    + '<p style="font-size:12.5px;color:var(--ink-3);margin:0;line-height:1.5">'
+    + 'É este registro que fecha a etapa <b>Receber material</b> e libera a '
+    + 'calibração. Enquanto faltar um item do pedido, a OS continua aqui.</p>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Registrar recebimento', pri:true, onClick: async () => {
+        const d = document.getElementById('rcD').value || isoHoje();
+        const leva = irmaos.length && document.getElementById('rcTodos').checked;
+        const ids = [i.item_id].concat(leva ? irmaos.map(x => x.item_id) : []);
+        try{
+          if (DEMO) throw new Error('Modo demonstração: recebimento não é gravado.');
+          const r = await rpc('tf_receber_itens', { p_os_item_ids: ids, p_data: d });
+          fecharModal();
+          toast((r && r.itens ? r.itens : ids.length) + ' item(ns) marcado(s) como recebido(s).','ok');
+          pintarCompras(); carregar();
+        }catch(e){ toast(e.message,'err'); }
+     }}]);
+}
+
+async function desfazerRecebimento(i){
+  try{
+    if (DEMO) throw new Error('Modo demonstração: recebimento não é gravado.');
+    const r = await rpc('tf_desfazer_recebimento', { p_os_item_id: i.item_id });
+    toast(r && r.reabriu
+      ? 'Recebimento desfeito — a etapa "Receber material" voltou a ficar aberta.'
+      : 'Recebimento desfeito.', 'ok');
+    pintarCompras(); carregar();
+  }catch(e){ toast(e.message,'err'); }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -5047,9 +5337,18 @@ async function montarProposta(n){
   _propItens = [];
 
   if (!n.cliente_id){
-    alvo.innerHTML = '<div class="aviso">Este negócio ainda é um <b>lead solto</b>. '
-      + 'A proposta precisa de um cliente cadastrado — o cliente nasce quando o negócio '
-      + 'vira OS, ou você o cadastra em Cadastros e liga o negócio a ele.</div>';
+    // A instrução antiga aqui mandava fazer o que não existia ("cadastre em
+    // Cadastros e ligue o negócio a ele"). Desde o S22 existe, e é na aba ao
+    // lado — então a mensagem aponta para o botão em vez de para o vazio.
+    alvo.innerHTML = '<div class="aviso">Este negócio ainda é um <b>lead solto</b>, e '
+      + 'proposta é coisa de cliente: é o cadastro dele que guarda os equipamentos '
+      + 'que vão ser inspecionados, e é o contato dele que assina a aprovação.'
+      + '<div style="margin-top:10px"><button class="btn pri" type="button" id="npIrCli">'
+      + 'Ir para a aba Cliente e transformar em cliente</button></div></div>';
+    const ir = document.getElementById('npIrCli');
+    if (ir) ir.addEventListener('click', () => {
+      abaNeg = 'cliente'; abrirNegocio(n);
+    });
     return;
   }
 
@@ -5181,16 +5480,142 @@ function pintarItensProposta(){
 // Aqui é só LEITURA com um atalho para editar. A edição de verdade é na tela
 // de Cadastros, e o botão leva para lá: manter dois formulários para o mesmo
 // cliente é como os dois passam a discordar.
+/** Cria o cliente a partir do lead. O aviso de parecidos vem do banco e NÃO
+    bloqueia: mostra quem já existe e devolve as duas saídas. */
+async function virarCliente(n, confirmado){
+  const nome = (document.getElementById('vcNome') || {}).value || '';
+  if (!nome.trim()){ toast('Escreva o nome do cliente.','err'); return; }
+  try{
+    const r = await rpc('tf_negocio_virar_cliente', {
+      p_negocio_id: n.id, p_nome: nome.trim(),
+      p_cnpj:   (document.getElementById('vcCnpj') || {}).value || null,
+      p_cidade: (document.getElementById('vcCid')  || {}).value || null,
+      p_uf:     (document.getElementById('vcUf')   || {}).value || null,
+      p_confirmado: !!confirmado });
+
+    if (r.status === 'parecidos'){
+      avisarParecidosNoNegocio(n, r);
+      return;
+    }
+    toast('Agora é cliente: ' + r.nome + '.','ok');
+    await pintarComercial();
+    const novo = (negocios || []).find(x => x.id === n.id);
+    if (novo) abrirNegocio(novo);
+  }catch(e){ toast(e.message,'err'); }
+}
+
+/** O mesmo aviso do cadastro (S21), agora no caminho do negócio: quem já existe,
+    e as duas saídas — aproveitar ou criar assim mesmo. */
+function avisarParecidosNoNegocio(n, r){
+  const rot = { mesmo:'mesmo cliente', muito_parecido:'muito parecido', parecido:'parecido' };
+  abrirModal('Já existe cliente parecido',
+      '<p class="nota" style="margin-top:0">Antes de criar <b>' + esc(r.nome) + '</b>, '
+    + 'confira se não é um destes. Aproveitar o cadastro mantém equipamentos e '
+    + 'histórico no mesmo lugar — e é o que evita duas fichas da mesma empresa.</p>'
+    + '<div class="parecidos">' + (r.semelhantes || []).map(c =>
+        '<button class="btn parecidoLinha" type="button" data-lig="' + esc(c.id) + '">'
+      + '<span class="pn">' + esc(c.nome) + '</span>'
+      + '<span class="pd">' + esc(c.cnpj || 'sem CNPJ')
+      +   (c.cidade ? ' · ' + esc(c.cidade) : '') + '</span>'
+      + '<span class="chip">' + esc(rot[c.forca] || c.forca)
+      +   (c.parece_filial ? ' · outra filial' : '') + '</span></button>').join('')
+    + '</div>'
+    + '<p class="nota">Se for outra empresa — ou outra filial, que tem CNPJ, endereço '
+    + 'e vasos próprios —, criar de novo é o certo.</p>',
+    [ { label:'Criar assim mesmo', onClick: () => { fecharModal(); virarCliente(n, true); } },
+      { label:'Cancelar', pri:true, onClick: () => fecharModal() } ]);
+
+  document.querySelectorAll('[data-lig]').forEach(bt =>
+    bt.addEventListener('click', async () => {
+      fecharModal();
+      await ligarClienteAoNegocio(n, bt.dataset.lig);
+    }));
+}
+
+async function buscarClienteParaNegocio(n, termo){
+  const alvo = document.getElementById('vcLista');
+  if (!alvo) return;
+  if (termo.length < 2){ alvo.innerHTML = ''; return; }
+  try{
+    const r = await rpc('tf_buscar_cliente', { p_termo: termo, p_limite: 8 });
+    alvo.innerHTML = (r && r.length)
+      ? '<div class="parecidos">' + r.map(c =>
+          '<button class="btn parecidoLinha" type="button" data-lig2="' + esc(c.id) + '">'
+        + '<span class="pn">' + esc(c.nome) + '</span>'
+        + '<span class="pd">' + esc(c.cnpj || 'sem CNPJ')
+        +   (c.cidade ? ' · ' + esc(c.cidade) : '') + '</span>'
+        + '<span class="chip">' + c.equipamentos + ' equip. · ' + c.oss + ' OS</span>'
+        + '</button>').join('') + '</div>'
+      : '<p class="nota">Nenhum cliente com esse nome ou CNPJ.</p>';
+    alvo.querySelectorAll('[data-lig2]').forEach(bt =>
+      bt.addEventListener('click', () => ligarClienteAoNegocio(n, bt.dataset.lig2)));
+  }catch(e){
+    alvo.innerHTML = '<p class="nota"></p>';
+    alvo.querySelector('p').textContent = 'Não deu para buscar: ' + e.message;
+  }
+}
+
+async function ligarClienteAoNegocio(n, clienteId){
+  try{
+    const r = await rpc('tf_negocio_ligar_cliente',
+      { p_negocio_id: n.id, p_cliente_id: clienteId });
+    toast('Negócio ligado a ' + r.nome + '.','ok');
+    await pintarComercial();
+    const novo = (negocios || []).find(x => x.id === n.id);
+    if (novo) abrirNegocio(novo);
+  }catch(e){ toast(e.message,'err'); }
+}
+
 async function negCliente(n, b){
   if (!n.cliente_id){
+    // ⚠ Até o S22 esta aba só EXPLICAVA que o cliente nasceria junto com a OS —
+    //    e mandava "cadastre em Cadastros e ligue o negócio a ele", uma instrução
+    //    que ninguém conseguia cumprir: não havia tela para ligar, e o perfil
+    //    comercial não tem o módulo Cadastros. No caminho da inspeção, em que a
+    //    proposta vem ANTES da OS, isso travava o orçamento de todo lead novo.
+    //    As duas ações abaixo são a saída, e são duas de propósito: criar sempre
+    //    é como a base volta a encher de Gerdau repetida.
     b.innerHTML = '<div class="aviso">Este negócio ainda é um <b>lead solto</b> — '
-      + esc(n.lead_nome || 'sem nome') + '. O cliente é criado quando ele virar OS, '
-      + 'e a partir daí os dados dele aparecem aqui.</div>'
+      + esc(n.lead_nome || 'sem nome') + '. Enquanto for lead dá para conversar, '
+      + 'agendar e registrar tudo; para <b>orçar</b>, ele precisa virar cliente.</div>'
       + (n.lead_contato || n.lead_telefone || n.lead_email
           ? '<div class="blocoLocal"><div class="lin"><span class="rot">Contato</span><span>'
             + esc([n.lead_contato, n.lead_telefone, n.lead_email].filter(Boolean).join(' · '))
             + '</span></div></div>'
-          : '');
+          : '')
+      + '<div class="secTit">Virar cliente</div>'
+      + '<p class="nota">Cria o cadastro com o que já está aqui. O contato vira o '
+      + 'contato de aprovação e de agenda — é ele que a resposta do cliente vai pedir.</p>'
+      + '<div class="dupla"><div class="campo"><label for="vcNome">Nome do cliente</label>'
+      + '<input id="vcNome" type="text" autocomplete="off" name="vcn_nofill" value="'
+      + esc(n.lead_nome || '') + '"></div>'
+      + '<div class="campo"><label for="vcCnpj">CNPJ (opcional)</label>'
+      + '<input id="vcCnpj" type="text" autocomplete="off" name="vcc_nofill" '
+      + 'placeholder="dá para preencher depois"></div></div>'
+      + '<div class="dupla"><div class="campo"><label for="vcCid">Cidade</label>'
+      + '<input id="vcCid" type="text" autocomplete="off" name="vci_nofill"></div>'
+      + '<div class="campo"><label for="vcUf">UF</label>'
+      + '<input id="vcUf" type="text" maxlength="2" autocomplete="off" name="vcu_nofill"></div></div>'
+      + '<button class="btn pri" id="vcOk" style="width:100%">Transformar em cliente</button>'
+      + '<div class="secTit">Ou: já é um cliente cadastrado</div>'
+      + '<p class="nota">Se a empresa já está no cadastro, amarre o negócio nela em vez '
+      + 'de criar de novo — é o que mantém equipamentos e histórico no mesmo lugar.</p>'
+      + '<div class="campo"><label for="vcBusca">Procurar no cadastro</label>'
+      + '<input id="vcBusca" type="text" placeholder="nome ou CNPJ" autocomplete="off" '
+      + 'name="vcb_nofill" data-lpignore="true" data-1p-ignore></div>'
+      + '<div id="vcLista"></div>';
+
+    document.getElementById('vcOk').addEventListener('click', function(){
+      _semDuploEnvio_(this, () => virarCliente(n, false));
+    });
+
+    // busca com o mesmo debounce das outras listas
+    let t = null;
+    const cx = document.getElementById('vcBusca');
+    cx.addEventListener('input', () => {
+      clearTimeout(t);
+      t = setTimeout(() => buscarClienteParaNegocio(n, cx.value.trim()), 200);
+    });
     return;
   }
 
@@ -5203,11 +5628,16 @@ async function negCliente(n, b){
     + ((!n.cliente_endereco || !n.contato_agenda)
         ? '<p class="nota">O que está em branco não impede nada — mas é o que o campo vai '
           + 'procurar no dia da visita. Vale preencher antes de virar OS.</p>' : '')
-    + '<button class="btn" id="ngCad" style="width:100%">Abrir no cadastro de clientes</button>';
+    // ⚠ Só quem tem o módulo: o perfil comercial não tem Cadastros, e um botão
+    //   que leva a uma tela que não existe naquele menu deixa a pessoa em branco.
+    + (podeVer('cadastros')
+        ? '<button class="btn" id="ngCad" style="width:100%">Abrir no cadastro de clientes</button>'
+        : '');
   b.querySelector('h3').textContent = n.cliente_nome;
   carregarLogos([n.cliente_id]);
 
-  document.getElementById('ngCad').addEventListener('click', () => {
+  const bCad = document.getElementById('ngCad');
+  if (bCad) bCad.addEventListener('click', () => {
     cadSel = n.cliente_id;
     fecharDrawer();
     irPara('cad');
@@ -7578,9 +8008,13 @@ function demoCad(){
            {id:'e3',cliente_id:'c2',tag:'TQ-01',tipo:'tanque',localizacao:'Pátio',pmta:6}];
   D_IT = { d3: [
     {id:'i1',descricao:'Manômetro 63mm 0-14 kgf/cm²',quantidade:10,elegivel:true,fornecedor:'Wika',
-     custo_unitario:180,preco_unitario:297,total_custo:1800,total_venda:2970,margem_valor:1170,requer_calibracao:true},
+     custo_unitario:180,preco_unitario:297,total_custo:1800,total_venda:2970,margem_valor:1170,
+     aprovado:true,requer_calibracao:true,certificado_num:'RBC-2026-0771',calibrado_em:'2026-09-02',
+     requer_lacre:false,lacre_num:null},
     {id:'i2',descricao:'Válvula de segurança 1/2"',quantidade:2,elegivel:true,fornecedor:'Leser',
-     custo_unitario:940,preco_unitario:null,total_custo:1880,total_venda:0,margem_valor:-1880,requer_calibracao:true},
+     custo_unitario:940,preco_unitario:null,total_custo:1880,total_venda:0,margem_valor:-1880,
+     aprovado:true,requer_calibracao:true,certificado_num:null,
+     requer_lacre:true,lacre_num:null},
     {id:'i3',descricao:'Purgador termodinâmico 1/2"',quantidade:1,elegivel:true,fornecedor:null,
      custo_unitario:null,preco_unitario:null,total_custo:0,total_venda:0,margem_valor:0},
     {id:'i4',descricao:'Niple 1/4" (instalado em campo)',quantidade:1,elegivel:false,
@@ -7689,15 +8123,31 @@ const demoCots = () => ([
  {id:'q3',os_item_id:'i1',item:'Manômetro 0-16 bar 100mm',fornecedor:'Famabras',
   valor_unitario:169,valor_frete:240,prazo_dias:20,total_estimado:1930,escolhida:true}
 ]);
+// ⚠ Os nomes de coluna aqui têm que ser os REAIS de `v_compras` — `os_id`,
+//    `origem`, `recebido_em` inclusive. Demo que concorda com o app e discorda
+//    do banco é o que fez a tela de Relatórios ir ao ar em 04/09 com uma coluna
+//    inventada e os testes passarem verdes.
 const demoCompras = () => ([
- {item_id:'c1',os:'OS-26003',cliente:'Fundição Pará de Minas',descricao:'Manômetro 0-25 bar 6"',
-  fornecedor:'Wika',pedido_numero:'PC-2026-0001',previsto_para:new Date(Date.now()-10*864e5).toISOString().slice(0,10),
+ {item_id:'c1',os_id:'o3',os:'OS-26003',cliente:'Fundição Pará de Minas',descricao:'Manômetro 0-25 bar 6"',
+  origem:'compra',fornecedor:'Wika',pedido_numero:'PC-2026-0001',recebido_em:null,
+  previsto_para:new Date(Date.now()-10*864e5).toISOString().slice(0,10),
   situacao:'atrasado',dias_atraso:10},
- {item_id:'c2',os:'OS-26005',cliente:'Gerdau — Divinópolis',descricao:'Válvula de segurança 1.1/2"',
-  fornecedor:'Bermo',pedido_numero:'PC-2026-0002',previsto_para:new Date(Date.now()+2*864e5).toISOString().slice(0,10),
+ {item_id:'c1b',os_id:'o3',os:'OS-26003',cliente:'Fundição Pará de Minas',descricao:'Manômetro 0-16 bar 4"',
+  origem:'compra',fornecedor:'Wika',pedido_numero:'PC-2026-0001',recebido_em:null,
+  previsto_para:new Date(Date.now()-10*864e5).toISOString().slice(0,10),
+  situacao:'atrasado',dias_atraso:10},
+ {item_id:'c2',os_id:'o5',os:'OS-26005',cliente:'Gerdau — Divinópolis',descricao:'Válvula de segurança 1.1/2"',
+  origem:'compra',fornecedor:'Bermo',pedido_numero:'PC-2026-0002',recebido_em:null,
+  previsto_para:new Date(Date.now()+2*864e5).toISOString().slice(0,10),
   situacao:'chega logo',dias_atraso:-2},
- {item_id:'c3',os:'OS-26006',cliente:'Setormec',descricao:'Purgador automático 1/2"',
-  fornecedor:null,previsto_para:null,situacao:'sem previsão',dias_atraso:0}
+ {item_id:'c3',os_id:'o6',os:'OS-26006',cliente:'Setormec',descricao:'Purgador automático 1/2"',
+  origem:'proper',fornecedor:'Proper Compressores',pedido_numero:null,recebido_em:null,
+  previsto_para:null,situacao:'sem previsão',dias_atraso:0},
+ {item_id:'c4',os_id:'o6',os:'OS-26006',cliente:'Setormec',descricao:'Kit de reparo do secador',
+  origem:'compra',fornecedor:'Famabras',pedido_numero:'PC-2026-0003',
+  recebido_em:new Date(Date.now()-2*864e5).toISOString().slice(0,10),
+  previsto_para:new Date(Date.now()-3*864e5).toISOString().slice(0,10),
+  situacao:'recebido',dias_atraso:3}
 ]);
 
 const demoColsCom = () => ([
