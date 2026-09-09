@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S21</title>
+<title>TapFlow Manager · S22</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -391,6 +391,14 @@ main.rolaY{overflow-y:auto}
 .agLinha:first-of-type{border-top:0}
 .agLt{font-weight:600}
 .agLe,.agLq,.agLm{color:var(--ink-3);font-size:12.5px}
+/* "Quem" é um botão desde o S22 (item 8): clicar escolhe o responsável. Ele
+   se veste de texto para a linha não virar uma fileira de botões — o que a
+   deixaria pesada e esconderia qual é a ação principal, que é marcar o dia. */
+.agLinha .btn.mini.agLq{background:transparent;border:1px dashed var(--rule);
+  color:var(--ink-3);font-weight:500;text-align:left;padding:3px 8px;
+  justify-self:start;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agLinha .btn.mini.agLq:hover{background:var(--accent-soft);border-color:var(--accent);
+  border-style:solid;color:var(--accent-ink)}
 .agLm{font-variant-numeric:tabular-nums;text-align:right}
 .agLinha .btn.mini{margin-left:0}
 @media(max-width:860px){
@@ -1001,7 +1009,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S21';
+const APP_VERSION = 'S22';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -1317,6 +1325,12 @@ function quadrosDe(c){
 const NOME_QUADRO = { campo:'Equipes de Inspeção', adm:'Equipe Administrativa',
                       tecadm:'Equipe Técnico Administrativa' };
 
+/** O nome da coluna como a pessoa a lê. `coluna` continua sendo a FASE — é o
+    que o motor usa para dependência e ponteiro — e `coluna_rotulo` é o texto.
+    Um só lugar lê os dois: a gaveta dizendo "Encerramento" enquanto o quadro
+    diz "Faturamento e Expedição" é como duas telas começam a discordar. */
+const rotuloCol = c => (c && (c.coluna_rotulo || c.coluna)) || '';
+
 /* O menu chama o quarto quadro de 'tec' (a chave do item, que a BUSCA e o
    REPINTA usam) e a tarefa o chama de 'tecadm' (o valor que o banco grava).
    A tradução mora AQUI, num lugar só — dois nomes para a mesma coisa espalhados
@@ -1339,7 +1353,7 @@ function pintar(){
   const noQuadro = cards.filter(c => c.coluna && quadrosDe(c).indexOf(alvo) >= 0);
   const q = BUSCA[quadro] || '';
   const doQuadro = !q ? noQuadro : noQuadro.filter(c => casa(
-    [c.numero, c.cliente, c.coluna, c.tarefa_atual, c.descricao].join(' '), q));
+    [c.numero, c.cliente, c.coluna, c.coluna_rotulo, c.tarefa_atual, c.descricao].join(' '), q));
 
   // Os contadores vivem no menu, e desde os privilégios o menu pode não ter o
   // item — o perfil comercial não vê Campo. Escrever direto estourava a tela
@@ -1392,12 +1406,21 @@ function pintar(){
   // existe. Fase que só aparece porque um card está nela entra no fim, e não
   // no meio de um fluxo a que ela não pertence.
   const mapa = new Map();
-  COLUNAS.filter(k => k.quadro === alvo)
-         .forEach((k, i) => mapa.set(k.fase, { seq:i, itens:[] }));
+  const porFase = new Map();     // atalho para o card que não sabe o template
+  COLUNAS.filter(k => k.quadro === alvo).forEach((k, i) => {
+    const ch = chaveCol(k.template_id, k.fase);
+    mapa.set(ch, { seq:i, rotulo:k.rotulo, itens:[] });
+    if (!porFase.has(k.fase)) porFase.set(k.fase, ch);
+  });
 
   doQuadro.forEach(c => {
-    if (!mapa.has(c.coluna)) mapa.set(c.coluna, { seq: 1000 + (c.coluna_ordem || 0), itens: [] });
-    mapa.get(c.coluna).itens.push(c);
+    // Um banco anterior ao S22 não manda `template_id`; nesse caso o card cai
+    // na primeira coluna com aquele nome de fase, que é o comportamento antigo.
+    let ch = chaveCol(c.template_id, c.coluna);
+    if (!mapa.has(ch)) ch = porFase.get(c.coluna) || ch;
+    if (!mapa.has(ch)) mapa.set(ch, { seq: 1000 + (c.coluna_ordem || 0),
+                                      rotulo: c.coluna_rotulo || c.coluna, itens: [] });
+    mapa.get(ch).itens.push(c);
   });
   const colunas = [...mapa.entries()].sort((a,b) => a[1].seq - b[1].seq);
 
@@ -1408,7 +1431,7 @@ function pintar(){
     board.appendChild(fita);
   }
 
-  colunas.forEach(([nome, dados]) => {
+  colunas.forEach(([, dados]) => {
     const col = document.createElement('div');
     col.className = 'col ' + (alvo === 'campo' ? 'campo'
                             : alvo === 'tecadm' ? 'tecadm' : 'gestao')
@@ -1416,7 +1439,7 @@ function pintar(){
     col.innerHTML =
       '<div class="col-h"><span class="t"></span><span class="c">' + dados.itens.length + '</span></div>' +
       '<div class="col-b"></div>';
-    col.querySelector('.t').textContent = nome;
+    col.querySelector('.t').textContent = dados.rotulo;
     const body = col.querySelector('.col-b');
     if (!dados.itens.length){
       const v = document.createElement('div'); v.className = 'col-vazia'; v.textContent = 'vazia';
@@ -1442,59 +1465,70 @@ function pintar(){
 // — que é justamente quando ver a coluna vazia importa.
 let COLUNAS = [];
 
+/* O rótulo da coluna na demonstração. No banco isso é a tabela
+   `colunas_quadro`; aqui é uma cópia, e é a única cópia aceitável — a demo
+   roda sem servidor nenhum. */
+const ROTULO_DEMO = {
+  'Administrativo inicial':    'Entrada e Registro',
+  'Agendamento':               'Agendamento de Serviço',
+  'Documentação pré-inspeção': 'Preparação Documental Inicial',
+  'Inspeção em campo':         'Execução em Campo',
+  'Processamento e revisão':   'Engenharia e Laudos',
+  'Encerramento':              'Faturamento e Expedição',
+};
+
+/* A chave de uma coluna é (template, fase) — NÃO a fase sozinha.
+   "Encerramento" é o nome da última fase nos DOIS templates: no fornecimento
+   ela reúne "registrar motivo de perda" e "encerrar OS"; na inspeção, placas,
+   boleto e entrega. Agrupar pelo nome punha as duas na mesma coluna, e a
+   partir do S22 — em que a da inspeção se chama "Faturamento e Expedição" —
+   isso passaria a ser um rótulo descrevendo metade do que está embaixo dele. */
+const chaveCol = (tpl, fase) => (tpl || '') + '\u0000' + fase;
+
+/* fase → rótulo, montado do mesmo registro de colunas. Existe para a gaveta
+   poder nomear as fases que NÃO são a atual do card (a atual vem pronta na
+   view, em `coluna_rotulo`). */
+const ROTULOS_FASE = {};
+
 async function carregarColunas(){
   try{
-    let tarefas, perfis;
     if (DEMO){
-      if (!DEMO_DB) demoSeed();
-      // TODAS as OS da demo, não a primeira: com dois fluxos, ler só uma
-      // deixava as colunas do outro invisíveis enquanto nenhum card estivesse
-      // nelas — que é exatamente quando ver a coluna vazia importa.
-      // `_tpl` separa os dois fluxos na hora de ordenar as colunas: os dois
-      // usam fase_ordem 10, 20, 30…, e sem isso as fases de um apareceriam
-      // intercaladas com as do outro, sugerindo um caminho que não existe.
-      tarefas = Object.values(DEMO_DB).reduce((a,o) => a.concat(
-                  o.tarefas.map(t => Object.assign({}, t,
-                    { _tpl: o.meta.insp ? 1 : 0, quadros: QUADRO_DEMO[t.fase] }))), []);
-      perfis  = Object.entries(EXECUTOR).map(([id, ex]) =>
-                  ({ id, executa_em: ex, is_admin: id === 'admin' }));
-    } else {
-      const tpl = await get('pipeline_templates?select=tarefas&ativo=eq.true');
-      if (!tpl || !tpl.length) return;
-      // `_tpl` guarda de qual template a fase veio: os dois numeram as fases
-      // de 10 em 10, e ordenar só por fase_ordem intercalaria as colunas do
-      // fornecimento com as da inspeção — um caminho que não existe.
-      tarefas = tpl.reduce((a, t, i) => a.concat(
-                  (t.tarefas || []).map(x => Object.assign({}, x, { _tpl: i }))), []);
-      perfis  = await get('perfis?select=id,executa_em,is_admin');
+      // Mesma derivação de antes, agora carregando template e rótulo.
+      const vistas = new Map();
+      Object.values(DEMO_DB || (demoSeed(), DEMO_DB)).forEach(o => {
+        const tpl = o.meta.insp ? 'INSPECAO_NR13' : 'ACESSORIOS_NR13';
+        o.tarefas.forEach(t => {
+          const qs = QUADRO_DEMO[t.fase] || derivarQuadroDemo(t.perfis_responsaveis);
+          qs.forEach(q => vistas.set(chaveCol(tpl, t.fase) + '\u0000' + q, {
+            template_id: tpl, fase: t.fase, ordem: t.fase_ordem, quadro: q,
+            rotulo: (tpl === 'INSPECAO_NR13' && ROTULO_DEMO[t.fase]) || t.fase,
+            tplOrdem: o.meta.insp ? 1 : 0 }));
+        });
+      });
+      COLUNAS = [...vistas.values()].sort((a,b) => (a.tplOrdem - b.tplOrdem) || (a.ordem - b.ordem));
+      COLUNAS.forEach(k => ROTULOS_FASE[chaveCol(k.template_id, k.fase)] = k.rotulo);
+      return;
     }
-    const ex = {}; perfis.forEach(p => ex[p.id] = p.executa_em);
-    const adm = {}; perfis.forEach(p => adm[p.id] = !!p.is_admin);
+    // Fora da demo, quem monta o registro é o BANCO (`v_colunas_quadro`): ele
+    // já junta template, fase, quadro e rótulo na ordem do fluxo. Derivar isso
+    // aqui de novo seria a segunda versão da mesma regra — e é assim que uma
+    // tela passa a discordar da outra.
+    const c = await get('v_colunas_quadro?select=*&order=template_ordem,fase_ordem,quadro');
+    COLUNAS = (c || []).map(x => ({
+      template_id: x.template_id, fase: x.fase, ordem: x.fase_ordem,
+      quadro: x.quadro, rotulo: x.rotulo || x.fase, tplOrdem: x.template_ordem
+    }));
+    COLUNAS.forEach(k => ROTULOS_FASE[chaveCol(k.template_id, k.fase)] = k.rotulo);
+  }catch(e){ console.warn('[colunas] não foi possível ler o registro:', e.message); }
+}
 
-    // Mesma leitura do `tf__executor_de` do banco, e de propósito: o perfil
-    // admin NÃO vota (ele é 'ambos' por definição e faria toda fase virar
-    // 'ambos'), campo + escritório dá os dois, e fase só de admin é de
-    // escritório. Duas regras parecidas para a mesma pergunta é como a coluna
-    // aparece num quadro na tela e noutro no banco.
-    const derivar = perfisResp => {
-      const p = (perfisResp || []).filter(x => ex[x] && !adm[x]);
-      const temCampo = p.some(x => ex[x] === 'campo' || ex[x] === 'ambos');
-      const temAdm   = p.some(x => ex[x] === 'adm'   || ex[x] === 'ambos');
-      return temCampo && temAdm ? ['campo','adm'] : temCampo ? ['campo'] : ['adm'];
-    };
-
-    const vistas = new Map();
-    tarefas.forEach(t => {
-      const fase = t.fase, ordem = t.fase_ordem;
-      if (!fase || vistas.has(fase)) return;
-      const qs = (Array.isArray(t.quadros) && t.quadros.length)
-               ? t.quadros : derivar(t.perfis_responsaveis);
-      qs.forEach(q => vistas.set(fase + '\u0000' + q,
-                                 { fase, ordem, quadro:q, tpl: t._tpl || 0 }));
-    });
-    COLUNAS = [...vistas.values()]
-      .sort((a,b) => (a.tpl - b.tpl) || (a.ordem - b.ordem));
-  }catch(e){ console.warn('[colunas] não foi possível ler o template:', e.message); }
+/** A mesma leitura do `tf__executor_de` do banco, para a demonstração: o perfil
+    admin NÃO vota (é 'ambos' por definição e faria toda fase virar 'ambos'). */
+function derivarQuadroDemo(perfisResp){
+  const p = (perfisResp || []).filter(x => EXECUTOR[x] && x !== 'admin');
+  const temCampo = p.some(x => EXECUTOR[x] === 'campo' || EXECUTOR[x] === 'ambos');
+  const temAdm   = p.some(x => EXECUTOR[x] === 'adm'   || EXECUTOR[x] === 'ambos');
+  return temCampo && temAdm ? ['campo','adm'] : temCampo ? ['campo'] : ['adm'];
 }
 
 const atrasado = c => c.alerta_dias && c.dias_na_coluna != null && c.dias_na_coluna >= c.alerta_dias;
@@ -1632,7 +1666,7 @@ async function abrirOS(c){
   document.getElementById('dNum').textContent = c.numero;
   document.getElementById('dCli').textContent = c.cliente;
   document.getElementById('dSub').textContent =
-    c.coluna + ' · ' + nomeQuadros(c);
+    rotuloCol(c) + ' · ' + nomeQuadros(c);
   document.getElementById('dBody').innerHTML = '<p style="color:var(--ink-3);font-size:13px">Carregando…</p>';
   document.getElementById('dAcoes').innerHTML = '';
   document.getElementById('drawer').classList.add('on');
@@ -1680,7 +1714,9 @@ function pintarDrawer(){
       faseAtual = t.fase;
       const h = document.createElement('div');
       h.className = 'fase-h' + (t.fase === card.coluna ? ' atual' : '');
-      h.textContent = t.fase;
+      // o mesmo nome do quadro: a fase é a chave, o rótulo é o texto
+      h.textContent = (t.fase === card.coluna ? rotuloCol(card) : null)
+                   || (ROTULOS_FASE[chaveCol(card.template_id, t.fase)] || t.fase);
       body.appendChild(h);
     }
     const resolvida = (t.status === 'completo' || t.status === 'dispensado');
@@ -2014,7 +2050,7 @@ async function agir(acao, t, valor){
     await carregar({silencioso:true});
     const novo = cards.find(x => x.os_id === card.os_id);
     if (!novo || !novo.coluna){ fecharDrawer(); toast('OS concluída — saiu do quadro.', 'ok'); return; }
-    if (novo.coluna !== card.coluna) toast('Card foi para "' + novo.coluna + '".', 'ok');
+    if (novo.coluna !== card.coluna) toast('Card foi para "' + rotuloCol(novo) + '".', 'ok');
     await abrirOS(novo);
   }catch(e){
     toast(e.message, 'err');
@@ -2114,24 +2150,24 @@ function demoSeed(){
     return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0')
          + '-' + String(d.getDate()).padStart(2,'0'); };
   const os = [
-    { os_id:'d1', numero:'OS-2026-101', cliente:'Gerdau — Divinópolis', cliente_id:'c1', alvo:'T01', dias:1,  alerta:2,
+    { os_id:'d1', numero:'OS-26101', cliente:'Gerdau — Divinópolis', cliente_id:'c1', alvo:'T01', dias:1,  alerta:2,
       prioridade:'urgente', prazo:dPara(4), prazo_origem:'digitado', situacao:'ok' },
-    { os_id:'d2', numero:'OS-2026-102', cliente:'Farmax Ind. Farmacêutica', alvo:'T02', dias:0, alerta:3,
+    { os_id:'d2', numero:'OS-26102', cliente:'Farmax Ind. Farmacêutica', alvo:'T02', dias:0, alerta:3,
       prazo:dPara(1), situacao:'risco' },
-    { os_id:'d3', numero:'OS-2026-098', cliente:'Fundição Santana', cliente_id:'c2', alvo:'T05', dias:7,  alerta:5,
+    { os_id:'d3', numero:'OS-26098', cliente:'Fundição Santana', cliente_id:'c2', alvo:'T05', dias:7,  alerta:5,
       prioridade:'alta', prazo:dPara(9), situacao:'atrasada' },
-    { os_id:'d4', numero:'OS-2026-095', cliente:'Uau Ingleza', alvo:'T09', dias:12, alerta:7,
+    { os_id:'d4', numero:'OS-26095', cliente:'Uau Ingleza', alvo:'T09', dias:12, alerta:7,
       prazo:dPara(-3), prazo_origem:'digitado', situacao:'atrasada', atrasada:true },
-    { os_id:'d5', numero:'OS-2026-090', cliente:'Bauminas Agro — Itapecerica', alvo:'T14', dias:2, alerta:3,
+    { os_id:'d5', numero:'OS-26090', cliente:'Bauminas Agro — Itapecerica', alvo:'T14', dias:2, alerta:3,
       dispensar:['T10'], prazo:null, situacao:'sem_meta' },
-    { os_id:'d6', numero:'OS-2026-088', cliente:'LAX Soluções', alvo:'T15', dias:1, alerta:3,
+    { os_id:'d6', numero:'OS-26088', cliente:'LAX Soluções', alvo:'T15', dias:1, alerta:3,
       dispensar:['T10'], prazo:dPara(20), situacao:'ok' },
     // as três de inspeção: uma em cada quadro por onde o card passa
-    { os_id:'d7', numero:'OS-2026-110', cliente:'Uau Ingleza — inspeção anual', insp:true,
+    { os_id:'d7', numero:'OS-26110', cliente:'Uau Ingleza — inspeção anual', insp:true,
       alvo:'T03', dias:2, alerta:5, prazo:dPara(6), situacao:'ok' },
-    { os_id:'d8', numero:'OS-2026-108', cliente:'Gerdau — vaso VP-14', insp:true,
+    { os_id:'d8', numero:'OS-26108', cliente:'Gerdau — vaso VP-14', insp:true,
       alvo:'T09', dias:4, alerta:2, prioridade:'alta', prazo:dPara(3), situacao:'risco' },
-    { os_id:'d9', numero:'OS-2026-104', cliente:'SENAI Divinópolis', insp:true,
+    { os_id:'d9', numero:'OS-26104', cliente:'SENAI Divinópolis', insp:true,
       alvo:'T16', dias:1, alerta:3, dispensar:['T15'], prazo:dPara(8), situacao:'ok' }
   ];
 
@@ -2167,12 +2203,18 @@ function demoCards(){
     const abertas = tarefas.filter(t => t.status !== 'completo' && t.status !== 'dispensado');
     const atual = abertas[0];
     if (!atual) return { os_id:meta.os_id, numero:meta.numero, cliente:meta.cliente,
-                         cliente_id:meta.cliente_id, coluna:null };
+                         cliente_id:meta.cliente_id, coluna:null,
+                         template_id: meta.insp ? 'INSPECAO_NR13' : 'ACESSORIOS_NR13' };
     const naFase = tarefas.filter(t => t.fase === atual.fase);
     return {
       os_id: meta.os_id, numero: meta.numero, cliente: meta.cliente, cliente_id: meta.cliente_id,
       status_os: 'em_andamento',
       coluna: atual.fase, coluna_ordem: atual.fase_ordem,
+      // ⚠ A demonstração TEM que trazer `template_id` e `coluna_rotulo`: sem
+      // eles a demo do S22 desenharia as colunas do S21, com "Encerramento"
+      // servindo aos dois fluxos.
+      template_id: meta.insp ? 'INSPECAO_NR13' : 'ACESSORIOS_NR13',
+      coluna_rotulo: (meta.insp && ROTULO_DEMO[atual.fase]) || atual.fase,
       quadro:  EXECUTOR[(atual.perfis_responsaveis||[])[0]] || 'adm',
       // ⚠ A demonstração TEM que trazer `quadros`, senão ela desenha o app do
       // S21 com o comportamento do S20 e o quarto quadro nasce vazio na demo.
@@ -2396,7 +2438,8 @@ function modalDesignar(card, t, aposGravar){
     '<div class="campo"><label for="mdD">Em que dia</label>' +
       '<input id="mdD" type="date" value="' + esc(t.data_prevista || isoHoje()) + '"></div>' +
     '<p style="font-size:12px;color:var(--ink-3);margin:-4px 0 0;line-height:1.45">' +
-      'Escolher <b>— ninguém —</b> devolve a tarefa para "Sem dia marcado", com dia e tudo.</p>' +
+      'Escolher <b>— ninguém —</b> devolve a tarefa para "Sem dia marcado", com dia e tudo. ' +
+      'Deixar o dia vazio guarda só o responsável — a tarefa continua em "Sem dia", com o nome dele.</p>' +
     '<div class="campo"><label for="mdM">Quanto tempo (minutos)</label>' +
       '<input id="mdM" type="number" min="5" max="1440" step="5" value="' +
       esc(t.tempo_estimado_min || '') + '" placeholder="deixe vazio para usar a estimativa do template"></div>' +
@@ -2410,9 +2453,10 @@ function modalDesignar(card, t, aposGravar){
           const m = document.getElementById('mdM').value;
           const quem = document.getElementById('mdU').value || null;
           const dia  = document.getElementById('mdD').value || null;
-          // Dia sem dono some das TRÊS listas (pool, carga e roteiro). O banco
-          // recusa; a tela avisa antes, para não gastar uma ida ao servidor.
-          if (quem && !dia) throw new Error('Escolha também o dia — sem ele a tarefa não entra em agenda nenhuma.');
+          // ⚠ Até o S21 a tela recusava "dono sem dia" aqui, porque o banco
+          //    recusava. A regra caiu no S22: dono sem dia continua na vista
+          //    "Sem dia", com o nome. O que segue proibido é DIA SEM DONO —
+          //    esse sim some das três listas, e quem recusa é o banco.
           if (DEMO) throw new Error('Modo demonstração: designação não é gravada.');
           await rpc('tf_designar_tarefa', {
             p_os_id: card.os_id, p_tarefa_id: t.tarefa_id,
@@ -2525,7 +2569,7 @@ async function gerarPDF(tipo, card, itens){
     doc.setFont('helvetica','normal'); doc.text(String(v||'—'), M+32, y); y += 5.5; };
   linha('OS:', card.numero);
   linha('Cliente:', card.cliente);
-  linha('Etapa:', card.coluna);
+  linha('Etapa:', rotuloCol(card));
   linha('Emitido em:', dataBR());
   y += 4;
 
@@ -2656,10 +2700,10 @@ async function pintarItens(){
         await carregar({silencioso:true});
         const novo = cards.find(x => x.os_id === card.os_id);
         if (novo && novo.coluna !== colAntes){
-          toast('Etapa concluída — o card foi para "' + novo.coluna + '".', 'ok');
+          toast('Etapa concluída — o card foi para "' + rotuloCol(novo) + '".', 'ok');
           osAberta.card = novo;
           document.getElementById('dSub').textContent =
-            novo.coluna + ' · ' + nomeQuadros(novo);
+            rotuloCol(novo) + ' · ' + nomeQuadros(novo);
         }
         pintarItens();
       }catch(e){ toast(e.message,'err'); el.disabled = false; }
@@ -3180,7 +3224,11 @@ async function montarGerador(caixa){
     let numero = null;
     try{
       // 1. o número primeiro: ele precisa ir DENTRO do arquivo
-      numero = DEMO ? 'PROP-2026-0099' : await rpc('tf_reservar_numero_proposta', {});
+      // ⚠ com o `p_os_id`: quando a OS já tem referência (o caso do
+      //   fornecimento, em que a OS nasce antes), a proposta REAPROVEITA o
+      //   número dela em vez de puxar outro. Um trabalho, um número.
+      numero = DEMO ? '26099' : await rpc('tf_reservar_numero_proposta',
+                                          { p_os_id: card.os_id });
       est.valores['Nº_da_Proposta'] = numero;
 
       msg.textContent = 'Baixando o modelo…';
@@ -3216,7 +3264,7 @@ async function montarGerador(caixa){
       _msgGerador = { cor:'var(--ok)', texto: numero + ' gerada e baixada.'
         + (logosTiradas ? ' Logomarca do cliente anterior removida do cabeçalho.' : '')
         + (faltaram.length ? ' ⚠ Ficaram sem valor no papel: ' + faltaram.join(', ') + '.' : '')
-        + (novo && novo.coluna !== antes ? ' O card foi para "' + novo.coluna + '".' : '') };
+        + (novo && novo.coluna !== antes ? ' O card foi para "' + rotuloCol(novo) + '".' : '') };
       toast('Proposta ' + numero + ' gerada.', 'ok');
       pintarProposta();
     }catch(e){
@@ -3569,7 +3617,11 @@ async function pintarProposta(){
       'Para a proposta que não saiu daqui — só o número entra, e é esse registro ' +
       'que fecha a etapa e move o card.</p>' +
     '<div class="campo"><label for="pN">Número da proposta</label>' +
-      '<input id="pN" type="text" placeholder="ex.: ORC-8842"></div>' +
+      '<input id="pN" type="text" placeholder="deixe vazio para o TapFlow numerar">' +
+      '<div class="dica">Vazio, sai o próximo número do ano (' +
+      'ex.: <span class="mono">' + esc(new Date().getFullYear().toString().slice(2)) +
+      '001</span>). Preenchido com um número que já existe nesta OS, entra como ' +
+      '<b>revisão</b> dele.</div></div>' +
     '<div class="dupla">' +
       '<div class="campo"><label for="pV">Valor total</label>' +
         '<input id="pV" type="number" step="0.01" min="0" inputmode="decimal" placeholder="deixe vazio p/ usar o da OS"></div>' +
@@ -3591,11 +3643,17 @@ async function pintarProposta(){
   document.getElementById('pD').value = d.toISOString().slice(0,10);
 
   document.getElementById('pOk').addEventListener('click', async () => {
-    const num = document.getElementById('pN').value.trim();
-    if (!num){ toast('Informe o número da proposta.','err'); return; }
+    let num = document.getElementById('pN').value.trim();
     const b = document.getElementById('pOk'); b.disabled = true;
     const arq = (document.getElementById('pF').files || [])[0];
     try{
+      // O número tem que existir ANTES do upload: é ele que nomeia o arquivo no
+      // Drive. Reservar aqui pode deixar um buraco na sequência se o Drive
+      // recusar depois — e buraco na sequência é doutrina antiga deste projeto
+      // (13_exclusoes), preferível a um arquivo com nome que não bate.
+      if (!num && !DEMO){ b.textContent = 'Reservando o número…';
+        num = await rpc('tf_reservar_numero_proposta', { p_os_id: card.os_id }); }
+      if (!num) num = '26099';
       // O arquivo sobe ANTES do registro: se o Drive recusar, nada é gravado e
       // o número continua livre para tentar de novo. O contrário deixaria uma
       // proposta registrada apontando para um PDF que não existe.
@@ -3613,7 +3671,7 @@ async function pintarProposta(){
       }
       if (DEMO) demoProposta(card.os_id, num);
       else await rpc('tf_registrar_proposta_externa', {
-        p_os_id: card.os_id, p_numero: num,
+        p_os_id: card.os_id, p_numero: num || null,
         p_valor_total: document.getElementById('pV').value ? Number(document.getElementById('pV').value) : null,
         p_validade: document.getElementById('pD').value || null,
         p_arquivo_url: url
@@ -3622,7 +3680,7 @@ async function pintarProposta(){
       await carregar({silencioso:true});
       const novo = cards.find(x => x.os_id === card.os_id);
       if (novo){ osAberta.card = novo;
-        toast(novo.coluna !== antes ? 'Registrada — o card foi para "' + novo.coluna + '".' : 'Proposta registrada.', 'ok');
+        toast(novo.coluna !== antes ? 'Registrada — o card foi para "' + rotuloCol(novo) + '".' : 'Proposta registrada.', 'ok');
       } else toast('Proposta registrada.','ok');
       pintarProposta();
     }catch(e){ toast(e.message,'err'); b.disabled = false; b.textContent = 'Registrar e mover o card'; }
@@ -4089,7 +4147,7 @@ async function emitirPedido(p, caixa){
 
       toast(r.numero + ' emitido para ' + p.fornecedor + '.', 'ok');
       _msgPedido = r.numero + ' emitido — ' + r.itens + ' item(ns), ' + BRL(r.valor) + '.'
-        + (novo && novo.coluna !== antesCol ? ' O card foi para "' + novo.coluna + '".' : '');
+        + (novo && novo.coluna !== antesCol ? ' O card foi para "' + rotuloCol(novo) + '".' : '');
       pintarCustos();
     }catch(e){
       msg.style.color = 'var(--crit)'; msg.textContent = e.message;
@@ -4422,7 +4480,7 @@ function desenharCom(){
   if (!q) return;
   const busca = BUSCA.com || '';
   const vis = negocios.filter(n =>
-    casa([n.numero, n.cliente_nome, n.titulo, n.coluna, n.contato_nome].join(' '), busca));
+    casa([n.numero, n.numero_exibicao, n.cliente_nome, n.titulo, n.coluna, n.contato_nome].join(' '), busca));
   const total = vis.reduce((s,n) => s + Number(n.valor_propostas || n.valor_estimado || 0), 0);
   document.getElementById('cResumo').textContent =
     vis.length + (busca && vis.length !== negocios.length ? ' de ' + negocios.length : '')
@@ -4608,10 +4666,18 @@ function cardNegocio(n){
   if (n.e_contrato) chips.push('<span class="mini ct">contrato</span>');
   if (parado >= 7) chips.push('<span class="mini ' + (parado>=14?'crit':'warn') + '">' + parado + 'd parado</span>');
 
+  if (Number(n.propostas_numeros) > 1)
+    chips.push('<span class="mini">' + n.propostas_numeros + ' propostas</span>');
+
   d.innerHTML = logo
     + '<div class="num"></div><div class="cli"></div><div class="tit"></div>'
     + '<div class="valor"></div><div class="chips">' + chips.join('') + '</div>';
-  d.querySelector('.num').textContent = n.numero;
+  // ⚠ `numero_exibicao` vem da view: é NEG-… até a proposta SAIR, e o número
+  //    da proposta (com Rev., quando houver) dali em diante. A regra mora no
+  //    banco de propósito — o quadro não escolhe qual número o cliente conhece.
+  d.querySelector('.num').textContent = n.numero_exibicao || n.numero;
+  if (n.numero_exibicao && n.numero_exibicao !== n.numero)
+    d.querySelector('.num').title = n.numero;   // o NEG- continua alcançável
   d.querySelector('.cli').textContent = n.cliente_nome;
   d.querySelector('.tit').textContent = n.titulo;
   const v = Number(n.valor_propostas || 0) || Number(n.valor_estimado || 0);
@@ -4629,9 +4695,10 @@ const dataCurta = s => {
 // ── a gaveta do negócio ─────────────────────────────────────────────────────
 async function abrirNegocio(n){
   negAberto = n;
-  document.getElementById('dNum').textContent = n.numero;
+  document.getElementById('dNum').textContent = n.numero_exibicao || n.numero;
   document.getElementById('dCli').textContent = n.cliente_nome;
   document.getElementById('dSub').textContent = n.coluna
+    + (n.numero_exibicao && n.numero_exibicao !== n.numero ? ' · ' + n.numero : '')
     + (n.dias_parado ? ' · ' + n.dias_parado + ' dia(s) sem novidade' : '');
   document.getElementById('drawer').classList.add('on');
   document.getElementById('scrim').classList.add('on');
@@ -4893,7 +4960,7 @@ async function negPropostas(n, b){
       +  '<th>Número</th><th>V.</th><th>Status</th><th class="num">Valor</th>'
       +  '<th>Itens</th><th></th></tr></thead><tbody>'
       + props.map(p => '<tr>'
-          + '<td class="mono">' + esc(p.numero) + '</td>'
+          + '<td class="mono">' + esc(p.numero_exibicao || p.numero) + '</td>'
           + '<td class="num">' + p.versao + '</td>'
           + '<td>' + esc(p.status) + (p.os ? ' · OS ' + esc(p.os) : '') + '</td>'
           + '<td class="num">' + BRL(p.valor_total) + '</td>'
@@ -5016,7 +5083,10 @@ async function montarProposta(n){
     + '<button class="btn" id="npAddLinha" style="width:100%;margin-bottom:16px">Acrescentar linha</button>'
     + '<div class="secTit">A proposta</div><div id="npLista"></div>'
     + '<div class="dupla"><div class="campo"><label for="npNum">Número da proposta</label>'
-    + '<input id="npNum" type="text" placeholder="Ex.: ORC-5001" autocomplete="off" name="npn_nofill"></div>'
+    + '<input id="npNum" type="text" placeholder="deixe vazio para o TapFlow numerar" '
+    + 'autocomplete="off" name="npn_nofill">'
+    + '<div class="dica">Vazio, sai o próximo do ano. Repetindo um número já '
+    + 'usado neste negócio, entra como <b>revisão</b> — e o card não troca de número.</div></div>'
     + '<div class="campo"><label for="npVal">Validade</label><input id="npVal" type="date"></div></div>'
     + '<button class="btn pri" id="npGravar" style="width:100%">Registrar proposta</button>';
 
@@ -5049,7 +5119,6 @@ async function montarProposta(n){
   document.getElementById('npGravar').addEventListener('click', function(){
     _semDuploEnvio_(this, async () => {
       const num = document.getElementById('npNum').value.trim();
-      if (!num){ toast('Informe o número da proposta.','err'); return; }
       if (!_propItens.length){ toast('A proposta precisa de pelo menos um item.','err'); return; }
       const semPreco = _propItens.filter(i => !(Number(i.preco_unitario) > 0));
       if (semPreco.length){
@@ -5059,9 +5128,10 @@ async function montarProposta(n){
       }
       try{
         const r = await rpc('tf_criar_proposta_negocio', { p_negocio_id: n.id,
-          p_numero: num, p_itens: _propItens,
+          p_numero: num || null, p_itens: _propItens,
           p_validade: document.getElementById('npVal').value || null });
-        toast('Proposta ' + r.numero + ' registrada — ' + BRL(r.valor_total) + '.','ok');
+        toast('Proposta ' + (r.rotulo || r.numero) + ' registrada — '
+              + BRL(r.valor_total) + '.','ok');
         _propItens = [];
         negPropostas(n, document.getElementById('dBody'));
       }catch(e){ toast(e.message,'err'); }
@@ -6193,10 +6263,10 @@ function demoExcluirPerfil(id){
   _demoP = _demoP.filter(x => x.id !== id);
 }
 const demoDocs = () => ([
-  {id:'d1',origem:'documento',tipo:'proposta',identificacao:'ORC-4417',url:'#',
-   quando:new Date().toISOString(),os:'OS-2026-0005',cliente:'Fundição Pará de Minas',quem:'Glênio Arantes'},
+  {id:'d1',origem:'documento',tipo:'proposta',identificacao:'26005',url:'#',
+   quando:new Date().toISOString(),os:'OS-26005',cliente:'Fundição Pará de Minas',quem:'Glênio Arantes'},
   {id:'d2',origem:'anexo',tipo:'foto_tarefa',identificacao:'aceite.jpg',url:'#',
-   quando:new Date().toISOString(),os:'OS-2026-0003',cliente:'Laticínios Serra Azul',quem:'Inspetor 1'}
+   quando:new Date().toISOString(),os:'OS-26003',cliente:'Laticínios Serra Azul',quem:'Inspetor 1'}
 ]);
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -6701,6 +6771,9 @@ async function excluirCatalogo(item){
 // ════════════════════════════════════════════════════════════════════════════
 
 let DUPS = [];
+let VAZIOS = [];              // v_clientes_vazios
+const VAZIOS_MARCADOS = new Set();
+let vaziosAberto = false;
 
 const DUP_CLASSE = {
   seguro: { selo:'seguro', rot:'seguro',
@@ -6722,6 +6795,7 @@ async function pintarDuplicados(){
   const board = document.getElementById('board');
   board.innerHTML = '<div class="painel" style="max-width:1040px">'
     + '<h3>Cadastros repetidos <span class="conta" id="dupConta"></span></h3>'
+    + '<div id="vaziosCx"></div>'
     + '<div id="dupCorpo"><p class="nota">Procurando…</p></div></div>';
 
   if (DEMO){
@@ -6730,6 +6804,13 @@ async function pintarDuplicados(){
       + 'demonstração não há base de clientes para varrer.</p>';
     return;
   }
+
+  // A lista dos vazios é INDEPENDENTE da dos repetidos: um cadastro vazio com
+  // nome único não entra em grupo nenhum e mesmo assim é lixo. Se uma falhar, a
+  // outra continua desenhando.
+  get('v_clientes_vazios?select=*&order=created_at&limit=500')
+    .then(v => { VAZIOS = v || []; desenharVazios(); })
+    .catch(e => { VAZIOS = null; desenharVazios(e.message); });
 
   try{
     DUPS = await get('v_clientes_duplicados?select=*&order=registros.desc,chave');
@@ -6744,8 +6825,132 @@ async function pintarDuplicados(){
     document.getElementById('dupRetry').addEventListener('click', pintarDuplicados);
     return;
   }
-  REPINTA.dup = desenharDuplicados;
+  // a busca da tela filtra as DUAS listas — a dos vazios e a dos grupos
+  REPINTA.dup = () => { desenharVazios(); desenharDuplicados(); };
   desenharDuplicados();
+}
+
+/* ── OS CADASTROS VAZIOS ────────────────────────────────────────────────────
+   A varredura do S21 achou 116 cadastros sem nada dentro — clique perdido em
+   "Adicionar cliente". O Bruno pediu o botão de lote DEPOIS de olhar a lista
+   uma vez, e é por isso que a seção nasce FECHADA com o número na frente:
+   abrir é o ato de olhar, e nada é excluído sem alguém marcar.
+
+   Nada é pré-marcado. Marcar tudo por padrão transformaria "excluir os
+   marcados" em "excluir todos", que é exatamente o clique que ninguém quer
+   dar sem querer. */
+function desenharVazios(erro){
+  const cx = document.getElementById('vaziosCx');
+  if (!cx) return;
+
+  if (erro){
+    cx.innerHTML = '<div class="aviso" style="margin-bottom:14px"><b>Não deu para '
+      + 'listar os cadastros vazios.</b><p class="mtv"></p></div>';
+    cx.querySelector('.mtv').textContent = erro + ' — isto NÃO quer dizer que não há.';
+    return;
+  }
+  if (!VAZIOS || !VAZIOS.length){
+    cx.innerHTML = '';
+    contador('nVaz', '');
+    return;
+  }
+  contador('nVaz', VAZIOS.length);
+
+  if (!vaziosAberto){
+    cx.innerHTML = '<div class="aviso" style="margin-bottom:14px">'
+      + '<b>' + VAZIOS.length + ' cadastro(s) sem nada dentro.</b> '
+      + 'Sem CNPJ, endereço, contato, equipamento, negócio ou OS — o rastro de '
+      + 'um "Adicionar cliente" que não foi concluído.'
+      + '<div style="margin-top:10px"><button class="btn" type="button" id="vzAbrir">'
+      + 'Ver a lista</button></div></div>';
+    document.getElementById('vzAbrir').addEventListener('click', () => {
+      vaziosAberto = true; desenharVazios();
+    });
+    return;
+  }
+
+  const q = BUSCA.dup || '';
+  const lista = !q ? VAZIOS : VAZIOS.filter(v => casa(v.nome + ' ' + (v.cidade||''), q));
+  const marcados = VAZIOS.filter(v => VAZIOS_MARCADOS.has(v.id)).length;
+
+  cx.innerHTML =
+      '<div class="dupGrupo" style="margin-bottom:16px">'
+    + '<h4>Cadastros vazios <span class="selo seguro">' + VAZIOS.length + '</span></h4>'
+    + '<p class="sub">Marque o que pode sair. A exclusão confere cada um no banco '
+    + 'de novo — quem tiver ganhado histórico desde que esta lista foi montada é '
+    + 'recusado, não apagado.</p>'
+    + '<div style="max-height:340px;overflow:auto;border:1px solid var(--rule);border-radius:6px">'
+    + '<table class="dupTab"><thead><tr><th style="width:34px"></th><th>Cadastro</th>'
+    +   '<th>Cidade</th><th class="num">Criado há</th></tr></thead><tbody>'
+    + lista.map(v =>
+        '<tr><td><input type="checkbox" data-vz="' + esc(v.id) + '"'
+      + (VAZIOS_MARCADOS.has(v.id) ? ' checked' : '') + '></td>'
+      + '<td>' + esc(v.nome) + '</td><td>' + esc(v.cidade || '—') + '</td>'
+      + '<td class="num">' + (v.dias != null ? v.dias + ' d' : '—') + '</td></tr>').join('')
+    + '</tbody></table></div>'
+    + '<div class="dupAcoes">'
+    +   '<button class="btn" type="button" id="vzTodos">Marcar os ' + lista.length + ' da lista</button>'
+    +   '<button class="btn" type="button" id="vzNenhum">Desmarcar</button>'
+    +   '<button class="btn' + (marcados ? ' pri' : '') + '" type="button" id="vzExcluir"'
+    +     (marcados ? '' : ' disabled') + '>Excluir os ' + marcados + ' marcados</button>'
+    +   '<button class="btn" type="button" id="vzFechar">Fechar a lista</button>'
+    + '</div></div>';
+
+  cx.querySelectorAll('[data-vz]').forEach(b => b.addEventListener('change', () => {
+    if (b.checked) VAZIOS_MARCADOS.add(b.dataset.vz); else VAZIOS_MARCADOS.delete(b.dataset.vz);
+    desenharVazios();
+  }));
+  document.getElementById('vzTodos').addEventListener('click', () => {
+    lista.forEach(v => VAZIOS_MARCADOS.add(v.id)); desenharVazios();
+  });
+  document.getElementById('vzNenhum').addEventListener('click', () => {
+    VAZIOS_MARCADOS.clear(); desenharVazios();
+  });
+  document.getElementById('vzFechar').addEventListener('click', () => {
+    vaziosAberto = false; desenharVazios();
+  });
+  const bx = document.getElementById('vzExcluir');
+  if (bx && marcados) bx.addEventListener('click', () => excluirVazios());
+}
+
+function excluirVazios(){
+  const ids = VAZIOS.filter(v => VAZIOS_MARCADOS.has(v.id)).map(v => v.id);
+  if (!ids.length) return;
+  const nomes = VAZIOS.filter(v => VAZIOS_MARCADOS.has(v.id)).slice(0, 8).map(v => v.nome);
+
+  abrirModal('Excluir ' + ids.length + ' cadastro(s)?',
+      '<p class="nota" style="margin-top:0">Isto apaga de vez. Cada exclusão fica '
+    + 'registrada no livro (quem, quando, o que havia dentro) — mas o cadastro '
+    + 'não volta.</p>'
+    + '<div class="opcoes" style="max-height:180px;overflow:auto">'
+    + nomes.map(n => '<div class="linhaOpc"><span>' + esc(n) + '</span></div>').join('')
+    + (ids.length > nomes.length
+       ? '<div class="linhaOpc"><span>… e mais ' + (ids.length - nomes.length) + '</span></div>' : '')
+    + '</div>',
+    [ { label:'Excluir', pri:true, onClick: async function(){
+          const b = this;
+          try{
+            if (DEMO) throw new Error('Modo demonstração: nada é excluído.');
+            let ok = 0, nao = [];
+            // ⚠ Em lotes de 200, que é o teto da função. Em série, e não em
+            //    paralelo: se o terceiro lote falhar, os dois primeiros já
+            //    saíram e a tela precisa mostrar o que sobrou.
+            for (let i = 0; i < ids.length; i += 200){
+              const r = await rpc('tf_excluir_clientes_vazios',
+                { p_ids: ids.slice(i, i + 200), p_motivo: 'faxina de cadastros vazios' });
+              ok += Number(r.excluidos || 0);
+              nao = nao.concat(r.detalhe || []);
+            }
+            fecharModal();
+            VAZIOS_MARCADOS.clear();
+            toast(ok + ' cadastro(s) excluído(s)'
+              + (nao.length ? ' · ' + nao.length + ' recusado(s)' : '') + '.',
+              nao.length ? 'err' : 'ok');
+            if (nao.length) console.warn('[faxina] recusados:', nao);
+            pintarDuplicados();
+          }catch(e){ toast(e.message,'err'); if (b) b.disabled = false; }
+        } },
+      { label:'Cancelar', onClick: () => fecharModal() } ]);
 }
 
 function desenharDuplicados(){
@@ -7485,13 +7690,13 @@ const demoCots = () => ([
   valor_unitario:169,valor_frete:240,prazo_dias:20,total_estimado:1930,escolhida:true}
 ]);
 const demoCompras = () => ([
- {item_id:'c1',os:'OS-2026-0003',cliente:'Fundição Pará de Minas',descricao:'Manômetro 0-25 bar 6"',
+ {item_id:'c1',os:'OS-26003',cliente:'Fundição Pará de Minas',descricao:'Manômetro 0-25 bar 6"',
   fornecedor:'Wika',pedido_numero:'PC-2026-0001',previsto_para:new Date(Date.now()-10*864e5).toISOString().slice(0,10),
   situacao:'atrasado',dias_atraso:10},
- {item_id:'c2',os:'OS-2026-0005',cliente:'Gerdau — Divinópolis',descricao:'Válvula de segurança 1.1/2"',
+ {item_id:'c2',os:'OS-26005',cliente:'Gerdau — Divinópolis',descricao:'Válvula de segurança 1.1/2"',
   fornecedor:'Bermo',pedido_numero:'PC-2026-0002',previsto_para:new Date(Date.now()+2*864e5).toISOString().slice(0,10),
   situacao:'chega logo',dias_atraso:-2},
- {item_id:'c3',os:'OS-2026-0006',cliente:'Setormec',descricao:'Purgador automático 1/2"',
+ {item_id:'c3',os:'OS-26006',cliente:'Setormec',descricao:'Purgador automático 1/2"',
   fornecedor:null,previsto_para:null,situacao:'sem previsão',dias_atraso:0}
 ]);
 
@@ -7522,11 +7727,15 @@ const demoNegocios = () => {
     dias_parado:1,valor_estimado:8000,valor_propostas:0,oss:0,proxima_agenda:new Date(Date.now()+2*864e5).toISOString()},
    {id:'n3',numero:'NEG-2026-0003',cliente_nome:'Fundição Pará de Minas',titulo:'Manômetros e válvulas — forno',
     coluna:'Proposta enviada',coluna_ordem:50,interacoes:7,tarefas_abertas:2,tarefas_atrasadas:1,
+    // ⚠ A demo TEM que trazer `numero_exibicao`, senão ela desenha o card do
+    // S21 com crachá S22 — e o item 9 é justamente esta troca de número.
+    numero_exibicao:'26031',propostas_enviadas:1,propostas_numeros:1,
     dias_parado:11,valor_estimado:0,valor_propostas:3550,oss:1,cliente_id:'c8',
     cliente_endereco:'Av. Industrial, 900',cliente_localizacao:'https://maps.google.com/?q=-19.8,-44.6',
     contato_agenda:'Marcos · (37) 98888-1111'},
    {id:'n4',numero:'NEG-2026-0004',cliente_nome:'Gerdau — Divinópolis',titulo:'Recalibração anual',
     coluna:'Aprovadas',coluna_ordem:60,interacoes:12,tarefas_abertas:0,tarefas_atrasadas:0,
+    numero_exibicao:'26028 Rev. 01',propostas_enviadas:2,propostas_numeros:1,
     dias_parado:2,valor_propostas:18400,oss:1,e_contrato:true,cliente_id:'c1',
     cliente_endereco:'Rod. MG-050, km 12',cliente_localizacao:'https://maps.google.com/?q=-20.14,-44.88',
     contato_agenda:'Patrícia · (37) 99999-0000'},
@@ -7588,13 +7797,13 @@ function demoAgendaEquipePool(){
   // Variedade de propósito: três OS, três clientes, etapas diferentes e uma
   // sem responsável — é o que os filtros da vista "Sem dia" têm que separar.
   const base = [
-    ['d1','OS-2026-0007','Gerdau — Divinópolis','T05','Cotar com fornecedores','Orçamento','adm',45,'urgente',3],
-    ['d1','OS-2026-0007','Gerdau — Divinópolis','T06','Precificar','Orçamento','adm',30,'urgente',3],
-    ['d3','OS-2026-0005','Uau Ingleza Indústria Ltda','T02','Executar levantamento','Em campo','campo',180,'normal',1],
-    ['d3','OS-2026-0005','Uau Ingleza Indústria Ltda','T03','Fechar levantamento com o cliente','Concluída em campo','campo',30,'normal',1],
-    ['d5','OS-2026-0090','Bauminas Agro — Itapecerica','T13','Calibrar e lacrar','Calibração','adm',60,'alta',2],
-    ['d5','OS-2026-0090','Bauminas Agro — Itapecerica','T14','Agendar retorno','Retorno p/ instalação','adm',15,'alta',2],
-    ['d5','OS-2026-0090','Bauminas Agro — Itapecerica','T15','Instalar em campo','Retorno p/ instalação','campo',120,'alta',2],
+    ['d1','OS-26007','Gerdau — Divinópolis','T05','Cotar com fornecedores','Orçamento','adm',45,'urgente',3],
+    ['d1','OS-26007','Gerdau — Divinópolis','T06','Precificar','Orçamento','adm',30,'urgente',3],
+    ['d3','OS-26005','Uau Ingleza Indústria Ltda','T02','Executar levantamento','Em campo','campo',180,'normal',1],
+    ['d3','OS-26005','Uau Ingleza Indústria Ltda','T03','Fechar levantamento com o cliente','Concluída em campo','campo',30,'normal',1],
+    ['d5','OS-26090','Bauminas Agro — Itapecerica','T13','Calibrar e lacrar','Calibração','adm',60,'alta',2],
+    ['d5','OS-26090','Bauminas Agro — Itapecerica','T14','Agendar retorno','Retorno p/ instalação','adm',15,'alta',2],
+    ['d5','OS-26090','Bauminas Agro — Itapecerica','T15','Instalar em campo','Retorno p/ instalação','campo',120,'alta',2],
   ];
   return base.map(([os_id, num, cli, tid, tar, fase, exec, min, prio, rank], k) => ({
     os_id, os_numero:num, cliente:cli, tarefa_id:tid, tarefa:tar, fase, executor:exec,
@@ -7612,11 +7821,11 @@ function demoRel(){
     os:[
       // Os nomes aqui TEM que ser os do banco. Quando eram inventados, a demo passava
       // verde e o modo real quebrava — foi assim que o relatório foi ao ar quebrado.
-      {id:'d1',numero:'OS-2026-0007',status:'aberta',descricao:'Acessórios NR-13',
+      {id:'d1',numero:'OS-26007',status:'aberta',descricao:'Acessórios NR-13',
        data_abertura:hoje,encerrada_em:null,cliente_id:'c3'},
-      {id:'d2',numero:'OS-2026-0006',status:'concluida',descricao:'Parada anual',
+      {id:'d2',numero:'OS-26006',status:'concluida',descricao:'Parada anual',
        data_abertura:hoje,encerrada_em:hoje+'T18:00:00Z',cliente_id:'c2'},
-      {id:'d3',numero:'OS-2026-0005',status:'aberta',descricao:'Inspeção',
+      {id:'d3',numero:'OS-26005',status:'aberta',descricao:'Inspeção',
        data_abertura:hoje,encerrada_em:null,cliente_id:'c1'},
     ],
     itens:[
@@ -7628,24 +7837,24 @@ function demoRel(){
        fornecedor:'Famabras',pedido_numero:'PC-2026-0001',pedido_em:hoje,previsto_para:'2026-08-20',recebido_em:null},
     ],
     props:[
-      {id:'p1',numero:'PROP-2026-0002',versao:1,status:'emitida',cliente:cli.c3,
-       os_numero:'OS-2026-0007',emitida_em:hoje,valor_total:4200},
-      {id:'p2',numero:'PROP-2026-0001',versao:2,status:'aprovada',cliente:cli.c1,
-       os_numero:'OS-2026-0005',emitida_em:hoje,valor_total:7340},
-      {id:'p3',numero:'PROP-2026-0000',versao:1,status:'reprovada',cliente:cli.c2,
-       os_numero:'OS-2026-0006',emitida_em:hoje,valor_total:2900,motivo_perda:'preço'},
+      {id:'p1',numero:'26007',versao:1,status:'emitida',cliente:cli.c3,
+       os_numero:'OS-26007',emitida_em:hoje,valor_total:4200},
+      {id:'p2',numero:'26005',versao:2,status:'aprovada',cliente:cli.c1,
+       os_numero:'OS-26005',emitida_em:hoje,valor_total:7340},
+      {id:'p3',numero:'26006',versao:1,status:'reprovada',cliente:cli.c2,
+       os_numero:'OS-26006',emitida_em:hoje,valor_total:2900,motivo_perda:'preço'},
     ],
     negs:[{coluna:'Proposta enviada'},{coluna:'Primeiro contato'},{coluna:'Proposta enviada'}],
     peds:[
-      {numero:'PC-2026-0001',fornecedor:'Famabras',cliente:cli.c1,os_numero:'OS-2026-0005',
+      {numero:'PC-2026-0001',fornecedor:'Famabras',cliente:cli.c1,os_numero:'OS-26005',
        emitido_em:hoje,valor:840,itens:1,recebidos:0,previsto_para:'2026-08-20'},
-      {numero:'PC-2026-0002',fornecedor:'Wika',cliente:cli.c3,os_numero:'OS-2026-0007',
+      {numero:'PC-2026-0002',fornecedor:'Wika',cliente:cli.c3,os_numero:'OS-26007',
        emitido_em:hoje,valor:592,itens:1,recebidos:0,previsto_para:hoje},
     ],
     margens:[
-      {os_id:'d1',numero:'OS-2026-0007',cliente:cli.c3,venda:1060,custo_itens:592,
+      {os_id:'d1',numero:'OS-26007',cliente:cli.c3,venda:1060,custo_itens:592,
        margem_bruta:468,custos_extras:120,margem_real:348,margem_pct:33},
-      {os_id:'d3',numero:'OS-2026-0005',cliente:cli.c1,venda:1440,custo_itens:840,
+      {os_id:'d3',numero:'OS-26005',cliente:cli.c1,venda:1440,custo_itens:840,
        margem_bruta:600,custos_extras:0,margem_real:600,margem_pct:42},
     ],
   };
@@ -7653,13 +7862,13 @@ function demoRel(){
 
 /** Documentos em demo, no formato das views (não o da aba de Configurações). */
 const demoDocsGerados = () => ([
-  {id:'g1',os_id:'d3',os:'OS-2026-0005',cliente:'Uau Ingleza Indústria Ltda',
-   numero:'PROP-2026-0001',modelo_titulo:'Inspeção NR-13 — básico 2024.2',
+  {id:'g1',os_id:'d3',os:'OS-26005',cliente:'Uau Ingleza Indústria Ltda',
+   numero:'26005',modelo_titulo:'Inspeção NR-13 — básico 2024.2',
    natureza:'Inspeção em vasos de pressão',valor_total:7340,
    created_at:isoHoje()+'T14:20:00Z',quem:'Fernando Sousa'},
 ]);
 const demoPedidosDoc = () => ([
-  {numero:'PC-2026-0001',os_id:'d3',os_numero:'OS-2026-0005',cliente:'Uau Ingleza Indústria Ltda',
+  {numero:'PC-2026-0001',os_id:'d3',os_numero:'OS-26005',cliente:'Uau Ingleza Indústria Ltda',
    fornecedor:'Famabras',emitido_em:isoHoje()+'T10:00:00Z',valor:840,itens:1,recebidos:0,
    previsto_para:'2026-08-20',emitido_por_nome:'Fernando Sousa'},
 ]);
@@ -7706,7 +7915,7 @@ function demoAddContato(o){ demoCad(); D_CT.push(Object.assign({id:'t'+Date.now(
 function demoAddEquip(o){ demoCad(); D_EQ.push(Object.assign({id:'e'+Date.now()},o));
   const c=D_CLI.find(x=>x.id===o.cliente_id); if(c) c._equip++; }
 function demoNovaOS(cli,desc){
-  demoCad(); const n = 'OS-2026-0' + (100 + Object.keys(DEMO_DB||{}).length);
+  demoCad(); const n = 'OS-26' + (100 + Object.keys(DEMO_DB||{}).length);
   return { numero:n, os_id:'novo' };
 }
 function demoGravarItem(os,id,campo,valor){
@@ -8613,7 +8822,9 @@ function agVistaPool(cx){
       + g.itens.map(t =>
           '<div class="agLinha"><span class="agLt">' + esc(t.tarefa || '') + '</span>'
         + '<span class="agLe">' + esc(t.fase || '') + '</span>'
-        + '<span class="agLq">' + esc(t.usuario || '— ninguém —') + '</span>'
+        + '<button class="btn mini agLq" type="button" data-quem="'
+        + esc(t.os_id + '|' + t.tarefa_id) + '">'
+        + esc(t.usuario || '— ninguém —') + '</button>'
         + '<span class="agLm">' + (t.tempo_estimado_min ? minHora(t.tempo_estimado_min) : '—') + '</span>'
         + '<button class="btn mini" type="button" data-id="' + esc(t.os_id + '|' + t.tarefa_id) + '">'
         + 'marcar dia</button></div>').join('')
@@ -8642,6 +8853,72 @@ function agVistaPool(cx){
     const t = todos.find(x => x.os_id === osId && x.tarefa_id === tid);
     if (t) agAbrirTarefa(t, true);
   }));
+
+  // "Quem" é o outro caminho: escolher o responsável AGORA e o dia depois.
+  cx.querySelectorAll('button[data-quem]').forEach(b => b.addEventListener('click', () => {
+    const [osId, tid] = b.dataset.quem.split('|');
+    const t = todos.find(x => x.os_id === osId && x.tarefa_id === tid);
+    if (t) modalQuem(t);
+  }));
+}
+
+/* ── ESCOLHER QUEM FAZ, SEM MARCAR O DIA ────────────────────────────────────
+   O pedido: clicar em "— ninguém —" abre a lista das pessoas APTAS àquela
+   tarefa, filtrada pelos perfis responsáveis dela.
+
+   Quem monta essa lista é o BANCO (`tf_pessoas_para_tarefa`), não esta tela.
+   É o mesmo motivo pelo qual "quem é você" é `tf_meu_acesso()`: uma segunda
+   regra escrita aqui é uma regra a mais para divergir da primeira. O admin vem
+   na lista marcado como admin — ele passa em tudo por definição, e escondê-lo
+   trancaria o dono do sistema para fora de uma tarefa do próprio sistema.
+
+   O dia fica de fora de propósito: a tarefa continua no "Sem dia", agora com
+   dono. Era o estado que o banco recusava até o S22 — e a justificativa
+   ("some das três listas") valia para o contrário, dia sem dono. */
+async function modalQuem(t){
+  if (DEMO){ toast('Modo demonstração: designação não é gravada.','err'); return; }
+  let pessoas;
+  try{
+    pessoas = await rpc('tf_pessoas_para_tarefa',
+      { p_os_id: t.os_id, p_tarefa_id: t.tarefa_id });
+  }catch(e){ toast(e.message,'err'); return; }
+
+  const atual = t.usuario_designado || '';
+  const linha = u =>
+      '<label class="linhaOpc"><input type="radio" name="qmU" value="' + esc(u.usuario_id) + '"'
+    + (String(u.usuario_id) === String(atual) ? ' checked' : '') + '> '
+    + '<span><b>' + esc(u.nome) + '</b>'
+    + '<br><small style="color:var(--ink-3)">' + esc(u.perfil || u.perfil_id)
+    + (u.por_perfil ? '' : ' · entra por ser admin') + '</small></span></label>';
+
+  abrirModal('Quem faz · ' + t.tarefa,
+      '<p class="nota" style="margin-top:0">' + esc(t.os_numero) + ' · '
+    + esc(t.cliente || '') + '<br>Só quem tem o perfil responsável por esta '
+    + 'tarefa aparece aqui — mais os admins.</p>'
+    + (pessoas && pessoas.length
+       ? '<div class="opcoes">'
+         + '<label class="linhaOpc"><input type="radio" name="qmU" value=""'
+         + (atual ? '' : ' checked') + '> <span>— ninguém —</span></label>'
+         + pessoas.map(linha).join('') + '</div>'
+       : '<div class="aviso">Ninguém do time tem o perfil responsável por esta '
+         + 'tarefa. Confira os perfis em Configurações → Usuários.</div>')
+    + '<p style="font-size:12px;color:var(--ink-3);margin:10px 0 0;line-height:1.45">'
+    + 'A tarefa continua em <b>Sem dia</b>, agora com dono. Para pôr num dia, '
+    + 'use <b>marcar dia</b>.</p>',
+    [ { label:'Cancelar', onClick: fecharModal },
+      { label:'Gravar', pri:true, onClick: async () => {
+          try{
+            const sel = document.querySelector('input[name="qmU"]:checked');
+            await rpc('tf_designar_tarefa', {
+              p_os_id: t.os_id, p_tarefa_id: t.tarefa_id,
+              p_usuario: (sel && sel.value) || null,
+              p_data: t.dia || null, p_minutos: null });
+            fecharModal();
+            toast((sel && sel.value) ? 'Responsável gravado.' : 'Designação removida.', 'ok');
+            AGENDA.chave = null; AGENDA.pool = [];
+            await pintarAgenda();
+          }catch(e){ toast(e.message,'err'); }
+      } } ]);
 }
 
 /** Abre o modal de designação para uma linha da agenda ou do pool. */
@@ -8664,16 +8941,16 @@ function demoAgendaItens(){
   let d1 = agSoma(d0, 1), g2 = 0;
   while (!agEhUtil(d1) && g2++ < 14) d1 = agSoma(d1, 1);
   return [
-    { usuario_id:'u3', usuario:'Inspetor 1', dia:d0, os_id:'d1', os_numero:'OS-2026-101',
+    { usuario_id:'u3', usuario:'Inspetor 1', dia:d0, os_id:'d1', os_numero:'OS-26101',
       cliente:'Gerdau — Divinópolis', tarefa_id:'T01', tarefa:'Aceitar OS e deslocar',
       fase:'Aberta', executor:'campo', tempo_estimado_min:30, prioridade:'urgente', prioridade_rank:3 },
-    { usuario_id:'u3', usuario:'Inspetor 1', dia:d0, os_id:'d2', os_numero:'OS-2026-102',
+    { usuario_id:'u3', usuario:'Inspetor 1', dia:d0, os_id:'d2', os_numero:'OS-26102',
       cliente:'Farmax Ind. Farmacêutica', tarefa_id:'T02', tarefa:'Executar levantamento',
       fase:'Em campo', executor:'campo', tempo_estimado_min:180, prioridade:'normal', prioridade_rank:1 },
-    { usuario_id:'u1', usuario:'Túlio', dia:d0, os_id:'d3', os_numero:'OS-2026-098',
+    { usuario_id:'u1', usuario:'Túlio', dia:d0, os_id:'d3', os_numero:'OS-26098',
       cliente:'Fundição Santana', tarefa_id:'T04', tarefa:'Conferir levantamento',
       fase:'Orçamento', executor:'adm', tempo_estimado_min:null, prioridade:'alta', prioridade_rank:2 },
-    { usuario_id:'u2', usuario:'Vinícius', dia:d1, os_id:'d3', os_numero:'OS-2026-098',
+    { usuario_id:'u2', usuario:'Vinícius', dia:d1, os_id:'d3', os_numero:'OS-26098',
       cliente:'Fundição Santana', tarefa_id:'T05', tarefa:'Cotar com fornecedores',
       fase:'Orçamento', executor:'adm', tempo_estimado_min:45, prioridade:'alta', prioridade_rank:2 },
   ];
