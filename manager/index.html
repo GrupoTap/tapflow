@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S24</title>
+<title>TapFlow Manager · S25</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -63,6 +63,10 @@
   /* O quarto quadro (Técnico Administrativa) precisa de faixa própria: com
      a mesma cor da gestão, quem olha de longe não distingue os dois. */
   --tecadm:#1E7A42; --tecadm-soft:#E1F0E7;
+  /* O quinto (Fornecimento de Produtos, S25) também: é um FLUXO, não uma
+     equipe, e quem alterna entre ele e a Administrativa precisa saber de
+     relance em qual dos dois está. */
+  --forn:#6B4FA0;   --forn-soft:#EEE9F6;
   --crit:#A62D18;   --crit-soft:#F7E4DF;
   --warn:#96601A;   --warn-soft:#F8EEDC;
   --ok:#1E7A42;     --ok-soft:#DFF0E6;
@@ -210,6 +214,28 @@ main.rolaY{overflow-y:auto}
 .board{display:flex;gap:10px;align-items:stretch;min-width:min-content;
   height:calc(100vh - var(--header-h) - 32px)}
 .board.livre{display:block;height:auto;min-width:0}
+
+/* ── S25: nos QUADROS a página não rola; quem rola é o <main>, e só de lado ──
+   Até o S24 a altura do quadro era a conta `100vh − 54 − 32`. A conta fechava
+   exata — e mesmo assim sobrava: a barra de rolagem HORIZONTAL do <main> (15 a
+   17 px no Windows) é somada POR FORA dela. A página ganhava 15 px de rolagem
+   vertical e a barra ficava logo abaixo da borda da janela: para rolar para o
+   lado, era preciso primeiro rolar para baixo (item 1). E a roda do mouse
+   subia a página inteira esses 15 px, levando o cabeçalho das colunas junto
+   (item 2) — os cards já rolavam dentro da coluna, era a página que se mexia.
+   Nos quatro quadros, Comercial incluído.
+   ⚠ Não dá para ver no Chromium automático: ele esconde as barras. O parecer
+   de 09/09 mediu assim e concluiu que cabia. Medir com as barras VISÍVEIS.
+   Agora, em modo quadro (`body.emQuadro`, posto pelo irPara): o app tem a
+   altura exata da janela, o <main> ocupa o que sobra DEPOIS do topo (e da
+   faixa de demo, se houver) e a barra horizontal mora dentro dele — sempre
+   no pé da janela, sempre visível. `flex:1 1 0` com a altura do pai definida
+   é o que torna a altura do <main> "definida" para o `height:100%` do quadro;
+   com o `min-height:100vh` antigo no .app ela não era, e o quadro caía para
+   a altura do conteúdo. As telas de lista não entram aqui. */
+body.emQuadro .app{height:100vh;height:100dvh;min-height:0}
+body.emQuadro main{flex:1 1 0;min-height:0;overflow-x:auto;overflow-y:hidden}
+body.emQuadro .board:not(.livre){height:100%}
 .col{
   flex:0 0 264px; display:flex; flex-direction:column; height:100%;
   background:var(--surface-2); border:1px solid var(--rule); border-radius:4px;
@@ -227,6 +253,7 @@ main.rolaY{overflow-y:auto}
 .col.campo{border-top:3px solid var(--campo)}
 .col.gestao{border-top:3px solid var(--gestao)}
 .col.tecadm{border-top:3px solid var(--tecadm)}
+.col.forn{border-top:3px solid var(--forn)}
 
 /* ── aviso de cliente parecido / revisão de duplicados ───────────────── */
 .parecidos{display:flex;flex-direction:column;gap:6px;margin:10px 0}
@@ -874,9 +901,19 @@ th.filtrada .tfFun{opacity:1}
   padding:5px;font-size:11.5px;color:var(--ink-2);font-family:inherit}
 .tfmPe button.pri{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 
-.fitaBusca{flex:0 0 auto;align-self:flex-start;background:var(--accent-soft);
-  color:var(--accent-ink);font-size:12px;font-weight:600;padding:5px 11px;border-radius:4px;
-  margin-bottom:8px;position:absolute}
+/* A fita da busca FLUTUA no pé do quadro. Até o S24 ela era `absolute` sem
+   posição, dentro da fileira de colunas: nascia em cima do cabeçalho da
+   primeira coluna, cobrindo o nome dela — e com o botão "Limpar a busca" do
+   S25 o clique ia para a coluna, não para o botão. Embaixo ela não cobre
+   nome de coluna nenhum, e continua dentro do #board: trocar de tela a apaga
+   junto com o resto. */
+.fitaBusca{position:fixed;z-index:30;bottom:30px;
+  left:calc(var(--nav-w) + (100vw - var(--nav-w)) / 2);transform:translateX(-50%);
+  background:var(--accent-soft);border:1px solid var(--accent);box-shadow:var(--sh-lift);
+  color:var(--accent-ink);font-size:12px;font-weight:600;padding:6px 12px;border-radius:4px;
+  white-space:nowrap;max-width:calc(100vw - var(--nav-w) - 24px);overflow:hidden;text-overflow:ellipsis}
+.fitaLimpa{margin-left:10px;border:0;background:none;padding:0;font:inherit;font-weight:700;
+  color:var(--accent);text-decoration:underline;cursor:pointer}
 .conta{font-size:11.5px;font-weight:400;color:var(--ink-3);font-family:var(--mono);margin-left:6px}
 .linhaCli.incompleto b::after{content:' · cadastro incompleto';font-size:10.5px;
   font-weight:600;color:var(--warn)}
@@ -1030,7 +1067,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S24';
+const APP_VERSION = 'S25';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -1311,13 +1348,13 @@ async function carregar(opt){
     falhaCarga = null;
     pararRecon();
     setConn('ok','Conectado');
-    if (visao === 'campo' || visao === 'adm' || visao === 'tec') pintar();
+    if (eQuadroOS(visao)) pintar();
   }catch(e){
     // Guarda o MOTIVO: quadro vazio por erro não pode ser desenhado como
     // "nada para fazer". Foi assim que um "JWT expired" virou susto.
     falhaCarga = e.message || 'não deu para carregar';
     if (e.negocio && !e.sessaoMorta){ setConn('off','Erro'); toast(e.message, 'err'); }
-    if (visao === 'campo' || visao === 'adm' || visao === 'tec') pintar();
+    if (eQuadroOS(visao)) pintar();
     throw e;
   }
 }
@@ -1344,7 +1381,8 @@ function quadrosDe(c){
     enquanto o menu diz "Equipe Administrativa" é como uma tela começa a
     discordar da outra. */
 const NOME_QUADRO = { campo:'Equipes de Inspeção', adm:'Equipe Administrativa',
-                      tecadm:'Equipe Técnico Administrativa' };
+                      tecadm:'Equipe Técnico Administrativa',
+                      fornecimento:'Fornecimento de Produtos' };
 
 /** O nome da coluna como a pessoa a lê. `coluna` continua sendo a FASE — é o
     que o motor usa para dependência e ponteiro — e `coluna_rotulo` é o texto.
@@ -1356,7 +1394,14 @@ const rotuloCol = c => (c && (c.coluna_rotulo || c.coluna)) || '';
    REPINTA usam) e a tarefa o chama de 'tecadm' (o valor que o banco grava).
    A tradução mora AQUI, num lugar só — dois nomes para a mesma coisa espalhados
    pelo arquivo é como a busca de uma tela deixa de filtrar a outra. */
-const QUADRO_DA_VISAO = { campo:'campo', adm:'adm', tec:'tecadm' };
+const QUADRO_DA_VISAO = { campo:'campo', adm:'adm', tec:'tecadm', forn:'fornecimento' };
+/* Os itens do menu que são quadro de OS. Até o S24 isto estava escrito à mão
+   em quatro lugares (`v === 'campo' || v === 'adm' || v === 'tec'`); o quinto
+   quadro teria de ser lembrado em todos, e o que ficasse para trás seria uma
+   tela que não repinta. Agora a lista é a chave do QUADRO_DA_VISAO. */
+const eQuadroOS = v => Object.prototype.hasOwnProperty.call(QUADRO_DA_VISAO, v);
+/* A faixa de cor da coluna, por quadro. */
+const CLASSE_COL = { campo:'campo', adm:'gestao', tecadm:'tecadm', fornecimento:'forn' };
 const nomeQuadros = c => quadrosDe(c).map(q => NOME_QUADRO[q] || q).join(' e ');
 
 /** Escreve um contador do menu, se ele estiver no menu desta pessoa. */
@@ -1379,15 +1424,16 @@ function pintar(){
   // Os contadores vivem no menu, e desde os privilégios o menu pode não ter o
   // item — o perfil comercial não vê Campo. Escrever direto estourava a tela
   // inteira num TypeError. O contador que não existe simplesmente não é escrito.
-  contador('nCampo', cards.filter(c => c.coluna && quadrosDe(c).indexOf('campo')  >= 0).length);
-  contador('nAdm',   cards.filter(c => c.coluna && quadrosDe(c).indexOf('adm')    >= 0).length);
-  contador('nTec',   cards.filter(c => c.coluna && quadrosDe(c).indexOf('tecadm') >= 0).length);
+  Object.keys(CONTADOR_QUADRO).forEach(qq => contador(CONTADOR_QUADRO[qq],
+    cards.filter(c => c.coluna && quadrosDe(c).indexOf(qq) >= 0).length));
 
   const board = document.getElementById('board');
   board.innerHTML = '';
 
   // Lista vazia por ERRO não pode ser desenhada como "nada para fazer" — foi
-  // assim que um "JWT expired" virou susto de perda de dados.
+  // assim que um "JWT expired" virou susto de perda de dados. É a ÚNICA
+  // situação em que o quadro não desenha as colunas: colunas "vazia" em cima
+  // de uma carga que falhou seriam o quadro mentindo.
   if (!noQuadro.length && falhaCarga){
     board.innerHTML = '<div class="vazio"><h3>Não deu para carregar o quadro</h3><p class="mt"></p>'
       + '<button class="btn" id="bRetentar" style="margin-top:14px">Tentar de novo</button></div>';
@@ -1398,32 +1444,20 @@ function pintar(){
     return;
   }
 
-  if (!doQuadro.length){
-    board.innerHTML = q
-      ? '<div class="vazio"><h3>Nenhuma OS com essa busca</h3><p class="mt2"></p>'
-        + '<button class="btn" id="bLimpaB" style="margin-top:14px">Limpar a busca</button></div>'
-      : '<div class="vazio"><h3>Nenhuma OS neste quadro</h3>' +
-        '<p>' + (alvo === 'campo'
-          ? 'Nada depende das equipes de inspeção agora.'
-          : alvo === 'tecadm'
-          ? 'Nada esperando processamento ou revisão.'
-          : 'Nada parado na administração agora.') + '</p></div>';
-    if (q){
-      board.querySelector('.mt2').textContent =
-        noQuadro.length + ' OS neste quadro não casam com "' + q + '".';
-      document.getElementById('bLimpaB').addEventListener('click', () => {
-        BUSCA[quadro] = ''; document.getElementById('tbBusca').value = ''; pintar();
-      });
-    }
-    return;
-  }
-
+  // ── S25: AS COLUNAS SAEM SEMPRE, MESMO COM O QUADRO INTEIRO VAZIO ─────────
+  // Até o S24 a pintura saía cedo com "Nenhuma OS neste quadro" antes de
+  // desenhar coluna nenhuma. Coluna vazia só aparecia quando uma VIZINHA
+  // tinha card — nas Equipes de Inspeção isso "funcionava" porque sempre havia
+  // card do fornecimento lá. Com o fornecimento no quadro próprio, a Inspeção
+  // passaria a mostrar a mensagem justamente no quadro citado como exemplo do
+  // comportamento certo. Agora: colunas sempre, com "vazia" embaixo do rótulo.
+  //
   // As colunas do quadro vêm do TEMPLATE, não só das OS que existem hoje.
   // Coluna vazia continua na tela: é assim que se enxerga o fluxo inteiro e se
   // percebe que ninguém está em "Calibração" — some a coluna, some a informação.
   // A ORDEM é a do COLUNAS, não a do `fase_ordem` sozinho: os dois templates
   // numeram as fases de 10 em 10, e ordenar só pelo número intercalaria as
-  // colunas do fornecimento com as da inspeção — desenhando um caminho que não
+  // colunas de um fluxo com as do outro — desenhando um caminho que não
   // existe. Fase que só aparece porque um card está nela entra no fim, e não
   // no meio de um fluxo a que ela não pertence.
   const mapa = new Map();
@@ -1443,19 +1477,47 @@ function pintar(){
                                       rotulo: c.coluna_rotulo || c.coluna, itens: [] });
     mapa.get(ch).itens.push(c);
   });
+
+  // Sem coluna nenhuma para desenhar. Com o registro carregado isto não
+  // acontece (todo quadro tem fase no template); acontece quando o REGISTRO
+  // não veio — e aí tela em branco, ou "nenhuma OS", seria mentir de novo.
+  if (!mapa.size){
+    if (q){
+      board.innerHTML = '<div class="vazio"><h3>Nenhuma OS com essa busca</h3><p class="mt2"></p>'
+        + '<button class="btn" id="bLimpaB" style="margin-top:14px">Limpar a busca</button></div>';
+      board.querySelector('.mt2').textContent =
+        noQuadro.length + ' OS neste quadro não casam com "' + q + '".';
+      document.getElementById('bLimpaB').addEventListener('click', limparBuscaQuadro);
+      return;
+    }
+    board.innerHTML = '<div class="vazio"><h3>Não deu para ler as colunas deste quadro</h3>'
+      + '<p class="mt"></p><button class="btn" id="bRetentar" style="margin-top:14px">Tentar de novo</button></div>';
+    board.querySelector('.mt').textContent = (falhaColunas || 'o registro de colunas veio vazio')
+      + ' — isto NÃO quer dizer que não há OS neste quadro.';
+    document.getElementById('bRetentar').addEventListener('click',
+      () => carregarColunas().then(() => carregar()).catch(()=>{}));
+    return;
+  }
   const colunas = [...mapa.entries()].sort((a,b) => a[1].seq - b[1].seq);
 
+  // A busca sem resultado também deixa de apagar o quadro: as colunas ficam,
+  // e a fita diz quantas OS a busca escondeu — com o botão de desfazer.
   if (q){
     const fita = document.createElement('div');
     fita.className = 'fitaBusca';
-    fita.textContent = doQuadro.length + ' de ' + noQuadro.length + ' OS batem com "' + q + '"';
+    const t = document.createElement('span');
+    t.textContent = doQuadro.length + ' de ' + noQuadro.length + ' OS batem com "' + q + '"';
+    fita.appendChild(t);
+    const bl = document.createElement('button');
+    bl.type = 'button'; bl.className = 'fitaLimpa'; bl.textContent = 'Limpar a busca';
+    bl.addEventListener('click', limparBuscaQuadro);
+    fita.appendChild(bl);
     board.appendChild(fita);
   }
 
   colunas.forEach(([, dados]) => {
     const col = document.createElement('div');
-    col.className = 'col ' + (alvo === 'campo' ? 'campo'
-                            : alvo === 'tecadm' ? 'tecadm' : 'gestao')
+    col.className = 'col ' + (CLASSE_COL[alvo] || 'gestao')
                   + (dados.itens.length ? '' : ' vazia');
     col.innerHTML =
       '<div class="col-h"><span class="t"></span><span class="c">' + dados.itens.length + '</span></div>' +
@@ -1463,7 +1525,9 @@ function pintar(){
     col.querySelector('.t').textContent = dados.rotulo;
     const body = col.querySelector('.col-b');
     if (!dados.itens.length){
-      const v = document.createElement('div'); v.className = 'col-vazia'; v.textContent = 'vazia';
+      const v = document.createElement('div'); v.className = 'col-vazia';
+      // com busca ligada a coluna não está vazia: a busca é que escondeu
+      v.textContent = q ? 'nenhuma com a busca' : 'vazia';
       body.appendChild(v);
     }
     // mais crítico primeiro: travada, depois atrasada, depois mais tempo parada
@@ -1473,22 +1537,35 @@ function pintar(){
   });
 
   // ── Onde o quadro começa a rolar ────────────────────────────────────────
-  // A Equipe Administrativa tem NOVE colunas: as seis do fornecimento e as três
-  // da inspeção. Abrindo sempre no zero, uma OS de inspeção nasce fora da tela,
-  // atrás de cinco colunas vazias — e quem abre o quadro conclui que não há
-  // nada. Coluna vazia continua na tela (é lei), mas a ROLAGEM passa a começar
-  // na primeira coluna que tem card. Quem quiser ver as anteriores rola para a
-  // esquerda, que é o gesto natural.
+  // Nasceu no S22, quando a Equipe Administrativa tinha NOVE colunas (seis do
+  // fornecimento e três da inspeção) e uma OS de inspeção nascia fora da tela,
+  // atrás de cinco colunas vazias. Desde o S25 o fornecimento tem quadro
+  // próprio e os quadros de equipe cabem na tela — mas o Fornecimento de
+  // Produtos tem nove colunas, e a regra continua valendo lá: coluna vazia
+  // continua na tela (é lei), mas a ROLAGEM começa na primeira que tem card.
   // ⚠ quem rola na horizontal é o <main>, não o #board — mexer no scrollLeft do
   //   #board não move nada. `scrollIntoView` acha o pai certo sozinho.
   const cheia = colunas.findIndex(([, d]) => d.itens.length);
   if (cheia > 0){
-    const alvo = board.children[cheia + (q ? 1 : 0)];   // a fita da busca conta
-    if (alvo) alvo.scrollIntoView({ inline: 'start', block: 'nearest' });
+    const alvoCol = board.children[cheia + (q ? 1 : 0)];   // a fita da busca conta
+    if (alvoCol) alvoCol.scrollIntoView({ inline: 'start', block: 'nearest' });
   }
 
   // depois de a tela estar pronta, nunca antes
   carregarLogos(doQuadro.map(c => c.cliente_id));
+}
+
+/* O contador do menu de cada quadro (valor do banco → id do elemento). */
+const CONTADOR_QUADRO = { campo:'nCampo', adm:'nAdm', tecadm:'nTec', fornecimento:'nForn' };
+
+/* O item de menu do primeiro quadro em que o card aparece. */
+function visaoDoCard(c){
+  const q = c ? quadrosDe(c)[0] : 'campo';
+  return Object.keys(QUADRO_DA_VISAO).find(v => QUADRO_DA_VISAO[v] === q) || 'campo';
+}
+
+function limparBuscaQuadro(){
+  BUSCA[quadro] = ''; document.getElementById('tbBusca').value = ''; pintar();
 }
 
 // ── registro de colunas ─────────────────────────────────────────────────────
@@ -1500,6 +1577,7 @@ function pintar(){
 // um deixava as colunas do outro invisíveis enquanto nenhuma OS estivesse nelas
 // — que é justamente quando ver a coluna vazia importa.
 let COLUNAS = [];
+let falhaColunas = null;   // por que o registro não veio — o quadro sem colunas diz o motivo
 
 /* O rótulo da coluna na demonstração. No banco isso é a tabela
    `colunas_quadro`; aqui é uma cópia, e é a única cópia aceitável — a demo
@@ -1534,7 +1612,7 @@ async function carregarColunas(){
       Object.values(DEMO_DB || (demoSeed(), DEMO_DB)).forEach(o => {
         const tpl = o.meta.insp ? 'INSPECAO_NR13' : 'ACESSORIOS_NR13';
         o.tarefas.forEach(t => {
-          const qs = QUADRO_DEMO[t.fase] || derivarQuadroDemo(t.perfis_responsaveis);
+          const qs = quadrosDemo(tpl, t.fase, t.perfis_responsaveis);
           qs.forEach(q => vistas.set(chaveCol(tpl, t.fase) + '\u0000' + q, {
             template_id: tpl, fase: t.fase, ordem: t.fase_ordem, quadro: q,
             rotulo: (tpl === 'INSPECAO_NR13' && ROTULO_DEMO[t.fase]) || t.fase,
@@ -1555,7 +1633,11 @@ async function carregarColunas(){
       quadro: x.quadro, rotulo: x.rotulo || x.fase, tplOrdem: x.template_ordem
     }));
     COLUNAS.forEach(k => ROTULOS_FASE[chaveCol(k.template_id, k.fase)] = k.rotulo);
-  }catch(e){ console.warn('[colunas] não foi possível ler o registro:', e.message); }
+    falhaColunas = null;
+  }catch(e){
+    falhaColunas = e.message || 'não deu para ler o registro de colunas';
+    console.warn('[colunas] não foi possível ler o registro:', e.message);
+  }
 }
 
 /** A mesma leitura do `tf__executor_de` do banco, para a demonstração: o perfil
@@ -2233,6 +2315,16 @@ const QUADRO_DEMO = {
   'Encerramento':              ['adm'],
 };
 
+/* Onde a fase aparece, na demonstração — pelo TEMPLATE primeiro, depois pela
+   fase. O QUADRO_DEMO é por nome de fase, e "Encerramento" existe nos dois
+   templates: sem olhar o template, o encerramento do fornecimento cairia na
+   Administrativa. Desde o S25 (47_quadro_fornecimento.sql) o fornecimento
+   inteiro vai para o quadro próprio. */
+function quadrosDemo(tpl, fase, perfis){
+  if (tpl === 'ACESSORIOS_NR13') return ['fornecimento'];
+  return QUADRO_DEMO[fase] || derivarQuadroDemo(perfis);
+}
+
 function demoCards(){
   if (!DEMO_DB) demoSeed();
   return Object.values(DEMO_DB).map(({meta, tarefas, travada}) => {
@@ -2254,8 +2346,8 @@ function demoCards(){
       quadro:  EXECUTOR[(atual.perfis_responsaveis||[])[0]] || 'adm',
       // ⚠ A demonstração TEM que trazer `quadros`, senão ela desenha o app do
       // S21 com o comportamento do S20 e o quarto quadro nasce vazio na demo.
-      quadros: QUADRO_DEMO[atual.fase]
-               || [EXECUTOR[(atual.perfis_responsaveis||[])[0]] || 'adm'],
+      quadros: quadrosDemo(meta.insp ? 'INSPECAO_NR13' : 'ACESSORIOS_NR13',
+                           atual.fase, atual.perfis_responsaveis),
       tarefa_atual_id: atual.tarefa_id, tarefa_atual: atual.nome,
       tarefa_atual_tipo: atual.tipo, tarefa_atual_status: atual.status,
       tarefa_atual_perfis: atual.perfis_responsaveis, tarefa_atual_lock: atual.lock_por,
@@ -4105,7 +4197,10 @@ async function modalNovaOS(){
           fecharModal();
           toast('OS ' + r.numero + ' aberta.', 'ok');
           await carregar();
-          irPara('campo');
+          // Vai para o quadro onde a OS NASCEU, não para um fixo. Até o S24 era
+          // sempre 'campo' — e a inspeção nasce na Administrativa. Com o
+          // fornecimento no quadro próprio (S25), as duas nasceriam longe da tela.
+          irPara(visaoDoCard(cards.find(c => c.os_id === (r && r.os_id))));
         }catch(e){ toast(e.message,'err'); }
      }}]);
 }
@@ -6258,12 +6353,14 @@ async function modalExcluirUsuario(id, nome, semPerfil){
 // formulário mandava a lista do que estava marcado — e o que não aparece não
 // pode estar marcado. Checkbox que falta não é uma opção a menos; é um
 // apagamento silencioso.
-// ⚠ ESTA LISTA TEM QUE BATER ITEM A ITEM COM O `ck_perfis_modulos` (39_quadros).
+// ⚠ ESTA LISTA TEM QUE BATER ITEM A ITEM COM O `ck_perfis_modulos` (hoje no
+//   47_quadro_fornecimento.sql, que acrescentou 'fornecimento' no S25).
 // O formulário grava o que está marcado; módulo que não aparece aqui não pode
 // ser marcado, e some do perfil no primeiro salvamento. Já aconteceu com
 // `documentos` entre o S10 e o S15.
 const MODULOS = [['os','OS e quadros'],['comercial','Comercial'],['compras','Compras'],
                  ['campo','Campo'],['tecadm','Técnico Administrativo'],
+                 ['fornecimento','Fornecimento de Produtos'],
                  ['cadastros','Cadastros'],['relatorios','Relatórios'],
                  ['documentos','Documentos']];
 
@@ -6601,13 +6698,13 @@ let _demoU = [
 ];
 let _demoP = [
   {id:'admin',nome:'Administração',executa_em:'ambos',is_admin:true,ativo:true,pessoas:1,
-   modulos:['os','comercial','compras','campo','cadastros','relatorios','documentos']},
+   modulos:['os','comercial','compras','campo','tecadm','fornecimento','cadastros','relatorios','documentos']},
   {id:'comercial',nome:'Comercial',executa_em:'adm',is_admin:false,ativo:true,pessoas:1,
-   modulos:['os','comercial','relatorios','documentos']},
+   modulos:['os','comercial','fornecimento','relatorios','documentos']},
   {id:'inspetor',nome:'Inspetor de Campo',executa_em:'campo',is_admin:false,ativo:true,pessoas:1,
-   modulos:['campo']},
+   modulos:['campo','fornecimento']},
   {id:'auxiliar',nome:'Auxiliar de Campo',executa_em:'campo',is_admin:false,ativo:true,pessoas:1,
-   modulos:['campo']}
+   modulos:['campo','fornecimento']}
 ];
 let _demoPend = [
   {auth_id:'p1', email:'tulio@engetap.com.br', confirmado:true, criado_em:new Date().toISOString()}
@@ -8687,6 +8784,11 @@ const NAV = [
     { v:'adm',   rot:'Equipe Administrativa',         ico:'gestao', cont:'nAdm',   mod:'os' },
     { v:'campo', rot:'Equipes de Inspeção',           ico:'campo',  cont:'nCampo', mod:'campo' },
     { v:'tec',   rot:'Equipe Técnico Administrativa', ico:'lupa',   cont:'nTec',   mod:'tecadm' },
+    // O quinto (S25) não é uma equipe, é um FLUXO: o fornecimento inteiro, de
+    // "Aberta" a "Encerramento", que antes aparecia rachado entre a
+    // Administrativa e as Equipes de Inspeção. Fica por último porque corre em
+    // paralelo à inspeção — os quatro de cima continuam na ordem do caminho dela.
+    { v:'forn',  rot:'Fornecimento de Produtos',      ico:'forn',   cont:'nForn',  mod:'fornecimento' },
   ]},
   { id:'operacao', rot:'OPERAÇÃO', itens:[
     { v:'age', rot:'Agenda',     ico:'agenda', cont:'nAge', mod:'os' },
@@ -8737,6 +8839,7 @@ const ICO = {
   sair:'<path d="M6 2H3v12h3"/><path d="M9 5l3 3-3 3M12 8H6"/>',
   lupa:'<circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2L14 14"/><path d="M5.4 7h3.2"/>',
   duplo:'<rect x="2.5" y="2.5" width="8" height="8" rx="1"/><path d="M5.5 13.5h8v-8"/>',
+  forn:'<path d="M1.5 4.5h8v6.5h-8z"/><path d="M9.5 7h3l2 2.5V11h-5"/><circle cx="4.5" cy="12" r="1.3"/><circle cx="11.5" cy="12" r="1.3"/>',
 };
 const svgIco = k => '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
   + 'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
@@ -8778,7 +8881,7 @@ function montarNav(){
 }
 
 const ROTULO = { campo:'Equipes de Inspeção', adm:'Equipe Administrativa',
-  com:'Equipe Comercial', tec:'Equipe Técnico Administrativa',
+  com:'Equipe Comercial', tec:'Equipe Técnico Administrativa', forn:'Fornecimento de Produtos',
   cpr:'Compras', age:'Agenda', doc:'Documentos', rel:'Relatórios',
   cad:'Clientes', dup:'Duplicados', cat:'Catálogo', cfg:'Configurações' };
 const GRUPO_DE = {};
@@ -8815,13 +8918,16 @@ function irPara(v){
 
   // Quadro rola na horizontal e tem altura de janela; lista rola na vertical.
   // Misturar os dois foi o que deixava a tela de Compras cortada no rodapé.
-  const eQuadro = (v === 'campo' || v === 'adm' || v === 'tec' || v === 'com');
+  const eQuadro = eQuadroOS(v) || v === 'com';
   document.getElementById('board').classList.toggle('livre', !eQuadro);
   document.querySelector('main').classList.toggle('rolaY', !eQuadro);
+  // S25: em quadro, a página tem a altura da janela e não rola — ver o CSS
+  // de `body.emQuadro`. Sem isto a barra horizontal fica abaixo da janela.
+  document.body.classList.toggle('emQuadro', eQuadro);
 
   // 'tec' é o item do menu; 'tecadm' é o valor que a tarefa carrega. Traduzir
   // aqui, num lugar só, evita espalhar dois nomes para a mesma coisa.
-  if (v === 'campo' || v === 'adm' || v === 'tec'){ quadro = v; REPINTA[v] = pintar; return pintar(); }
+  if (eQuadroOS(v)){ quadro = v; REPINTA[v] = pintar; return pintar(); }
   if (v === 'com') return pintarComercial();
   if (v === 'dup') return pintarDuplicados();
   if (v === 'age') return pintarAgenda();
@@ -9414,7 +9520,7 @@ const BUSCA = {};
 const REPINTA = {};
 const PLACEHOLDER_BUSCA = {
   campo:'Buscar OS, cliente, etapa…', adm:'Buscar OS, cliente, etapa…',
-  tec:'Buscar OS, cliente, etapa…', dup:'Buscar nome ou CNPJ…',
+  tec:'Buscar OS, cliente, etapa…', forn:'Buscar OS, cliente, etapa…', dup:'Buscar nome ou CNPJ…',
   com:'Buscar negócio, cliente, contato…', cpr:'Buscar item, OS, fornecedor…',
   doc:'Buscar número, cliente, modelo…', cad:'Buscar cliente, CNPJ, cidade…',
   cat:'Buscar item, código, marca…',
