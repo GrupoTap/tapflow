@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S26</title>
+<title>TapFlow Manager · S27</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1081,7 +1081,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S26';
+const APP_VERSION = 'S27';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -1675,7 +1675,7 @@ async function carregarColunas(){
       Object.values(DEMO_DB || (demoSeed(), DEMO_DB)).forEach(o => {
         const tpl = o.meta.insp ? 'INSPECAO_NR13' : 'ACESSORIOS_NR13';
         o.tarefas.forEach(t => {
-          const qs = quadrosDemo(tpl, t.fase, t.perfis_responsaveis);
+          const qs = quadrosDemo(tpl, t.fase, t.perfis_responsaveis, t.quadros);
           qs.forEach(q => vistas.set(chaveCol(tpl, t.fase) + '\u0000' + q, {
             template_id: tpl, fase: t.fase, ordem: t.fase_ordem, quadro: q,
             rotulo: (tpl === 'INSPECAO_NR13' && ROTULO_DEMO[t.fase]) || t.fase,
@@ -1858,7 +1858,8 @@ async function abrirOS(c){
   try{
     tarefas = DEMO ? demoTarefas(c.os_id)
       : await get('pipeline_tarefas?select=tarefa_id,nome,tipo,fase,fase_ordem,ordem,status,opcoes,'
-                  + 'perfis_responsaveis,lock_por,executor,usuario_designado,data_prevista,tempo_estimado_min'
+                  + 'perfis_responsaveis,lock_por,executor,usuario_designado,data_prevista,'
+                  + 'tempo_estimado_min,acao_terminal'
                   + '&os_id=eq.' + c.os_id + '&ativo=eq.SIM&order=camada,fase_ordem,ordem');
   }catch(e){ document.getElementById('dBody').innerHTML = '<p style="color:var(--crit);font-size:13px"></p>';
              document.getElementById('dBody').querySelector('p').textContent = e.message; return; }
@@ -1909,6 +1910,27 @@ function pintarDrawer(){
     el.querySelector('small').textContent =
       t.status + (t.perfis_responsaveis && t.perfis_responsaveis.length
         ? ' · ' + t.perfis_responsaveis.join(', ') : '');
+    // ── ITEM 9 (S27): DESFAZER UMA CONCLUSÃO FEITA POR ENGANO ───────────
+    // Até o S26 a tarefa concluída aparecia só com o "✓" e não havia nada a
+    // clicar — nem para admin. O Bruno concluiu "Anexar pedido de compra" por
+    // engano e não houve como voltar.
+    //
+    // O botão só existe onde o banco vai aceitar: admin, tarefa que NÃO fecha
+    // fase nem OS, e que não é decisão. Oferecer onde `tf_reabrir_tarefa`
+    // recusaria seria a tela prometendo o que o servidor nega — o defeito que
+    // este projeto persegue desde o parecer do TapControl.
+    if (resolvida && !DEMO && sessao.admin
+        && !(t.acao_terminal || '') && t.tipo !== 'decisao'){
+      const d = document.createElement('div');
+      d.className = 'tkDes';
+      d.innerHTML = '<span class="nota">concluída por engano?</span>'
+        + '<button class="btn mini" type="button">reabrir</button>';
+      d.querySelector('button').addEventListener('click', ev => {
+        ev.stopPropagation(); modalReabrir(card, t);
+      });
+      el.appendChild(d);
+    }
+
     // Designação: só faz sentido no que ainda não foi resolvido, e só para o
     // escritório. Quem já está resolvido não vai para a agenda de ninguém.
     if (!resolvida && !DEMO && podeVer('os')){
@@ -2197,9 +2219,56 @@ function pintarAcoes_(){
   const bc = document.createElement('button');
   bc.className = 'btn' + (t.status === 'em_andamento' ? ' pri' : '');
   bc.textContent = 'Concluir';
-  bc.addEventListener('click', () => agir('concluir', t));
+  // ── ITEM 9, SEGUNDA FRENTE (S27): CONFIRMAR ONDE NÃO SE PODE VOLTAR ──────
+  // A tarefa que fecha a fase ou a OS é justamente a que NÃO ganha o botão
+  // "reabrir" — desfazê-la é devolver o que ela fechou, e isso continua sendo
+  // feito no banco. Então o cuidado vem antes: um clique a mais onde o erro
+  // custa caro, e nenhum onde não custa.
+  const fecha = t.acao_terminal || '';
+  bc.addEventListener('click', () => {
+    if (!fecha) return agir('concluir', t);
+    abrirModal('Confirmar conclusão',
+        '<p>Confirma que <b>' + esc(t.nome) + '</b> foi realmente feito?</p>'
+      + '<div class="aviso">Concluir esta tarefa <b>'
+      + (fecha === 'fechar_os' ? 'encerra a OS inteira' : 'fecha a fase') + '</b>. '
+      + 'Ela não pode ser reaberta pela tela depois — se for engano, a correção passa pelo Fernando.</div>',
+      [{ label:'Cancelar', onClick: () => fecharModal() },
+       { label:'Sim, foi feito', pri:true, onClick: async () => {
+           fecharModal(); await agir('concluir', t); }}]);
+  });
   row.appendChild(bc);
-  hint.textContent = 'Concluir esta tarefa move o card — a próxima coluna é consequência, não escolha.';
+  hint.textContent = fecha
+    ? 'Esta tarefa ' + (fecha === 'fechar_os' ? 'encerra a OS' : 'fecha a fase')
+      + ' — o TapFlow pede confirmação antes.'
+    : 'Concluir esta tarefa move o card — a próxima coluna é consequência, não escolha.';
+}
+
+/** ITEM 9 · o formulário do desfazer. O motivo é OBRIGATÓRIO e vai para o
+ *  histórico da OS: reabertura sem motivo é o mesmo buraco que a aprovação
+ *  sem evidência tinha até o S18 — o card anda e ninguém sabe por quê. */
+function modalReabrir(card, t){
+  abrirModal('Reabrir "' + t.nome + '"',
+      '<div class="aviso">Isto devolve a tarefa para <b>pendente</b>. O que já foi feito '
+    + 'por causa dela não é desfeito — só a tarefa volta a pedir conclusão.</div>'
+    + '<div class="campo"><label for="rbMot">Por que está reabrindo?</label>'
+    + '<textarea id="rbMot" rows="3" placeholder="ex.: marquei como concluída sem ter anexado o pedido"></textarea>'
+    + '<div class="dica">Fica registrado no histórico, com o seu nome e a hora.</div></div>'
+    + '<div class="dica" id="rbMsg" style="color:var(--crit)"></div>',
+    [{ label:'Cancelar', onClick: () => fecharModal() },
+     { label:'Reabrir', pri:true, onClick: async () => {
+        const mot = (document.getElementById('rbMot').value || '').trim();
+        const msg = document.getElementById('rbMsg');
+        if (mot.length < 5){ msg.textContent = 'Escreva o motivo — ele fica no histórico.'; return; }
+        try{
+          await rpc('tf_reabrir_tarefa',
+                    { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id, p_motivo: mot });
+          fecharModal();
+          toast('"' + t.nome + '" foi reaberta.', 'ok');
+          await carregar({silencioso:true});
+          const novo = cards.find(x => x.os_id === card.os_id) || card;
+          await abrirOS(novo);
+        }catch(e){ msg.textContent = e.message; }
+     }}]);
 }
 
 async function agir(acao, t, valor){
@@ -2264,9 +2333,15 @@ let DEMO_DB = null;
 let DEMO_MODELOS = null;
 
 function demoSeed(){
-  const T = (id,nome,tipo,fase,fo,ord,status,perfis,opcoes) =>
+  // ⚠ `quadros` passou a ser DECLARADO por tarefa (S27), e não mais derivado
+  //    da fase: desde o item 1 e o item 2 do documento de 12/09 a mesma fase
+  //    aparece em dois quadros — "Engenharia e Laudos" no campo e no tecadm,
+  //    "Faturamento e Expedição" no tecadm e no adm. Demo que deriva da fase
+  //    desenharia o quadro do S26 com o comportamento do S27.
+  const T = (id,nome,tipo,fase,fo,ord,status,perfis,opcoes,quadros) =>
     ({ tarefa_id:id, nome, tipo, fase, fase_ordem:fo, ordem:ord, status,
-       perfis_responsaveis:perfis||[], opcoes:opcoes||[], lock_por:null });
+       perfis_responsaveis:perfis||[], opcoes:opcoes||[], lock_por:null,
+       acao_terminal:'', quadros: quadros || null });
 
   const modelo = () => [
     T('T01','Aceitar OS e deslocar','manual','Aberta',10,1,'pendente',['inspetor','auxiliar']),
@@ -2294,27 +2369,29 @@ function demoSeed(){
   // mostra o que já funcionava é demo que aprova a tela errada.
   const modeloInsp = () => [
     T('D01','Esta OS inclui compra de peça ou material?','decisao','Administrativo inicial',10,1,'pendente',['tecnico_adm','comercial','admin'],
-      [{valor:'sim',label:'Sim, tem pedido de compra'},{valor:'nao',label:'Não'}]),
-    T('D02','Inclui confecção de placa de identificação?','decisao','Administrativo inicial',10,2,'pendente',['tecnico_adm','comercial','admin'],
-      [{valor:'sim',label:'Sim, inclui placa'},{valor:'nao',label:'Não'}]),
-    T('T01','Anexar pedido de compra','manual','Administrativo inicial',10,3,'condicional',['compras','tecnico_adm']),
-    T('T02','Lançar na planilha de controle','manual','Administrativo inicial',10,4,'bloqueado',['admin','tecnico_adm']),
-    T('T03','Agendar serviço (data e hora)','manual','Agendamento',20,1,'bloqueado',['comercial','tecnico_adm']),
-    T('T04','Emitir ART','manual','Documentação pré-inspeção',30,1,'bloqueado',['tecnico_adm']),
-    T('T05','Lançar no TapDoc','manual','Documentação pré-inspeção',30,2,'bloqueado',['tecnico_adm']),
-    T('T06','Executar a inspeção','manual','Inspeção em campo',40,1,'bloqueado',['inspetor','auxiliar']),
-    T('T07','Extrair e tratar o CSV','manual','Processamento e revisão',50,1,'bloqueado',['tecnico_adm']),
-    T('T08','Gerar documentações no TapDoc Web','manual','Processamento e revisão',50,2,'bloqueado',['tecnico_adm']),
-    T('T09','Revisão I','manual','Processamento e revisão',50,3,'bloqueado',['tecnico_adm']),
-    T('T10','Revisão II','manual','Processamento e revisão',50,4,'bloqueado',['tecnico_adm','admin']),
-    T('T11','Fazer o mapa de medições de espessura','manual','Processamento e revisão',50,5,'bloqueado',['tecnico_adm']),
-    T('T12','Assinar digitalmente','manual','Processamento e revisão',50,6,'bloqueado',['admin']),
-    T('T13','Adicionar/atualizar no TapWeb','manual','Processamento e revisão',50,7,'bloqueado',['tecnico_adm']),
-    T('T14','Impressão e atualização dos documentos físicos','manual','Processamento e revisão',50,8,'bloqueado',['admin','tecnico_adm']),
-    T('T15','Gerar e confeccionar as placas','manual','Encerramento',60,1,'condicional',['admin','tecnico_adm']),
-    T('T16','Emitir boleto / nota fiscal','manual','Encerramento',60,2,'bloqueado',['admin']),
-    T('T17','Entregar/despachar a documentação','manual','Encerramento',60,3,'bloqueado',['inspetor','auxiliar']),
-    T('T18','Avisar o comercial da finalização','manual','Encerramento',60,4,'bloqueado',['comercial','admin'])
+      [{valor:'sim',label:'Sim, tem pedido de compra'},{valor:'nao',label:'Não'}],['adm']),
+    // D02 ("inclui placa?") saiu no S27: a placa nova leva QR Code da pasta
+    // virtual, então a Engetap SEMPRE troca a placa — a pergunta nunca mudava
+    // de resposta e só custava um clique.
+    T('T01','Anexar pedido de compra','manual','Administrativo inicial',10,3,'condicional',['compras','tecnico_adm'],null,['adm']),
+    T('T02','Lançar na planilha de controle','manual','Administrativo inicial',10,4,'bloqueado',['admin','tecnico_adm'],null,['adm']),
+    T('T03','Agendar serviço (data e hora)','manual','Agendamento',20,1,'bloqueado',['comercial','tecnico_adm','inspetor'],null,['campo']),
+    T('T04','Emitir ART','manual','Documentação pré-inspeção',30,1,'bloqueado',['tecnico_adm'],null,['adm']),
+    T('T05','Lançar no TapDoc','manual','Documentação pré-inspeção',30,2,'bloqueado',['tecnico_adm'],null,['adm']),
+    T('T06','Executar a inspeção','manual','Inspeção em campo',40,1,'bloqueado',['inspetor','auxiliar'],null,['campo']),
+    T('T07','Extrair e tratar o CSV','manual','Processamento e revisão',50,1,'bloqueado',['inspetor','auxiliar'],null,['campo']),
+    T('T08','Gerar documentações no TapDoc Web','manual','Processamento e revisão',50,2,'bloqueado',['inspetor','auxiliar'],null,['campo']),
+    T('T09','Revisão I','manual','Processamento e revisão',50,3,'bloqueado',['inspetor','auxiliar'],null,['campo']),
+    T('T10','Revisão II','manual','Processamento e revisão',50,4,'bloqueado',['tecnico_adm','admin'],null,['tecadm']),
+    T('T11','Fazer o mapa de medições de espessura','manual','Processamento e revisão',50,5,'bloqueado',['inspetor','auxiliar'],null,['campo']),
+    T('T12','Assinar digitalmente','manual','Processamento e revisão',50,6,'bloqueado',['admin'],null,['tecadm']),
+    T('T13','Adicionar/atualizar no TapWeb','manual','Processamento e revisão',50,7,'bloqueado',['tecnico_adm'],null,['tecadm']),
+    T('T14','Impressão e atualização dos documentos físicos','manual','Processamento e revisão',50,8,'bloqueado',['admin','tecnico_adm'],null,['tecadm']),
+    T('T15','Gerar Placas','manual','Encerramento',60,1,'bloqueado',['tecnico_adm'],null,['tecadm']),
+    T('T15B','Confeccionar Placas','manual','Encerramento',60,2,'bloqueado',['admin'],null,['adm']),
+    T('T16','Emitir boleto / nota fiscal','manual','Encerramento',60,3,'bloqueado',['admin'],null,['adm']),
+    T('T17','Entregar/despachar a documentação','manual','Encerramento',60,4,'bloqueado',['inspetor','auxiliar'],null,['adm']),
+    T('T18','Avisar o comercial da finalização','manual','Encerramento',60,5,'bloqueado',['comercial','admin'],null,['adm'])
   ];
 
   DEMO_MODELOS = { forn: modelo, insp: modeloInsp };
@@ -2389,9 +2466,11 @@ const QUADRO_DEMO = {
    templates: sem olhar o template, o encerramento do fornecimento cairia na
    Administrativa. Desde o S25 (47_quadro_fornecimento.sql) o fornecimento
    inteiro vai para o quadro próprio. */
-function quadrosDemo(tpl, fase, perfis){
+function quadrosDemo(tpl, fase, perfis, quadros){
   if (tpl === 'ACESSORIOS_NR13') return ['fornecimento'];
-  return QUADRO_DEMO[fase] || derivarQuadroDemo(perfis);
+  // ⚠ O declarado vem PRIMEIRO (S27): desde o item 1 e o item 2 a mesma fase
+  //   mora em dois quadros, e o mapa por fase não sabe distinguir as tarefas.
+  return quadros || QUADRO_DEMO[fase] || derivarQuadroDemo(perfis);
 }
 
 function demoCards(){
@@ -2416,7 +2495,7 @@ function demoCards(){
       // ⚠ A demonstração TEM que trazer `quadros`, senão ela desenha o app do
       // S21 com o comportamento do S20 e o quarto quadro nasce vazio na demo.
       quadros: quadrosDemo(meta.insp ? 'INSPECAO_NR13' : 'ACESSORIOS_NR13',
-                           atual.fase, atual.perfis_responsaveis),
+                           atual.fase, atual.perfis_responsaveis, atual.quadros),
       tarefa_atual_id: atual.tarefa_id, tarefa_atual: atual.nome,
       tarefa_atual_tipo: atual.tipo, tarefa_atual_status: atual.status,
       tarefa_atual_perfis: atual.perfis_responsaveis, tarefa_atual_lock: atual.lock_por,
@@ -2853,7 +2932,7 @@ async function pintarItens(){
   try{
     itens = DEMO ? demoItens(card.os_id)
       : await get('os_itens?select=id,descricao,tipo_acessorio,quantidade,elegivel,fornecedor,'
-        + 'custo_unitario,preco_unitario,total_custo,total_venda,margem_valor,aprovado,'
+        + 'custo_unitario,preco_unitario,desconto_pct,total_custo,total_venda,margem_valor,aprovado,'
         + 'requer_calibracao,recebido_em,certificado_num,calibrado_em,'
         + 'requer_lacre,lacre_num,origem,e_servico'
         + '&os_id=eq.' + card.os_id + '&order=created_at');
@@ -2883,9 +2962,20 @@ async function pintarItens(){
   // Perfil de campo VÊ a aba inteira, mas não grava: o RLS de `os_itens` é do
   // escritório, e a tela não oferece o que ele recusaria (S26, item 5).
   const soLeitura = !podeEscritorio();
+  // ── ITEM 4 (S27): O DESCONTO PASSA A TER ONDE SER DIGITADO ──────────────
+  // `os_itens.desconto_pct` existe desde o 01_schema, e `total_venda` já é
+  // calculado com ele pelo banco — mas nenhuma tela oferecia o campo. Na
+  // prática o desconto virava preço unitário baixado na marra, com o valor
+  // negociado ocupando o lugar do preço de tabela: depois não havia como
+  // saber quanto se deu de desconto, nem em qual item.
+  //
+  // O "desconto geral" NÃO é um valor guardado à parte: é um atalho que
+  // preenche o percentual de todos os itens de uma vez. O campo por item
+  // continua sendo a fonte única — duas fontes de verdade para a mesma conta
+  // é como as duas discordam no fim do mês.
   body.innerHTML = '<div style="overflow-x:auto"><table class="tbl"><thead><tr>'
     + '<th>Item</th><th>Qtd</th><th>De onde vem</th><th>Fornecedor</th>'
-    + '<th>Custo un.</th><th>Preço un.</th><th>Margem</th>'
+    + '<th>Custo un.</th><th>Preço un.</th><th>Desc. %</th><th>Margem</th>'
     + '</tr></thead><tbody></tbody></table></div>';
   const tb = body.querySelector('tbody');
 
@@ -2920,7 +3010,7 @@ async function pintarItens(){
       try{
         osAberta.tarefas = await get('pipeline_tarefas?select=tarefa_id,nome,tipo,fase,'
           + 'fase_ordem,ordem,status,opcoes,perfis_responsaveis,lock_por,executor,'
-          + 'usuario_designado,data_prevista,tempo_estimado_min'
+          + 'usuario_designado,data_prevista,tempo_estimado_min,acao_terminal'
           + '&os_id=eq.' + card.os_id + '&ativo=eq.SIM&order=camada,fase_ordem,ordem');
       }catch(e){}
     }
@@ -2937,6 +3027,7 @@ async function pintarItens(){
       + '<td><input class="f" type="text" placeholder="—"></td>'
       + '<td><input class="c" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0,00"></td>'
       + '<td><input class="p" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0,00"></td>'
+      + '<td><input class="dsc" style="width:62px;text-align:right" type="number" step="0.01" min="0" max="100" inputmode="decimal" placeholder="0"></td>'
       + '<td class="num m"></td>';
     tr.querySelector('.d').textContent = it.descricao;
     tr.querySelector('.q').textContent = Number(it.quantidade);
@@ -2949,10 +3040,12 @@ async function pintarItens(){
     fi.value = it.fornecedor || '';
     ci.value = it.custo_unitario != null ? it.custo_unitario : '';
     pi.value = it.preco_unitario != null ? it.preco_unitario : '';
+    const di = tr.querySelector('.dsc');
+    di.value = Number(it.desconto_pct) ? it.desconto_pct : '';
     if (it.elegivel && !(Number(it.custo_unitario) > 0)) ci.classList.add('falta');
     if (it.elegivel && !(Number(it.preco_unitario) > 0)) pi.classList.add('falta');
     tr.querySelector('.m').textContent = it.margem_valor != null ? BRL(it.margem_valor) : '—';
-    if (!it.elegivel || soLeitura){ [oi,fi,ci,pi].forEach(x => x.disabled = true); }
+    if (!it.elegivel || soLeitura){ [oi,fi,ci,pi,di].forEach(x => x.disabled = true); }
 
     const grava = (campo, el, numerico) => el.addEventListener('change', async () => {
       const bruto = el.value.trim();
@@ -2970,6 +3063,18 @@ async function pintarItens(){
     grava('fornecedor', fi, false);
     grava('custo_unitario', ci, true);
     grava('preco_unitario', pi, true);
+    // vazio = 0: o banco tem `not null default 0` com check de 0 a 100, e
+    // mandar null daria erro de constraint na cara de quem apagou o campo
+    di.addEventListener('change', async () => {
+      const v = di.value.trim() === '' ? 0 : Number(di.value);
+      if (!(v >= 0 && v <= 100)){ toast('O desconto vai de 0 a 100%.','err'); return; }
+      di.disabled = true;
+      try{
+        if (DEMO) demoGravarItem(card.os_id, it.id, 'desconto_pct', v);
+        else await patch('os_itens', 'id=eq.' + it.id, { desconto_pct: v });
+        await refrescar(); pintarItens();
+      }catch(e){ toast(e.message,'err'); di.disabled = false; }
+    });
     tb.appendChild(tr);
   });
 
@@ -2985,6 +3090,41 @@ async function pintarItens(){
   t.querySelectorAll('.v')[1].textContent = BRL(somaV);
   t.querySelectorAll('.v')[2].textContent = BRL(somaM) + (somaV>0 ? '  ·  ' + Math.round(somaM/somaV*100) + '%' : '');
   body.appendChild(t);
+
+  // ── ITEM 4 · o desconto geral, que é o caso comum ───────────────────────
+  // "3% pedidos, 3% concedidos" é um número só, sobre tudo. Digitá-lo item a
+  // item é onde se esquece uma linha e o total sai errado. O ajuste fino
+  // continua existindo: depois de aplicado, cada item ainda se edita.
+  if (el.length && !soLeitura){
+    const dg = document.createElement('div');
+    dg.style.cssText = 'display:flex;gap:8px;align-items:flex-end;margin-top:14px;flex-wrap:wrap';
+    dg.innerHTML = '<div class="campo" style="margin:0;flex:1 1 130px">'
+      + '<label for="dgPct">Desconto geral (%)</label>'
+      + '<input id="dgPct" type="number" step="0.01" min="0" max="100" inputmode="decimal" placeholder="ex.: 3"></div>'
+      + '<button class="btn" type="button" id="dgOk">Aplicar em todos os itens</button>';
+    body.appendChild(dg);
+    const nota = document.createElement('p');
+    nota.className = 'nota';
+    nota.style.marginTop = '6px';
+    nota.textContent = 'Preenche o percentual de todos os ' + el.length
+      + ' item(ns) de uma vez. Depois dá para ajustar um item específico na coluna "Desc. %".';
+    body.appendChild(nota);
+    document.getElementById('dgOk').addEventListener('click', function(){
+      _semDuploEnvio_(this, async () => {
+        const v = Number(document.getElementById('dgPct').value);
+        if (!(v >= 0 && v <= 100)){ toast('O desconto vai de 0 a 100%.','err'); return; }
+        try{
+          for (const i of el){
+            if (DEMO) demoGravarItem(card.os_id, i.id, 'desconto_pct', v);
+            else await patch('os_itens', 'id=eq.' + i.id, { desconto_pct: v });
+          }
+          await refrescar();
+          toast(v ? v + '% aplicado em ' + el.length + ' item(ns).' : 'Desconto zerado.', 'ok');
+          pintarItens();
+        }catch(e){ toast(e.message,'err'); }
+      });
+    });
+  }
 
   // Atalho do caso comum: numa OS de fornecimento a maioria das peças é para
   // comprar. Responder quatro selects um a um para depois cotar é atrito que a
@@ -3397,9 +3537,36 @@ const ROTULO_CHAVE = {
 const CHAVES_NA_TELA = ['Cliente','CNPJ_Cliente','Endereço_Cliente','Nº_Cliente',
   'Bairro_Cliente','Cidade','CEP_Cliente','Contato','Telefone_do_Contato','Autor'];
 
-async function montarGerador(caixa){
+async function montarGerador(caixa, props){
   const { card } = osAberta;
   const est = { modelo:null, valores:null, itens:[], fonte:'os', total:0, tirarLogo:true, logos:0 };
+
+  // ── ITEM 3 (S27): GERAR DE NOVO É REVISÃO, E A TELA DIZ ISSO ANTES ───────
+  // Até o S26 cada clique em "Gerar" emitia um número NOVO: a OS-26025 saía
+  // com as propostas 26025 e 26026, as duas em v1, e o cliente recebia dois
+  // números para o mesmo trabalho. Agora repetir é versão — e o que muda
+  // depende de a proposta já ter saído ou não:
+  //   · nunca gerada            → nasce a v1
+  //   · gerada e NÃO enviada    → o TapFlow corrige a mesma versão no lugar
+  //   · já enviada ao cliente   → nasce a v2, e a anterior fica vencida
+  //   · já aprovada             → o banco recusa (e diz o que fazer)
+  // A tela avisa qual dos quatro é ANTES do clique: descobrir depois, pelo
+  // número impresso no .docx, é tarde.
+  const viva = (props || []).filter(x => x.status !== 'vencida' && x.status !== 'reprovada')
+                            .sort((a,b) => (b.versao||0) - (a.versao||0))[0] || null;
+  const aviso = !viva
+    ? ''
+    : (viva.status === 'aprovada' || viva.status === 'aprovada_parcial')
+      ? '<div class="aviso">A proposta <b>' + esc(viva.numero) + ' v' + viva.versao
+        + '</b> já foi <b>aprovada</b> pelo cliente. Gerar por cima dela é recusado — '
+        + 'marque a caixa abaixo se isto é outra proposta, de outro escopo.</div>'
+      : viva.enviada_em
+        ? '<div class="aviso">Esta OS já tem a proposta <b>' + esc(viva.numero) + ' v' + viva.versao
+          + '</b>, <b>já enviada</b> ao cliente. Gerar agora cria a <b>v' + (viva.versao + 1)
+          + '</b> do mesmo número, e a anterior fica marcada como vencida.</div>'
+        : '<div class="aviso">Esta OS já tem a proposta <b>' + esc(viva.numero) + ' v' + viva.versao
+          + '</b>, que <b>ainda não foi enviada</b>. Gerar agora <b>corrige esta mesma versão</b> '
+          + 'no lugar — não cria número nem versão nova.</div>';
 
   caixa.innerHTML =
     '<h3 style="font-size:15px;margin:0 0 4px">Gerar proposta</h3>' +
@@ -3413,6 +3580,13 @@ async function montarGerador(caixa){
     '<div id="gVals"></div>' +
     '<div id="gTab"></div>' +
     '<div id="gLogo"></div>' +
+    aviso +
+    (viva
+      ? '<label class="chk" style="margin:0 0 10px"><input type="checkbox" id="gNovo"> '
+        + '<span>É <b>outra</b> proposta, com número próprio</span></label>'
+        + '<div class="dica" style="margin:-6px 0 12px">Marque só quando for outro escopo — '
+        + 'não para corrigir a que já existe. O caso comum é deixar desmarcado.</div>'
+      : '') +
     '<button class="btn pri" id="gOk" style="width:100%;padding:11px">Gerar e baixar o .docx</button>' +
     '<div class="dica" id="gMsg" style="margin-top:8px"></div>';
 
@@ -3591,8 +3765,10 @@ async function montarGerador(caixa){
       // ⚠ com o `p_os_id`: quando a OS já tem referência (o caso do
       //   fornecimento, em que a OS nasce antes), a proposta REAPROVEITA o
       //   número dela em vez de puxar outro. Um trabalho, um número.
+      const forcarNovo = !!(document.getElementById('gNovo')
+                            && document.getElementById('gNovo').checked);
       numero = DEMO ? '26099' : await rpc('tf_reservar_numero_proposta',
-                                          { p_os_id: card.os_id });
+                                          { p_os_id: card.os_id, p_forcar_novo: forcarNovo });
       est.valores['Nº_da_Proposta'] = numero;
 
       msg.textContent = 'Baixando o modelo…';
@@ -3612,7 +3788,8 @@ async function montarGerador(caixa){
       baixarBlob(blob, nome);
 
       msg.textContent = 'Registrando na OS…';
-      if (!DEMO) await rpc('tf_registrar_documento_gerado', {
+      let reg = null;
+      if (!DEMO) reg = await rpc('tf_registrar_documento_gerado', {
         p_os_id: card.os_id, p_modelo_id: est.modelo.id, p_numero: numero,
         p_valores: est.valores, p_itens: usaOS ? est.itens : null,
         p_valor_total: usaOS ? est.total : null,
@@ -3625,15 +3802,29 @@ async function montarGerador(caixa){
       const novo = cards.find(x => x.os_id === card.os_id);
       if (novo) osAberta.card = novo;
 
-      _msgGerador = { cor:'var(--ok)', texto: numero + ' gerada e baixada.'
+      // o que o banco DE FATO fez: nasceu, corrigiu ou versionou. Dizer
+      // "gerada" nos três casos é como alguém descobre, semanas depois, que
+      // a v1 que mandou para o cliente foi sobrescrita.
+      const rot = (reg && reg.rotulo) || numero;
+      const oque = !reg ? 'gerada e baixada.'
+        : reg.caso === 'corrigida'  ? 'corrigida no lugar e baixada — a versão não mudou, porque ela ainda não tinha sido enviada.'
+        : reg.caso === 'versao_nova'? 'gerada e baixada — versão nova; a anterior ficou marcada como vencida.'
+        : 'gerada e baixada.';
+      _msgGerador = { cor:'var(--ok)', texto: rot + ' ' + oque
         + (logosTiradas ? ' Logomarca do cliente anterior removida do cabeçalho.' : '')
         + (faltaram.length ? ' ⚠ Ficaram sem valor no papel: ' + faltaram.join(', ') + '.' : '')
         + (novo && novo.coluna !== antes ? ' O card foi para "' + rotuloCol(novo) + '".' : '') };
-      toast('Proposta ' + numero + ' gerada.', 'ok');
+      toast('Proposta ' + rot + ' ' + ((reg && reg.caso === 'corrigida') ? 'corrigida.' : 'gerada.'), 'ok');
       pintarProposta();
     }catch(e){
       msg.style.color = 'var(--crit)';
-      msg.textContent = e.message + (numero ? ' (o número ' + numero + ' foi queimado — não é problema.)' : '');
+      // ⚠ Desde o S27 o número reservado costuma ser o que a OS JÁ usa — nesse
+      //   caso nada foi queimado, e dizer que foi assusta à toa. Só o número
+      //   realmente novo (primeira proposta, ou "outra proposta") some.
+      const novoNum = !viva || (document.getElementById('gNovo')
+                                && document.getElementById('gNovo').checked);
+      msg.textContent = e.message
+        + (numero && novoNum ? ' (o número ' + numero + ' foi queimado — não é problema.)' : '');
       b.disabled = false;
     }
   });
@@ -3992,7 +4183,7 @@ async function pintarProposta(){
   g.style.cssText = 'border:1px solid var(--rule);border-radius:6px;padding:15px;margin-bottom:20px';
   g.innerHTML = '<p class="dica" style="margin:0">Carregando os modelos…</p>';
   body.appendChild(g);
-  montarGerador(g).catch(e => { g.innerHTML = '<p class="dica"></p>';
+  montarGerador(g, props).catch(e => { g.innerHTML = '<p class="dica"></p>';
     g.querySelector('p').textContent = 'Gerador indisponível: ' + e.message; });
 
   const f = document.createElement('div');
@@ -5563,15 +5754,40 @@ async function montarProposta(n){
     + '<div class="secTit">Acrescentar uma linha</div>'
     + '<div class="dupla"><div class="campo"><label for="npDesc">Descrição</label>'
     + '<input id="npDesc" type="text" placeholder="Ex.: Emissão de ART" autocomplete="off" name="npd_nofill"></div>'
+    // ── ITEM 5 (S27): QUANTIDADE É NÚMERO INTEIRO ─────────────────────────
+    // Este campo estava `step="0.01" inputmode="decimal"`, copiado dos campos
+    // de valor em reais ao lado — e aceitava 1,11. No processo isso não
+    // existe: não se inspeciona meio vaso nem se emite 0,1 ART. O padrão certo
+    // já estava no app de Campo (`#fQ`): step 1, mínimo 1, teclado numérico.
+    // A trava do banco (`ck_ositens_qtd_inteira`) fecha os outros caminhos.
     + '<div class="campo"><label for="npQtd">Qtd.</label>'
-    + '<input id="npQtd" type="number" step="0.01" inputmode="decimal" value="1"></div></div>'
+    + '<input id="npQtd" type="number" step="1" min="1" inputmode="numeric" value="1"></div></div>'
     + '<button class="btn" id="npAddLinha" style="width:100%;margin-bottom:16px">Acrescentar linha</button>'
     + '<div class="secTit">A proposta</div><div id="npLista"></div>'
+    // ── ITEM 4 (S27) ────────────────────────────────────────────────────────
+    // `proposta_itens.desconto_pct` já existia e `tf_criar_proposta_negocio`
+    // já o recebia no JSON dos itens — faltava só onde digitar. O geral é um
+    // atalho de tela: ele preenche o percentual de cada item, e é o item que
+    // vale. Assim o desconto fica registrado como desconto, e não escondido
+    // dentro de um preço unitário baixado na marra.
+    + '<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin:4px 0 14px">'
+    +   '<div class="campo" style="margin:0;flex:1 1 130px"><label for="npDescG">Desconto geral (%)</label>'
+    +   '<input id="npDescG" type="number" step="0.01" min="0" max="100" inputmode="decimal" placeholder="ex.: 3"></div>'
+    +   '<button class="btn" type="button" id="npDescOk">Aplicar em todos</button></div>'
+    + '<div class="dica" style="margin:-10px 0 14px">Aplica em todas as linhas de uma vez. '
+    +   'Depois dá para mudar o percentual de uma linha específica na coluna "Desc. %".</div>'
     + '<div class="dupla"><div class="campo"><label for="npNum">Número da proposta</label>'
     + '<input id="npNum" type="text" placeholder="deixe vazio para o TapFlow numerar" '
     + 'autocomplete="off" name="npn_nofill">'
-    + '<div class="dica">Vazio, sai o próximo do ano. Repetindo um número já '
-    + 'usado neste negócio, entra como <b>revisão</b> — e o card não troca de número.</div></div>'
+    // ── ITEM 3 (S27): O QUE "VAZIO" PASSOU A SIGNIFICAR ────────────────────
+    // Era "sai o próximo do ano" — e era por aí que o defeito do print
+    // entrava: a segunda proposta do mesmo negócio saía como 26028 ao lado da
+    // 26027, as duas em v1, e o card somava as duas. Agora vazio quer dizer
+    // "revise a que já existe"; o contador só é consultado quando o negócio
+    // ainda não tem proposta nenhuma.
+    + '<div class="dica">Vazio: <b>revisa a proposta que este negócio já tem</b> '
+    + '(ou puxa o próximo número do ano, se ainda não houver nenhuma). '
+    + 'Digite um número novo só quando for <b>outra</b> proposta, de outro escopo.</div></div>'
     + '<div class="campo"><label for="npVal">Validade</label><input id="npVal" type="date"></div></div>'
     + '<button class="btn pri" id="npGravar" style="width:100%">Registrar proposta</button>';
 
@@ -5584,7 +5800,7 @@ async function montarProposta(n){
       _propItens.push({ equipamento_id: c.dataset.eq,
         descricao: 'Inspeção NR-13 — ' + c.dataset.tag
                    + (c.dataset.tipo ? ' (' + c.dataset.tipo + ')' : ''),
-        quantidade: 1, preco_unitario: null, e_servico: false });
+        quantidade: 1, preco_unitario: null, desconto_pct: 0, e_servico: false });
       c.checked = false;
     });
     pintarItensProposta();
@@ -5593,12 +5809,22 @@ async function montarProposta(n){
   document.getElementById('npAddLinha').addEventListener('click', () => {
     const d = document.getElementById('npDesc').value.trim();
     if (!d){ toast('Escreva a descrição da linha.','err'); return; }
+    const q = Math.trunc(Number(document.getElementById('npQtd').value));
+    if (!(q >= 1)){ toast('A quantidade é um número inteiro, a partir de 1.','err'); return; }
     _propItens.push({ equipamento_id: null, descricao: d,
-      quantidade: parseFloat(document.getElementById('npQtd').value) || 1,
-      preco_unitario: null, e_servico: true });
+      quantidade: q, preco_unitario: null, desconto_pct: 0, e_servico: true });
     document.getElementById('npDesc').value = '';
     document.getElementById('npQtd').value = '1';
     pintarItensProposta();
+  });
+
+  document.getElementById('npDescOk').addEventListener('click', () => {
+    const v = Number(document.getElementById('npDescG').value);
+    if (!(v >= 0 && v <= 100)){ toast('O desconto vai de 0 a 100%.','err'); return; }
+    if (!_propItens.length){ toast('Acrescente as linhas primeiro.','err'); return; }
+    _propItens.forEach(i => { i.desconto_pct = v; });
+    pintarItensProposta();
+    toast(v ? v + '% aplicado em ' + _propItens.length + ' linha(s).' : 'Desconto zerado.','ok');
   });
 
   document.getElementById('npGravar').addEventListener('click', function(){
@@ -5615,7 +5841,10 @@ async function montarProposta(n){
         const r = await rpc('tf_criar_proposta_negocio', { p_negocio_id: n.id,
           p_numero: num || null, p_itens: _propItens,
           p_validade: document.getElementById('npVal').value || null });
-        toast('Proposta ' + (r.rotulo || r.numero) + ' registrada — '
+        toast('Proposta ' + (r.rotulo || r.numero) + ' '
+              + (r.caso === 'corrigida' ? 'corrigida no lugar — '
+               : r.caso === 'versao_nova' ? 'registrada como versão nova — '
+               : 'registrada — ')
               + BRL(r.valor_total) + '.','ok');
         _propItens = [];
         negPropostas(n, document.getElementById('dBody'));
@@ -5626,6 +5855,13 @@ async function montarProposta(n){
   pintarItensProposta();
 }
 
+/** O total de uma linha, com desconto — espelho de `proposta_itens.total`
+ *  (`preco * qtd * (1 - desconto/100)`, arredondado em 2 casas). */
+function totalItem(i){
+  const bruto = (Number(i.preco_unitario)||0) * (Number(i.quantidade)||0);
+  return Math.round(bruto * (1 - (Number(i.desconto_pct)||0)/100) * 100) / 100;
+}
+
 function pintarItensProposta(){
   const el = document.getElementById('npLista');
   if (!el) return;
@@ -5633,10 +5869,15 @@ function pintarItensProposta(){
     el.innerHTML = '<p class="nota">Nada ainda. Marque equipamentos ou acrescente uma linha.</p>';
     return;
   }
-  const total = _propItens.reduce((s,i) =>
+  // o mesmo cálculo que `proposta_itens.total` faz no banco — se as duas
+  // contas divergirem, a tela mente sobre o que vai ser gravado
+  const bruto = _propItens.reduce((s,i) =>
     s + (Number(i.preco_unitario)||0) * (Number(i.quantidade)||0), 0);
+  const total = _propItens.reduce((s,i) => s + totalItem(i), 0);
+  const descontado = bruto - total;
   el.innerHTML = '<div style="overflow-x:auto"><table class="tbl"><thead><tr>'
-    + '<th>Item</th><th>Qtd.</th><th class="num">Preço unit.</th><th class="num">Total</th><th></th>'
+    + '<th>Item</th><th>Qtd.</th><th class="num">Preço unit.</th><th class="num">Desc. %</th>'
+    + '<th class="num">Total</th><th></th>'
     + '</tr></thead><tbody>'
     + _propItens.map((i, k) => '<tr>'
         + '<td>' + esc(i.descricao) + (i.equipamento_id ? '' : ' <span class="mini">digitado</span>') + '</td>'
@@ -5644,14 +5885,26 @@ function pintarItensProposta(){
         + '<td class="num"><input class="mini" style="width:96px;text-align:right" type="number"'
         +   ' step="0.01" inputmode="decimal" data-preco="' + k + '" value="'
         +   (i.preco_unitario == null ? '' : i.preco_unitario) + '"></td>'
-        + '<td class="num">' + BRL((Number(i.preco_unitario)||0) * (Number(i.quantidade)||0)) + '</td>'
+        + '<td class="num"><input class="mini" style="width:66px;text-align:right" type="number"'
+        +   ' step="0.01" min="0" max="100" inputmode="decimal" data-desc="' + k + '" value="'
+        +   (Number(i.desconto_pct) ? i.desconto_pct : '') + '" placeholder="0"></td>'
+        + '<td class="num">' + BRL(totalItem(i)) + '</td>'
         + '<td><button class="btn mini" type="button" data-tira="' + k + '">tirar</button></td>'
         + '</tr>').join('')
     + '</tbody></table></div>'
-    + '<p class="nota" style="text-align:right;font-size:14px"><b>Total: ' + BRL(total) + '</b></p>';
+    + '<p class="nota" style="text-align:right;font-size:14px">'
+    +   (descontado > 0 ? '<span style="color:var(--ink-3)">Sem desconto: ' + BRL(bruto)
+                          + ' · desconto: −' + BRL(descontado) + '</span><br>' : '')
+    +   '<b>Total: ' + BRL(total) + '</b></p>';
 
   el.querySelectorAll('[data-preco]').forEach(inp => inp.addEventListener('change', () => {
     _propItens[Number(inp.dataset.preco)].preco_unitario = parseFloat(inp.value) || null;
+    pintarItensProposta();
+  }));
+  el.querySelectorAll('[data-desc]').forEach(inp => inp.addEventListener('change', () => {
+    const v = inp.value.trim() === '' ? 0 : Number(inp.value);
+    if (!(v >= 0 && v <= 100)){ toast('O desconto vai de 0 a 100%.','err'); pintarItensProposta(); return; }
+    _propItens[Number(inp.dataset.desc)].desconto_pct = v;
     pintarItensProposta();
   }));
   el.querySelectorAll('[data-tira]').forEach(b => b.addEventListener('click', () => {
