@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S11</title>
+<title>TapFlow Field · S12</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -269,6 +269,17 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 .login h1 span{color:var(--accent)}
 .login .sub{font-size:13.5px;color:var(--ink-3);margin:0 0 20px}
 .login .erro{color:var(--crit);font-size:13px;margin:0 0 10px;min-height:18px;line-height:1.4}
+/* Olho de ver a senha (S12). Alvo de 46px — é dedo de inspetor com luva, no
+   sol, e o campo do Field já usa fonte 16px para o iPhone não dar zoom. */
+.cxSenha{position:relative}
+.cxSenha input{padding-right:48px}
+.cxSenha .olho{position:absolute;top:0;right:0;bottom:0;width:46px;display:flex;
+  align-items:center;justify-content:center;padding:0;margin:0;border:0;border-radius:0;
+  background:none;color:var(--ink-3);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.cxSenha .olho svg{width:21px;height:21px;display:block}
+.cxSenha .olho .fechado{display:none}
+.cxSenha .olho.ver .aberto{display:none}
+.cxSenha .olho.ver .fechado{display:block}
 </style>
 </head>
 <body>
@@ -311,7 +322,10 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
     <div class="campo"><label for="lgE">E-mail</label>
       <input id="lgE" type="email" autocomplete="username" inputmode="email"></div>
     <div class="campo"><label for="lgS">Senha</label>
-      <input id="lgS" type="password" autocomplete="current-password"></div>
+      <div class="cxSenha">
+        <input id="lgS" type="password" autocomplete="current-password">
+        <button type="button" class="olho" id="lgOlho" aria-label="Mostrar senha" aria-pressed="false" title="Mostrar senha" tabindex="-1"><svg class="aberto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.8-6.8 10-6.8S22 12 22 12s-3.8 6.8-10 6.8S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg><svg class="fechado" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.8-6.8 10-6.8S22 12 22 12s-3.8 6.8-10 6.8S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path d="M4.2 4.2 19.8 19.8"/></svg></button>
+      </div></div>
     <p class="erro" id="lgErr"></p>
     <button class="btn pri" id="lgBtn">Entrar</button>
   </div>
@@ -326,7 +340,7 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S11';
+const APP_VERSION = 'S12';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -2335,6 +2349,31 @@ document.getElementById('lgBtn').addEventListener('click', async () => {
 document.getElementById('lgS').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('lgBtn').click();
 });
+
+/* ── Olho de ver a senha (S12) ───────────────────────────────────────────────
+   Senha digitada às cegas erra fácil, e o erro só aparece como "credenciais
+   inválidas" — que é a mesma mensagem de senha errada de verdade. O botão só
+   troca o `type` do campo: nada da senha é guardado, lido ou enviado a lugar
+   nenhum, e ele volta a ficar oculto toda vez que a tela de login aparece.
+   `tabindex="-1"` no botão de propósito: Tab vai do e-mail à senha e da senha
+   ao Entrar, sem parar no olho. */
+function olhoSenha(mostrar){
+  const b = document.getElementById('lgOlho'), c = document.getElementById('lgS');
+  if (!b || !c) return;
+  c.type = mostrar ? 'text' : 'password';
+  b.classList.toggle('ver', mostrar);
+  const rot = mostrar ? 'Ocultar senha' : 'Mostrar senha';
+  b.setAttribute('aria-label', rot);
+  b.setAttribute('aria-pressed', mostrar ? 'true' : 'false');
+  b.title = rot;
+}
+try{
+  document.getElementById('lgOlho').addEventListener('click', () => {
+    const c = document.getElementById('lgS');
+    olhoSenha(c.type === 'password');
+    c.focus();
+  });
+}catch(e){}
 
 function iniciar(){
   pintarFila();

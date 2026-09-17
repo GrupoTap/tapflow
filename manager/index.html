@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S29</title>
+<title>TapFlow Manager · S30</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1008,6 +1008,17 @@ th.num .tfThFixo{text-align:right}
 .login input:focus{outline:2px solid var(--accent);outline-offset:-1px;background:var(--surface)}
 .login .btn{width:100%;padding:10px;justify-content:center}
 .login .erro{font-size:12.5px;color:var(--crit);margin:0 0 10px;min-height:16px}
+/* Olho de ver a senha (S30). O botão mora DENTRO da caixa do campo, então a
+   margem de baixo passa do input para a caixa — no input ela empurrava o olho
+   para cima do rótulo seguinte. */
+.login .cxSenha{position:relative;margin-bottom:12px}
+.login .cxSenha input{margin-bottom:0;padding-right:42px}
+.login .olho{position:absolute;top:0;right:0;bottom:0;width:40px;display:flex;align-items:center;justify-content:center;padding:0;margin:0;border:0;border-radius:0;background:none;color:var(--ink-3);cursor:pointer}
+.login .olho:hover{color:var(--ink)}
+.login .olho svg{width:19px;height:19px;display:block}
+.login .olho .fechado{display:none}
+.login .olho.ver .aberto{display:none}
+.login .olho.ver .fechado{display:block}
 
 @media (max-width:640px){
   header{padding:8px 11px;gap:9px}
@@ -1190,7 +1201,10 @@ th.num .tfThFixo{text-align:right}
     <label for="lgEmail">E-mail</label>
     <input id="lgEmail" type="email" autocomplete="username">
     <label for="lgSenha">Senha</label>
-    <input id="lgSenha" type="password" autocomplete="current-password">
+    <div class="cxSenha">
+      <input id="lgSenha" type="password" autocomplete="current-password">
+      <button type="button" class="olho" id="lgOlho" aria-label="Mostrar senha" aria-pressed="false" title="Mostrar senha" tabindex="-1"><svg class="aberto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.8-6.8 10-6.8S22 12 22 12s-3.8 6.8-10 6.8S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg><svg class="fechado" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.8-6.8 10-6.8S22 12 22 12s-3.8 6.8-10 6.8S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path d="M4.2 4.2 19.8 19.8"/></svg></button>
+    </div>
     <p class="erro" id="lgErro"></p>
     <button class="btn pri" id="lgBtn">Entrar</button>
   </div>
@@ -1210,7 +1224,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S29';
+const APP_VERSION = 'S30';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -12333,6 +12347,31 @@ document.getElementById('lgBtn').addEventListener('click', async () => {
 document.getElementById('lgSenha').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('lgBtn').click();
 });
+
+/* ── Olho de ver a senha (S30) ───────────────────────────────────────────────
+   Senha digitada às cegas erra fácil, e o erro só aparece como "credenciais
+   inválidas" — que é a mesma mensagem de senha errada de verdade. O botão só
+   troca o `type` do campo: nada da senha é guardado, lido ou enviado a lugar
+   nenhum, e ele volta a ficar oculto toda vez que a tela de login aparece.
+   `tabindex="-1"` no botão de propósito: Tab vai do e-mail à senha e da senha
+   ao Entrar, sem parar no olho. */
+function olhoSenha(mostrar){
+  const b = document.getElementById('lgOlho'), c = document.getElementById('lgSenha');
+  if (!b || !c) return;
+  c.type = mostrar ? 'text' : 'password';
+  b.classList.toggle('ver', mostrar);
+  const rot = mostrar ? 'Ocultar senha' : 'Mostrar senha';
+  b.setAttribute('aria-label', rot);
+  b.setAttribute('aria-pressed', mostrar ? 'true' : 'false');
+  b.title = rot;
+}
+try{
+  document.getElementById('lgOlho').addEventListener('click', () => {
+    const c = document.getElementById('lgSenha');
+    olhoSenha(c.type === 'password');
+    c.focus();
+  });
+}catch(e){}
 
 async function iniciar(){
   // O menu é remontado AQUI, não só no carregamento do arquivo: quando o

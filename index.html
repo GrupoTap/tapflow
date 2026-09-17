@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>TapFlow · H1</title>
+<title>TapFlow · H2</title>
 <meta name="theme-color" content="#102438">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -97,6 +97,18 @@ label{display:block;font-size:12px;font-weight:600;color:var(--ink-2);margin:12p
 input{width:100%;padding:9px 11px;border:1px solid var(--rule);border-radius:4px;
   font:inherit;background:var(--surface)}
 input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+/* Olho de ver a senha (H2) — o hub é a porta de entrada do time, então é aqui
+   que o olho mais serve. Mesmo desenho dos outros dois apps. */
+.cxSenha{position:relative}
+.cxSenha input{padding-right:42px}
+.cxSenha .olho{position:absolute;top:0;right:0;bottom:0;width:40px;display:flex;
+  align-items:center;justify-content:center;padding:0;margin:0;border:0;border-radius:0;
+  background:none;color:var(--ink-3);cursor:pointer}
+.cxSenha .olho:hover{color:var(--ink)}
+.cxSenha .olho svg{width:19px;height:19px;display:block}
+.cxSenha .olho .fechado{display:none}
+.cxSenha .olho.ver .aberto{display:none}
+.cxSenha .olho.ver .fechado{display:block}
 .btn{width:100%;margin-top:18px;padding:10px;border:0;border-radius:4px;background:var(--accent);
   color:#fff;font:600 14px var(--sans);cursor:pointer;transition:background var(--t)}
 .btn:hover{background:var(--accent-hover)}
@@ -144,7 +156,10 @@ input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--a
       <label for="lgEmail">E-mail</label>
       <input id="lgEmail" type="email" autocomplete="username" required>
       <label for="lgSenha">Senha</label>
-      <input id="lgSenha" type="password" autocomplete="current-password" required>
+      <div class="cxSenha">
+        <input id="lgSenha" type="password" autocomplete="current-password" required>
+        <button type="button" class="olho" id="lgOlho" aria-label="Mostrar senha" aria-pressed="false" title="Mostrar senha" tabindex="-1"><svg class="aberto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.8-6.8 10-6.8S22 12 22 12s-3.8 6.8-10 6.8S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg><svg class="fechado" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.8-6.8 10-6.8S22 12 22 12s-3.8 6.8-10 6.8S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path d="M4.2 4.2 19.8 19.8"/></svg></button>
+      </div>
       <p class="erro" id="lgErro"></p>
       <button class="btn" id="lgBtn" type="submit">Entrar</button>
     </form>
@@ -161,7 +176,7 @@ input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--a
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';
 
-const APP_VERSION = 'H1';
+const APP_VERSION = 'H2';
 try{ document.getElementById('selo').textContent = 'HUB · ' + APP_VERSION; }catch(e){}
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
@@ -326,8 +341,35 @@ function telaLogin(recado){
   document.getElementById('quemSou').hidden = true;
   document.getElementById('login').hidden = false;
   document.getElementById('lgErro').textContent = recado || '';
+  try{ olhoSenha(false); }catch(e){}
   setTimeout(() => { try{ document.getElementById('lgEmail').focus(); }catch(e){} }, 30);
 }
+
+
+/* ── Olho de ver a senha (H2) ───────────────────────────────────────────────
+   Senha digitada às cegas erra fácil, e o erro só aparece como "credenciais
+   inválidas" — que é a mesma mensagem de senha errada de verdade. O botão só
+   troca o `type` do campo: nada da senha é guardado, lido ou enviado a lugar
+   nenhum, e ele volta a ficar oculto toda vez que a tela de login aparece.
+   `tabindex="-1"` no botão de propósito: Tab vai do e-mail à senha e da senha
+   ao Entrar, sem parar no olho. */
+function olhoSenha(mostrar){
+  const b = document.getElementById('lgOlho'), c = document.getElementById('lgSenha');
+  if (!b || !c) return;
+  c.type = mostrar ? 'text' : 'password';
+  b.classList.toggle('ver', mostrar);
+  const rot = mostrar ? 'Ocultar senha' : 'Mostrar senha';
+  b.setAttribute('aria-label', rot);
+  b.setAttribute('aria-pressed', mostrar ? 'true' : 'false');
+  b.title = rot;
+}
+try{
+  document.getElementById('lgOlho').addEventListener('click', () => {
+    const c = document.getElementById('lgSenha');
+    olhoSenha(c.type === 'password');
+    c.focus();
+  });
+}catch(e){}
 
 document.getElementById('frm').addEventListener('submit', async ev => {
   ev.preventDefault();
