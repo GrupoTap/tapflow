@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S30</title>
+<title>TapFlow Manager · S31</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -451,6 +451,53 @@ body.emQuadro .board:not(.livre){height:100%}
   .agLe,.agLq{font-size:11.5px}
   .agLm{grid-row:1;text-align:right}
 }
+
+/* ── S31 ─────────────────────────────────────────────────────────────────── */
+/* Seleção em lote na vista "Sem dia" (item 2). A caixinha só existe na linha
+   que ESTA pessoa consegue assumir — oferecer onde o servidor vai recusar é o
+   defeito que o projeto persegue desde o parecer do TapControl. */
+.agLinha{grid-template-columns:auto 2fr 1fr 1fr auto auto}
+.agCk{display:flex;align-items:center;justify-content:center}
+.agCk input{width:15px;height:15px;cursor:pointer}
+.agCkVazio{width:15px}
+.agLote{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;
+  padding:9px 12px;border:1px solid var(--accent);border-radius:5px;
+  background:var(--accent-soft);font-size:13px}
+.agLote b{color:var(--accent-ink)}
+.agLote .btn{margin-left:auto}
+.agGrupoH .agCkT{margin-right:2px}
+@media(max-width:860px){ .agLinha{grid-template-columns:auto 1fr auto} }
+
+/* Tarefas por perfil (item 1) */
+.tpTab td,.tpTab th{vertical-align:middle}
+.tpTab tr.tpOn{background:var(--accent-soft)}
+.tpTab .tpDim{color:var(--ink-3);font-size:12px}
+.tpTab input[type=checkbox]{width:16px;height:16px;cursor:pointer}
+.tpTab .mono{color:var(--ink-3);font-size:11px}
+
+/* Autocomplete do Catálogo na linha da proposta (item 5) */
+.acWrap{position:relative}
+.acLista{position:absolute;z-index:200;left:0;right:0;top:100%;margin-top:2px;
+  background:var(--surface);border:1px solid var(--accent);border-radius:5px;
+  box-shadow:0 8px 24px rgba(16,36,56,.16);max-height:260px;overflow-y:auto}
+.acItem{display:flex;gap:10px;align-items:baseline;width:100%;text-align:left;
+  padding:7px 10px;border:0;background:transparent;cursor:pointer;font:inherit;
+  border-bottom:1px solid var(--rule-2)}
+.acItem:last-child{border-bottom:0}
+.acItem:hover,.acItem.on{background:var(--accent-soft)}
+.acItem .acD{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acItem .acC{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-3)}
+.acItem .acP{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+.acNada{padding:8px 10px;color:var(--ink-3);font-size:12.5px}
+
+/* Consulta do CNPJ no cadastro do cliente (item 8) */
+.cnpjLinha{display:flex;gap:8px;align-items:flex-end}
+.cnpjLinha .campo{flex:1;margin-bottom:0}
+.cnpjCx{margin:8px 0 14px;padding:10px 12px;border:1px solid var(--rule);
+  border-radius:5px;background:var(--surface-2);font-size:12.5px;line-height:1.55}
+.cnpjCx b{color:var(--ink)}
+.cnpjCx.erro{border-color:var(--crit);background:var(--crit-soft)}
+.cnpjCx .btn.mini{margin-left:0;margin-top:6px}
 
 .agGrade{overflow-x:auto;border:1px solid var(--rule);border-radius:5px;background:var(--surface)}
 .agGrade table{border-collapse:collapse;width:100%;min-width:820px;font-size:12.5px}
@@ -1224,7 +1271,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S30';
+const APP_VERSION = 'S31';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -2052,9 +2099,13 @@ function pintarDrawer(){
     el.dataset.tid = t.tarefa_id;
     el.innerHTML = '<div class="st">' + icone(t.status, t.tipo) + '</div><div class="nm"><b></b><small></small></div>';
     el.querySelector('b').textContent = t.nome;
+    // ITEM 1 (S31): "bloqueado · tecnico_adm" colava dois fatos diferentes
+    // com um ponto do meio — o estado da tarefa e QUEM a executa. Foi essa
+    // leitura que fez o documento de 17/09 dizer que duas tarefas sem dono
+    // estavam "travadas para o Vinícius". O "quem faz:" separa os dois.
     el.querySelector('small').textContent =
       t.status + (t.perfis_responsaveis && t.perfis_responsaveis.length
-        ? ' · ' + t.perfis_responsaveis.join(', ') : '');
+        ? ' · quem faz: ' + t.perfis_responsaveis.join(', ') : '');
     // ── ITEM 9 (S27): DESFAZER UMA CONCLUSÃO FEITA POR ENGANO ───────────
     // Até o S26 a tarefa concluída aparecia só com o "✓" e não havia nada a
     // clicar — nem para admin. O Bruno concluiu "Anexar pedido de compra" por
@@ -2076,9 +2127,12 @@ function pintarDrawer(){
       el.appendChild(d);
     }
 
-    // Designação: só faz sentido no que ainda não foi resolvido, e só para o
-    // escritório. Quem já está resolvido não vai para a agenda de ninguém.
-    if (!resolvida && !DEMO && podeVer('os')){
+    // Designação: só faz sentido no que ainda não foi resolvido, e — desde o
+    // S31 — só para o ADMIN. Atribuir tarefa a outra pessoa virou ação do
+    // Bruno; os demais perfis continuam com "Assumir", que pega a tarefa para
+    // si e já confere o perfil. A trava de verdade é `tf_designar_tarefa`;
+    // esta linha é para a tela não oferecer o que o banco vai recusar.
+    if (!resolvida && !DEMO && podeVer('os') && sessao.admin){
       const d = document.createElement('div');
       d.className = 'tkDes';
       const quem = t.usuario_designado ? (NOMES[t.usuario_designado] || 'designada') : null;
@@ -2238,7 +2292,8 @@ const HIST_ROT = {
   anotacao_anulada:'Anotação anulada', tarefa_reaberta:'Tarefa reaberta',
   documento_gerado:'Documento gerado', numero_reservado:'Número reservado',
   tarefa_status:'Tarefa', os_concluida:'OS concluída', proposta_corrigida:'Proposta corrigida',
-  item_retirado:'Item tirado da OS', item_devolvido:'Item devolvido à OS'
+  item_retirado:'Item tirado da OS', item_devolvido:'Item devolvido à OS',
+  perfis_tarefa:'Quem faz a tarefa'
 };
 
 // ITEM 1 (S28): a aba lia só `eventos` — tudo automático, nada a anular. Agora
@@ -2425,7 +2480,19 @@ function pintarAcoes_(){
   // está e pede confirmação antes de tomar o lugar.
   const eu = meuId();
   const lockVivo = t.lock_por && (!t.lock_expira || new Date(t.lock_expira) > new Date());
-  if (t.status === 'pendente' && !lockVivo){
+  // ── ITEM 4 (S31): não se assume o que já é seu ─────────────────────────
+  // A tarefa estava designada ao Bruno, e o Bruno logado via "Assumir" ao
+  // lado de "Concluir" — um botão que, no melhor caso, não faz nada visível.
+  // Some só nesse caso: sem dono, ou com OUTRA pessoa, "Assumir" continua
+  // (é o caminho de tomar a tarefa de um colega, com a confirmação).
+  //
+  // O que se perde, e é de propósito: quem já é dono não passa mais pelo
+  // `tf_assumir_tarefa`, então a tarefa fica em `pendente` em vez de
+  // `em_andamento` e ninguém trava a fechadura de 8 horas. Nada depende
+  // disso para concluir — e quem for tomar a tarefa continua vendo o nome do
+  // dono e a confirmação antes.
+  const jaEMinha = t.usuario_designado && String(t.usuario_designado) === String(eu);
+  if (t.status === 'pendente' && !lockVivo && !jaEMinha){
     const b = document.createElement('button');
     b.className = 'btn pri'; b.textContent = 'Assumir';
     const dono = t.usuario_designado && t.usuario_designado !== eu
@@ -2967,24 +3034,72 @@ function modalPrazo(card){
      }}]);
 }
 
-/** Designar uma tarefa: quem, que dia, quantos minutos. */
-function modalDesignar(card, t, aposGravar){
-  // Só quem executa naquele lado aparece na lista — o banco recusa o resto, e
-  // oferecer uma opção que vai dar erro é armadilha, não liberdade.
-  const cabe = u => t.executor === 'ambos' || u.executa_em === 'ambos' || u.executa_em === t.executor;
-  const opts = EQUIPE.filter(cabe);
+/** Designar uma tarefa: quem, que dia, quantos minutos.
+ *
+ *  ── ITEM 1 (S31) ───────────────────────────────────────────────────────────
+ *  Duas coisas mudaram aqui, e as duas vêm do caso do documento de 17/09.
+ *
+ *  1) A LISTA. Até o S30 ela era filtrada só pelo LADO da tarefa (campo ou
+ *     escritório) — a mesma conta grossa que o banco fazia. Por isso dava para
+ *     designar alguém cujo PERFIL não está entre os responsáveis: a pessoa
+ *     entrava no sistema e não achava botão nenhum, só o aviso "esta tarefa é
+ *     de tecnico_adm". Agora quem monta a lista é `tf_pessoas_para_tarefa`, a
+ *     mesma função que a Agenda já usava desde o S22 — a regra mora num lugar
+ *     só. Quem está fora do perfil responsável aparece num grupo à parte.
+ *
+ *  2) O AVISO. O pedido do Bruno é explícito: avisar, não bloquear. Escolher
+ *     alguém de fora abre uma confirmação que diz o que vai acontecer (a
+ *     pessoa pode não conseguir agir) e deixa passar. Bloqueio aqui seria
+ *     mentir sobre o que o banco faz — ele aceita.
+ *
+ *  Para quem NÃO é admin isto vira outra tela: a única pessoa da lista é ela
+ *  mesma. O modal continua existindo para o "marcar dia" da Agenda, que é de
+ *  todo o escritório — é `tf_designar_tarefa` que recusa mexer na tarefa
+ *  dos outros. */
+async function modalDesignar(card, t, aposGravar){
+  const souAdmin = !!sessao.admin;
+  const eu = meuId();
+  let pessoas = null, erro = null;
+  if (!DEMO){
+    try{
+      pessoas = await rpc('tf_pessoas_para_tarefa',
+        { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id, p_todos: souAdmin });
+    }catch(e){ erro = e.message; }
+  }
+  // Sem servidor (demo) ou sem resposta: cai no filtro antigo, pelo lado da
+  // tarefa. Lista vazia numa tela de atribuição parece tela quebrada.
+  if (!pessoas){
+    const cabe = u => t.executor === 'ambos' || u.executa_em === 'ambos' || u.executa_em === t.executor;
+    pessoas = EQUIPE.filter(cabe).map(u => ({ usuario_id:u.id, nome:u.nome,
+      perfil:u.perfil || u.perfil_id, por_perfil:true }));
+  }
+  // Quem não é admin só se designa a si mesmo — é o que o banco aceita.
+  if (!souAdmin) pessoas = pessoas.filter(u => String(u.usuario_id) === String(eu));
+
+  const aptos = pessoas.filter(u => u.por_perfil !== false);
+  const fora  = pessoas.filter(u => u.por_perfil === false);
+  const opt = u => '<option value="' + esc(u.usuario_id) + '"'
+      + (String(u.usuario_id) === String(t.usuario_designado) ? ' selected' : '')
+      + ' data-fora="' + (u.por_perfil === false ? '1' : '') + '">'
+      + esc(u.nome) + (u.perfil ? ' — ' + esc(u.perfil) : '') + '</option>';
+
   abrirModal('Designar · ' + t.nome,
     '<div class="campo"><label for="mdU">Quem faz</label><select id="mdU">' +
       '<option value="">— ninguém —</option>' +
-      opts.map(u => '<option value="'+u.id+'"' + (u.id === t.usuario_designado ? ' selected' : '') +
-                    '>' + esc(u.nome) + '</option>').join('') +
-    '</select>' + (opts.length ? '' : (EQUIPE.length
-      ? '<small style="color:var(--crit)">Ninguém do time executa em ' +
-        esc(t.executor) + '. Confira os perfis.</small>'
+      (aptos.length ? '<optgroup label="Perfil responsável por esta tarefa">'
+                      + aptos.map(opt).join('') + '</optgroup>' : '') +
+      (fora.length  ? '<optgroup label="Fora do perfil responsável — o TapFlow avisa antes">'
+                      + fora.map(opt).join('') + '</optgroup>' : '') +
+    '</select>' + (pessoas.length ? '' : (erro
       // "não achei ninguém" e "não consegui perguntar" são coisas diferentes.
-      // A primeira manda mexer em perfis; a segunda, em nada.
-      : '<small style="color:var(--crit)">Não consegui carregar o time — ' +
-        'recarregue a página antes de mexer em perfil.</small>')) + '</div>' +
+      ? '<small style="color:var(--crit)">Não consegui carregar o time — ' +
+        'recarregue a página antes de mexer em perfil.</small>'
+      : '<small style="color:var(--crit)">Ninguém do time executa em ' +
+        esc(t.executor || '?') + '. Confira os perfis.</small>')) + '</div>' +
+    (souAdmin ? '' :
+      '<p style="font-size:12px;color:var(--ink-3);margin:-4px 0 0;line-height:1.45">' +
+      'Designar tarefa para <b>outra pessoa</b> é do administrador. Aqui você marca ' +
+      'o <b>seu</b> dia — ou usa <b>Assumir</b>, na OS, para pegar a tarefa para você.</p>') +
     '<div class="campo"><label for="mdD">Em que dia</label>' +
       '<input id="mdD" type="date" value="' + esc(t.data_prevista || isoHoje()) + '"></div>' +
     '<p style="font-size:12px;color:var(--ink-3);margin:-4px 0 0;line-height:1.45">' +
@@ -2999,23 +3114,47 @@ function modalDesignar(card, t, aposGravar){
       'não entra na conta.</p>',
     [{ label:'Cancelar', onClick: fecharModal },
      { label:'Gravar', pri:true, onClick: async () => {
-        try{
-          const m = document.getElementById('mdM').value;
-          const quem = document.getElementById('mdU').value || null;
-          const dia  = document.getElementById('mdD').value || null;
-          // ⚠ Até o S21 a tela recusava "dono sem dia" aqui, porque o banco
-          //    recusava. A regra caiu no S22: dono sem dia continua na vista
-          //    "Sem dia", com o nome. O que segue proibido é DIA SEM DONO —
-          //    esse sim some das três listas, e quem recusa é o banco.
-          if (DEMO) throw new Error('Modo demonstração: designação não é gravada.');
-          await rpc('tf_designar_tarefa', {
-            p_os_id: card.os_id, p_tarefa_id: t.tarefa_id,
-            p_usuario: quem, p_data: dia, p_minutos: m ? Number(m) : null });
-          fecharModal(); toast('Designação gravada.','ok');
-          if (aposGravar) await aposGravar();
-          else await abrirOSPorId(card.os_id);
-        }catch(e){ toast(e.message,'err'); }
+        const sel  = document.getElementById('mdU');
+        const op   = sel.options[sel.selectedIndex];
+        const quem = sel.value || null;
+        // o aviso do ponto 3: explica o risco e deixa o admin decidir
+        if (quem && op && op.dataset.fora === '1'){
+          const lista = (t.perfis_responsaveis || []).join(', ');
+          abrirModal('Designar mesmo assim?',
+              '<div class="aviso"><b>' + esc(op.textContent) + '</b> não está entre os perfis '
+            + 'responsáveis por <b>' + esc(t.nome) + '</b>'
+            + (lista ? ' (' + esc(lista) + ')' : '') + '.</div>'
+            + '<p class="nota">A tarefa vai para a agenda dele, mas quando ele entrar pode não '
+            + 'achar botão para concluir — é exatamente o que aconteceu na OS-26038. '
+            + 'Se for para ele fazer mesmo, o caminho certo é '
+            + '<b>Configurações › Tarefas por perfil</b>, que muda a regra para valer.</p>',
+            [{ label:'Voltar', onClick: () => { fecharModal(); modalDesignar(card, t, aposGravar); } },
+             { label:'Designar assim mesmo', pri:true,
+               onClick: () => gravarDesignacao(card, t, quem, aposGravar) }]);
+          return;
+        }
+        await gravarDesignacao(card, t, quem, aposGravar);
      }}]);
+}
+
+/** O que grava, separado do formulário porque a confirmação do aviso reentra
+ *  por aqui depois de fechar o modal. */
+async function gravarDesignacao(card, t, quem, aposGravar){
+  try{
+    const m   = (document.getElementById('mdM') || {}).value;
+    const dia = (document.getElementById('mdD') || {}).value || null;
+    // ⚠ Até o S21 a tela recusava "dono sem dia" aqui, porque o banco
+    //    recusava. A regra caiu no S22: dono sem dia continua na vista
+    //    "Sem dia", com o nome. O que segue proibido é DIA SEM DONO —
+    //    esse sim some das três listas, e quem recusa é o banco.
+    if (DEMO) throw new Error('Modo demonstração: designação não é gravada.');
+    await rpc('tf_designar_tarefa', {
+      p_os_id: card.os_id, p_tarefa_id: t.tarefa_id,
+      p_usuario: quem, p_data: dia, p_minutos: m ? Number(m) : null });
+    fecharModal(); toast('Designação gravada.','ok');
+    if (aposGravar) await aposGravar();
+    else await abrirOSPorId(card.os_id);
+  }catch(e){ toast(e.message,'err'); }
 }
 
 const arquivoParaBase64 = f => new Promise((ok, err) => {
@@ -3430,15 +3569,22 @@ async function pintarItens(){
       linhas: () => el.map(i => ({ preco: Number(i.preco_unitario) || 0,
                                    qtd: Number(i.quantidade) || 0,
                                    desc: Number(i.desconto_pct) || 0 })),
-      aplicar: async (pct) => {
+      // S31: chega um percentual POR LINHA (null nas que ficam de fora). O
+      // desconto geral parte do total atual e cada linha encolhe na mesma
+      // proporção — quem já tinha desconto próprio continua com mais.
+      aplicar: async (pcts) => {
         try{
-          for (const i of el){
-            if (!(Number(i.preco_unitario) > 0)) continue;
-            if (DEMO) demoGravarItem(card.os_id, i.id, 'desconto_pct', pct);
-            else await patch('os_itens', 'id=eq.' + i.id, { desconto_pct: pct });
+          let n = 0;
+          for (let k = 0; k < el.length; k++){
+            const p = pcts[k];
+            if (p === null || p === undefined) continue;
+            const i = el[k];
+            if (DEMO) demoGravarItem(card.os_id, i.id, 'desconto_pct', p);
+            else await patch('os_itens', 'id=eq.' + i.id, { desconto_pct: p });
+            n++;
           }
           await refrescar();
-          toast(pct ? _pctBR(pct) + ' gravado nos itens.' : 'Desconto zerado.', 'ok');
+          toast(n + ' item(ns) com o desconto gravado.', 'ok');
           pintarItens();
         }catch(e){ toast(e.message,'err'); }
       }
@@ -6824,25 +6970,39 @@ let _gerNegAberto = null;   // o gerador continua aberto depois de repintar a ab
 
 
 // ════════════════════════════════════════════════════════════════════════════
-// ITEM 3 (S28) — DESCONTO GERAL EM %, EM R$ OU PELO VALOR FINAL
+// DESCONTO GERAL — %, R$ OU VALOR FINAL
+// Item 3 do S28; itens 6 e 7 do S31 (17/09) refizeram a conta por dentro.
 // ----------------------------------------------------------------------------
 // O cliente negocia em reais ("fecha por R$ 500?", "me dá R$ 50?"), e o campo
-// só aceitava percentual. Agora são três caminhos para o MESMO número: o
-// percentual por item (`desconto_pct`), que continua sendo a fonte única.
+// só aceitava percentual. São três caminhos para o MESMO número: o percentual
+// por item (`desconto_pct`) continua sendo a fonte única.
 //
-// "Desconto em R$" e "Valor final" são opostos — um é o que SAI, o outro o que
-// FICA — e trocar um pelo outro zera a proposta. Por isso:
-//   · os três ficam em caixas separadas, com a palavra que os distingue em
-//     destaque (SAI / FECHAR) e o sinal na frente do campo (− R$ / = R$);
-//   · a prévia mostra os três números juntos, por extenso, ANTES de aplicar;
-//   · aplicar é um clique à parte — digitar não muda nada;
-//   · acima de 30% o TapFlow pergunta de novo.
+// ── O QUE MUDOU NO S31, E POR QUÊ ──────────────────────────────────────────
 //
-// ⚠ Um detalhe que o documento não previa: o percentual tem DUAS casas
-//   (`numeric(5,2)`) e cada linha arredonda o seu total. "Fechar em R$ 500"
-//   sobre R$ 550 dá 9,09%, e 550 × 0,9091 = 500,01. A prévia faz a conta
-//   exatamente como o banco vai fazer e diz o centavo de diferença, em vez de
-//   prometer um valor que não vai sair.
+// ITEM 7 · A BASE ERA O PREÇO CHEIO. A caixa dizia "Total atual: R$ 600,00"
+// numa proposta cuja linha já tinha 25% e valia R$ 450,00 — o total real,
+// aliás impresso duas linhas acima, na própria tela. Pior que o rótulo: o
+// desconto de R$ 50,00 era calculado sobre os 600 e SUBSTITUÍA o desconto da
+// linha, devolvendo ≈ R$ 550,00 onde o Bruno esperava R$ 400,00.
+//   Agora a base é o total ATUAL (já com o desconto de cada linha), e o
+//   desconto geral ACUMULA sobre ele: R$ 450,00 − R$ 50,00 = R$ 400,00. Cada
+//   linha encolhe na mesma proporção, então quem tinha desconto próprio
+//   continua com mais desconto que os vizinhos — o que não acontecia quando
+//   todas eram igualadas no mesmo percentual.
+//
+// ITEM 6 · O CENTAVO. "Desconto em R$: 50" sobre R$ 600,00 devolvia R$ 49,98.
+// O documento atribuiu isso a arredondamento em cascata na tela; não era. A
+// tela já calculava com o valor exato e já AVISAVA na prévia ("com o
+// percentual em duas casas, o desconto fica R$ 49,98"). O arredondamento
+// estava na COLUNA: `desconto_pct numeric(5,2)` não guarda 8,3333…%, e sobre
+// uma linha de R$ 600,00 o passo do percentual vale 6 centavos — R$ 550,00
+// era inalcançável. O `52_ajustes_s31.sql` levou a coluna para quatro casas;
+// esta tela passou a distribuir o valor exato entre as linhas e a devolver o
+// centavo que sobra para a maior delas.
+//
+// O resto do desenho continua: os três em caixas separadas, com a palavra que
+// os distingue em destaque (SAI / FECHAR); a prévia mostra os três números
+// ANTES de aplicar; aplicar é um clique à parte; acima de 30% pergunta de novo.
 const DESC_ALERTA_PCT = 30;
 
 function _numBR(v){
@@ -6852,11 +7012,22 @@ function _numBR(v){
   const n = Number(s);
   return isFinite(n) ? n : NaN;
 }
+const _c2 = n => Math.round(n * 100) / 100;                 // centavos inteiros
 const _pctBR = p => (Math.round(p * 100) / 100).toLocaleString('pt-BR',
   { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + '%';
+/** O percentual como ele vai para o campo da linha: até 4 casas, sem zero à
+ *  toa. 8,3333 aparece inteiro; 25 aparece como 25. */
+const _descCurto = p => {
+  const n = Math.round(Number(p) * 10000) / 10000;
+  return String(n);
+};
 
-/** cfg: { id, linhas: () => [{preco, qtd, desc}], aplicar: async pct => {} }
- *  Devolve { atualizar } para a tela chamar quando as linhas mudarem. */
+/** cfg: { id, linhas: () => [{preco, qtd, desc}], aplicar: async pcts => {} }
+ *  `aplicar` recebe um ARRAY alinhado com `linhas()`: o percentual novo de
+ *  cada linha, ou null nas que ficam de fora (sem preço ou sem quantidade).
+ *  Até o S30 recebia um percentual só, igual para todas — o que era a própria
+ *  causa do item 7. Devolve { atualizar } para a tela chamar quando as linhas
+ *  mudarem. */
 function montarDescontoGeral(alvo, cfg){
   const P = cfg.id;
   alvo.innerHTML =
@@ -6864,10 +7035,10 @@ function montarDescontoGeral(alvo, cfg){
     + '<div class="descGTit">Desconto geral <span>— preencha <b>um</b> dos três; os outros dois se calculam</span></div>'
     + '<div class="descGGrade">'
     +   '<div class="descGCx pct"><label for="' + P + 'Pct">Desconto em percentual</label>'
-    +     '<small>o mesmo percentual em todas as linhas</small>'
+    +     '<small>sobre o total <b>atual</b> da proposta</small>'
     +     '<div class="descGInp"><input id="' + P + 'Pct" type="text" inputmode="decimal" autocomplete="off" placeholder="ex.: 3"><span>%</span></div></div>'
     +   '<div class="descGCx sai"><label for="' + P + 'Rs">Desconto em R$</label>'
-    +     '<small>quanto <b>SAI</b> do total</small>'
+    +     '<small>quanto <b>SAI</b> do total atual</small>'
     +     '<div class="descGInp"><span>− R$</span><input id="' + P + 'Rs" type="text" inputmode="decimal" autocomplete="off" placeholder="ex.: 50,00"></div></div>'
     +   '<div class="descGCx fica"><label for="' + P + 'Fim">Valor final da proposta</label>'
     +     '<small>quanto a proposta deve <b>FECHAR</b></small>'
@@ -6875,115 +7046,231 @@ function montarDescontoGeral(alvo, cfg){
     + '</div>'
     + '<div class="descGPrev" id="' + P + 'Prev" aria-live="polite"></div>'
     + '<button class="btn" type="button" id="' + P + 'Ok" disabled>Aplicar em todas as linhas</button>'
+    + '<button class="btn mini" type="button" id="' + P + 'Zero" hidden '
+    +   'style="margin-left:0;margin-top:8px">Tirar todos os descontos</button>'
     + '</div>';
 
   const $ = s => document.getElementById(P + s);
   const campos = { Pct: $('Pct'), Rs: $('Rs'), Fim: $('Fim') };
-  let pct = null, origem = null, alvoFim = null;
+  let alvoTotal = null;   // quanto a proposta deve fechar (o número exato pedido)
+  let origem = null;      // qual dos três campos foi preenchido
 
+  /** As linhas que entram na conta, com o total de cada uma como o banco o
+   *  calcula (`round(preco*qtd*(1-desc/100), 2)`). Se as duas contas
+   *  divergirem, a tela mente sobre o que vai ser gravado. */
   const conta = () => {
-    const ls = cfg.linhas().filter(l => Number(l.preco) > 0 && Number(l.qtd) > 0);
-    const bruto = ls.reduce((s, l) => s + l.preco * l.qtd, 0);
-    return { ls, bruto: Math.round(bruto * 100) / 100,
-             semPreco: cfg.linhas().length - ls.length };
+    const todas = cfg.linhas();
+    const ls = [];
+    todas.forEach((l, i) => {
+      const preco = Number(l.preco) || 0, qtd = Number(l.qtd) || 0;
+      if (preco > 0 && qtd > 0)
+        ls.push({ i, bruto: _c2(preco * qtd),
+                  total: _c2(preco * qtd * (1 - (Number(l.desc) || 0) / 100)),
+                  desc: Number(l.desc) || 0 });
+    });
+    return { n: todas.length, ls,
+             bruto: _c2(ls.reduce((s, l) => s + l.bruto, 0)),
+             atual: _c2(ls.reduce((s, l) => s + l.total, 0)),
+             semPreco: todas.length - ls.length,
+             comDesconto: ls.filter(l => l.desc > 0).length };
   };
-  const totalCom = (ls, p) => Math.round(ls.reduce((s, l) =>
-    s + Math.round(l.preco * l.qtd * (1 - p / 100) * 100) / 100, 0) * 100) / 100;
+
+  /** Distribui o total pedido entre as linhas, proporcionalmente ao que cada
+   *  uma vale HOJE, e devolve o percentual de cada uma com quatro casas.
+   *  O centavo que sobra da divisão vai para a maior linha — em algum lugar
+   *  ele tem que cair, e na maior é onde menos distorce. */
+  const distribuir = (c, N) => {
+    const f = c.atual > 0 ? N / c.atual : 0;
+    const alvos = c.ls.map(l => _c2(l.total * f));
+    let sobra = _c2(N - alvos.reduce((s, v) => s + v, 0));
+    if (Math.abs(sobra) >= 0.005 && alvos.length){
+      let maior = 0;
+      c.ls.forEach((l, k) => { if (l.total > c.ls[maior].total) maior = k; });
+      alvos[maior] = _c2(Math.min(c.ls[maior].bruto, Math.max(0, alvos[maior] + sobra)));
+    }
+    // O percentual de uma linha, dado o total que ela deve ter. Duas coisas
+    // acontecem aqui, e as duas por causa do item 6:
+    //   · o percentual tem quatro casas (é o que a coluna guarda desde o S31),
+    //     e entre o "para baixo" e o "para cima" ganha o que chega mais perto
+    //     do centavo pedido — arredondar sempre para o mais próximo erra por
+    //     um centavo em linha grande;
+    //   · entre dois percentuais que dão O MESMO centavo, ganha o mais
+    //     simples. "3%" sobre R$ 1.234,56 dá exatamente o mesmo total que
+    //     3,0003%, e ninguém que digitou 3 quer ver 3,0003 gravado na linha.
+    const pctPara = (bruto, alvo) => {
+      if (!(bruto > 0)) return 0;
+      const ex = (1 - alvo / bruto) * 100;
+      // `Number(q.toFixed(4))` não é estética: a coluna tem QUATRO casas e
+      // arredonda o que passar disso. Mandar 33.333299999999994 faria o banco
+      // gravar outro número do que esta tela mostrou.
+      const cand = [Math.floor(ex * 10000) / 10000, Math.ceil(ex * 10000) / 10000,
+                    Math.round(ex), Math.round(ex * 10) / 10, Math.round(ex * 100) / 100]
+        .map(q => Number(q.toFixed(4)))
+        .filter(q => q >= 0 && q <= 100);
+      let melhor = 0, erro = Infinity;
+      cand.forEach(q => {
+        const e = Math.abs(_c2(bruto * (1 - q / 100)) - alvo);
+        // empate: fica com o percentual de menos casas (o texto mais curto)
+        if (e < erro - 1e-9 || (Math.abs(e - erro) < 1e-9 && String(q).length < String(melhor).length)){
+          erro = e; melhor = q;
+        }
+      });
+      return melhor;
+    };
+
+    const pcts = new Array(c.n).fill(null);
+    let reais = c.ls.map((l, k) => {
+      const p = pctPara(l.bruto, alvos[k]);
+      pcts[l.i] = p;
+      return _c2(l.bruto * (1 - p / 100));    // o que o banco vai gravar
+    });
+    // Sobrou centavo depois de tudo? Ele cabe numa linha só — e a linha certa
+    // é a MENOR, não a maior. Com quatro casas, dois percentuais vizinhos
+    // mudam o total de uma linha em 0,000001 do valor dela: numa linha de
+    // R$ 15.000 isso já é um centavo e meio, e nenhum percentual acerta o
+    // centavo pedido. Numa linha de R$ 2.000 o passo vale 0,2 centavo e
+    // sempre acerta. Por isso a correção desce da menor para a maior e para
+    // na primeira que fecha.
+    let real = _c2(reais.reduce((s, v) => s + v, 0));
+    if (Math.abs(real - N) >= 0.005 && c.ls.length){
+      const ordem = c.ls.map((l, k) => k).sort((a, b) => c.ls[a].bruto - c.ls[b].bruto);
+      for (const k of ordem){
+        const alvo2 = _c2(Math.min(c.ls[k].bruto, Math.max(0, reais[k] + (N - real))));
+        const p2 = pctPara(c.ls[k].bruto, alvo2);
+        const novo = _c2(c.ls[k].bruto * (1 - p2 / 100));
+        const depois = _c2(real - reais[k] + novo);
+        if (Math.abs(depois - N) < Math.abs(real - N)){
+          pcts[c.ls[k].i] = p2; reais[k] = novo; real = depois;
+        }
+        if (Math.abs(real - N) < 0.005) break;
+      }
+    }
+    return { pcts, real };
+  };
 
   const prever = () => {
-    const pv = $('Prev'), ok = $('Ok');
-    const { ls, bruto, semPreco } = conta();
+    const pv = $('Prev'), ok = $('Ok'), zero = $('Zero');
+    const c = conta();
     ok.disabled = true; ok.classList.remove('pri');
-    if (!ls.length){
+    zero.hidden = !c.comDesconto;
+
+    if (!c.ls.length){
       pv.className = 'descGPrev'; pv.textContent = 'Ponha preço nas linhas para calcular o desconto.';
       return;
     }
-    if (pct === null){
+    if (alvoTotal === null){
       pv.className = 'descGPrev';
-      pv.textContent = 'Total sem desconto: ' + BRL(bruto) + '. Nada será mudado até você clicar em "Aplicar".';
+      pv.textContent = (c.comDesconto
+          ? 'Total atual: ' + BRL(c.atual) + ' (sem desconto seriam ' + BRL(c.bruto) + '). '
+          : 'Total atual: ' + BRL(c.atual) + '. ')
+        + 'O desconto geral sai daqui. Nada muda até você clicar em "Aplicar".';
       return;
     }
-    if (isNaN(pct) || pct < 0 || pct > 100){
+    if (isNaN(alvoTotal) || alvoTotal < 0 || alvoTotal > c.atual){
       pv.className = 'descGPrev erro';
-      pv.textContent = origem === 'Fim' && alvoFim > bruto
-        ? 'O valor final (' + BRL(alvoFim) + ') é MAIOR que o total (' + BRL(bruto) + ') — isso não é desconto.'
-        : 'Esse desconto não cabe: ele precisa ficar entre zero e o total da proposta (' + BRL(bruto) + ').';
+      pv.textContent = origem === 'Fim' && alvoTotal > c.atual
+        ? 'O valor final (' + BRL(alvoTotal) + ') é MAIOR que o total atual ('
+          + BRL(c.atual) + ') — isso não é desconto.'
+        : 'Esse desconto não cabe: ele precisa ficar entre zero e o total atual da proposta ('
+          + BRL(c.atual) + ').';
       return;
     }
-    const novo = totalCom(ls, pct);
-    const sai = Math.round((bruto - novo) * 100) / 100;
-    const alto = pct > DESC_ALERTA_PCT;
+
+    const d = distribuir(c, alvoTotal);
+    const sai  = _c2(c.atual - d.real);
+    const pctG = c.atual > 0 ? (sai / c.atual) * 100 : 0;
+    const alto = pctG > DESC_ALERTA_PCT;
     pv.className = 'descGPrev' + (alto ? ' alto' : ' pronto');
     pv.innerHTML = '<span>Total atual: <b></b></span><span class="seta">→</span>'
       + '<span>Desconto: <b class="s"></b></span><span class="seta">→</span>'
       + '<span>Novo total: <b class="n"></b></span>'
       + '<div class="descGNotas"></div>';
-    pv.querySelector('b').textContent = BRL(bruto);
-    pv.querySelector('b.s').textContent = '− ' + BRL(sai) + ' (' + _pctBR(pct) + ')';
-    pv.querySelector('b.n').textContent = BRL(novo);
+    pv.querySelector('b').textContent = BRL(c.atual);
+    pv.querySelector('b.s').textContent = '− ' + BRL(sai) + ' (' + _pctBR(pctG) + ')';
+    pv.querySelector('b.n').textContent = BRL(d.real);
+
     const notas = [];
-    if (origem === 'Fim' && alvoFim != null && Math.abs(novo - alvoFim) >= 0.005)
-      notas.push('Com o percentual em duas casas, o total fica ' + BRL(novo) + ' — '
-        + BRL(Math.abs(novo - alvoFim)) + (novo > alvoFim ? ' acima' : ' abaixo') + ' do valor pedido.');
-    if (origem === 'Rs' && Math.abs(sai - _numBR(campos.Rs.value)) >= 0.005)
-      notas.push('Com o percentual em duas casas, o desconto fica ' + BRL(sai) + '.');
-    const proprios = ls.filter(l => Number(l.desc || 0) > 0
-                                  && Math.abs(Number(l.desc) - pct) > 0.001).length;
-    if (proprios) notas.push(proprios + ' linha(s) com desconto próprio passam para ' + _pctBR(pct) + '.');
-    if (semPreco) notas.push(semPreco + ' linha(s) sem preço ficam fora da conta.');
+    if (c.comDesconto)
+      notas.push('A base é o total atual, ' + BRL(c.atual) + ' — o preço cheio soma '
+        + BRL(c.bruto) + ', e o desconto que já existe nas linhas continua valendo.');
+    if (Math.abs(d.real - alvoTotal) >= 0.005)
+      notas.push('O total possível mais próximo é ' + BRL(d.real) + ', '
+        + BRL(Math.abs(d.real - alvoTotal)) + (d.real > alvoTotal ? ' acima' : ' abaixo')
+        + ' do que você pediu.');
+    if (c.semPreco) notas.push(c.semPreco + ' linha(s) sem preço ficam fora da conta.');
     if (alto) notas.push('Desconto acima de ' + DESC_ALERTA_PCT + '%. Confira se o valor foi digitado no campo certo.');
     pv.querySelector('.descGNotas').textContent = notas.join(' ');
     ok.disabled = false; ok.classList.add('pri');
-    ok.textContent = 'Aplicar ' + _pctBR(pct) + ' em todas as linhas';
+    ok.textContent = 'Aplicar − ' + BRL(sai) + ' nas ' + c.ls.length + ' linha(s)';
   };
 
+  /** Digitou num campo: o valor DELE é o exato; os outros dois viram leitura.
+   *  Era aqui que o documento achava que morava o defeito — e é aqui que a
+   *  regra fica explícita: o número que manda é o que a pessoa digitou. */
   const ao = (k) => () => {
-    const { bruto } = conta();
+    const c = conta();
     const v = _numBR(campos[k].value);
-    origem = k; alvoFim = null;
+    origem = k;
     Object.keys(campos).forEach(o => campos[o].classList.toggle('calc', o !== k && v !== null));
     if (v === null){
-      pct = null;
+      alvoTotal = null;
       Object.keys(campos).forEach(o => { if (o !== k) campos[o].value = ''; campos[o].classList.remove('calc'); });
       return prever();
     }
-    if (isNaN(v) || bruto <= 0){ pct = NaN; return prever(); }
-    if (k === 'Pct') pct = v;
-    if (k === 'Rs')  pct = v / bruto * 100;
-    if (k === 'Fim'){ alvoFim = v; pct = (bruto - v) / bruto * 100; }
-    if (!isNaN(pct) && pct >= 0 && pct <= 100){
-      pct = Math.round(pct * 100) / 100;
-      // os campos calculados mostram o que o BANCO vai gravar (linha a linha)
-      const novo = totalCom(conta().ls, pct);
+    if (isNaN(v) || c.atual <= 0){ alvoTotal = NaN; return prever(); }
+    if (k === 'Pct') alvoTotal = _c2(c.atual * (1 - v / 100));
+    if (k === 'Rs')  alvoTotal = _c2(c.atual - v);
+    if (k === 'Fim') alvoTotal = _c2(v);
+
+    if (alvoTotal >= 0 && alvoTotal <= c.atual){
+      // os campos calculados mostram o que vai SAIR, já com a conta do banco
+      const d = distribuir(c, alvoTotal);
       const fmt = x => x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      if (k !== 'Pct') campos.Pct.value = String(pct).replace('.', ',');
-      if (k !== 'Rs')  campos.Rs.value  = fmt(Math.round((bruto - novo) * 100) / 100);
-      if (k !== 'Fim') campos.Fim.value = fmt(novo);
+      const pctG = c.atual > 0 ? (c.atual - d.real) / c.atual * 100 : 0;
+      if (k !== 'Pct') campos.Pct.value = String(Math.round(pctG * 100) / 100).replace('.', ',');
+      if (k !== 'Rs')  campos.Rs.value  = fmt(_c2(c.atual - d.real));
+      if (k !== 'Fim') campos.Fim.value = fmt(d.real);
     }
     prever();
   };
   Object.keys(campos).forEach(k => campos[k].addEventListener('input', ao(k)));
 
+  const limpar = () => {
+    Object.values(campos).forEach(c => { c.value = ''; c.classList.remove('calc'); });
+    alvoTotal = null; origem = null;
+    prever();
+  };
+
   $('Ok').addEventListener('click', function(){
-    if (pct === null || isNaN(pct)) return;
-    const vai = async () => {
-      await cfg.aplicar(pct);
-      Object.values(campos).forEach(c => { c.value = ''; c.classList.remove('calc'); });
-      pct = null; origem = null;
-      prever();
-    };
-    if (pct > DESC_ALERTA_PCT){
-      const { ls, bruto } = conta();
-      abrirModal('Desconto de ' + _pctBR(pct) + '?',
+    if (alvoTotal === null || isNaN(alvoTotal)) return;
+    const c = conta();
+    const d = distribuir(c, alvoTotal);
+    const sai = _c2(c.atual - d.real);
+    const pctG = c.atual > 0 ? (sai / c.atual) * 100 : 0;
+    const vai = async () => { await cfg.aplicar(d.pcts); limpar(); };
+    if (pctG > DESC_ALERTA_PCT){
+      abrirModal('Desconto de ' + _pctBR(pctG) + '?',
           '<div class="aviso">É um desconto alto. O erro mais comum aqui é digitar o '
         + '<b>valor final</b> no campo do <b>desconto em R$</b> (ou o contrário).</div>'
-        + '<p>Total atual <b>' + esc(BRL(bruto)) + '</b> → desconto <b>' + esc(BRL(bruto - totalCom(ls, pct)))
-        + '</b> → novo total <b>' + esc(BRL(totalCom(ls, pct))) + '</b>.</p>',
+        + '<p>Total atual <b>' + esc(BRL(c.atual)) + '</b> → desconto <b>' + esc(BRL(sai))
+        + '</b> → novo total <b>' + esc(BRL(d.real)) + '</b>.</p>',
         [{ label:'Voltar e conferir', onClick: () => fecharModal() },
-         { label:'Sim, aplicar ' + _pctBR(pct), pri:true, onClick: async () => { fecharModal(); await vai(); } }]);
+         { label:'Sim, aplicar', pri:true, onClick: async () => { fecharModal(); await vai(); } }]);
       return;
     }
     _semDuploEnvio_(this, vai);
+  });
+
+  // Zerar deixou de ser "aplicar 0%": com a base no total atual, 0% quer dizer
+  // "não tire mais nada", e não "apague o desconto que já existe". Quem apaga
+  // é este botão, que só aparece quando há o que apagar.
+  $('Zero').addEventListener('click', function(){
+    const c = conta();
+    _semDuploEnvio_(this, async () => {
+      await cfg.aplicar(new Array(c.n).fill(null).map((_, i) =>
+        c.ls.some(l => l.i === i) ? 0 : null));
+      limpar();
+    });
   });
 
   prever();
@@ -7064,8 +7351,22 @@ async function montarProposta(n, props){
           + 'a proposta com linhas digitadas — e vale cadastrar os equipamentos em '
           + 'Cadastros → Clientes, porque no ano que vem eles já estarão aqui.</div>')
     + '<div class="secTit">Acrescentar uma linha</div>'
-    + '<div class="dupla"><div class="campo"><label for="npDesc">Descrição</label>'
-    + '<input id="npDesc" type="text" placeholder="Ex.: Emissão de ART" autocomplete="off" name="npd_nofill"></div>'
+    // ── ITEM 5 (S31): A DESCRIÇÃO PUXA DO CATÁLOGO ────────────────────────
+    // O Catálogo existe desde o S10, com preço cadastrado em todo item, e
+    // este campo era texto livre sem ligação nenhuma com ele: o vendedor
+    // redigitava "Emissão de ART" e o preço toda vez. Agora digitar busca no
+    // catálogo e escolher preenche descrição e preço.
+    //
+    // Continua texto livre: item avulso se digita e pronto. E o que a
+    // proposta guarda é o TEXTO escolhido, não um ponteiro para o catálogo —
+    // a proposta congela o que foi ofertado, e renomear o item do catálogo
+    // não pode reescrever o que o cliente recebeu.
+    + '<div class="dupla"><div class="campo acWrap"><label for="npDesc">Descrição</label>'
+    + '<input id="npDesc" type="text" placeholder="Ex.: Emissão de ART — ou digite para buscar no Catálogo" '
+    +   'autocomplete="off" name="npd_nofill" role="combobox" aria-expanded="false" aria-autocomplete="list">'
+    + '<div id="npDescAC"></div>'
+    + '<div class="dica">Digite para buscar no <b>Catálogo</b>; escolher traz o preço junto. '
+    +   'Para item avulso, escreva à vontade.</div></div>'
     // ── ITEM 5 (S27): QUANTIDADE É NÚMERO INTEIRO ─────────────────────────
     // Este campo estava `step="0.01" inputmode="decimal"`, copiado dos campos
     // de valor em reais ao lado — e aceitava 1,11. No processo isso não
@@ -7074,6 +7375,9 @@ async function montarProposta(n, props){
     // A trava do banco (`ck_ositens_qtd_inteira`) fecha os outros caminhos.
     + '<div class="campo"><label for="npQtd">Qtd.</label>'
     + '<input id="npQtd" type="number" step="1" min="1" inputmode="numeric" value="1"></div></div>'
+    + '<div class="campo"><label for="npPreco">Preço unit. (R$)</label>'
+    + '<input id="npPreco" type="number" step="0.01" min="0" inputmode="decimal" '
+    +   'placeholder="vem do Catálogo quando você escolhe um item"></div>'
     + '<button class="btn" id="npAddLinha" style="width:100%;margin-bottom:8px">Acrescentar linha</button>'
     // ITEM 3 (S29): a linha do plano não se digita — vem de Configurações › Planos
     + '<button class="btn" id="npAddPlano" type="button" style="width:100%;margin-bottom:16px" '
@@ -7139,15 +7443,24 @@ async function montarProposta(n, props){
     pintarItensProposta();
   });
 
+  // S31: o autocomplete do Catálogo neste campo
+  autocompletarCatalogo(document.getElementById('npDesc'),
+                        document.getElementById('npDescAC'),
+                        item => { document.getElementById('npPreco').value =
+                                    item.preco_referencia != null ? item.preco_referencia : ''; });
+
   document.getElementById('npAddLinha').addEventListener('click', () => {
     const d = document.getElementById('npDesc').value.trim();
     if (!d){ toast('Escreva a descrição da linha.','err'); return; }
     const q = Math.trunc(Number(document.getElementById('npQtd').value));
     if (!(q >= 1)){ toast('A quantidade é um número inteiro, a partir de 1.','err'); return; }
+    const pr = parseFloat(document.getElementById('npPreco').value);
     _propItens.push({ equipamento_id: null, descricao: d,
-      quantidade: q, preco_unitario: null, desconto_pct: 0, e_servico: true });
+      quantidade: q, preco_unitario: isFinite(pr) && pr > 0 ? pr : null,
+      desconto_pct: 0, e_servico: true });
     document.getElementById('npDesc').value = '';
     document.getElementById('npQtd').value = '1';
+    document.getElementById('npPreco').value = '';
     pintarItensProposta();
   });
 
@@ -7172,12 +7485,18 @@ async function montarProposta(n, props){
     linhas: () => _propItens.map(i => ({ preco: Number(i.preco_unitario) || 0,
                                          qtd: Number(i.quantidade) || 0,
                                          desc: Number(i.desconto_pct) || 0 })),
-    aplicar: async (pct) => {
+    // S31: um percentual por linha, calculado a partir do total ATUAL da
+    // proposta (itens 6 e 7). Continua sem gravar nada até "Registrar".
+    aplicar: async (pcts) => {
       if (!_propItens.length){ toast('Acrescente as linhas primeiro.','err'); return; }
-      _propItens.forEach(i => { if (Number(i.preco_unitario) > 0) i.desconto_pct = pct; });
+      let n = 0;
+      _propItens.forEach((i, k) => {
+        if (pcts[k] === null || pcts[k] === undefined) return;
+        i.desconto_pct = pcts[k]; n++;
+      });
       pintarItensProposta();
-      toast(pct ? _pctBR(pct) + ' aplicado. Nada foi gravado ainda — confira e clique em Registrar.'
-                : 'Desconto zerado.','ok');
+      toast(n + ' linha(s) com o desconto aplicado. Nada foi gravado ainda — '
+            + 'confira e clique em Registrar.','ok');
     }
   });
 
@@ -7209,6 +7528,83 @@ async function montarProposta(n, props){
   pintarItensProposta();
 }
 
+// ── ITEM 5 (S31): O AUTOCOMPLETE DO CATÁLOGO ────────────────────────────────
+// O catálogo é pequeno (dezenas de itens) e muda pouco: carrega uma vez por
+// sessão e a busca acontece na memória, sem ida ao servidor por tecla. Se a
+// carga falhar, o campo continua sendo texto livre — um autocomplete que não
+// abriu não pode impedir ninguém de digitar a linha e seguir com a proposta.
+let _catalogoCache = null;
+async function catalogoParaEscolha(){
+  if (_catalogoCache) return _catalogoCache;
+  if (DEMO){ _catalogoCache = []; return _catalogoCache; }
+  try{
+    const r = await get('v_catalogo?select=id,codigo,descricao,rotulo,unidade,preco_referencia'
+                        + '&ativo=is.true&order=codigo&limit=1000');
+    _catalogoCache = (r || []).map(x => Object.assign({}, x, {
+      _busca: norm([x.codigo, x.descricao, x.rotulo].join(' ')) }));
+  }catch(e){ _catalogoCache = []; }
+  return _catalogoCache;
+}
+
+/** Liga um input de texto ao Catálogo. `aoEscolher` recebe o item inteiro —
+ *  quem decide o que fazer com o preço é a tela que chamou.
+ *  Teclado: ↓/↑ andam, Enter escolhe, Esc fecha. Sem isso é um menu que só
+ *  existe para quem usa mouse. */
+function autocompletarCatalogo(inp, caixa, aoEscolher){
+  if (!inp || !caixa) return;
+  let itens = [], marcado = -1, aberto = false;
+  catalogoParaEscolha().then(c => { itens = c; });
+
+  const fechar = () => {
+    caixa.innerHTML = ''; aberto = false; marcado = -1;
+    inp.setAttribute('aria-expanded','false');
+  };
+  const escolher = it => {
+    inp.value = it.descricao || it.rotulo || '';
+    fechar();
+    if (aoEscolher) aoEscolher(it);
+    inp.focus();
+  };
+  const pintar = () => {
+    const termos = norm(inp.value).trim().split(/\s+/).filter(Boolean);
+    if (!termos.length || !itens.length){ fechar(); return; }
+    const achados = itens.filter(x => termos.every(w => x._busca.includes(w))).slice(0, 8);
+    aberto = true;
+    inp.setAttribute('aria-expanded','true');
+    if (!achados.length){
+      caixa.innerHTML = '<div class="acLista"><div class="acNada">'
+        + 'Nada no Catálogo com isso — o texto que você digitou vale como linha avulsa.'
+        + '</div></div>';
+      return;
+    }
+    caixa.innerHTML = '<div class="acLista" role="listbox">'
+      + achados.map((x, k) => '<button type="button" class="acItem' + (k === marcado ? ' on' : '')
+          + '" role="option" data-k="' + k + '">'
+          + '<span class="acC">' + esc(x.codigo || '') + '</span>'
+          + '<span class="acD">' + esc(x.descricao || '')
+          + (x.unidade ? ' <span class="acC">/' + esc(x.unidade) + '</span>' : '') + '</span>'
+          + '<span class="acP">' + (x.preco_referencia != null ? BRL(x.preco_referencia) : 'sem preço')
+          + '</span></button>').join('')
+      + '</div>';
+    caixa.querySelectorAll('.acItem').forEach(b =>
+      // mousedown, não click: o blur do input fecharia a lista antes do clique
+      b.addEventListener('mousedown', ev => { ev.preventDefault(); escolher(achados[Number(b.dataset.k)]); }));
+    caixa._achados = achados;
+  };
+
+  inp.addEventListener('input', pintar);
+  inp.addEventListener('focus', pintar);
+  inp.addEventListener('blur', () => setTimeout(fechar, 120));
+  inp.addEventListener('keydown', ev => {
+    const n = (caixa._achados || []).length;
+    if (!aberto || !n) return;
+    if (ev.key === 'ArrowDown'){ ev.preventDefault(); marcado = (marcado + 1) % n; pintar(); }
+    else if (ev.key === 'ArrowUp'){ ev.preventDefault(); marcado = (marcado - 1 + n) % n; pintar(); }
+    else if (ev.key === 'Enter' && marcado >= 0){ ev.preventDefault(); escolher(caixa._achados[marcado]); }
+    else if (ev.key === 'Escape'){ fechar(); }
+  });
+}
+
 /** O total de uma linha, com desconto — espelho de `proposta_itens.total`
  *  (`preco * qtd * (1 - desconto/100)`, arredondado em 2 casas). */
 function totalItem(i){
@@ -7237,13 +7633,26 @@ function pintarItensProposta(){
     + '</tr></thead><tbody>'
     + _propItens.map((i, k) => '<tr>'
         + '<td>' + esc(i.descricao) + (i.equipamento_id ? '' : ' <span class="mini">digitado</span>') + '</td>'
-        + '<td class="num">' + i.quantidade + '</td>'
+        // ── ITEM 3 (S31): a quantidade vira campo ────────────────────────
+        // O documento diz que QTD "ficou travada quando os outros foram
+        // liberados". Não é o caso: ela NUNCA foi campo nesta tabela, nem em
+        // rascunho — era texto. Por isso corrigir a quantidade custava apagar
+        // a linha e digitar tudo de novo. O remédio é o mesmo: vira input,
+        // dentro do mesmo mecanismo — nada é gravado até "Registrar", que é
+        // quem cria a revisão seguinte.
+        // Inteira, a partir de 1: é o `ck_propitens_qtd_inteira` (12/09).
+        + '<td class="num"><input class="mini" style="width:64px;text-align:right" type="number"'
+        +   ' step="1" min="1" inputmode="numeric" data-qtd="' + k + '" value="'
+        +   (i.quantidade == null ? '' : i.quantidade) + '"></td>'
         + '<td class="num"><input class="mini" style="width:96px;text-align:right" type="number"'
         +   ' step="0.01" inputmode="decimal" data-preco="' + k + '" value="'
         +   (i.preco_unitario == null ? '' : i.preco_unitario) + '"></td>'
-        + '<td class="num"><input class="mini" style="width:66px;text-align:right" type="number"'
-        +   ' step="0.01" min="0" max="100" inputmode="decimal" data-desc="' + k + '" value="'
-        +   (Number(i.desconto_pct) ? i.desconto_pct : '') + '" placeholder="0"></td>'
+        // S31: quatro casas. O desconto geral, quando parte de um valor em
+        // R$, grava percentual quebrado (8,3333%) — é o que faz o centavo
+        // fechar. Mostrar só duas aqui esconderia o número que está gravado.
+        + '<td class="num"><input class="mini" style="width:78px;text-align:right" type="number"'
+        +   ' step="0.0001" min="0" max="100" inputmode="decimal" data-desc="' + k + '" value="'
+        +   (Number(i.desconto_pct) ? _descCurto(i.desconto_pct) : '') + '" placeholder="0"></td>'
         + '<td class="num">' + BRL(totalItem(i)) + '</td>'
         + '<td><button class="btn mini" type="button" data-tira="' + k + '">tirar</button></td>'
         + '</tr>').join('')
@@ -7253,6 +7662,13 @@ function pintarItensProposta(){
                           + ' · desconto: −' + BRL(descontado) + '</span><br>' : '')
     +   '<b>Total: ' + BRL(total) + '</b></p>';
 
+  el.querySelectorAll('[data-qtd]').forEach(inp => inp.addEventListener('change', () => {
+    const q = Math.trunc(Number(inp.value));
+    if (!(q >= 1)){ toast('A quantidade é um número inteiro, a partir de 1.','err');
+                    pintarItensProposta(); return; }
+    _propItens[Number(inp.dataset.qtd)].quantidade = q;
+    pintarItensProposta();
+  }));
   el.querySelectorAll('[data-preco]').forEach(inp => inp.addEventListener('change', () => {
     _propItens[Number(inp.dataset.preco)].preco_unitario = parseFloat(inp.value) || null;
     pintarItensProposta();
@@ -7673,7 +8089,12 @@ async function pintarConfig(){
     + '<div class="chips" id="cfgTabs"></div>'
     + '<div id="cfgCorpo"></div></div>';
 
-  const abas = [['usuarios','Usuários'],['perfis','Perfis'],['turno','Turno'],['planos','Planos'],
+  // S31: "Tarefas por perfil" fica ao LADO de Perfis, não dentro. São dois
+  // controles diferentes e o documento pediu que não se fundissem: "O que
+  // aparece na tela" decide por onde a pessoa navega; esta decide, tarefa por
+  // tarefa, quem pode executá-la.
+  const abas = [['usuarios','Usuários'],['perfis','Perfis'],['tarefas','Tarefas por perfil'],
+                ['turno','Turno'],['planos','Planos'],
                 ['docs','Documentos'],['param','Google Drive'],['exc','Exclusões']];
   const t = document.getElementById('cfgTabs');
   abas.forEach(([id,rot]) => {
@@ -7686,6 +8107,7 @@ async function pintarConfig(){
 
   if (abaCfg === 'usuarios') return cfgUsuarios();
   if (abaCfg === 'perfis')   return cfgPerfis();
+  if (abaCfg === 'tarefas')  return cfgTarefasPerfil();
   if (abaCfg === 'docs')     return cfgDocumentos();
   if (abaCfg === 'turno')    return cfgTurno();
   if (abaCfg === 'planos')   return cfgPlanos();
@@ -8190,6 +8612,175 @@ function formPerfil(p){
   });
 }
 
+// ── TAREFAS POR PERFIL (S31) ────────────────────────────────────────────────
+// ITEM 1 do documento de 17/09. O TapFlow sempre teve, por tarefa, a lista de
+// perfis que podem executá-la (`perfis_responsaveis`) — o que não existia era
+// a tela para mexer nela. Mudar exigia rodar SQL, e a única saída prática era
+// designar alguém de outro perfil, que é o defeito relatado: a pessoa recebe a
+// tarefa e não acha botão nenhum.
+//
+// Três decisões desta tela, e por quê:
+//
+//  · O EIXO É O PERFIL, não a tarefa. O pedido foi "escolher um perfil e ver
+//    quais tarefas ele pode fazer". Marcar e desmarcar uma coluna é mais
+//    parecido com o raciocínio de quem contrata alguém ("o que o Vinícius vai
+//    poder fazer?") do que abrir tarefa por tarefa.
+//
+//  · CADA MARCA GRAVA NA HORA, e o toast diz quantas OS abertas foram junto.
+//    Botão "Salvar" no fim de 37 caixas é onde se perde metade do trabalho.
+//
+//  · O AVISO DE APP. `executor` (campo/escritório) é DERIVADO desses perfis, e
+//    é ele que manda a tarefa para o aplicativo de Campo. Pôr "inspetor" em
+//    "Emitir ART" não dá só permissão: faz a tarefa aparecer no celular do
+//    inspetor. Por isso a tela pergunta antes quando a marca muda o lado.
+let _cfgTpl = null;      // as tarefas dos moldes, como vieram do banco
+let _cfgPerfilSel = null;
+
+async function cfgTarefasPerfil(){
+  const c = document.getElementById('cfgCorpo');
+  c.innerHTML = '<p class="nota">Carregando…</p>';
+  let perfis = [], tarefas = [];
+  try{
+    [perfis, tarefas] = await Promise.all([
+      DEMO ? demoPerfis() : get('v_perfis?select=*&ativo=is.true&order=id'),
+      DEMO ? demoTarefasTemplate() : rpc('tf_tarefas_do_template', { p_template_id: null })
+    ]);
+  }catch(e){
+    c.innerHTML = '<div class="painel"><h3>Tarefas por perfil</h3>'
+      + '<div class="aviso"><b>Não deu para carregar os moldes.</b><br>' + esc(e.message)
+      + '<br>Falta rodar o <b>52_ajustes_s31.sql</b>?</div>'
+      + '<button class="btn" id="tpRetry">Tentar de novo</button></div>';
+    document.getElementById('tpRetry').addEventListener('click', cfgTarefasPerfil);
+    return;
+  }
+  _cfgTpl = tarefas;
+  // o admin fica de fora da lista de escolha: ele passa em tudo por definição,
+  // e marcar caixa para ele daria a impressão de que desmarcar tira algo
+  const escolhiveis = perfis.filter(p => !p.is_admin);
+  if (!_cfgPerfilSel || !escolhiveis.some(p => p.id === _cfgPerfilSel))
+    _cfgPerfilSel = (escolhiveis[0] || {}).id || null;
+
+  c.innerHTML = '<div class="painel"><h3>Quem pode fazer cada tarefa</h3>'
+    + '<p class="nota">Esta lista é <b>diferente</b> do “O que aparece na tela”, ao lado em '
+    + '<b>Perfis</b>: lá se decide por onde a pessoa navega; aqui, tarefa por tarefa, quem pode '
+    + 'executá-la. Marcar vale <b>para sempre</b> — toda OS nova nasce com a regra — '
+    + '<b>e para as OS já abertas</b> cuja tarefa ainda não foi resolvida. O que já foi '
+    + 'concluído fica como está: é histórico.</p>'
+    + '<div class="chips" id="tpPerfis"></div>'
+    + '<div id="tpCorpo"></div></div>';
+
+  const ch = document.getElementById('tpPerfis');
+  escolhiveis.forEach(p => {
+    const b = document.createElement('button');
+    b.className = 'fchip' + (p.id === _cfgPerfilSel ? ' on' : '');
+    b.textContent = p.nome;
+    b.addEventListener('click', () => { _cfgPerfilSel = p.id; cfgTarefasPerfil(); });
+    ch.appendChild(b);
+  });
+  tpPintarTarefas(perfis);
+}
+
+function tpPintarTarefas(perfis){
+  const cx = document.getElementById('tpCorpo');
+  if (!cx) return;
+  const perfil = (perfis || []).find(p => p.id === _cfgPerfilSel);
+  if (!perfil || !(_cfgTpl || []).length){
+    cx.innerHTML = '<p class="nota">Nenhum molde para mostrar.</p>';
+    return;
+  }
+  const moldes = new Map();
+  _cfgTpl.forEach(t => {
+    if (!moldes.has(t.template_id)) moldes.set(t.template_id, { nome:t.template, itens:[] });
+    moldes.get(t.template_id).itens.push(t);
+  });
+
+  const LADO = { campo:'app de Campo', adm:'escritório', ambos:'campo e escritório' };
+  cx.innerHTML = [...moldes.entries()].map(([id, m]) =>
+      '<div class="secTit">' + esc(m.nome) + '</div>'
+    + '<table class="tab tpTab"><thead><tr>'
+    +   '<th style="width:34px"></th><th>Tarefa</th><th>Etapa</th>'
+    +   '<th>Quem faz hoje</th><th>Executa em</th><th class="num">OS abertas</th>'
+    + '</tr></thead><tbody>'
+    + m.itens.map(t => {
+        const tem = (t.perfis_responsaveis || []).includes(perfil.id);
+        return '<tr' + (tem ? ' class="tpOn"' : '') + '>'
+        + '<td><input type="checkbox" data-tp="' + esc(t.template_id + '|' + t.tarefa_id) + '"'
+        +   (tem ? ' checked' : '') + ' aria-label="' + esc(t.nome) + '"></td>'
+        + '<td><b>' + esc(t.nome) + '</b> <span class="mono mini">' + esc(t.tarefa_id) + '</span></td>'
+        + '<td>' + esc(t.fase || '') + '</td>'
+        + '<td class="mini">' + esc((t.perfis_responsaveis || []).join(', ') || '—') + '</td>'
+        + '<td class="mini">' + esc(LADO[t.executor] || t.executor || '') + '</td>'
+        + '<td class="num">' + (t.abertas || 0) + '</td>'
+        + '</tr>';
+      }).join('')
+    + '</tbody></table>').join('');
+
+  cx.querySelectorAll('[data-tp]').forEach(ck => ck.addEventListener('change', () => {
+    const [tpl, tid] = ck.dataset.tp.split('|');
+    tpAlternar(tpl, tid, ck, perfis);
+  }));
+}
+
+/** Marca ou desmarca o perfil nesta tarefa. Grava na hora; se a mudança troca
+ *  o LADO da tarefa (campo ↔ escritório), pergunta antes — é o que decide se
+ *  ela aparece no aplicativo de Campo. */
+function tpAlternar(tplId, tarefaId, ck, perfis){
+  const t = (_cfgTpl || []).find(x => x.template_id === tplId && x.tarefa_id === tarefaId);
+  if (!t) return;
+  const atuais = (t.perfis_responsaveis || []).slice();
+  const marcar = ck.checked;
+  const novos = marcar ? atuais.concat([_cfgPerfilSel]).filter((v,i,a) => a.indexOf(v) === i)
+                       : atuais.filter(x => x !== _cfgPerfilSel);
+  const voltar = () => { ck.checked = !marcar; };
+
+  if (!novos.length){
+    toast('Deixe ao menos um perfil: sem nenhum, a tarefa vira de escritório e some do app de Campo.','err');
+    voltar(); return;
+  }
+
+  // o lado da tarefa é derivado dos perfis — conferido aqui só para AVISAR;
+  // quem calcula de verdade é o banco (`tf__executor_de`), e é o número dele
+  // que aparece no toast depois.
+  const ladoDe = lista => {
+    const ps = (perfis || []).filter(p => lista.includes(p.id) && !p.is_admin);
+    const campo = ps.some(p => p.executa_em === 'campo' || p.executa_em === 'ambos');
+    const adm   = ps.some(p => p.executa_em === 'adm'   || p.executa_em === 'ambos');
+    return campo && adm ? 'ambos' : campo ? 'campo' : 'adm';
+  };
+  const LADO = { campo:'só no app de Campo', adm:'só no escritório', ambos:'no campo e no escritório' };
+  const antes = t.executor || ladoDe(atuais), depois = ladoDe(novos);
+
+  const gravar = async () => {
+    if (DEMO){ toast('Modo demonstração: a mudança não é gravada.','err'); voltar(); return; }
+    try{
+      const r = await rpc('tf_salvar_perfis_tarefa',
+        { p_template_id: tplId, p_tarefa_id: tarefaId, p_perfis: novos });
+      t.perfis_responsaveis = novos;
+      t.executor = r.executor_depois || depois;
+      toast('“' + t.nome + '”: ' + novos.join(', ')
+        + (Number(r.os_afetadas) ? ' — ' + r.os_afetadas + ' OS aberta(s) já valendo.'
+                                 : ' — nenhuma OS aberta usava esta tarefa.'), 'ok');
+      tpPintarTarefas(perfis);
+    }catch(e){ toast(e.message,'err'); voltar(); }
+  };
+
+  if (antes !== depois){
+    abrirModal('Isto muda onde a tarefa aparece',
+        '<p><b>' + esc(t.nome) + '</b> passa a ser executada <b>' + esc(LADO[depois] || depois)
+      + '</b> (hoje é ' + esc(LADO[antes] || antes) + ').</p>'
+      + '<div class="aviso">Isso não é só permissão: é o que faz a tarefa '
+      + (depois === 'adm'
+         ? '<b>sumir do aplicativo de Campo</b> de quem já a fazia no celular.'
+         : '<b>aparecer no aplicativo de Campo</b>, no celular do inspetor.')
+      + '</div>'
+      + '<p class="nota">Vale para as OS abertas em que esta tarefa ainda não foi resolvida.</p>',
+      [{ label:'Cancelar', onClick: () => { fecharModal(); voltar(); } },
+       { label:'Mudar assim mesmo', pri:true, onClick: async () => { fecharModal(); await gravar(); } }]);
+    return;
+  }
+  gravar();
+}
+
 // ── DOCUMENTOS ──────────────────────────────────────────────────────────────
 async function cfgDocumentos(){
   const c = document.getElementById('cfgCorpo');
@@ -8531,6 +9122,24 @@ const demoUsuarios  = () => { _demoContar();
   return _demoU.slice().sort((a,b) => (b.ativo-a.ativo) || a.nome.localeCompare(b.nome)); };
 const demoPerfis    = () => { _demoContar(); return _demoP.slice(); };
 const demoPendentes = () => _demoPend.slice();
+
+// S31 · a tela "Tarefas por perfil" no modo demonstração. Um pedaço de cada
+// molde, com os perfis reais do template — o bastante para ver como a tela se
+// comporta sem banco. Marcar aqui não grava nada, e a tela diz isso.
+const _demoTpl = [
+  ['INSPECAO_NR13','Inspeção NR-13','T01','Anexar pedido de compra','Administrativo inicial',['compras','tecnico_adm'],'adm',2],
+  ['INSPECAO_NR13','Inspeção NR-13','T02','Lançar na planilha de controle','Administrativo inicial',['admin','tecnico_adm'],'adm',1],
+  ['INSPECAO_NR13','Inspeção NR-13','T03','Agendar serviço (data e hora)','Agendamento',['comercial','tecnico_adm','inspetor'],'ambos',1],
+  ['INSPECAO_NR13','Inspeção NR-13','T04','Emitir ART','Documentação pré-inspeção',['tecnico_adm'],'adm',3],
+  ['INSPECAO_NR13','Inspeção NR-13','T05','Lançar no TapDoc','Documentação pré-inspeção',['tecnico_adm'],'adm',3],
+  ['INSPECAO_NR13','Inspeção NR-13','T06','Executar a inspeção','Inspeção em campo',['inspetor','auxiliar'],'campo',2],
+  ['ACESSORIOS_NR13','Fornecimento de Acessórios','T01','Aceitar OS e deslocar','Aberta',['inspetor','auxiliar'],'campo',1],
+  ['ACESSORIOS_NR13','Fornecimento de Acessórios','T04','Conferir levantamento','Orçamento',['tecnico_adm','compras','comercial'],'adm',2],
+  ['ACESSORIOS_NR13','Fornecimento de Acessórios','T11','Emitir pedido de compra','Compra',['compras'],'adm',1]
+];
+const demoTarefasTemplate = () => _demoTpl.map(x => ({
+  template_id:x[0], template:x[1], tarefa_id:x[2], nome:x[3], fase:x[4],
+  perfis_responsaveis:x[5].slice(), executor:x[6], quadros:[], abertas:x[7], resolvidas:0 }));
 
 // As mesmas recusas do banco, para o demo não prometer o que a produção nega.
 function demoCriarUsuario(nome, email, perfil){
@@ -9713,17 +10322,42 @@ async function detalheCliente(c){
     +   '</div>'
     +   '<div class="campos">'
     +     cp('clNome','Razão social', cli.razao_social)
-    +     '<div class="dupla">' + cp('clFant','Nome fantasia', cli.nome_fantasia, 'como é conhecido — opcional') + cp('clCnpj','CNPJ', cli.cnpj, 'opcional') + '</div>'
+    // ── ITEM 8 (S31): BUSCAR DADOS DO CNPJ ──────────────────────────────
+    // Não é busca automática: o botão é o ato. Digitar o CNPJ e ver a ficha
+    // se reescrever sozinha assusta — e às vezes o que está na tela é mais
+    // novo que o que está na Receita.
+    +     '<div class="dupla">' + cp('clFant','Nome fantasia', cli.nome_fantasia, 'como é conhecido — opcional')
+    +     '<div class="cnpjLinha">' + cp('clCnpj','CNPJ', cli.cnpj, 'opcional')
+    +       '<button class="btn" type="button" id="clCnpjB" '
+    +       'title="Consulta os dados públicos deste CNPJ e preenche o formulário">'
+    +       'Buscar dados do CNPJ</button></div></div>'
+    +     '<div id="clCnpjMsg"></div>'
     +   '</div>'
     + '</div>'
     + '<div class="secTit" style="margin-top:0">Onde fica</div>'
-    + cp('clEnd','Endereço', cli.endereco, 'Rua, número, bairro')
+    + cp('clEnd','Endereço', cli.endereco, 'Rua e complemento — o que vai no documento')
+    + '<div class="tripla">' + cp('clNum','Número', cli.numero) + cp('clBai','Bairro', cli.bairro)
+    +   cp('clCompl','Complemento', cli.complemento, 'sala, galpão, bloco') + '</div>'
     + '<div class="tripla">' + cp('clCid','Cidade', cli.cidade) + cp('clUf','UF', cli.uf)
     +   cp('clCep','CEP', cli.cep) + '</div>'
     + cp('clLoc','Localização no mapa', cli.localizacao, 'Cole aqui o link do Google Maps')
     + '<p class="nota">O endereço é para o documento; a localização é para chegar lá. '
     + 'Metade das plantas não tem número que o GPS ache — é o link do mapa que evita o '
     + 'inspetor ligando do portão errado.</p>'
+    // Os campos da Receita. Ficam juntos e por último porque quase nunca se
+    // digitam à mão: ou vieram da consulta, ou estão vazios. Editáveis assim
+    // mesmo — cadastro da Receita atrasa, e quem sabe o de hoje é o vendedor.
+    + '<div class="secTit">Na Receita Federal</div>'
+    + '<div class="tripla">' + cp('clSit','Situação cadastral', cli.situacao_cadastral, 'ATIVA, BAIXADA…')
+    +   cp('clNat','Natureza jurídica', cli.natureza_juridica)
+    +   cp('clAber','Data de abertura', cli.data_abertura, null, 'date') + '</div>'
+    + '<div class="dupla">' + cp('clCnae','CNAE', cli.cnae)
+    +   cp('clCnaeD','Atividade principal', cli.cnae_descricao) + '</div>'
+    + (cli.dados_cnpj_em
+        ? '<p class="nota">Consultado pelo CNPJ em '
+          + esc(new Date(cli.dados_cnpj_em).toLocaleDateString('pt-BR'))
+          + '. Vale conferir antes de emitir documento: a Receita muda e não avisa.</p>'
+        : '')
     + '<div class="campo"><label for="clObs">Observações</label>'
     + '<textarea id="clObs" rows="2">' + esc(cli.observacoes||'') + '</textarea></div>'
     + '<button class="btn pri" id="clSalvar" style="width:100%;margin-bottom:20px">Salvar cliente</button>'
@@ -9741,12 +10375,27 @@ async function detalheCliente(c){
           p_cnpj: v('clCnpj').trim() || null, p_endereco: v('clEnd').trim() || null,
           p_cidade: v('clCid').trim() || null, p_uf: v('clUf').trim() || null,
           p_cep: v('clCep').trim() || null, p_localizacao: v('clLoc').trim() || null,
-          p_observacoes: v('clObs').trim() || null });
+          p_observacoes: v('clObs').trim() || null,
+          // S31 · item 8
+          p_numero: v('clNum').trim() || null, p_bairro: v('clBai').trim() || null,
+          p_complemento: v('clCompl').trim() || null,
+          p_situacao_cadastral: v('clSit').trim() || null,
+          p_cnae: v('clCnae').trim() || null, p_cnae_descricao: v('clCnaeD').trim() || null,
+          p_natureza_juridica: v('clNat').trim() || null,
+          p_data_abertura: v('clAber') || null,
+          // só carimba quando a consulta aconteceu nesta sessão de edição:
+          // salvar à mão não pode fazer dado velho parecer recém-conferido
+          p_dados_cnpj_em: _cnpjConsultado || null });
         toast('Cliente salvo.','ok');
         pintarCadastros();
       }catch(e){ toast(e.message,'err'); }
     });
   });
+
+  // ── o botão da consulta do CNPJ ──
+  _cnpjConsultado = null;
+  const bCnpj = document.getElementById('clCnpjB');
+  if (bCnpj) bCnpj.addEventListener('click', () => buscarDadosCnpj(bCnpj));
 
   // ── logomarca ──
   const bLogo = document.getElementById('clLogoB');
@@ -9775,6 +10424,117 @@ async function detalheCliente(c){
 
   pintarContatos(cli, contatos);
   pintarEquipamentos(cli, equips);
+}
+
+// ── ITEM 8 (S31): OS DADOS PÚBLICOS DO CNPJ ─────────────────────────────────
+// Metade da ficha de um cliente novo é digitação de coisa que já está pública
+// no cartão CNPJ. O botão consulta e preenche; o vendedor confere e salva.
+//
+// TRÊS DECISÕES:
+//
+//  · O SERVIÇO é a BrasilAPI (`brasilapi.com.br`). O Bruno não tem preferência
+//    e a escolha ficou comigo: é gratuita, não pede cadastro nem chave (chave
+//    num arquivo que vai para o GitHub Pages seria chave pública), responde
+//    com CORS liberado — sem isso o navegador nem tenta — e lê da base da
+//    Receita. Se um dia ela sair do ar, trocar é mexer só em `_CNPJ_URL` e no
+//    `_cnpjMapear` aqui embaixo.
+//
+//  · NADA É APAGADO POR CAMPO VAZIO. O que a consulta não trouxer fica como
+//    estava na tela. Consulta incompleta não pode limpar o endereço que
+//    alguém conferiu por telefone.
+//
+//  · TELEFONE E E-MAIL NÃO ENTRAM NA FICHA. Eles moram em Contatos, que tem
+//    nome e papel (quem aprova, quem agenda, quem recebe a nota) — o telefone
+//    da Receita é o da portaria. A tela mostra o que veio, para o vendedor
+//    cadastrar o contato com aquilo à mão.
+const _CNPJ_URL = 'https://brasilapi.com.br/api/cnpj/v1/';
+let _cnpjConsultado = null;   // quando a consulta rodou; vai no salvar
+
+const _soDigitos = v => String(v || '').replace(/\D/g, '');
+
+/** O que a resposta vira na ficha. Isolado porque é o único ponto que sabe o
+ *  formato do serviço — trocar de fornecedor é reescrever só isto. */
+function _cnpjMapear(j){
+  const rua = [j.descricao_tipo_de_logradouro, j.logradouro]
+    .filter(x => x && String(x).trim()).join(' ').trim();
+  return {
+    razao_social: j.razao_social,
+    nome_fantasia: j.nome_fantasia,
+    endereco: rua || null,
+    numero: j.numero,
+    complemento: j.complemento,
+    bairro: j.bairro,
+    cidade: j.municipio,
+    uf: j.uf,
+    cep: _soDigitos(j.cep).replace(/^(\d{5})(\d{3})$/, '$1-$2') || null,
+    situacao_cadastral: j.descricao_situacao_cadastral,
+    cnae: j.cnae_fiscal ? String(j.cnae_fiscal) : null,
+    cnae_descricao: j.cnae_fiscal_descricao,
+    natureza_juridica: j.natureza_juridica,
+    data_abertura: j.data_inicio_atividade || null,
+    _telefone: j.ddd_telefone_1 || null,
+    _email: j.email || null
+  };
+}
+
+async function buscarDadosCnpj(botao){
+  const inp = document.getElementById('clCnpj');
+  const msg = document.getElementById('clCnpjMsg');
+  const doc = _soDigitos(inp && inp.value);
+  const dizer = (html, erro) => {
+    if (!msg) return;
+    msg.innerHTML = '<div class="cnpjCx' + (erro ? ' erro' : '') + '">' + html + '</div>';
+  };
+  if (doc.length !== 14){
+    dizer('Digite o CNPJ completo (14 números) antes de buscar.', true); return;
+  }
+  botao.disabled = true;
+  const rot = botao.textContent;
+  botao.textContent = 'Buscando…';
+  dizer('Consultando a Receita…');
+  try{
+    const r = await fetch(_CNPJ_URL + doc, { headers: { 'Accept': 'application/json' } });
+    if (r.status === 404) throw new Error('A Receita não tem esse CNPJ. Confira os números.');
+    if (r.status === 429) throw new Error('O serviço de consulta pediu para esperar um pouco. Tente de novo em um minuto.');
+    if (!r.ok) throw new Error('O serviço de consulta respondeu ' + r.status + '.');
+    const j = await r.json();
+    const d = _cnpjMapear(j);
+
+    // preenche o que veio; o que não veio fica como está
+    const por = { clNome:'razao_social', clFant:'nome_fantasia', clEnd:'endereco',
+                  clNum:'numero', clBai:'bairro', clCompl:'complemento',
+                  clCid:'cidade', clUf:'uf', clCep:'cep', clSit:'situacao_cadastral',
+                  clCnae:'cnae', clCnaeD:'cnae_descricao', clNat:'natureza_juridica',
+                  clAber:'data_abertura' };
+    let n = 0;
+    Object.keys(por).forEach(id => {
+      const v = d[por[id]];
+      const el = document.getElementById(id);
+      if (el && v != null && String(v).trim() !== ''){ el.value = String(v).trim(); n++; }
+    });
+    // o CNPJ volta formatado, como no cartão
+    if (inp) inp.value = doc.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+    _cnpjConsultado = new Date().toISOString();
+
+    const alerta = d.situacao_cadastral && !/ativa/i.test(d.situacao_cadastral)
+      ? '<br><b style="color:var(--crit)">Atenção: a situação cadastral é '
+        + esc(d.situacao_cadastral) + '.</b> Vale confirmar antes de emitir proposta ou nota.'
+      : '';
+    const contato = (d._telefone || d._email)
+      ? '<br>Veio também ' + [d._telefone ? '<b>' + esc(d._telefone) + '</b>' : null,
+                             d._email ? '<b>' + esc(d._email) + '</b>' : null]
+          .filter(Boolean).join(' e ')
+        + '. Telefone e e-mail moram em <b>Contatos</b>, aqui embaixo, porque pertencem a uma '
+        + '<i>pessoa</i> — copie para lá se forem de alguém.'
+      : '';
+    dizer(n + ' campo(s) preenchido(s) pela consulta. <b>Confira e clique em Salvar cliente</b> — '
+      + 'nada foi gravado ainda, e tudo continua editável.' + alerta + contato);
+  }catch(e){
+    dizer('Não deu para consultar: ' + esc(e.message)
+      + '<br>Dá para preencher à mão normalmente — a consulta é um atalho, não um caminho obrigatório.', true);
+  }finally{
+    botao.disabled = false; botao.textContent = rot;
+  }
 }
 
 // ── CONTATOS ────────────────────────────────────────────────────────────────
@@ -11336,6 +12096,93 @@ function agVistaMes(cx){
 // a chave de uma linha da agenda: OS|tarefa, ou av|id do compromisso
 const chaveAg = t => t.origem === 'avulso' ? 'av|' + t.compromisso_id : t.os_id + '|' + t.tarefa_id;
 
+// ── ITEM 2 (S31): O LOTE DA VISTA "SEM DIA" ─────────────────────────────────
+// A seleção vive numa variável de módulo, não no DOM: a lista se repinta a
+// cada filtro e a cada refresh em segundo plano, e seleção guardada no
+// checkbox some junto. É a mesma regra que vale para busca e paginação aqui.
+const LOTE = new Set();
+
+/** Esta pessoa consegue assumir esta linha? A conta é a MESMA de
+ *  `tf_assumir_tarefa`: sem dono, ainda aberta, e o perfil entre os
+ *  responsáveis (ou a tarefa sem perfil nomeado, ou quem olha é admin).
+ *  A caixinha só aparece onde a resposta é sim — marcar em massa o que o
+ *  servidor vai recusar é prometer o que ele nega. */
+function agPossoAssumir(t){
+  if (!t) return false;
+  if (DEMO) return !t.usuario_designado && !t.usuario_id;   // só para a tela ser vista
+  if (t.origem === 'avulso'){
+    // compromisso avulso tem função própria (`tf_assumir_compromisso`), sem
+    // perfil responsável: qualquer um do time pega o que está solto
+    return !t.usuario_designado && !t.usuario_id;
+  }
+  if (t.usuario_designado) return false;               // já tem dono: nada a assumir em lote
+  if (!['pendente','em_andamento'].includes(t.status || 'pendente')) return false;
+  if (sessao.admin) return true;
+  const ps = t.perfis_responsaveis || [];
+  return !ps.length || ps.includes(sessao.perfil);
+}
+
+/** Por que a caixinha não está ali. Vai no title, para a linha sem caixinha
+ *  não parecer um esquecimento. */
+function agPorQueNao(t){
+  if (!t) return '';
+  if (t.usuario_designado || t.usuario_id)
+    return 'Já está com ' + (t.usuario || 'alguém') + ' — use "Assumir" na OS para tomar a tarefa.';
+  const ps = t.perfis_responsaveis || [];
+  if (ps.length) return 'Esta tarefa é de ' + ps.join(' ou ') + '.';
+  return 'Esta tarefa não pode ser assumida agora.';
+}
+
+/** Assume a leva, uma chamada por tarefa, e conta o que aconteceu.
+ *
+ *  NÃO é tudo ou nada, de propósito: se uma das trinta não bater com o perfil,
+ *  recusar as trinta faria a pessoa procurar qual é, uma a uma — exatamente o
+ *  trabalho que este botão existe para tirar. O que passou, passou; o que
+ *  falhou volta nomeado, com o motivo do servidor.
+ *
+ *  `tf_assumir_tarefa` não levanta exceção quando recusa: devolve
+ *  {status:'recusado'}. Ignorar o retorno era o verde mentindo do S18. */
+async function agAssumirLote(itens){
+  if (!itens || !itens.length) return;
+  if (DEMO){ toast('Modo demonstração: nada é assumido de verdade.','err'); return; }
+  const falhas = [];
+  let ok = 0;
+  for (const t of itens){
+    try{
+      if (t.origem === 'avulso'){
+        await rpc('tf_assumir_compromisso', { p_id: t.compromisso_id, p_forcar: false });
+        ok++;
+        continue;
+      }
+      const r = await rpc('tf_assumir_tarefa',
+        { p_os_id: t.os_id, p_tarefa_id: t.tarefa_id, p_forcar: false });
+      if (r && r.status === 'recusado'){
+        falhas.push({ t, motivo: r.motivo === 'perfil_nao_autorizado'
+          ? 'é de ' + ((r.perfis || []).join(' ou ') || 'outro perfil')
+          : (r.motivo || 'recusada') + (r.status_atual ? ' (está ' + r.status_atual + ')' : '') });
+      } else if (r && r.status === 'locked'){
+        falhas.push({ t, motivo: (r.locked_nome || 'outra pessoa') + ' assumiu agora há pouco' });
+      } else ok++;
+    }catch(e){ falhas.push({ t, motivo: e.message }); }
+  }
+  LOTE.clear();
+  AGENDA.chave = null; AGENDA.pool = [];
+  await pintarAgenda();
+
+  if (!falhas.length){
+    toast(ok + ' tarefa(s) assumida(s) — agora são suas, ainda sem dia marcado.', 'ok');
+    return;
+  }
+  abrirModal(ok ? ok + ' assumida(s), ' + falhas.length + ' não' : 'Nenhuma foi assumida',
+      (ok ? '<p class="nota" style="margin-top:0">As que deram certo já estão com você, em '
+            + '<b>Sem dia</b>. Use <b>marcar dia</b> para pôr na semana.</p>' : '')
+    + '<div class="aviso"><b>Estas ficaram de fora:</b><ul style="margin:6px 0 0;padding-left:18px">'
+    + falhas.map(f => '<li>' + esc(f.t.os_numero || '') + ' · ' + esc(f.t.tarefa || '')
+        + ' — ' + esc(f.motivo) + '</li>').join('')
+    + '</ul></div>',
+    [{ label:'Entendi', pri:true, onClick: fecharModal }]);
+}
+
 // ── VISTA: SEM DIA (o antigo "pool", agora com filtros) ─────────────────────
 function agVistaPool(cx){
   const q = BUSCA.age || '';
@@ -11367,6 +12214,17 @@ function agVistaPool(cx){
         + esc(r) + '</option>').join('')
     + '</select></label>';
 
+  // ── ITEM 2 (S31): ASSUMIR EM LOTE ────────────────────────────────────────
+  // 36 tarefas sem dono, uma por vez. A caixinha só aparece onde ESTA pessoa
+  // consegue assumir (sem dono e com o perfil responsável batendo) — o resto
+  // da linha continua clicável, é só a marcação em massa que não se oferece
+  // onde o servidor recusaria. O lote não é tudo-ou-nada: o que passar, passa,
+  // e o que falhar volta com o motivo.
+  const assumiveis = lista.filter(agPossoAssumir);
+  // marcação de tarefa que saiu do filtro não pode ficar pendurada
+  const validas = new Set(assumiveis.map(chaveAg));
+  [...LOTE].forEach(k => { if (!validas.has(k)) LOTE.delete(k); });
+
   let html = '<div class="agFiltros">'
     + sel('fCli','Cliente', clientes, F.cliente)
     + sel('fOs','OS', oss, F.os)
@@ -11376,6 +12234,19 @@ function agVistaPool(cx){
     + '<button class="btn mini" type="button" id="fLimpar">limpar filtros</button>'
     + '<span class="agFn">' + lista.length + ' de ' + todos.length + '</span>'
     + '</div>';
+
+  if (assumiveis.length){
+    html += '<div class="agLote">'
+      + '<label class="chk" style="margin:0"><input type="checkbox" id="agTodas"'
+      + (LOTE.size === assumiveis.length ? ' checked' : '') + '> '
+      + 'marcar as ' + assumiveis.length + ' que são do seu perfil</label>'
+      + '<span>' + (LOTE.size ? '<b>' + LOTE.size + '</b> selecionada'
+                                + (LOTE.size > 1 ? 's' : '')
+                              : 'nenhuma selecionada') + '</span>'
+      + '<button class="btn pri" type="button" id="agAssumir"'
+      + (LOTE.size ? '' : ' disabled') + '>Assumir selecionadas</button>'
+      + '</div>';
+  }
 
   if (!lista.length){
     html += '<div class="vazio2"><b>' + (todos.length ? 'Nada bate com o filtro' : 'Nada solto')
@@ -11408,7 +12279,13 @@ function agVistaPool(cx){
       +   '<span class="agGrupoN">' + g.itens.length + ' tarefa'
       +     (g.itens.length > 1 ? 's' : '') + ' sem dia</span></div>'
       + g.itens.map(t =>
-          '<div class="agLinha"><span class="agLt">' + esc(t.tarefa || '') + '</span>'
+          '<div class="agLinha">'
+        + (agPossoAssumir(t)
+            ? '<span class="agCk"><input type="checkbox" data-lote="' + esc(chaveAg(t))
+              + '"' + (LOTE.has(chaveAg(t)) ? ' checked' : '')
+              + ' aria-label="Assumir ' + esc(t.tarefa || '') + '"></span>'
+            : '<span class="agCk agCkVazio" title="' + esc(agPorQueNao(t)) + '"></span>')
+        + '<span class="agLt">' + esc(t.tarefa || '') + '</span>'
         + '<span class="agLe">' + esc(t.fase || '') + '</span>'
         + '<button class="btn mini agLq" type="button" data-quem="'
         + esc(chaveAg(t)) + '">'
@@ -11441,6 +12318,24 @@ function agVistaPool(cx){
     if (t) agAbrirTarefa(t, true);
   }));
 
+  // ITEM 2 (S31): a marcação vive FORA do DOM (em `LOTE`), como o resto do
+  // estado desta tela — senão o refresh em segundo plano apagaria a seleção
+  // no meio da escolha.
+  cx.querySelectorAll('[data-lote]').forEach(ck => ck.addEventListener('change', () => {
+    if (ck.checked) LOTE.add(ck.dataset.lote); else LOTE.delete(ck.dataset.lote);
+    agPintar();
+  }));
+  const todasCk = document.getElementById('agTodas');
+  if (todasCk) todasCk.addEventListener('change', () => {
+    LOTE.clear();
+    if (todasCk.checked) assumiveis.forEach(t => LOTE.add(chaveAg(t)));
+    agPintar();
+  });
+  const bLote = document.getElementById('agAssumir');
+  if (bLote) bLote.addEventListener('click', function(){
+    _semDuploEnvio_(this, () => agAssumirLote(assumiveis.filter(t => LOTE.has(chaveAg(t)))));
+  });
+
   // "Quem" é o outro caminho: escolher o responsável AGORA e o dia depois.
   cx.querySelectorAll('button[data-quem]').forEach(b => b.addEventListener('click', () => {
     const t = todos.find(x => chaveAg(x) === b.dataset.quem);
@@ -11470,6 +12365,13 @@ async function modalQuem(t){
       { p_os_id: t.os_id, p_tarefa_id: t.tarefa_id });
   }catch(e){ toast(e.message,'err'); return; }
 
+  // S31: escolher OUTRA pessoa é do admin. Para os demais perfis a lista fica
+  // com uma opção só — eles mesmos —, que é o que `tf_designar_tarefa` aceita.
+  // Some da lista é melhor que aparecer e o servidor recusar depois.
+  if (!sessao.admin){
+    const eu = String(meuId());
+    pessoas = (pessoas || []).filter(u => String(u.usuario_id) === eu);
+  }
   const atual = t.usuario_designado || '';
   const linha = u =>
       '<label class="linhaOpc"><input type="radio" name="qmU" value="' + esc(u.usuario_id) + '"'
@@ -11487,8 +12389,15 @@ async function modalQuem(t){
          + '<label class="linhaOpc"><input type="radio" name="qmU" value=""'
          + (atual ? '' : ' checked') + '> <span>— ninguém —</span></label>'
          + pessoas.map(linha).join('') + '</div>'
-       : '<div class="aviso">Ninguém do time tem o perfil responsável por esta '
-         + 'tarefa. Confira os perfis em Configurações → Usuários.</div>')
+       : (sessao.admin
+          ? '<div class="aviso">Ninguém do time tem o perfil responsável por esta '
+            + 'tarefa. Confira os perfis em Configurações → Usuários.</div>'
+          : '<div class="aviso">Esta tarefa é de <b>'
+            + esc((t.perfis_responsaveis || []).join(' ou ') || 'outro perfil')
+            + '</b> — o seu perfil não a assume. Quem muda isso é o administrador, '
+            + 'em Configurações › Tarefas por perfil.</div>'))
+    + (sessao.admin ? '' : '<p class="nota" style="margin:8px 0 0">Escolher <b>outra '
+       + 'pessoa</b> é do administrador. Aqui você pega a tarefa para você.</p>')
     + '<p style="font-size:12px;color:var(--ink-3);margin:10px 0 0;line-height:1.45">'
     + 'A tarefa continua em <b>Sem dia</b>, agora com dono. Para pôr num dia, '
     + 'use <b>marcar dia</b>.</p>',
@@ -11647,6 +12556,9 @@ function agAbrirTarefa(i, doPool){
             || { os_id:i.os_id, numero:i.os_numero, cliente:i.cliente };
   modalDesignar(card, {
     tarefa_id:i.tarefa_id, nome:i.tarefa, executor:i.executor,
+    // S31: o modal avisa quando a pessoa está fora do perfil responsável —
+    // e para isso precisa saber qual é. A view da agenda já trazia.
+    perfis_responsaveis: i.perfis_responsaveis || [],
     usuario_designado:i.usuario_designado || i.usuario_id || null,
     data_prevista: doPool ? null : i.dia,
     tempo_estimado_min:i.tempo_estimado_min
