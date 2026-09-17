@@ -804,6 +804,11 @@ button.mini{padding:6px 12px;font-weight:600}
 .tbl input:disabled,.linhaCal input:disabled{background:var(--paper);color:var(--ink-2);cursor:not-allowed}
 .tbl tr.fora{opacity:.55}
 .tbl tr.fora td:first-child::after{content:" · fora do orçamento";font-size:10.5px;color:var(--ink-3)}
+.tbl tr.fora.retirado td:first-child::after{content:none}
+.tbl tr.fora.retirado{opacity:1}
+.tbl tr.fora.retirado td{color:var(--ink-3)}
+.tbl .motivoRet{text-decoration:none;display:block;margin:2px 0 0;font-size:11.5px}
+.btn.mini.tirarItem{margin:4px 0 0}
 .totais{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--rule);
   border:1px solid var(--rule);margin-top:14px}
 .totais div{background:var(--surface);padding:9px 11px}
@@ -2218,7 +2223,8 @@ const HIST_ROT = {
   pedido_compra:'Pedido de compra', pipeline_instanciado:'Pipeline criado',
   anotacao_anulada:'Anotação anulada', tarefa_reaberta:'Tarefa reaberta',
   documento_gerado:'Documento gerado', numero_reservado:'Número reservado',
-  tarefa_status:'Tarefa', os_concluida:'OS concluída', proposta_corrigida:'Proposta corrigida'
+  tarefa_status:'Tarefa', os_concluida:'OS concluída', proposta_corrigida:'Proposta corrigida',
+  item_retirado:'Item tirado da OS', item_devolvido:'Item devolvido à OS'
 };
 
 // ITEM 1 (S28): a aba lia só `eventos` — tudo automático, nada a anular. Agora
@@ -3176,6 +3182,37 @@ async function gerarPDF(tipo, card, itens){
 // ════════════════════════════════════════════════════════════════════════════
 const BRL = v => (Number(v)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 
+/** Tirar (ou devolver) um item da OS — S29. */
+function modalTirarItem(it, depois){
+  const tirar = !!it.elegivel;
+  abrirModal(tirar ? 'Tirar "' + it.descricao + '" da OS' : 'Devolver "' + it.descricao + '" à OS',
+    tirar
+      ? '<p class="nota" style="margin-top:0">Use quando o cliente não quer este item. Ele deixa de entrar '
+        + 'na proposta, no pedido de compra e nos totais da OS, e continua na lista, esmaecido, com o motivo.</p>'
+        + '<p class="nota"><b>Depois de tirar</b>, gere a revisão da proposta na aba <b>Proposta</b>: '
+        + 'ela sai só com o que ficou, e o cliente aprova essa inteira.</p>'
+        + '<div class="campo"><label for="tiM">Por que sai?</label>'
+        + '<input id="tiM" type="text" maxlength="200" autocomplete="off" name="tim_nofill" '
+        + 'placeholder="ex.: cliente não quis o purgador"></div>'
+        + '<div class="dica" id="tiMsg" style="color:var(--crit)"></div>'
+      : '<p class="nota" style="margin-top:0">O item volta para a OS e entra de novo na próxima proposta.</p>'
+        + (it.retirado_motivo ? '<p class="nota">Tinha saído por: <b>' + esc(it.retirado_motivo) + '</b></p>' : '')
+        + '<p class="nota">Confira custo e preço dele na lista — etapa que já andou sem ele não volta sozinha.</p>'
+        + '<div class="dica" id="tiMsg" style="color:var(--crit)"></div>',
+    [{ label:'Voltar', onClick: () => fecharModal() },
+     { label: tirar ? 'Tirar da OS' : 'Devolver à OS', pri:true, onClick: async () => {
+        const msg = document.getElementById('tiMsg');
+        const motivo = tirar ? document.getElementById('tiM').value.trim() : null;
+        if (tirar && motivo.length < 3){ msg.textContent = 'Escreva por que o item sai.'; return; }
+        try{
+          await rpc('tf_tirar_item_os', { p_item_id: it.id, p_tirar: tirar, p_motivo: motivo });
+          fecharModal();
+          toast(tirar ? 'Item tirado da OS. Agora gere a revisão da proposta.' : 'Item devolvido à OS.', 'ok');
+          if (depois) await depois();
+        }catch(e){ msg.textContent = e.message; }
+     }}]);
+}
+
 async function pintarItens(){
   const { card } = osAberta;
   const body = document.getElementById('dBody');
@@ -3188,7 +3225,7 @@ async function pintarItens(){
       : await get('os_itens?select=id,descricao,tipo_acessorio,quantidade,elegivel,fornecedor,'
         + 'custo_unitario,preco_unitario,desconto_pct,total_custo,total_venda,margem_valor,aprovado,'
         + 'requer_calibracao,recebido_em,certificado_num,calibrado_em,'
-        + 'requer_lacre,lacre_num,origem,e_servico'
+        + 'requer_lacre,lacre_num,origem,e_servico,retirado_em,retirado_motivo'
         + '&os_id=eq.' + card.os_id + '&order=ordem');
   }catch(e){ body.innerHTML=''; const p=document.createElement('p');
              p.style.color='var(--crit)'; p.textContent=e.message; body.appendChild(p); return; }
@@ -3272,7 +3309,7 @@ async function pintarItens(){
 
   itens.forEach(it => {
     const tr = document.createElement('tr');
-    if (!it.elegivel) tr.className = 'fora';
+    if (!it.elegivel) tr.className = it.retirado_em ? 'fora retirado' : 'fora';
     tr.innerHTML = '<td class="d"></td><td class="num q"></td>'
       + '<td><select class="o">'
       +   '<option value="">— responder —</option>'
@@ -3284,6 +3321,26 @@ async function pintarItens(){
       + '<td><input class="dsc" style="width:62px;text-align:right" type="number" step="0.01" min="0" max="100" inputmode="decimal" placeholder="0"></td>'
       + '<td class="num m"></td>';
     tr.querySelector('.d').textContent = it.descricao;
+    // ── "TIRAR DA OS" (S29) ────────────────────────────────────────────────
+    // Sem "aprovou em parte", o que o cliente não quer sai por uma REVISÃO da
+    // proposta — e a revisão do fornecimento é montada com os itens da OS.
+    // Tirar aqui = `elegivel` falso (fora da proposta, do pedido e dos totais),
+    // com motivo; só enquanto o cliente não respondeu pelo item. O que o
+    // levantamento deixou de fora não se devolve por aqui.
+    if (!soLeitura && !DEMO && it.aprovado == null && (it.elegivel || it.retirado_em)){
+      const bt = document.createElement('button');
+      bt.type = 'button'; bt.className = 'btn mini tirarItem';
+      bt.textContent = it.elegivel ? 'tirar da OS' : 'devolver à OS';
+      if (!it.elegivel && it.retirado_motivo) bt.title = 'Tirado: ' + it.retirado_motivo;
+      bt.addEventListener('click', () => modalTirarItem(it, async () => { await refrescar(); pintarItens(); }));
+      tr.querySelector('.d').appendChild(document.createElement('br'));
+      tr.querySelector('.d').appendChild(bt);
+    }
+    if (!it.elegivel && it.retirado_motivo){
+      const m = document.createElement('div'); m.className = 'nota motivoRet';
+      m.textContent = 'Tirado da OS: ' + it.retirado_motivo;
+      tr.querySelector('.d').appendChild(m);
+    }
     tr.querySelector('.q').textContent = Number(it.quantidade);
     const oi = tr.querySelector('.o');
     const fi = tr.querySelector('.f'), ci = tr.querySelector('.c'), pi = tr.querySelector('.p');
@@ -3730,7 +3787,7 @@ let PLANOS = null;
 const PLANOS_DEMO = {
   basico_texto:'Todos os requisitos da NR-13 + acesso ao TapWeb + Documentação TapWeb', basico_faixa:'Itens 3.3 ao 3.10',
   padrao_texto:'Todos os requisitos da NR-13 + acesso ao TapWeb + Documentação TapWeb + Agenda + Acompanhamento', padrao_faixa:'Itens 3.3 ao 3.12',
-  premium_texto:'Tudo do Plano Padrão + Localização + Treinamento NR-13 e TapWeb –', premium_faixa:'Itens 3.3 ao 3.16',
+  premium_texto:'Tudo do Plano Padrão + Localização + Treinamento NR-13 e TapWeb + Check-list de Compressores –', premium_faixa:'Itens 3.3 ao 3.16',
   trecho_comum:'(Vasos Cat. III, IV e V)', basico_pct:-9, premium_pct:34, arredondar:10 };
 async function carregarPlanos(forcar){
   if (PLANOS && !forcar) return PLANOS;
