@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S37</title>
+<title>TapFlow Manager · S38</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -660,7 +660,7 @@ button.mini{padding:6px 12px;font-weight:600}
 .cardCom{position:relative;text-align:left;background:var(--surface);border:1px solid var(--rule);
   border-radius:3px;padding:11px 12px;display:block;width:100%;cursor:pointer}
 .cardCom:hover{border-color:var(--accent)}
-.cardCom.morno{border-left:3px solid var(--warn)}
+.cardCom.morno{border-left:3px solid #E0B800}
 .cardCom.parado{border-left:3px solid var(--crit)}
 .cardCom .logoFaixa{margin:-3px 0 7px}
 /* O quadrado da logo: com imagem ou com as iniciais, o tamanho é o mesmo —
@@ -763,6 +763,12 @@ button.mini{padding:6px 12px;font-weight:600}
   background:var(--surface-2);color:var(--ink-3);white-space:nowrap}
 .mini.crit{background:var(--crit-soft);color:var(--crit)}
 .mini.warn{background:var(--warn-soft);color:var(--warn)}
+/* S38 · item 3: as três faixas do "dias sem interação". O amarelo NÃO é o
+   --warn (que é âmbar-terroso, lido como "marrom" ao lado do verde): é um
+   amarelo de verdade, com texto escuro para passar no contraste. */
+.mini.dsi.verde{background:var(--ok-soft);color:var(--ok)}
+.mini.dsi.amarelo{background:#FBEFA6;color:#5E4A00}
+.mini.dsi.vermelho{background:var(--crit-soft);color:var(--crit)}
 .mini.ag{background:var(--gestao-soft);color:var(--gestao)}
 .mini.ct{background:var(--accent-soft);color:var(--accent)}
 
@@ -943,6 +949,11 @@ button.mini{padding:6px 12px;font-weight:600}
   color:var(--ink-3);padding:6px 5px;border-bottom:1px solid var(--rule);white-space:nowrap}
 .tbl td{padding:6px 5px;border-bottom:1px solid var(--rule-2);vertical-align:middle}
 .tbl td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+/* S38 · item 2: a prévia do anexo por vaso pinta a célula vencida como o Word vai pintar */
+.tbl td.venc{background:#FFF176;color:#3A3000;font-weight:600}
+.anexoPrev{margin:0 0 14px}
+.anexoPrev .tbl{font-size:12px}
+.anexoPrev .tbl th,.anexoPrev .tbl td{white-space:nowrap}
 .tbl input{width:100%;padding:6px 7px;border:1px solid var(--rule);border-radius:3px;
   font-size:13px;background:var(--surface);min-width:64px}
 .tbl input:focus{outline:2px solid var(--accent);outline-offset:-1px}
@@ -1396,7 +1407,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S37';
+const APP_VERSION = 'S38';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -2284,6 +2295,28 @@ function pintarDrawer(){
       if (podeTrocar) d.querySelector('button').addEventListener('click', ev => {
         ev.stopPropagation(); modalDesignar(card, t);
       });
+      // ── ITEM 1 (S38): "ASSUMIR" EM TODA TAREFA DO MEU PERFIL ──────────
+      // Atribuir continua do admin (o "trocar" acima). Assumir — pegar para
+      // si o que o seu perfil faz — é de quem está em "quem faz", e vale
+      // também para a tarefa BLOQUEADA: a troca de pessoa acontece hoje, no
+      // telefone, para a inspeção de amanhã. Numa bloqueada o banco muda SÓ
+      // o responsável (58_ajustes_s38); quem destrava continua sendo o motor.
+      //
+      // Não aparece: para o admin (ele já tem o "trocar"), na tarefa que já é
+      // minha, e na tarefa ATUAL — essa tem o botão grande lá embaixo, com a
+      // fechadura, e dois botões para a mesma coisa confundem.
+      if (!podeTrocar && !eAtual && possoAssumir(t)){
+        const ba = document.createElement('button');
+        ba.className = 'btn mini'; ba.type = 'button'; ba.textContent = 'assumir';
+        ba.title = t.usuario_designado
+          ? 'Passa a tarefa de ' + (NOMES[t.usuario_designado] || 'outra pessoa') + ' para você.'
+          : 'Esta tarefa não tem responsável. Assumir põe o seu nome nela.';
+        ba.addEventListener('click', ev => {
+          ev.stopPropagation();
+          confirmarAssumir(t, t.usuario_designado ? (NOMES[t.usuario_designado] || 'outra pessoa') : null, false);
+        });
+        d.appendChild(ba);
+      }
       el.appendChild(d);
     }
     body.appendChild(el);
@@ -2632,7 +2665,10 @@ function pintarAcoes_(){
   // disso para concluir — e quem for tomar a tarefa continua vendo o nome do
   // dono e a confirmação antes.
   const jaEMinha = t.usuario_designado && String(t.usuario_designado) === String(eu);
-  if (t.status === 'pendente' && !lockVivo && !jaEMinha){
+  // S38: também em "em andamento" cuja fechadura de 8 h já venceu. Até o S37
+  // o botão só existia em `pendente`: quem assumiu ontem e não foi deixava a
+  // tarefa em andamento, sem fechadura viva, e sem botão para ninguém tomar.
+  if ((t.status === 'pendente' || t.status === 'em_andamento') && !lockVivo && !jaEMinha){
     const b = document.createElement('button');
     b.className = 'btn pri'; b.textContent = 'Assumir';
     const dono = t.usuario_designado && t.usuario_designado !== eu
@@ -2676,11 +2712,37 @@ function pintarAcoes_(){
     : 'Concluir esta tarefa move o card — a próxima coluna é consequência, não escolha.';
 }
 
+/** S38 · a MESMA conta de `tf_assumir_tarefa`: não resolvida, não é minha,
+ *  e o meu perfil está em "quem faz" (ou a tarefa não nomeia perfil, ou sou
+ *  admin). O botão só aparece onde o banco vai aceitar. */
+function possoAssumir(t){
+  if (!t || DEMO) return false;
+  if (t.status === 'completo' || t.status === 'dispensado') return false;
+  if (t.usuario_designado && String(t.usuario_designado) === String(meuId())) return false;
+  if (sessao.admin) return true;
+  const ps = t.perfis_responsaveis || [];
+  return !ps.length || ps.includes(sessao.perfil);
+}
+
 function confirmarAssumir(t, quem, forcar){
+  const bloqueada = !(t.status === 'pendente' || t.status === 'em_andamento');
+  const souApoio = (t.apoios || []).some(a => String(a) === String(meuId()));
+  const outros = (t.apoios || []).filter(a => String(a) !== String(meuId()))
+                   .map(a => NOMES[a] || '?');
   abrirModal('Assumir "' + t.nome + '"',
-      '<p>Esta tarefa está ' + (forcar ? 'sendo feita por' : 'designada a') + ' <b>' + esc(quem) + '</b>.</p>'
+      (quem
+        ? '<p>Esta tarefa está ' + (forcar ? 'sendo feita por' : 'com') + ' <b>' + esc(quem) + '</b>.</p>'
+        : '<p>Esta tarefa ainda não tem responsável.</p>')
     + '<div class="aviso">Ao assumir, <b>você passa a ser o responsável</b> — na agenda, no card e '
-    + 'nas telas de todo mundo. O dia marcado continua o mesmo. A troca fica no histórico da OS.</div>',
+    + 'nas telas de todo mundo'
+    + (quem ? (souApoio
+        ? ', e <b>' + esc(quem) + ' passa a ser o apoio</b> (vocês trocam de papel)'
+        : ' — <b>' + esc(quem) + ' sai da tarefa</b>') : '')
+    + '. O dia marcado continua o mesmo. A troca fica no histórico da OS.'
+    + (outros.length && !souApoio ? '<br>O apoio (' + esc(outros.join(', ')) + ') continua.' : '')
+    + (bloqueada ? '<br><b>A tarefa continua bloqueada</b> até a etapa anterior fechar — '
+        + 'assumir agora só deixa o seu nome nela.' : '')
+    + '</div>',
     [{ label:'Cancelar', onClick: () => fecharModal() },
      { label:'Assumir', pri:true, onClick: async () => { fecharModal(); await agir('assumir', t, null, forcar); } }]);
 }
@@ -2740,7 +2802,9 @@ async function agir(acao, t, valor, forcar){
     }
     else if (acao === 'concluir') await rpc('tf_concluir_tarefa', { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id });
     else if (acao === 'decisao')  await rpc('tf_resolver_decisao',{ p_os_id: card.os_id, p_tarefa_id: t.tarefa_id, p_valor: valor });
-    if (acao === 'assumir') toast('Assumida — agora a tarefa é sua em todas as telas.', 'ok');
+    if (acao === 'assumir') toast(t.status === 'pendente' || t.status === 'em_andamento'
+      ? 'Assumida — agora a tarefa é sua em todas as telas.'
+      : 'Assumida — o seu nome já está nela; ela continua bloqueada até a etapa anterior fechar.', 'ok');
 
     await carregar({silencioso:true});
     const novo = cards.find(x => x.os_id === card.os_id);
@@ -3263,7 +3327,10 @@ async function modalDesignar(card, t, aposGravar){
     (souAdmin ? '' :
       '<p style="font-size:12px;color:var(--ink-3);margin:-4px 0 0;line-height:1.45">' +
       'Designar tarefa para <b>outra pessoa</b> é do administrador. Aqui você marca ' +
-      'o <b>seu</b> dia — ou usa <b>Assumir</b>, na OS, para pegar a tarefa para você.</p>') +
+      'o <b>seu</b> dia' + (t.usuario_designado && String(t.usuario_designado) !== String(eu) && possoAssumir(t)
+        ? ' — ou usa <b>Assumir</b>, aqui embaixo, para pegar a tarefa de <b>'
+          + esc(NOMES[t.usuario_designado] || 'quem está com ela') + '</b> (ela sai da tarefa; a troca fica no histórico da OS).'
+        : ' — ou usa <b>Assumir</b>, na OS, para pegar a tarefa para você.') + '</p>') +
     '<div class="campo"><label for="mdD">Em que dia</label>' +
       '<input id="mdD" type="date" value="' + esc(t.data_prevista || isoHoje()) + '"></div>' +
     '<p style="font-size:12px;color:var(--ink-3);margin:-4px 0 0;line-height:1.45">' +
@@ -3277,6 +3344,26 @@ async function modalDesignar(card, t, aposGravar){
       'monta a barra de carga na Agenda — tarefa sem minuto não some, mas também ' +
       'não entra na conta.</p>' + blocoApoio,
     [{ label:'Cancelar', onClick: fecharModal },
+     // ── ITEM 1 (S38): ASSUMIR PELA AGENDA ────────────────────────────────
+     // A Agenda é de todos (S36) e é onde o inspetor VÊ a tarefa do colega. A
+     // OS, não: o card mora no quadro da fase atual (Administrativa, Técnico
+     // Adm.), que o perfil de campo não abre. Sem este botão, o "assumir" do
+     // S38 só existiria para quem já consegue abrir a OS. Aparece para quem
+     // não é admin, quando a tarefa é de OUTRA pessoa e o perfil bate.
+     ...(!souAdmin && !DEMO && t.usuario_designado && possoAssumir(t) ? [{
+       label:'Assumir (passar para mim)', onClick: async () => {
+         fecharModal();
+         try{
+           const r = await rpc('tf_assumir_tarefa', { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id, p_forcar: true });
+           if (r && r.status === 'recusado') throw new Error(r.motivo === 'perfil_nao_autorizado'
+             ? 'Esta tarefa é de ' + ((r.perfis || []).join(' ou ') || 'outro perfil') + '. O seu perfil não a assume.'
+             : 'O servidor recusou: ' + (r.motivo || '?') + (r.status_atual ? ' (a tarefa está ' + r.status_atual + ')' : '') + '.');
+           toast('Assumida — ' + (r && r.so_designacao
+             ? 'o seu nome já está nela; ela continua bloqueada até a etapa anterior fechar.'
+             : 'agora a tarefa é sua em todas as telas.'), 'ok');
+           if (aposGravar) await aposGravar();
+         }catch(e){ toast(e.message, 'err'); }
+       } }] : []),
      { label:'Gravar', pri:true, onClick: async () => {
         const sel  = document.getElementById('mdU');
         const op   = sel.options[sel.selectedIndex];
@@ -3443,6 +3530,10 @@ const SERVICOS_NR13 = [
   { chave:'manometro', campo:'venc_calib_manometro', nome:'Calibração de Manômetro', curto:'Man.'  },
   { chave:'valvula',   campo:'venc_calib_valvula',   nome:'Calibração de Válvula',   curto:'Válv.' }
 ];
+/* S38 · os três começos de linha de inspeção que o papel soma como "Inspeções"
+   (ver `tf__grupo_servico_nr13` no 58_). Mudar aqui é mudar lá também. */
+const INSP_INT = 'Inspeção Interna — ', INSP_EXT = 'Inspeção Externa — ',
+      INSP_AMB = 'Inspeção Interna e Externa — ';
 /** Vencido = a data já passou, medida contra o HOJE DE BRASÍLIA (`isoHoje`).
     Comparação de texto ISO, que é o que evita fuso na conta. */
 const vencido = d => !!d && String(d).slice(0,10) <= isoHoje();
@@ -4431,12 +4522,103 @@ function _juntarPlaceholders(xml){
 /** Monta o .docx final. Devolve { blob, faltaram } — `faltaram` são as chaves
  *  que ficaram no papel sem valor, para a tela poder avisar em vez de entregar
  *  uma proposta com «Cliente» impresso no meio do texto. */
-async function docxGerar({ bytes, valores, tabela, totalTexto, tirarLogoCliente, logoCliente, planos }){
+/* ── ITEM 2 (S38): O ANEXO POR VASO ─────────────────────────────────────────
+   Uma página no fim do documento com os vasos DAQUELA proposta e as colunas
+   A–G da planilha do TapWeb (Tag, Status, Data Desativação, Inspeção
+   Externa, Inspeção Interna, Calibração Manômetro, Calibração Válvula). As
+   linhas vêm prontas de `tf_anexo_vasos` (58_): o banco decide o que está
+   vencido, a tela só desenha. A célula vencida é amarela UMA POR UMA — no
+   VP-13 do exemplo, a Externa vencida acende e a Interna em dia não.
+
+   O XML é escrito com formatação própria (fonte 8,5 pt, bordas cinza) em vez
+   de copiar um estilo do modelo: os 8 modelos têm estilos diferentes, e a
+   tabela de itens de cada um tem 5 colunas, não 7. */
+const ANEXO_COLS = [
+  ['tag',        'Tag',                  1300],
+  ['status',     'Status',               1250],
+  ['desativado', 'Data Desativação',     1350],
+  ['externa',    'Inspeção Externa',     1350],
+  ['interna',    'Inspeção Interna',     1350],
+  ['manometro',  'Calibração Manômetro', 1450],
+  ['valvula',    'Calibração Válvula',   1450]
+];
+function _anexoVasosXml(a){
+  const run = (t, b, sz) => '<w:r><w:rPr>' + (b ? '<w:b/><w:bCs/>' : '')
+    + '<w:sz w:val="' + sz + '"/><w:szCs w:val="' + sz + '"/></w:rPr>'
+    + '<w:t xml:space="preserve">' + _xmlEsc(t) + '</w:t></w:r>';
+  const par = (t, o) => { o = o || {};
+    return '<w:p><w:pPr><w:spacing w:before="' + (o.antes || 0) + '" w:after="' + (o.depois || 0) + '"/>'
+      + (o.jc ? '<w:jc w:val="' + o.jc + '"/>' : '') + '</w:pPr>' + run(t, o.b, o.sz || 20) + '</w:p>'; };
+  const cel = (t, w, o) => { o = o || {};
+    return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>'
+      + (o.fill ? '<w:shd w:val="clear" w:color="auto" w:fill="' + o.fill + '"/>' : '')
+      + '<w:vAlign w:val="center"/></w:tcPr>' + par(t, { b: o.b, sz: 17, jc: 'center' }) + '</w:tc>'; };
+  const borda = ['top','left','bottom','right','insideH','insideV']
+    .map(k => '<w:' + k + ' w:val="single" w:sz="4" w:space="0" w:color="808080"/>').join('');
+  const cab = '<w:tr><w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>'
+    + ANEXO_COLS.map(c => cel(c[1], c[2], { b: true, fill: 'D9E2EC' })).join('') + '</w:tr>';
+  const linhas = (a.linhas || []).map(l => '<w:tr><w:trPr><w:cantSplit/></w:trPr>'
+    + ANEXO_COLS.map(([k, , w]) => cel(l[k] || '', w,
+        { b: k === 'tag', fill: (l.venc && l.venc[k]) ? 'FFFF00' : null })).join('') + '</w:tr>').join('');
+  return '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
+    + par('ANEXO — SITUAÇÃO DOS VASOS DE PRESSÃO', { b: true, sz: 24, depois: 80 })
+    + par('Vencimentos conforme o TapWeb' + (a.tapweb_em ? ' (atualizado em ' + a.tapweb_em + ')' : '')
+          + '. Em amarelo, os serviços vencidos em ' + a.hoje + '.', { sz: 18, depois: 160 })
+    + '<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:jc w:val="center"/>'
+    + '<w:tblBorders>' + borda + '</w:tblBorders><w:tblLayout w:type="fixed"/>'
+    + '<w:tblCellMar><w:left w:w="60" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tblCellMar>'
+    + '</w:tblPr><w:tblGrid>' + ANEXO_COLS.map(c => '<w:gridCol w:w="' + c[2] + '"/>').join('')
+    + '</w:tblGrid>' + cab + linhas + '</w:tbl><w:p/>';
+}
+/** Entra ANTES do `<w:sectPr>` final do corpo (que tem de ser o último filho
+ *  do body). Se o último sectPr é de parágrafo — há `</w:p>` depois dele —,
+ *  o corpo não tem sectPr próprio e o anexo entra logo antes de `</w:body>`. */
+function inserirAnexoVasos(xml, a){
+  const fim = xml.lastIndexOf('</w:body>');
+  if (fim < 0 || !a || !(a.linhas || []).length) return xml;
+  let pos = xml.lastIndexOf('<w:sectPr', fim);
+  if (pos < 0 || xml.lastIndexOf('</w:p>', fim) > pos || xml.lastIndexOf('</w:tbl>', fim) > pos) pos = fim;
+  return xml.slice(0, pos) + _anexoVasosXml(a) + xml.slice(pos);
+}
+
+/** A prévia e a escolha, comum aos dois geradores (OS e negócio). */
+async function carregarAnexoVasos(args){
+  if (DEMO) return null;
+  try{ return await rpc('tf_anexo_vasos', args); }
+  catch(e){ return { erro: e.message }; }
+}
+function htmlAnexoGerador(est, idChk){
+  const m = est.modelo;
+  if (!m || !m.tem_tabela) return '';
+  const a = est.anexo;
+  if (a === undefined) return '<p class="dica" style="margin:0 0 14px">Conferindo os vasos da proposta…</p>';
+  if (!a) return '';
+  if (a.erro) return '<div class="aviso" style="margin:0 0 14px">O anexo por vaso não pôde ser montado: '
+    + esc(a.erro) + (/tf_anexo_vasos/.test(a.erro) ? ' — falta rodar o <b>58_ajustes_s38.sql</b> no Supabase.' : '')
+    + ' O documento sai sem ele.</div>';
+  const ls = a.linhas || [];
+  if (!ls.length) return '<p class="dica" style="margin:0 0 14px">Sem anexo por vaso: nenhum vaso desta '
+    + 'proposta tem dados do TapWeb.</p>';
+  return '<div class="anexoPrev"><label class="check" style="margin:0 0 6px"><input type="checkbox" id="' + idChk + '"'
+    + (est.porAnexo !== false ? ' checked' : '') + '><span>Pôr no fim do documento o <b>anexo por vaso</b> — '
+    + ls.length + ' vaso(s)' + (Number(a.vencidos) ? ', ' + a.vencidos + ' serviço(s) vencido(s) em amarelo' : '')
+    + '</span></label>'
+    + '<div style="overflow-x:auto"><table class="tbl"><thead><tr>'
+    + ANEXO_COLS.map(c => '<th>' + esc(c[1]) + '</th>').join('') + '</tr></thead><tbody>'
+    + ls.map(l => '<tr>' + ANEXO_COLS.map(([k]) => '<td' + (l.venc && l.venc[k] ? ' class="venc"' : '') + '>'
+        + esc(l[k] || '') + '</td>').join('') + '</tr>').join('')
+    + '</tbody></table></div></div>';
+}
+/** O que vai para o `docxGerar`: só com modelo de proposta, com linha, e marcado. */
+const anexoParaGerar = est => (est.modelo && est.modelo.tem_tabela && est.porAnexo !== false
+  && est.anexo && !est.anexo.erro && (est.anexo.linhas || []).length) ? est.anexo : null;
+
+async function docxGerar({ bytes, valores, tabela, totalTexto, tirarLogoCliente, logoCliente, planos, anexo }){
   const JSZipLib = await carregarJSZip();
   const zip = await JSZipLib.loadAsync(bytes);
   const alvos = Object.keys(zip.files).filter(n => /^word\/.*\.xml$/.test(n) && !zip.files[n].dir);
   const faltaram = new Set();
-  let logosTiradas = 0, logosPostas = 0, planosEscritos = 0;
+  let logosTiradas = 0, logosPostas = 0, planosEscritos = 0, anexoVasos = 0;
 
   for (const nome of alvos){
     let t = await zip.file(nome).async('string');
@@ -4483,12 +4665,18 @@ async function docxGerar({ bytes, valores, tabela, totalTexto, tirarLogoCliente,
         mexeu = true;
       }
     }
+    // S38 · item 2: o anexo por vaso, no fim do corpo
+    if (nome === 'word/document.xml' && anexo && (anexo.linhas || []).length){
+      const antes = t.length;
+      t = inserirAnexoVasos(t, anexo);
+      if (t.length !== antes){ anexoVasos = anexo.linhas.length; mexeu = true; }
+    }
     if (mexeu) zip.file(nome, t);
   }
 
   const blob = await zip.generateAsync({ type:'blob',
     mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-  return { blob, faltaram: [...faltaram], logosTiradas, logosPostas, planosEscritos };
+  return { blob, faltaram: [...faltaram], logosTiradas, logosPostas, planosEscritos, anexoVasos };
 }
 
 /** Espelho de `tf__proposta_rotulo`: v1 é o número puro; v2 é "Rev. 01". */
@@ -4655,6 +4843,7 @@ async function montarGerador(caixa, props){
     '<div id="gTab"></div>' +
     '<div id="gPlanos"></div>' +
     '<div id="gLogo"></div>' +
+    '<div id="gAnexo"></div>' +
     aviso +
     (viva
       ? '<label class="chk" style="margin:0 0 10px"><input type="checkbox" id="gNovo"> '
@@ -4783,6 +4972,15 @@ async function montarGerador(caixa, props){
     if (c) c.addEventListener('change', () => { est.porLogo = c.checked; });
   };
 
+  // ── S38 · item 2: o anexo por vaso ──
+  const pintarAnexo = () => {
+    const el = document.getElementById('gAnexo');
+    if (!el) return;
+    el.innerHTML = htmlAnexoGerador(est, 'gAnexoX');
+    const c = document.getElementById('gAnexoX');
+    if (c) c.addEventListener('change', () => { est.porAnexo = c.checked; });
+  };
+
   // ── trocar de modelo recarrega tudo ──
   const trocar = async () => {
     est.modelo = modelos.find(m => m.id === sel.value);
@@ -4801,6 +4999,8 @@ async function montarGerador(caixa, props){
       est.fonte = est.itens.length ? 'os' : 'modelo';
     }catch(e){ toast('Não consegui montar os dados: ' + e.message, 'err'); est.valores = est.valores || {}; }
     pintarValores(); pintarTabela();
+    est.anexo = undefined; pintarAnexo();
+    est.anexo = await carregarAnexoVasos({ p_os_id: card.os_id }); pintarAnexo();
     // o modelo é baixado aqui só para saber se tem logomarca de cliente. Vale a
     // pena: é o defeito mais caro de todos, e descobrir depois de enviar não
     // adianta. Fica em cache para a hora de gerar.
@@ -4867,13 +5067,14 @@ async function montarGerador(caixa, props){
       msg.textContent = 'Montando o documento…';
       const usaOS = est.modelo.tem_tabela && est.fonte === 'os' && est.itens.length;
       const planos = usaOS ? planosParaGerar(est) : null;
-      const { blob, faltaram, logosTiradas, logosPostas, planosEscritos } = await docxGerar({
+      const { blob, faltaram, logosTiradas, logosPostas, planosEscritos, anexoVasos } = await docxGerar({
         bytes, valores: est.valores,
         tabela: usaOS ? est.itens : null,
         totalTexto: BRL(est.total).replace(/ /g,' '),
         tirarLogoCliente: true,
         logoCliente: est.porLogo !== false ? est.logoCli : null,
-        planos
+        planos,
+        anexo: anexoParaGerar(est)
       });
 
       const nome = nomeSeguro(numero + ' - ' + (est.valores['Cliente']||'Cliente')
@@ -4905,6 +5106,7 @@ async function montarGerador(caixa, props){
         : 'gerada e baixada.';
       _msgGerador = { cor:'var(--ok)', texto: rot + ' ' + oque
         + (planosEscritos ? ' Os três planos preenchidos (Básico, Padrão e Premium).' : '')
+        + (anexoVasos ? ' Anexo por vaso no fim (' + anexoVasos + ' vaso(s)).' : '')
         + (logosPostas ? ' Logomarca do cliente no cabeçalho.' : '')
         + (logosTiradas ? ' Logomarca do cliente anterior removida do cabeçalho.' : '')
         + (reg && reg.rotulo && reg.rotulo !== est.valores['Nº_da_Proposta']
@@ -6607,11 +6809,22 @@ function blocoLocal(d){
 const COLS_SEM_CONTADOR = new Set(['Leads', 'Recusadas', 'Concluídos']);
 const colunaComContador = nome => !COLS_SEM_CONTADOR.has(nome);
 
+/* ── ITEM 3 (S38): A COR DIZ SE JÁ É PARA SE PREOCUPAR ─────────────────────
+   Faixas confirmadas pelo Bruno em 24/09: verde até 5 dias, amarelo 6 e 7,
+   vermelho a partir de 8. Até o S37 o crachá era cinza até 6 e só mudava de
+   cor em 7 e 14 — o número estava lá, mas era preciso LER cada card.
+   Um lugar só decide a faixa: o crachá e a borda do card leem daqui.
+   A cor nunca vem sozinha — o texto continua dizendo quantos dias (quem não
+   distingue verde de vermelho lê o número). */
+const DSI_AMARELO = 6, DSI_VERMELHO = 8;
+const faixaDSI = d => (d >= DSI_VERMELHO ? 'vermelho' : (d >= DSI_AMARELO ? 'amarelo' : 'verde'));
 function chipDiasSemInteracao(dias){
   const d = Math.max(0, Number(dias || 0));
   const txt = d === 0 ? 'interação hoje' : d + (d === 1 ? ' dia' : ' dias') + ' sem interação';
-  return '<span class="mini dsi' + (d >= 14 ? ' crit' : (d >= 7 ? ' warn' : '')) + '" '
-    + 'title="Dias desde a última interação registrada no Histórico (anotação ou registro do sistema)">'
+  const f = faixaDSI(d);
+  return '<span class="mini dsi ' + f + '" '
+    + 'title="Dias desde a última interação registrada no Histórico (anotação ou registro do sistema). '
+    + 'Verde: até 5 · amarelo: 6 e 7 · vermelho: 8 ou mais.">'
     + txt + '</span>';
 }
 
@@ -6620,7 +6833,8 @@ function cardNegocio(n, comContador){
   const d = document.createElement('button');
   d.className = 'cardCom';
   const parado = Number(n.dias_parado || 0);
-  const alerta = !comContador ? '' : (parado >= 14 ? ' parado' : (parado >= 7 ? ' morno' : ''));
+  // S38: a borda acompanha a faixa do crachá (amarelo 6–7, vermelho 8+)
+  const alerta = !comContador ? '' : ({ vermelho:' parado', amarelo:' morno', verde:'' })[faixaDSI(parado)];
   d.className += alerta;
 
   // O espaço da logo é SEMPRE desenhado — com a imagem, se já veio; com as
@@ -7242,7 +7456,7 @@ async function montarGeradorNegocio(caixa, n, props){
     + '<div class="dica" id="gnMd" style="margin:-8px 0 10px"></div>'
     + '<div class="campo"><label for="gnNat">Natureza do serviço</label>'
     + '<input id="gnNat" type="text" autocomplete="off" name="gnn_nofill"></div>'
-    + '<div id="gnVals"></div><div id="gnTab"></div><div id="gnPlanos"></div><div id="gnLogo"></div>'
+    + '<div id="gnVals"></div><div id="gnTab"></div><div id="gnPlanos"></div><div id="gnLogo"></div><div id="gnAnexo"></div>'
     + '<button class="btn pri" id="gnOk" type="button" style="width:100%;padding:10px">Gerar e baixar o .docx</button>'
     + '<div class="dica" id="gnMsg" style="margin-top:8px"></div></div>';
 
@@ -7316,6 +7530,15 @@ async function montarGeradorNegocio(caixa, n, props){
     if (c) c.addEventListener('change', () => { est.porLogo = c.checked; });
   };
 
+  // ── S38 · item 2: o anexo por vaso ──
+  const pintarAnexo = () => {
+    const el = document.getElementById('gnAnexo');
+    if (!el) return;
+    el.innerHTML = htmlAnexoGerador(est, 'gnAnexoX');
+    const c = document.getElementById('gnAnexoX');
+    if (c) c.addEventListener('change', () => { est.porAnexo = c.checked; });
+  };
+
   const trocar = async () => {
     est.prop = elegiveis.find(p => p.id === selP.value) || elegiveis[0];
     est.modelo = modelos.find(m => m.id === sel.value);
@@ -7330,6 +7553,8 @@ async function montarGeradorNegocio(caixa, n, props){
       est.total = est.itens.reduce((s, i) => s + (Number(i.valor_total_num) || 0), 0);
     }catch(e){ toast('Não consegui montar os dados: ' + e.message, 'err'); est.valores = est.valores || {}; }
     pintarValores(); pintarTabela();
+    est.anexo = undefined; pintarAnexo();
+    est.anexo = await carregarAnexoVasos({ p_proposta_id: est.prop.id }); pintarAnexo();
     est.logos = 0; pintarLogo();
     est.temPlanos = false; est.idxPlano = 0;
     pintarPlanosGerador(document.getElementById('gnPlanos'), est, 'gnPlanoL');
@@ -7369,13 +7594,14 @@ async function montarGeradorNegocio(caixa, n, props){
         msg.textContent = 'Montando o documento…';
         const usaItens = est.modelo.tem_tabela && est.itens.length;
         const planos = usaItens ? planosParaGerar(est) : null;
-        const { blob, faltaram, logosPostas, planosEscritos } = await docxGerar({
+        const { blob, faltaram, logosPostas, planosEscritos, anexoVasos } = await docxGerar({
           bytes, valores: est.valores,
           tabela: usaItens ? est.itens : null,
           totalTexto: BRL(est.total).replace(/\u00a0/g,' '),
           tirarLogoCliente: true,
           logoCliente: est.porLogo !== false ? est.logoCli : null,
-          planos
+          planos,
+          anexo: anexoParaGerar(est)
         });
         const rot = est.valores['Nº_da_Proposta'] || est.prop.numero;
         const natu = document.getElementById('gnNat').value.trim();
@@ -7392,6 +7618,7 @@ async function montarGeradorNegocio(caixa, n, props){
         toast('Documento da proposta ' + rot + ' gerado.', 'ok');
         _msgGerNeg = rot + ' gerada e baixada.'
           + (planosEscritos ? ' Os três planos preenchidos (Básico, Padrão e Premium).' : '')
+          + (anexoVasos ? ' Anexo por vaso no fim (' + anexoVasos + ' vaso(s)).' : '')
           + (logosPostas ? ' Logomarca do cliente no cabeçalho.' : '')
           + (faltaram.length ? ' ⚠ Ficaram sem valor no papel: ' + faltaram.join(', ') + '.' : '')
           + ' Confira o arquivo e use "Registrar envio" quando mandar ao cliente.';
@@ -7789,9 +8016,12 @@ function blocoEquipamentosProposta(equip){
     + 'do cadastro — o que o TapWeb já sabe não se digita de novo aqui.</p>'
     // ITEM 5 (S37): aqui continua um por vaso (é o que a OS da inspeção usa
     // para saber ONDE ir); o documento soma por tipo — ver `57_ajustes_s37`.
+    // S38: até 3 linhas, e Interna + Externa do mesmo vaso é UMA inspeção
     + '<p class="dica">No <b>documento</b> da proposta os serviços marcados saem '
-    + '<b>somados por tipo</b> — até 4 linhas: Inspeções Internas, Inspeções Externas, '
-    + 'Calibração de Manômetros e Calibração de Válvulas, com a quantidade de vasos. '
+    + '<b>somados por tipo</b> — até 3 linhas: <b>Inspeções</b> (conta os vasos: Interna e Externa '
+    + 'do mesmo vaso são <b>uma</b> inspeção), <b>Calibração de Manômetros</b> e <b>Calibração de '
+    + 'Válvulas</b>. Marcar Interna e Externa do mesmo vaso vira uma linha só, com um preço. '
+    + 'No fim do documento sai um <b>anexo por vaso</b>, com os vencimentos do TapWeb. '
     + 'Aqui eles continuam um por vaso, porque é essa lista que a OS leva para o campo.</p>'
     + '<div class="listaItens eqProp">' + linhas + '</div>'
     + (nVenc
@@ -7969,16 +8199,45 @@ async function montarProposta(n, props){
   if (bAdd) bAdd.addEventListener('click', () => {
     const marcados = [...alvo.querySelectorAll('[data-eq]:checked')];
     if (!marcados.length){ toast('Marque ao menos um serviço.','err'); return; }
-    let postos = 0, repetidos = 0;
+    let postos = 0, repetidos = 0, juntados = 0;
+    // ── ITEM 2 (S38): INTERNA + EXTERNA DO MESMO VASO = UMA LINHA ────────
+    // O papel conta UMA inspeção por vaso. Mas proposta não aceita linha a
+    // zero, então duas linhas teriam dois preços e o vaso sairia cobrado duas
+    // vezes dentro de "1 inspeção". Por isso a montagem já grava uma linha
+    // só, "Inspeção Interna e Externa — TAG" — e a OS continua sabendo o vaso
+    // e os dois serviços, que estão no texto.
+    const tipoInsp = d => d.startsWith(INSP_INT) ? 'int' : d.startsWith(INSP_EXT) ? 'ext' : null;
+    const tagDe = d => d.split(' — ').slice(1).join(' — ');
+    const marcadosInsp = new Map();          // equipamento → {int, ext}
+    marcados.forEach(c => { const k = tipoInsp(c.dataset.desc); if (!k) return;
+      const m = marcadosInsp.get(c.dataset.eq) || {}; m[k] = c; marcadosInsp.set(c.dataset.eq, m); });
     marcados.forEach(c => {
-      const desc = c.dataset.desc;
-      if (jaTem(c.dataset.eq, desc)){ repetidos++; c.checked = false; return; }
+      let desc = c.dataset.desc;
+      const k = tipoInsp(desc);
+      c.checked = false;
+      if (k){
+        const eq = c.dataset.eq, tag = tagDe(desc), amb = INSP_AMB + tag;
+        const par = marcadosInsp.get(eq) || {};
+        if (par.int && par.ext){
+          if (k === 'ext') return;           // a linha já saiu pela Interna
+          desc = amb;
+        } else {
+          // o outro serviço já está na proposta: vira a linha combinada, no lugar
+          const outro = (k === 'int' ? INSP_EXT : INSP_INT) + tag;
+          const ix = _propItens.findIndex(i => (i.equipamento_id || null) === eq
+                       && norm(String(i.descricao||'')).trim() === norm(outro).trim());
+          if (ix >= 0){ _propItens[ix].descricao = amb; juntados++; return; }
+        }
+        if (jaTem(eq, amb)){ repetidos++; return; }
+      }
+      if (jaTem(c.dataset.eq, desc)){ repetidos++; return; }
       _propItens.push({ equipamento_id: c.dataset.eq, descricao: desc,
         quantidade: 1, preco_unitario: null, desconto_pct: 0, e_servico: false });
-      c.checked = false; postos++;
+      postos++;
     });
     if (repetidos) toast(repetidos + ' já estava(m) na proposta.','err');
-    if (postos) pintarItensProposta(); else pintarItensProposta();
+    else if (juntados) toast(juntados + ' vaso(s) passaram a ter Interna e Externa numa linha só.','ok');
+    pintarItensProposta();
   });
 
   // S31: o autocomplete do Catálogo neste campo
@@ -8195,6 +8454,7 @@ function pintarItensProposta(){
         + '<td><button class="btn mini" type="button" data-tira="' + k + '">tirar</button></td>'
         + '</tr>').join('')
     + '</tbody></table></div>'
+    + htmlParesInspecao()
     + '<p class="nota" style="text-align:right;font-size:14px">'
     +   (descontado > 0 ? '<span style="color:var(--ink-3)">Sem desconto: ' + BRL(bruto)
                           + ' · desconto: −' + BRL(descontado) + '</span><br>' : '')
@@ -8220,6 +8480,58 @@ function pintarItensProposta(){
   el.querySelectorAll('[data-tira]').forEach(b => b.addEventListener('click', () => {
     _propItens.splice(Number(b.dataset.tira), 1); pintarItensProposta();
   }));
+  el.querySelectorAll('[data-juntar]').forEach(b => b.addEventListener('click', () => {
+    juntarParInspecao(b.dataset.juntar); pintarItensProposta();
+  }));
+}
+
+/* ── ITEM 2 (S38): PROPOSTA QUE JÁ TEM INTERNA E EXTERNA SEPARADAS ─────────
+   Proposta montada até o S37 tem as duas linhas, cada uma com preço. No papel
+   o vaso conta UMA inspeção, mas o valor continua sendo a soma — o que pode
+   ser exatamente o que se quer (preços diferentes para cada serviço), ou uma
+   cobrança dobrada. A tela não decide: avisa e oferece juntar. Juntar preserva
+   o total (preço = soma, com o desconto equivalente); o preço se corrige na
+   própria linha depois. */
+function paresInspecao(){
+  const pares = new Map();
+  _propItens.forEach((i, k) => {
+    if (!i.equipamento_id) return;
+    const d = String(i.descricao || '');
+    const tipo = d.startsWith(INSP_INT) ? 'int' : d.startsWith(INSP_EXT) ? 'ext' : null;
+    if (!tipo) return;
+    const tag = d.split(' — ').slice(1).join(' — ');
+    const ch = i.equipamento_id + '|' + norm(tag);
+    const p = pares.get(ch) || { tag }; p[tipo] = k; pares.set(ch, p);
+  });
+  return [...pares.entries()].filter(([, p]) => p.int !== undefined && p.ext !== undefined);
+}
+function htmlParesInspecao(){
+  const ps = paresInspecao();
+  if (!ps.length) return '';
+  return '<div class="aviso" style="margin:8px 0">'
+    + '<b>' + ps.length + ' vaso(s) com Inspeção Interna e Externa em linhas separadas.</b> '
+    + 'No documento cada vaso conta como <b>1 inspeção</b>, mas o valor é a <b>soma das duas linhas</b>. '
+    + 'Se o preço é por vaso, junte numa linha e confira o preço:'
+    + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'
+    + ps.map(([ch, p]) => '<button class="btn mini" type="button" style="margin-left:0" data-juntar="'
+        + esc(ch) + '">juntar ' + esc(p.tag) + '</button>').join('')
+    + '</div></div>';
+}
+function juntarParInspecao(ch){
+  const par = paresInspecao().find(([c]) => c === ch);
+  if (!par) return;
+  const p = par[1];
+  const a = _propItens[p.int], b = _propItens[p.ext];
+  const bruto = [a, b].reduce((s, i) => s + (Number(i.preco_unitario) || 0) * (Number(i.quantidade) || 0), 0);
+  const tot = totalItem(a) + totalItem(b);
+  const novo = { equipamento_id: a.equipamento_id, descricao: INSP_AMB + p.tag, quantidade: 1,
+    preco_unitario: bruto > 0 ? Math.round(bruto * 100) / 100 : null,
+    desconto_pct: bruto > 0 ? Math.round((1 - tot / bruto) * 1e6) / 1e4 : 0,
+    custo_unitario: a.custo_unitario ?? null, e_servico: !!a.e_servico };
+  const primeiro = Math.min(p.int, p.ext), segundo = Math.max(p.int, p.ext);
+  _propItens.splice(segundo, 1);
+  _propItens.splice(primeiro, 1, novo);
+  toast(p.tag + ': Interna e Externa numa linha só, com o mesmo total. Confira o preço.', 'ok');
 }
 
 // ── cliente ─────────────────────────────────────────────────────────────────
