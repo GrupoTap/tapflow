@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S12</title>
+<title>TapFlow Field · S13</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -149,6 +149,10 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 .chip{font-size:11px;font-weight:600;padding:3px 8px;border-radius:3px;
   background:var(--surface-2);color:var(--ink-3);border:1px solid var(--rule-2)}
 .chip.eu{background:var(--accent-soft);color:var(--accent-ink);border-color:transparent}
+/* S13: `.eu` também é o botão "…" do topo (20px, mais abaixo) e vencia o
+   tamanho do chip — "você começou" saía com letra de título. Duas classes
+   ganham de uma: o chip volta aos 11px. */
+.chip.eu{font-size:11px;line-height:normal;padding:3px 8px}
 .chip.fila{background:var(--crit-soft);color:var(--crit);border-color:transparent}
 .chip.outro{background:var(--warn-soft);color:var(--warn);border-color:transparent}
 
@@ -340,7 +344,7 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S12';
+const APP_VERSION = 'S13';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -840,7 +844,10 @@ function pintarLista(){
 
   const m = document.getElementById('main');
   m.innerHTML = '';
-  if (!listaOS.length){
+  // S13: o "Hoje" pode ter coisa mesmo sem OS no campo — uma VISITA de negócio
+  // (não é OS) ou uma etapa de escritório no seu nome. Até o S12 a lista vazia
+  // saía cedo com "Nada no campo agora" e escondia o roteiro do dia.
+  if (!listaOS.length && !(MEU_DIA || []).length){
     if (falhaCarga){
       const v = document.createElement('div'); v.className = 'vazio';
       v.innerHTML = '<b>Não deu para carregar suas ordens</b><p class="mt"></p>' +
@@ -897,13 +904,14 @@ function pintarLista(){
    o que ficou de trás, depois quem vence antes, e a prioridade só desempata. */
 let MEU_DIA = [];
 
-/** 90 → "1h30". A MESMA função do Manager: o mesmo número tinha duas caras
+/** 90 → "1h30min". A MESMA função do Manager: o mesmo número tinha duas caras
  *  ("1h30" lá, "1.5h" aqui), e é o mesmo time olhando as duas telas. */
 function minHora(m){
   m = Number(m || 0);
   if (!m) return '—';
   const h = Math.floor(m / 60), r = m % 60;
-  return h ? (h + 'h' + (r ? String(r).padStart(2,'0') : '')) : (r + 'min');
+  // S13: "1h20min", como o Manager S36 — o minuto não perde o sufixo
+  return h ? (h + 'h' + (r ? String(r).padStart(2,'0') + 'min' : '')) : (r + 'min');
 }
 
 /* Data pura (YYYY-MM-DD) ganha T12:00 antes de virar Date. Sem isso,
@@ -960,12 +968,19 @@ function pintarMeuDia(m){
     }
     if (t.tempo_estimado_min)
       chips.push('<span class="chip">' + minHora(t.tempo_estimado_min) + '</span>');
+    // S13 (Manager S36 · item 7): o "Hoje" mostra também a tarefa em que você
+    // vai de APOIO (serviço em dupla) e a VISITA do dia em que te marcaram
+    if (t.papel === 'apoio')
+      chips.push('<span class="chip eu">apoio de ' + esc(t.principal || '?') + '</span>');
+    if (t.origem === 'visita')
+      chips.push('<span class="chip eu">visita' + (t.hora ? ' · ' + esc(t.hora) : '') + '</span>'
+        + (t.principal ? '<span class="chip">com ' + esc(t.principal) + '</span>' : ''));
 
     b.innerHTML = '<div class="n mono"></div><div class="c"></div>' +
       '<div class="t"><span>›</span><span class="tn"></span></div>' +
       '<div class="chips">' + chips.join('') + '</div>';
-    b.querySelector('.n').textContent  = t.os_numero;
-    b.querySelector('.c').textContent  = t.cliente;
+    b.querySelector('.n').textContent  = t.os_numero || '';
+    b.querySelector('.c').textContent  = t.cliente || '';
     b.querySelector('.tn').textContent = t.tarefa || '—';
     // Sem a OS na lista do campo (tarefa administrativa, por exemplo) o cartão
     // ainda aparece — só não abre. Sumir seria pior: a pessoa fica sem saber.
@@ -976,7 +991,9 @@ function pintarMeuDia(m){
       b.disabled = true;
       const av = document.createElement('div');
       av.className = 'semAbrir';
-      av.textContent = 'Etapa do escritório — não abre aqui.';
+      av.textContent = t.origem === 'visita'
+        ? 'Visita' + (t.os_descricao ? ' em ' + t.os_descricao : '') + ' — os detalhes estão no negócio, na Gestão.'
+        : 'Etapa do escritório — não abre aqui.';
       b.appendChild(av);
     }
     m.appendChild(b);

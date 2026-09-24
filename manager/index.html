@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S35</title>
+<title>TapFlow Manager · S36</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -513,6 +513,18 @@ body.emQuadro .board:not(.livre){height:100%}
 .tpTab .tpDim{color:var(--ink-3);font-size:12px}
 .tpTab input[type=checkbox]{width:16px;height:16px;cursor:pointer}
 .tpTab .mono{color:var(--ink-3);font-size:11px}
+/* S36 · a matriz de perfis */
+.tpModo{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 10px}
+.tpMatriz{overflow-x:auto;border:1px solid var(--rule);border-radius:4px;max-width:100%}
+.tpMx{margin:0;min-width:100%}
+.tpMx th,.tpMx td{padding:6px 8px}
+.tpMx .tpMx1{position:sticky;left:0;background:var(--surface);z-index:1;min-width:200px;max-width:260px}
+.tpMx .tpMxP{text-align:center;font-size:11px;white-space:normal;min-width:74px;max-width:96px}
+.tpMx .tpMxC{text-align:center}
+.tpMx td.tpOn{background:var(--accent-soft)}
+.tpMx .tpMxSec td{background:var(--surface-2);font-weight:600;font-size:12px;position:sticky;left:0}
+.tpSim{color:var(--ok);font-weight:700}
+.tpNao{color:var(--ink-3)}
 
 /* Autocomplete do Catálogo na linha da proposta (item 5) */
 .acWrap{position:relative}
@@ -1254,6 +1266,21 @@ th.num .tfThFixo{text-align:right}
 .agConc input:focus-visible + .agConcSw{outline:2px solid var(--accent);outline-offset:2px}
 .agConcN{font-size:12px;color:var(--ink-3)}
 .agConcLeg{font-size:12px;color:var(--ink-3);margin-left:auto}
+/* S36 · resolvidos na Semana e no Mês; apoio e visita na linha do Dia */
+.agResC{font-size:10.5px;color:var(--ok);margin-top:3px;font-weight:600}
+.chip.apoio{background:var(--accent-soft);color:var(--accent-ink);border-color:transparent}
+.chip.vis{background:var(--ok-soft,#E6F2EA);color:var(--ok);border-color:transparent}
+.agT.agVis{background:var(--surface-2);border-radius:4px}
+.mdApoio{margin-top:12px;border-top:1px solid var(--rule);padding-top:10px}
+.mdApoio summary{cursor:pointer;font-size:13px}
+.apoioLista{display:grid;gap:2px;max-height:220px;overflow-y:auto}
+.apoioOpc{padding:4px 8px}
+.agItem .agQuem{display:block;color:var(--ink-3)}
+/* S36: grupo de caixas/rádios FORA de .campo — lá dentro o rótulo vira caixa
+   alta e a caixinha ganha 100% de largura, e a lista saía desmontada */
+.grupoOpc{border:0;padding:0;margin:0 0 12px;min-width:0}
+.grupoOpc legend{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);margin-bottom:6px;padding:0}
+.grupoOpc .linhaOpc input{width:auto;margin-top:2px}
 @media (max-width:600px){ .agConcLeg{margin-left:0;flex-basis:100%} }
 .agResSep{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);
   border-top:1px dashed var(--rule);padding:10px 2px 2px;margin-top:6px}
@@ -1369,7 +1396,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S35';
+const APP_VERSION = 'S36';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -2154,7 +2181,7 @@ async function abrirOS(c){
     tarefas = DEMO ? demoTarefas(c.os_id)
       : await get('pipeline_tarefas?select=tarefa_id,nome,tipo,fase,fase_ordem,ordem,status,opcoes,'
                   + 'perfis_responsaveis,lock_por,lock_expira,executor,usuario_designado,data_prevista,'
-                  + 'tempo_estimado_min,acao_terminal'
+                  + 'tempo_estimado_min,acao_terminal,apoios'
                   + '&os_id=eq.' + c.os_id + '&ativo=eq.SIM&order=camada,fase_ordem,ordem');
   }catch(e){ document.getElementById('dBody').innerHTML = '<p style="color:var(--crit);font-size:13px"></p>';
              document.getElementById('dBody').querySelector('p').textContent = e.message; return; }
@@ -2240,8 +2267,10 @@ function pintarDrawer(){
       const d = document.createElement('div');
       d.className = 'tkDes';
       const quem = t.usuario_designado ? (NOMES[t.usuario_designado] || 'designada') : null;
+      const apoio = (t.apoios || []).map(id => NOMES[id] || '?').join(', ');
       d.innerHTML = '<span>' + (quem
-          ? esc(quem) + (t.data_prevista ? ' · ' + dataBR(t.data_prevista) : ' · sem dia')
+          ? esc(quem) + (apoio ? ' <span class="chip apoio">+ ' + esc(apoio) + '</span>' : '')
+            + (t.data_prevista ? ' · ' + dataBR(t.data_prevista) : ' · sem dia')
             + (t.tempo_estimado_min ? ' · ' + minHora(t.tempo_estimado_min) : '')
           : '<i>ninguém designado</i>') + '</span>'
         + '<button class="btn mini" type="button">' + (quem ? 'trocar' : 'designar') + '</button>';
@@ -3053,12 +3082,15 @@ function agCap(iso){
   return TURNO.capacidade_min || 540;
 }
 
-/** 90 → "1h30". Minuto puro em barra de carga não se lê. */
+/** 90 → "1h30min". Minuto puro em barra de carga não se lê.
+ *  ITEM 9 (S36): até o S35 era "1h30" — o minuto perdia o sufixo só quando
+ *  vinha junto da hora, e "10min" ao lado de "1h20" parecia outra unidade.
+ *  A MESMA função existe no Field; as duas mudaram juntas. */
 function minHora(m){
   m = Number(m || 0);
   if (!m) return '—';
   const h = Math.floor(m / 60), r = m % 60;
-  return h ? (h + 'h' + (r ? String(r).padStart(2,'0') : '')) : (r + 'min');
+  return h ? (h + 'h' + (r ? String(r).padStart(2,'0') + 'min' : '')) : (r + 'min');
 }
 
 /** A faixa do topo da gaveta: prioridade e prazo, com procedência. */
@@ -3187,6 +3219,27 @@ async function modalDesignar(card, t, aposGravar){
       + ' data-fora="' + (u.por_perfil === false ? '1' : '') + '">'
       + esc(u.nome) + (u.perfil ? ' — ' + esc(u.perfil) : '') + '</option>';
 
+  // ── ITEM 7 (S36): QUEM VAI JUNTO ─────────────────────────────────────────
+  // O apoio não muda o dono: prazo, conclusão e histórico continuam lendo
+  // "Quem faz". Cada apoio vê a tarefa na própria Agenda e ela conta na carga
+  // dele. Só aparece para o admin — pôr outra pessoa numa tarefa é designar.
+  const apoiosAtuais = (t.apoios || []).map(String);
+  const caixaApoio = u => '<label class="linhaOpc apoioOpc" data-u="' + esc(u.usuario_id) + '">'
+      + '<input type="checkbox" class="mdAp" value="' + esc(u.usuario_id) + '"'
+      + (apoiosAtuais.indexOf(String(u.usuario_id)) >= 0 ? ' checked' : '')
+      + ' data-fora="' + (u.por_perfil === false ? '1' : '') + '"> '
+      + '<span>' + esc(u.nome) + (u.perfil ? ' <small style="color:var(--ink-3)">— ' + esc(u.perfil)
+      + (u.por_perfil === false ? ' · fora do perfil' : '') + '</small>' : '') + '</span></label>';
+  const blocoApoio = souAdmin && !DEMO
+    ? '<details class="mdApoio"' + (apoiosAtuais.length ? ' open' : '') + '><summary><b>Quem vai junto</b> '
+      + '<span class="nota" style="margin:0">(apoio — serviço em dupla)</span></summary>'
+      + '<p class="nota" style="margin:6px 0">Cada pessoa marcada vê esta tarefa na própria Agenda, '
+      + 'no mesmo dia, e ela ocupa o tempo dela. O dono continua sendo o de cima — é o nome dele que '
+      + 'vale para prazo e histórico. Concluir segue a regra de sempre: quem tem o perfil da tarefa.</p>'
+      + '<div id="mdApLista" class="apoioLista">' + pessoas.map(caixaApoio).join('') + '</div></details>'
+    : (apoiosAtuais.length ? '<p class="nota">Apoio: <b>' + esc(apoiosAtuais.map(id => NOMES[id] || '?').join(', '))
+      + '</b> — quem muda é o administrador.</p>' : '');
+
   abrirModal('Designar · ' + t.nome,
     '<div class="campo"><label for="mdU">Quem faz</label><select id="mdU">' +
       '<option value="">— ninguém —</option>' +
@@ -3215,17 +3268,27 @@ async function modalDesignar(card, t, aposGravar){
     '<p style="font-size:12.5px;color:var(--ink-3);margin:0;line-height:1.5">' +
       'O dia é o que põe esta tarefa no roteiro de alguém. Os minutos são o que ' +
       'monta a barra de carga na Agenda — tarefa sem minuto não some, mas também ' +
-      'não entra na conta.</p>',
+      'não entra na conta.</p>' + blocoApoio,
     [{ label:'Cancelar', onClick: fecharModal },
      { label:'Gravar', pri:true, onClick: async () => {
         const sel  = document.getElementById('mdU');
         const op   = sel.options[sel.selectedIndex];
         const quem = sel.value || null;
+        // S36: os apoios marcados (sem o dono, que não é apoio de si mesmo)
+        const lista = document.getElementById('mdApLista');
+        const apoios = lista ? [...lista.querySelectorAll('.mdAp:checked')].map(c => c.value)
+                                 .filter(v => v !== quem) : null;
+        const foraAp = lista ? [...lista.querySelectorAll('.mdAp:checked')]
+                                 .filter(c => c.dataset.fora === '1' && c.value !== quem)
+                                 .map(c => c.closest('label').textContent.split(' — ')[0].trim()) : [];
+        t._apoiosNovos = apoios;
         // o aviso do ponto 3: explica o risco e deixa o admin decidir
-        if (quem && op && op.dataset.fora === '1'){
+        if ((quem && op && op.dataset.fora === '1') || foraAp.length){
           const lista = (t.perfis_responsaveis || []).join(', ');
+          const nomes = (quem && op && op.dataset.fora === '1' ? [op.textContent] : []).concat(foraAp);
           abrirModal('Designar mesmo assim?',
-              '<div class="aviso"><b>' + esc(op.textContent) + '</b> não está entre os perfis '
+              '<div class="aviso"><b>' + esc(nomes.join(', ')) + '</b> não '
+            + (nomes.length > 1 ? 'estão' : 'está') + ' entre os perfis '
             + 'responsáveis por <b>' + esc(t.nome) + '</b>'
             + (lista ? ' (' + esc(lista) + ')' : '') + '.</div>'
             + '<p class="nota">A tarefa vai para a agenda dele, mas quando ele entrar pode não '
@@ -3239,6 +3302,21 @@ async function modalDesignar(card, t, aposGravar){
         }
         await gravarDesignacao(card, t, quem, aposGravar);
      }}]);
+  mdEsconderDonoDoApoio();
+}
+
+/** S36: o dono não aparece na lista de apoio — ele não é apoio de si mesmo.
+ *  Chamado logo depois de abrir o modal, e a cada troca de "Quem faz". */
+function mdEsconderDonoDoApoio(){
+  const sel = document.getElementById('mdU'), lista = document.getElementById('mdApLista');
+  if (!sel || !lista) return;
+  const aplica = () => lista.querySelectorAll('.apoioOpc').forEach(l => {
+    const dono = l.dataset.u === sel.value;
+    l.hidden = dono;
+    if (dono){ const c = l.querySelector('input'); if (c) c.checked = false; }
+  });
+  sel.addEventListener('change', aplica);
+  aplica();
 }
 
 /** O que grava, separado do formulário porque a confirmação do aviso reentra
@@ -3255,7 +3333,19 @@ async function gravarDesignacao(card, t, quem, aposGravar){
     await rpc('tf_designar_tarefa', {
       p_os_id: card.os_id, p_tarefa_id: t.tarefa_id,
       p_usuario: quem, p_data: dia, p_minutos: m ? Number(m) : null });
-    fecharModal(); toast('Designação gravada.','ok');
+    // S36 · item 7: os apoios vêm DEPOIS do dono (o banco recusa apoio sem
+    // dono). Sem dono, o próprio banco já limpou os apoios — nada a mandar.
+    let msgAp = '';
+    const novos = t._apoiosNovos;
+    if (quem && Array.isArray(novos)){
+      const antes = (t.apoios || []).map(String).filter(v => v !== quem).sort().join(',');
+      if (novos.slice().sort().join(',') !== antes){
+        const r = await rpc('tf_definir_apoios', { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id,
+                                                   p_usuarios: novos });
+        msgAp = r && r.nomes ? ' Apoio: ' + r.nomes + '.' : ' Sem apoio.';
+      }
+    } else if (!quem && (t.apoios || []).length) msgAp = ' O apoio saiu junto.';
+    fecharModal(); toast('Designação gravada.' + msgAp,'ok');
     if (aposGravar) await aposGravar();
     else await abrirOSPorId(card.os_id);
   }catch(e){ toast(e.message,'err'); }
@@ -3610,7 +3700,7 @@ async function pintarItens(){
       try{
         osAberta.tarefas = await get('pipeline_tarefas?select=tarefa_id,nome,tipo,fase,'
           + 'fase_ordem,ordem,status,opcoes,perfis_responsaveis,lock_por,executor,'
-          + 'usuario_designado,data_prevista,tempo_estimado_min,acao_terminal'
+          + 'usuario_designado,data_prevista,tempo_estimado_min,acao_terminal,apoios'
           + '&os_id=eq.' + card.os_id + '&ativo=eq.SIM&order=camada,fase_ordem,ordem');
       }catch(e){}
     }
@@ -6141,10 +6231,18 @@ async function pintarComercial(){
   board.innerHTML = '<div class="comWrap">'
     + '<div class="barraCom">'
     +   '<button class="btn pri" id="cNovo">+ Novo negócio</button>'
+    // ITEM 11 (S36): a proposta que existiu antes do TapFlow entra por aqui,
+    // com a data e o número de verdade — e não pelo "Novo negócio", que nasce
+    // hoje e em "Leads".
+    +   (podeEscritorio() && !DEMO
+          ? '<button class="btn" id="cAntiga" title="Registrar uma proposta emitida antes do TapFlow, com a data e o número reais">'
+            + 'Lançar proposta antiga</button>' : '')
     +   '<span class="resumoCom" id="cResumo"></span></div>'
     + '<div class="comBoard"><div class="board" id="qCom"></div></div></div>';
 
   document.getElementById('cNovo').addEventListener('click', formNegocio);
+  const bAnt = document.getElementById('cAntiga');
+  if (bAnt) bAnt.addEventListener('click', formPropostaAntiga);
   REPINTA.com = desenharCom;
 
   try{
@@ -6348,7 +6446,7 @@ function reduzirImagem(file, lado, qualidade, comFundo, rente){
 
 // A geração da miniatura da logomarca. 0 = quadrada com tarja (até o S33),
 // 2 = rente (S34). O banco guarda em `clientes_logo.thumb_geracao` e é isso
-// que a ferramenta de manutenção usa para saber quem ainda falta.
+// que a view `v_logos_a_regerar` usa para saber quem ainda falta.
 const LOGO_THUMB_GERACAO = 2;
 const LOGO_THUMB_PX = 256;
 
@@ -6505,6 +6603,9 @@ function cardNegocio(n){
   // ITEM 10 (S28): o negócio está na entrega — qual OS
   if (n.pos_os_numero)
     chips.push('<span class="mini pos">entrega · ' + esc(n.pos_os_numero) + '</span>');
+  // ITEM 11 (S36): lançado depois do fato — as datas são as reais
+  if (n.retroativo) chips.push('<span class="mini" title="Proposta anterior ao TapFlow, lançada depois">anterior ao TapFlow</span>');
+  if (n.concluido_fora_em) chips.push('<span class="mini">executado fora do TapFlow</span>');
 
   d.innerHTML = logo
     + '<div class="num"></div><div class="cli"></div><div class="tit"></div>'
@@ -6776,6 +6877,24 @@ function formTarefa(n){
 }
 
 // ── agenda ──────────────────────────────────────────────────────────────────
+// ── ITEM 7 (S36): QUEM VAI NA VISITA ────────────────────────────────────────
+// Até o S35 o campo era só "Equipe" (Administrativa / Inspeção 1 / Inspeção 2),
+// e a visita não aparecia na agenda de ninguém. A lista de PESSOAS já existia
+// na tabela (`agendamentos.responsaveis`, desde o 19_) e ninguém a preenchia.
+// Agora a tela preenche, e a Agenda da equipe lê: cada pessoa marcada vê a
+// visita no dia dela, e a duração entra na carga. A equipe ficou como campo
+// opcional — é o que o aviso de choque de horário por grupo ainda usa.
+const DURACOES_VISITA = [[30,'30 min'],[60,'1 hora'],[90,'1h30'],[120,'2 horas'],
+                         [180,'3 horas'],[240,'4 horas'],[480,'o dia todo (8h)']];
+
+function caixasPessoas(prefixo, marcados){
+  const m = (marcados || []).map(String);
+  return '<div class="apoioLista pessoasVis">' + (EQUIPE || []).map(u =>
+      '<label class="linhaOpc apoioOpc"><input type="checkbox" class="' + prefixo + '" value="' + esc(u.id) + '"'
+    + (m.indexOf(String(u.id)) >= 0 ? ' checked' : '') + '> <span>' + esc(u.nome) + '</span></label>').join('')
+    + '</div>';
+}
+
 async function negAgenda(n, b){
   let itens = [], equipes = [];
   try{
@@ -6789,11 +6908,16 @@ async function negAgenda(n, b){
     +   '<input id="agT" type="text" value="Visita técnica — ' + esc(n.cliente_nome) + '"></div>'
     + '<div class="dupla"><div class="campo"><label for="agD">Quando</label>'
     +   '<input id="agD" type="datetime-local"></div>'
-    + '<div class="campo"><label for="agE">Equipe</label><select id="agE">'
+    + '<div class="campo"><label for="agDur">Duração</label><select id="agDur">'
+    +   DURACOES_VISITA.map(([v,r]) => '<option value="' + v + '"' + (v === 120 ? ' selected' : '') + '>' + r + '</option>').join('')
+    +   '</select></div></div>'
+    + '<fieldset class="grupoOpc"><legend>Quem vai</legend>' + caixasPessoas('agP', [])
+    +   '<small class="nota">A visita entra na Agenda de cada pessoa marcada e ocupa o tempo dela.</small></fieldset>'
+    + '<div class="dupla"><div class="campo"><label for="agE">Equipe (opcional)</label><select id="agE">'
     +   '<option value="">— sem equipe —</option>'
     +   equipes.map(e => '<option value="' + e.id + '">' + esc(e.nome) + '</option>').join('')
-    +   '</select></div></div>'
-    + '<div class="campo"><label for="agL">Local</label><input id="agL" type="text"></div>'
+    +   '</select></div>'
+    + '<div class="campo"><label for="agL">Local</label><input id="agL" type="text"></div></div>'
     + '<button class="btn pri" id="agOk" style="width:100%">Agendar</button>'
     + '<p class="nota">O compromisso fica preso a este negócio. A agenda do Google continua '
     + 'sendo a do celular — o espelho para lá entra numa próxima rodada.</p>'
@@ -6804,34 +6928,72 @@ async function negAgenda(n, b){
   itens.forEach(a => {
     const el = document.createElement('div');
     el.className = 'agItem';
-    el.innerHTML = '<b></b><small></small>';
+    el.innerHTML = '<b></b><small></small><small class="agQuem"></small>'
+      + (podeEscritorio() && !DEMO ? '<button class="btn mini" type="button">quem vai</button>' : '');
     el.querySelector('b').textContent = a.titulo;
-    el.querySelector('small').textContent =
+    const fimTxt = a.fim ? ' até ' + new Date(a.fim).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
+    el.querySelectorAll('small')[0].textContent =
       new Date(a.inicio).toLocaleString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
-      + (a.local ? ' · ' + a.local : '');
+      + fimTxt + (a.local ? ' · ' + a.local : '');
+    const nomes = (a.responsaveis || []).map(id => NOMES[id] || '?');
+    el.querySelector('.agQuem').textContent = nomes.length ? 'Vão: ' + nomes.join(', ')
+      : 'Ninguém marcado — não aparece na agenda de ninguém';
+    const bt = el.querySelector('button');
+    if (bt) bt.addEventListener('click', () => modalPessoasVisita(a, n));
     L.appendChild(el);
   });
 
   document.getElementById('agOk').addEventListener('click', async (e) => {
     const q = document.getElementById('agD').value;
     if (!q){ toast('Escolha a data e a hora.','err'); return; }
+    const quem = [...document.querySelectorAll('.agP:checked')].map(c => c.value);
+    const eq = document.getElementById('agE').value || null;
+    if (!quem.length && !eq){ toast('Marque quem vai (ou ao menos a equipe).','err'); return; }
     e.target.disabled = true;
+    const ini = new Date(q);
+    const fim = new Date(ini.getTime() + Number(document.getElementById('agDur').value || 60) * 60000);
     try{
       const r = DEMO ? {conflitos:[]} : await rpc('tf_agendar', {
         p_titulo: document.getElementById('agT').value.trim() || 'Visita',
-        p_inicio: new Date(q).toISOString(),
-        p_equipe_id: document.getElementById('agE').value || null,
-        p_negocio_id: n.id,
-        p_local: document.getElementById('agL').value.trim() || null });
+        p_inicio: ini.toISOString(), p_fim: fim.toISOString(),
+        p_equipe_id: eq, p_negocio_id: n.id,
+        p_local: document.getElementById('agL').value.trim() || null,
+        p_responsaveis: quem });
       const c = (r && r.conflitos) || [];
+      const quemChoca = [...new Set(c.map(x => x.quem).filter(Boolean))].join(', ');
       toast(c.length
-        ? 'Agendado — atenção: a equipe já tem ' + c.length + ' compromisso nesse horário.'
+        ? 'Agendado — atenção: ' + (quemChoca || 'a equipe') + ' já tem compromisso nesse horário.'
         : 'Agendado.', c.length ? 'err' : 'ok');
+      AGENDA.chave = null;   // a Agenda da equipe precisa ler de novo
       await pintarComercial();
       const at = negocios.find(x => x.id === n.id);
       if (at){ negAberto = at; pintarNeg(); }
     }catch(err){ toast(err.message,'err'); e.target.disabled = false; }
   });
+}
+
+/** Trocar quem vai numa visita já marcada (as de antes do S36 só tinham equipe). */
+function modalPessoasVisita(a, n){
+  const durAtual = a.fim ? Math.round((new Date(a.fim) - new Date(a.inicio)) / 60000) : 60;
+  abrirModal('Quem vai · ' + a.titulo,
+      caixasPessoas('mpv', a.responsaveis || [])
+    + '<div class="campo" style="margin-top:10px"><label for="mpvDur">Duração</label><select id="mpvDur">'
+    + DURACOES_VISITA.map(([v,r]) => '<option value="' + v + '"' + (v === durAtual ? ' selected' : '') + '>' + r + '</option>').join('')
+    + (DURACOES_VISITA.some(([v]) => v === durAtual) ? '' : '<option value="' + durAtual + '" selected>' + minHora(durAtual) + '</option>')
+    + '</select></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Gravar', pri:true, onClick: async () => {
+        const quem = [...document.querySelectorAll('.mpv:checked')].map(c => c.value);
+        const dur = Number(document.getElementById('mpvDur').value || 60);
+        try{
+          const r = await rpc('tf_agendamento_pessoas', { p_id: a.id, p_responsaveis: quem,
+            p_fim: new Date(new Date(a.inicio).getTime() + dur * 60000).toISOString() });
+          fecharModal();
+          toast(r.nomes ? 'Vão: ' + r.nomes + '.' : 'Ninguém marcado na visita.', 'ok');
+          AGENDA.chave = null;
+          pintarNeg();
+        }catch(e){ toast(e.message,'err'); }
+     }}]);
 }
 
 // ── A PROPOSTA MONTADA NO NEGÓCIO ───────────────────────────────────────────
@@ -8073,6 +8235,40 @@ async function buscarClienteParaNegocio(n, termo){
   }
 }
 
+/** ITEM 8 (S36): corrige o nome do lead — e, se o título do negócio carrega o
+ *  mesmo nome (é o comum: "Prospecção comercial — Biosev Agraícola"), oferece
+ *  corrigir os dois de uma vez. Não mexe na coluna do card: a anotação que fica
+ *  no histórico é automática. */
+function modalRenomearLead(n){
+  const antigo = n.lead_nome || '';
+  const noTitulo = antigo && (n.titulo || '').indexOf(antigo) >= 0;
+  abrirModal('Corrigir o nome do lead',
+      '<div class="campo"><label for="lnN">Nome</label>'
+    + '<input id="lnN" type="text" autocomplete="off" name="lnn_nofill" value="' + esc(antigo) + '"></div>'
+    + (noTitulo
+        ? '<label class="chk"><input type="checkbox" id="lnT" checked> Corrigir também no título: '
+          + '<span id="lnTprev" class="nota"></span></label>'
+        : '')
+    + '<p class="nota">Vale enquanto o negócio é lead. Depois de virar cliente, o nome é o do cadastro '
+    + 'e se corrige na ficha dele. A correção fica no histórico e não move o card.</p>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Gravar', pri:true, onClick: async () => {
+        const novo = document.getElementById('lnN').value.trim();
+        const ck = document.getElementById('lnT');
+        const titulo = ck && ck.checked ? (n.titulo || '').split(antigo).join(novo) : null;
+        try{
+          await rpc('tf_negocio_renomear_lead', { p_negocio_id: n.id, p_nome: novo, p_titulo: titulo });
+          fecharModal(); toast('Nome corrigido.','ok');
+          await pintarComercial();
+          const at = (negocios || []).find(x => x.id === n.id);
+          if (at) abrirNegocio(at);
+        }catch(e){ toast(e.message,'err'); }
+     }}]);
+  const inp = document.getElementById('lnN'), prev = document.getElementById('lnTprev');
+  const mostra = () => { if (prev) prev.textContent = '“' + (n.titulo || '').split(antigo).join(inp.value.trim()) + '”'; };
+  if (inp){ inp.addEventListener('input', mostra); mostra(); inp.focus(); inp.select(); }
+}
+
 async function ligarClienteAoNegocio(n, clienteId){
   try{
     const r = await rpc('tf_negocio_ligar_cliente',
@@ -8096,6 +8292,13 @@ async function negCliente(n, b){
     b.innerHTML = '<div class="aviso">Este negócio ainda é um <b>lead solto</b> — '
       + esc(n.lead_nome || 'sem nome') + '. Enquanto for lead dá para conversar, '
       + 'agendar e registrar tudo; para <b>orçar</b>, ele precisa virar cliente.</div>'
+      // ITEM 8 (S36): corrigir o nome SEM virar cliente. Até o S35 o único
+      // lugar era a "Razão social" do Virar cliente, que só grava convertendo.
+      + (podeEscritorio() && !DEMO
+          ? '<div class="blocoLocal"><div class="lin"><span class="rot">Nome do lead</span>'
+            + '<span>' + esc(n.lead_nome || '—') + '</span>'
+            + '<button class="btn mini" type="button" id="lnEdit">corrigir nome</button></div></div>'
+          : '')
       + (n.lead_contato || n.lead_telefone || n.lead_email
           ? '<div class="blocoLocal"><div class="lin"><span class="rot">Contato</span><span>'
             + esc([n.lead_contato, n.lead_telefone, n.lead_email].filter(Boolean).join(' · '))
@@ -8128,6 +8331,8 @@ async function negCliente(n, b){
     document.getElementById('vcOk').addEventListener('click', function(){
       _semDuploEnvio_(this, () => virarCliente(n, false));
     });
+    const lnEdit = document.getElementById('lnEdit');
+    if (lnEdit) lnEdit.addEventListener('click', () => modalRenomearLead(n));
 
     // busca com o mesmo debounce das outras listas
     let t = null;
@@ -8336,7 +8541,14 @@ async function negAcoes(n, b){
     + '<p class="nota"><b>Não é o mesmo que perder.</b> Perder é desfecho de negócio real e '
     + 'continua no funil. Excluir é para lixo — card de teste, duplicado, criado por engano — '
     + 'e some de todos os relatórios, inclusive das perdas.</p>'
-    + (n.oss
+    // ITEM 11 (S36): o lançamento retroativo tem volta própria enquanto nada
+    // foi feito em cima dele — o "Excluir" recusaria, porque a proposta "saiu"
+    + (n.retroativo && !n.oss
+        ? '<div class="aviso">Este negócio foi <b>lançado depois do fato</b> (proposta anterior ao TapFlow)'
+          + '<span id="ngRetroQuem"></span>. '
+          + 'Se o lançamento foi um engano, dá para desfazer — enquanto ninguém anotou, agendou ou abriu OS nele.</div>'
+          + '<button class="btn perigo" id="ngDesfRetro" style="width:100%">Desfazer o lançamento</button>'
+        : n.oss
         ? '<div class="aviso">Este negócio já gerou <b>' + n.oss + ' OS</b>, então não é lixo: '
           + 'há trabalho preso a ele. Se a OS também for de teste, exclua a OS primeiro.</div>'
         // S26: a mesma trava do banco (48_brasilia_e_exclusao). Proposta que SAIU
@@ -8347,6 +8559,28 @@ async function negAcoes(n, b){
           + 'enviada ao cliente, então não é lixo: o número está com ele. '
           + 'Use “Marcar como perdido”.</div>'
         : '<button class="btn perigo" id="ngExcluir" style="width:100%">Excluir negócio</button>');
+
+  // quem lançou e quando: está no negócio, não na view do quadro
+  const rq = document.getElementById('ngRetroQuem');
+  if (rq && !DEMO) get('negocios?select=retroativo_lancado_em,retroativo_lancado_por&id=eq.' + n.id)
+    .then(r => { const x = r && r[0]; if (!x || !x.retroativo_lancado_em) return;
+      rq.textContent = ' — lançado em ' + dataBR(x.retroativo_lancado_em)
+        + (x.retroativo_lancado_por ? ' por ' + (NOMES[x.retroativo_lancado_por] || 'alguém que saiu do time') : ''); })
+    .catch(() => {});
+  const bDR = document.getElementById('ngDesfRetro');
+  if (bDR) bDR.addEventListener('click', () => abrirModal('Desfazer o lançamento de ' + (n.numero_exibicao || n.numero),
+      '<p>O negócio e a proposta lançados somem do quadro. O registro fica no livro das exclusões '
+    + '(Configurações › Exclusões), com o número da proposta.</p>'
+    + '<div class="campo"><label for="drM">Por quê?</label><input id="drM" type="text" autocomplete="off" '
+    + 'name="drm_nofill" placeholder="ex.: número digitado errado"></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Desfazer', pri:true, onClick: async () => {
+        try{
+          await rpc('tf_desfazer_lancamento_retroativo', { p_negocio_id: n.id,
+            p_motivo: document.getElementById('drM').value.trim() });
+          fecharModal(); fecharDrawer(); toast('Lançamento desfeito.','ok'); pintarComercial();
+        }catch(e){ toast(e.message,'err'); }
+     }}]));
 
   // ── reabrir ──
   const bR = document.getElementById('ngReabre');
@@ -8506,6 +8740,148 @@ async function formNegocio(){
   });
 }
 
+// ── ITEM 11 (S36): LANÇAR UMA PROPOSTA ANTIGA ─────────────────────────────────
+// Para a proposta que a Engetap emitiu ANTES do TapFlow. Nasce no estágio
+// certo (a coluna continua sendo calculada pelos fatos — o que o formulário
+// grava são os fatos: envio, aprovação, recusa) e com as datas reais, que é o
+// que põe a proposta no mês certo do relatório comercial. Duas coisas que o
+// documento não previu e que a tela resolve:
+//   · "Aprovada e já executada" — sem isso, a proposta antiga aprovada ficaria
+//     em "Aprovadas" para sempre, e essa coluna quer dizer "falta abrir a OS".
+//   · Número antigo no formato do TapFlow, à frente do contador: a prévia avisa
+//     que o contador vai pular, senão o TapFlow emitiria o mesmo número depois.
+async function formPropostaAntiga(){
+  let motivos = [];
+  try{ motivos = await get('motivos_perda?select=id,nome&ativo=is.true&order=nome'); }catch(e){}
+
+  document.getElementById('dNum').textContent = 'Proposta antiga';
+  document.getElementById('dCli').textContent = '';
+  document.getElementById('dSub').textContent = 'Emitida antes do TapFlow — entra com a data e o número reais';
+  document.getElementById('dTabs').innerHTML = '';
+  document.getElementById('dAcoes').innerHTML = '';
+  document.getElementById('drawer').classList.add('on');
+  document.getElementById('scrim').classList.add('on');
+
+  const hoje = isoHoje();
+  document.getElementById('dBody').innerHTML =
+      '<div class="campo"><label for="paBusca">Cliente</label>'
+    + '<input id="paBusca" type="text" placeholder="razão social, nome fantasia ou CNPJ" autocomplete="off" '
+    + 'name="pab_nofill" data-lpignore="true" data-1p-ignore readonly onfocus="this.removeAttribute(\'readonly\')"></div>'
+    + '<div id="paCliLista"></div><div id="paCliSel" class="nota" style="margin:-4px 0 12px"></div>'
+    + '<div class="dupla"><div class="campo"><label for="paNum">Número da proposta</label>'
+    +   '<input id="paNum" type="text" autocomplete="off" name="pan_nofill" placeholder="como está no papel, ex.: 25087"></div>'
+    + '<div class="campo"><label for="paEm">Emitida em</label><input id="paEm" type="date" max="' + hoje + '"></div></div>'
+    + campoDinheiro('paVal', 'Valor total', null)
+    + '<div class="campo"><label for="paDesc">O que foi ofertado</label>'
+    +   '<input id="paDesc" type="text" autocomplete="off" name="pad_nofill" placeholder="ex.: inspeção de 3 vasos e calibração"></div>'
+    + '<div class="campo"><label for="paTit">Título do negócio (opcional)</label>'
+    +   '<input id="paTit" type="text" autocomplete="off" name="pat_nofill" placeholder="vazio = “Proposta NNN (anterior ao TapFlow)”"></div>'
+    + '<fieldset class="grupoOpc"><legend>O que aconteceu com ela</legend>'
+    + [['enviada','Enviada, ainda sem resposta','vai para “Proposta enviada”'],
+       ['aprovada','Aprovada — o serviço ainda está por fazer','vai para “Aprovadas”; dali abre a OS'],
+       ['executada','Aprovada e já executada fora do TapFlow','vai para “Concluídos”'],
+       ['recusada','Recusada pelo cliente','vai para “Recusadas”, com o motivo']].map(([v,r,d], i) =>
+        '<label class="linhaOpc"><input type="radio" name="paSit" value="' + v + '"' + (i === 0 ? ' checked' : '') + '> '
+      + '<span><b>' + r + '</b><br><small style="color:var(--ink-3)">' + d + '</small></span></label>').join('')
+    + '</fieldset>'
+    + '<div id="paResp" hidden>'
+    +   '<div class="campo"><label for="paRespEm">Data da resposta do cliente</label><input id="paRespEm" type="date" max="' + hoje + '"></div>'
+    +   '<div class="campo" id="paCtBox"><label for="paCt">Quem aprovou</label><select id="paCt"><option value="">— escolha o cliente primeiro —</option></select></div>'
+    +   '<div class="campo" id="paMotBox" hidden><label for="paMot">Motivo da recusa</label><select id="paMot"><option value="">—</option>'
+    +     (motivos || []).map(m => '<option value="' + esc(m.id) + '">' + esc(m.nome) + '</option>').join('') + '</select></div>'
+    + '</div>'
+    + '<div class="campo"><label for="paObs">Observação (opcional)</label><input id="paObs" type="text" autocomplete="off" name="pao_nofill"></div>'
+    + '<div id="paAviso"></div>'
+    + '<button class="btn pri" id="paOk" style="width:100%">Conferir e lançar</button>'
+    + '<p class="nota">O histórico do negócio registra as datas reais e diz que o lançamento foi feito hoje, e por quem. '
+    + 'O relatório comercial conta a proposta no mês em que ela foi emitida.</p>';
+  ligarCampoDinheiro('paVal');
+
+  let cliente = null;
+  const escolher = async c => {
+    cliente = c;
+    document.getElementById('paCliLista').innerHTML = '';
+    document.getElementById('paBusca').value = nomeCliente(c);
+    document.getElementById('paCliSel').textContent = 'Cliente: ' + nomeCliente(c) + (c.cnpj ? ' · ' + c.cnpj : '');
+    const sel = document.getElementById('paCt');
+    sel.innerHTML = '<option value="">carregando…</option>';
+    try{
+      const cts = await get('contatos?select=id,nome,cargo&cliente_id=eq.' + c.id + '&ativo=is.true&order=nome');
+      sel.innerHTML = (cts && cts.length)
+        ? '<option value="">—</option>' + cts.map(x => '<option value="' + esc(x.id) + '">' + esc(x.nome)
+            + (x.cargo ? ' — ' + esc(x.cargo) : '') + '</option>').join('')
+        : '<option value="">este cliente não tem contato cadastrado</option>';
+    }catch(e){ sel.innerHTML = '<option value="">não deu para carregar</option>'; }
+  };
+  let tb = null;
+  const inpB = document.getElementById('paBusca');
+  inpB.addEventListener('input', () => {
+    clearTimeout(tb);
+    tb = setTimeout(async () => {
+      const termo = inpB.value.trim(), alvo = document.getElementById('paCliLista');
+      if (termo.length < 2){ alvo.innerHTML = ''; return; }
+      try{
+        const r = await rpc('tf_buscar_cliente', { p_termo: termo, p_limite: 8 });
+        alvo.innerHTML = (r && r.length)
+          ? '<div class="parecidos">' + r.map((c, i) =>
+              '<button class="btn parecidoLinha" type="button" data-i="' + i + '">'
+            + '<span class="pn">' + esc(nomeCliente(c)) + '</span>'
+            + '<span class="pd">' + esc(c.cnpj || 'sem CNPJ') + (c.cidade ? ' · ' + esc(c.cidade) : '') + '</span>'
+            + '</button>').join('') + '</div>'
+          : '<p class="nota">Nenhum cliente com esse nome ou CNPJ. Proposta é de cliente cadastrado — cadastre em Clientes antes.</p>';
+        alvo.querySelectorAll('[data-i]').forEach(bt => bt.addEventListener('click', () => escolher(r[Number(bt.dataset.i)])));
+      }catch(e){ alvo.innerHTML = '<p class="nota"></p>'; alvo.querySelector('p').textContent = 'Não deu para buscar: ' + e.message; }
+    }, 200);
+  });
+
+  const sit = () => (document.querySelector('input[name=paSit]:checked') || {}).value || 'enviada';
+  const ajusta = () => {
+    const v = sit();
+    document.getElementById('paResp').hidden = v === 'enviada';
+    document.getElementById('paCtBox').hidden = !(v === 'aprovada' || v === 'executada');
+    document.getElementById('paMotBox').hidden = v !== 'recusada';
+  };
+  document.querySelectorAll('input[name=paSit]').forEach(r => r.addEventListener('change', ajusta));
+  ajusta();
+
+  const params = confirmado => ({
+    p_cliente_id: cliente && cliente.id, p_titulo: document.getElementById('paTit').value.trim() || null,
+    p_numero: document.getElementById('paNum').value.trim(), p_emitida_em: document.getElementById('paEm').value || null,
+    p_valor: lerCampoDinheiro('paVal', 'Valor total'), p_descricao: document.getElementById('paDesc').value.trim() || null,
+    p_situacao: sit(), p_resposta_em: sit() === 'enviada' ? null : (document.getElementById('paRespEm').value || null),
+    p_contato_id: document.getElementById('paCt').value || null,
+    p_motivo_perda_id: document.getElementById('paMot').value || null,
+    p_observacao: document.getElementById('paObs').value.trim() || null, p_confirmado: confirmado });
+
+  document.getElementById('paOk').addEventListener('click', function(){
+    _semDuploEnvio_(this, async () => {
+      if (!cliente) return toast('Escolha o cliente.','err');
+      let pr;
+      try{ pr = await rpc('tf_lancar_proposta_antiga', params(false)); }
+      catch(e){ return toast(e.message,'err'); }
+      const ROT = { enviada:'Proposta enviada', aprovada:'Aprovadas', executada:'Concluídos', recusada:'Recusadas' };
+      abrirModal('Lançar a proposta ' + pr.numero + '?',
+          '<p><b>' + esc(pr.cliente) + '</b> · emitida em ' + esc(dataBR(document.getElementById('paEm').value))
+        + ' · ' + esc(BRL(params(false).p_valor)) + '</p>'
+        + '<p>O card entra em <b>' + ROT[sit()] + '</b>.</p>'
+        + (pr.contador_avanca_para
+            ? '<div class="aviso">O número <b>' + esc(pr.numero) + '</b> está à frente da numeração do TapFlow. '
+              + 'Para o TapFlow não emitir esse mesmo número mais tarde, o contador pula: a próxima proposta '
+              + 'ou OS nova sai como <b>' + esc(pr.proximo_numero) + '</b>.</div>'
+            : ''),
+        [{ label:'Voltar', onClick: fecharModal },
+         { label:'Lançar', pri:true, onClick: async () => {
+            try{
+              const r = await rpc('tf_lancar_proposta_antiga', params(true));
+              fecharModal(); fecharDrawer();
+              toast('Proposta ' + r.rotulo + ' lançada (' + r.negocio_numero + ').','ok');
+              pintarComercial();
+            }catch(e){ toast(e.message,'err'); }
+         }}]);
+    });
+  });
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // MEU PERFIL (S32 · item 3)
 // ----------------------------------------------------------------------------
@@ -8598,7 +8974,7 @@ async function pintarConfig(){
   // aparece na tela" decide por onde a pessoa navega; esta decide, tarefa por
   // tarefa, quem pode executá-la.
   const abas = [['usuarios','Usuários'],['perfis','Perfis'],['tarefas','Tarefas por perfil'],
-                ['turno','Turno'],['planos','Planos'],['logos','Logomarcas'],
+                ['turno','Turno'],['planos','Planos'],
                 ['docs','Documentos'],['param','Google Drive'],['exc','Exclusões']];
   const t = document.getElementById('cfgTabs');
   abas.forEach(([id,rot]) => {
@@ -8615,7 +8991,6 @@ async function pintarConfig(){
   if (abaCfg === 'docs')     return cfgDocumentos();
   if (abaCfg === 'turno')    return cfgTurno();
   if (abaCfg === 'planos')   return cfgPlanos();
-  if (abaCfg === 'logos')    return cfgLogomarcas();
   if (abaCfg === 'param')    return cfgParametros();
   if (abaCfg === 'exc')      return cfgExclusoes();
 }
@@ -9183,6 +9558,16 @@ function formPerfil(p){
 //    inspetor. Por isso a tela pergunta antes quando a marca muda o lado.
 let _cfgTpl = null;      // as tarefas dos moldes, como vieram do banco
 let _cfgPerfilSel = null;
+// ── ITEM 6 (S36): A MATRIZ ──────────────────────────────────────────────────
+// A tela do S31 responde "o que ESTE perfil faz". A pergunta do documento de
+// 23/09 é outra: "estes dois perfis fazem a mesma coisa?" — e ela só se
+// responde vendo os perfis LADO A LADO. A matriz é a mesma lista de tarefas,
+// com um perfil por coluna; cada caixa grava pela MESMA função
+// (`tf_salvar_perfis_tarefa`), com o mesmo aviso de mudança de app. As telas
+// (módulos) aparecem em cima só para leitura — elas se editam em Perfis, que
+// grava o perfil inteiro de uma vez.
+let _tpModo = 'perfil';   // 'perfil' | 'matriz'
+let _tpPerfis = [];
 
 async function cfgTarefasPerfil(){
   const c = document.getElementById('cfgCorpo');
@@ -9208,7 +9593,12 @@ async function cfgTarefasPerfil(){
   if (!_cfgPerfilSel || !escolhiveis.some(p => p.id === _cfgPerfilSel))
     _cfgPerfilSel = (escolhiveis[0] || {}).id || null;
 
+  _tpPerfis = perfis;
   c.innerHTML = '<div class="painel"><h3>Quem pode fazer cada tarefa</h3>'
+    + '<div class="tpModo"><div class="chips" id="tpModo">'
+    + '<button type="button" class="fchip' + (_tpModo === 'perfil' ? ' on' : '') + '" data-m="perfil">Um perfil por vez</button>'
+    + '<button type="button" class="fchip' + (_tpModo === 'matriz' ? ' on' : '') + '" data-m="matriz">Todos lado a lado</button>'
+    + '</div><button type="button" class="btn" id="tpIgualar">Igualar um perfil a outro…</button></div>'
     + '<p class="nota">Esta lista é <b>diferente</b> do “O que aparece na tela”, ao lado em '
     + '<b>Perfis</b>: lá se decide por onde a pessoa navega; aqui, tarefa por tarefa, quem pode '
     + 'executá-la. Marcar vale <b>para sempre</b> — toda OS nova nasce com a regra — '
@@ -9217,7 +9607,12 @@ async function cfgTarefasPerfil(){
     + '<div class="chips" id="tpPerfis"></div>'
     + '<div id="tpCorpo"></div></div>';
 
+  document.querySelectorAll('#tpModo [data-m]').forEach(b => b.addEventListener('click', () => {
+    _tpModo = b.dataset.m; cfgTarefasPerfil();
+  }));
+  document.getElementById('tpIgualar').addEventListener('click', () => modalIgualarPerfis(escolhiveis));
   const ch = document.getElementById('tpPerfis');
+  if (_tpModo === 'matriz'){ ch.hidden = true; return tpPintarMatriz(perfis); }
   escolhiveis.forEach(p => {
     const b = document.createElement('button');
     b.className = 'fchip' + (p.id === _cfgPerfilSel ? ' on' : '');
@@ -9269,16 +9664,116 @@ function tpPintarTarefas(perfis){
   }));
 }
 
+/** A matriz (S36): tarefas nas linhas, perfis nas colunas. */
+function tpPintarMatriz(perfis){
+  const cx = document.getElementById('tpCorpo');
+  if (!cx) return;
+  const cols = (perfis || []).filter(p => !p.is_admin);
+  if (!cols.length || !(_cfgTpl || []).length){ cx.innerHTML = '<p class="nota">Nada para mostrar.</p>'; return; }
+  const cab = '<th class="tpMx1">Tarefa</th>' + cols.map(p =>
+      '<th class="tpMxP" title="' + esc(p.nome) + '">' + esc(p.nome) + '</th>').join('');
+  const moldes = new Map();
+  _cfgTpl.forEach(t => {
+    if (!moldes.has(t.template_id)) moldes.set(t.template_id, { nome:t.template, itens:[] });
+    moldes.get(t.template_id).itens.push(t);
+  });
+  // conta de diferenças entre colunas: é a resposta rápida para "são iguais?"
+  const telas = MODULOS.map(([k, rot]) => '<tr><td class="tpMx1">' + esc(rot) + '</td>'
+      + cols.map(p => {
+          const m = p.modulos || [];
+          const tem = !m.length || m.indexOf(k) >= 0;   // sem módulo nenhum = vê tudo (regra do S10)
+          return '<td class="tpMxC">' + (tem ? '<span class="tpSim" aria-label="sim">✓</span>' : '<span class="tpNao" aria-label="não">—</span>') + '</td>';
+        }).join('') + '</tr>').join('');
+  cx.innerHTML = '<div class="tpMatriz"><table class="tab tpTab tpMx"><thead><tr>' + cab + '</tr></thead><tbody>'
+    + '<tr class="tpMxSec"><td colspan="' + (cols.length + 1) + '">Telas que aparecem (só leitura — muda em <b>Perfis</b>)</td></tr>'
+    + telas
+    + [...moldes.entries()].map(([id, m]) =>
+        '<tr class="tpMxSec"><td colspan="' + (cols.length + 1) + '">' + esc(m.nome) + '</td></tr>'
+      + m.itens.map(t => '<tr><td class="tpMx1"><b>' + esc(t.nome) + '</b> <span class="mono mini">' + esc(t.tarefa_id) + '</span>'
+          + '<br><span class="tpDim">' + esc(t.fase || '') + '</span></td>'
+          + cols.map(p => {
+              const tem = (t.perfis_responsaveis || []).includes(p.id);
+              return '<td class="tpMxC' + (tem ? ' tpOn' : '') + '"><input type="checkbox" data-tp="'
+                + esc(t.template_id + '|' + t.tarefa_id) + '" data-pf="' + esc(p.id) + '"' + (tem ? ' checked' : '')
+                + ' aria-label="' + esc(p.nome + ' — ' + t.nome) + '"></td>';
+            }).join('') + '</tr>').join('')).join('')
+    + '</tbody></table></div>'
+    + '<p class="nota">O administrador não tem coluna: ele passa em tudo por definição.</p>';
+  cx.querySelectorAll('[data-tp]').forEach(ck => ck.addEventListener('change', () => {
+    const [tpl, tid] = ck.dataset.tp.split('|');
+    tpAlternar(tpl, tid, ck, perfis, ck.dataset.pf);
+  }));
+}
+const tpRepintar = perfis => (_tpModo === 'matriz' ? tpPintarMatriz(perfis) : tpPintarTarefas(perfis));
+
+/** "Igualar um perfil a outro" (S36): tudo que a ORIGEM faz, o DESTINO passa a
+ *  fazer também — tarefas e, se marcado, telas. Só ACRESCENTA. Cópia pontual:
+ *  tarefa criada depois marcando só um dos dois deixa o outro de fora, e a
+ *  matriz é onde isso aparece. */
+function modalIgualarPerfis(escolhiveis){
+  if (DEMO) return toast('Modo demonstração: não iguala perfis.','err');
+  const opts = sel => escolhiveis.map(p => '<option value="' + esc(p.id) + '"' + (p.id === sel ? ' selected' : '') + '>'
+                                        + esc(p.nome) + '</option>').join('');
+  abrirModal('Igualar um perfil a outro',
+      '<div class="dupla"><div class="campo"><label for="igO">Tudo que este faz…</label><select id="igO">'
+    + opts((escolhiveis[0] || {}).id) + '</select></div>'
+    + '<div class="campo"><label for="igD">…este passa a fazer também</label><select id="igD">'
+    + opts((escolhiveis[1] || escolhiveis[0] || {}).id) + '</select></div></div>'
+    + '<label class="chk"><input type="checkbox" id="igT" checked> Tarefas (vale para OS nova e para as abertas não resolvidas)</label>'
+    + '<label class="chk"><input type="checkbox" id="igM"> Telas que aparecem (módulos)</label>'
+    + '<p class="nota">Só acrescenta: nada que o segundo perfil já faz é tirado. Antes de gravar, '
+    + 'o TapFlow mostra o que muda.</p><div id="igPrev"></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Ver o que muda', pri:true, onClick: async () => {
+        const o = document.getElementById('igO').value, d = document.getElementById('igD').value;
+        const t = document.getElementById('igT').checked, m = document.getElementById('igM').checked;
+        let r;
+        try{ r = await rpc('tf_igualar_perfil', { p_origem:o, p_destino:d, p_tarefas:t, p_modulos:m, p_confirmado:false }); }
+        catch(e){ return toast(e.message,'err'); }
+        const tar = r.tarefas || [], mods = r.modulos || [];
+        const LADO = { campo:'app de Campo', adm:'escritório', ambos:'campo e escritório' };
+        const nomeMod = k => (MODULOS.find(x => x[0] === k) || [k,k])[1];
+        if (!tar.length && !mods.length){
+          document.getElementById('igPrev').innerHTML = '<div class="aviso ok"><b>' + esc(r.destino)
+            + '</b> já faz tudo que <b>' + esc(r.origem) + '</b> faz. Nada a igualar.</div>';
+          return;
+        }
+        abrirModal('Confirmar: ' + r.origem + ' → ' + r.destino,
+            (tar.length ? '<div class="secTit">' + tar.length + ' tarefa(s) passam a aceitar ' + esc(r.destino) + '</div>'
+              + '<div class="listaItens">' + tar.map(x => '<div class="lin"><span>' + esc(x.nome)
+                + ' <span class="mono mini">' + esc(x.tarefa_id) + '</span> <span class="nota">' + esc(x.template) + '</span></span>'
+                + (x.executor_antes !== x.executor_depois
+                    ? '<span class="chip urg">passa a ir também para ' + esc(LADO[x.executor_depois] || x.executor_depois) + '</span>' : '')
+                + '</div>').join('') + '</div>' : '')
+          + (mods.length ? '<div class="secTit">Telas acrescentadas</div><p>' + mods.map(k => esc(nomeMod(k))).join(', ') + '</p>' : '')
+          + (Number(r.mudam_de_app) ? '<div class="aviso">' + r.mudam_de_app + ' tarefa(s) mudam de app — '
+              + 'quem executa em campo passa a vê-las no celular, ou o contrário.</div>' : ''),
+          [{ label:'Voltar', onClick: fecharModal },
+           { label:'Igualar', pri:true, onClick: async () => {
+              try{
+                const g = await rpc('tf_igualar_perfil', { p_origem:o, p_destino:d, p_tarefas:t, p_modulos:m, p_confirmado:true });
+                fecharModal(); fecharModal();
+                toast(g.destino + ' igualado a ' + g.origem + ': ' + g.tarefas + ' tarefa(s)'
+                  + ((g.modulos || []).length ? ', ' + g.modulos.length + ' tela(s)' : '')
+                  + (g.os_afetadas ? ' — ' + g.os_afetadas + ' OS aberta(s) já valendo.' : '.'), 'ok');
+                _tpModo = 'matriz'; cfgTarefasPerfil();
+              }catch(e){ toast(e.message,'err'); }
+           }}]);
+     }}]);
+}
+
 /** Marca ou desmarca o perfil nesta tarefa. Grava na hora; se a mudança troca
  *  o LADO da tarefa (campo ↔ escritório), pergunta antes — é o que decide se
- *  ela aparece no aplicativo de Campo. */
-function tpAlternar(tplId, tarefaId, ck, perfis){
+ *  ela aparece no aplicativo de Campo. S36: o perfil vem por parâmetro na
+ *  matriz (uma coluna por perfil); na vista de um perfil, é o selecionado. */
+function tpAlternar(tplId, tarefaId, ck, perfis, perfilId){
   const t = (_cfgTpl || []).find(x => x.template_id === tplId && x.tarefa_id === tarefaId);
   if (!t) return;
+  const pf = perfilId || _cfgPerfilSel;
   const atuais = (t.perfis_responsaveis || []).slice();
   const marcar = ck.checked;
-  const novos = marcar ? atuais.concat([_cfgPerfilSel]).filter((v,i,a) => a.indexOf(v) === i)
-                       : atuais.filter(x => x !== _cfgPerfilSel);
+  const novos = marcar ? atuais.concat([pf]).filter((v,i,a) => a.indexOf(v) === i)
+                       : atuais.filter(x => x !== pf);
   const voltar = () => { ck.checked = !marcar; };
 
   if (!novos.length){
@@ -9308,7 +9803,7 @@ function tpAlternar(tplId, tarefaId, ck, perfis){
       toast('“' + t.nome + '”: ' + novos.join(', ')
         + (Number(r.os_afetadas) ? ' — ' + r.os_afetadas + ' OS aberta(s) já valendo.'
                                  : ' — nenhuma OS aberta usava esta tarefa.'), 'ok');
-      tpPintarTarefas(perfis);
+      tpRepintar(perfis);
     }catch(e){ toast(e.message,'err'); voltar(); }
   };
 
@@ -9483,109 +9978,14 @@ async function cfgTurno(){
 // Mesma receita do Turno: uma linha só no banco (`parametros_planos`), editada
 // daqui, sem SQL na mão. O que se digita no app é o Padrão; Básico e Premium
 // saem dele por percentual e só existem dentro do .docx.
-// ── LOGOMARCAS · REGERAR AS MINIATURAS (S34 · item 4) ───────────────────────
-// Por que existe uma TELA para isto, em vez de uma linha de SQL: quem
-// redimensiona imagem é o navegador. O banco guarda base64 e não sabe abrir
-// um JPEG. A migration 54_ só marca QUEM já passou (`thumb_geracao`); o
-// trabalho é aqui.
-//
-// E por que não fazer sozinho, ao abrir o quadro: são até 519 clientes, cada
-// um com um `original` de 600px. Puxar isso no meio de uma repintura de
-// quadro trava a tela de quem só queria ver os cards. É ato explícito, com
-// contador na frente, e dá para parar no meio — o que já foi regerado está
-// gravado.
-let _regerando = false;
-
-async function cfgLogomarcas(){
-  const c = document.getElementById('cfgCorpo');
-  c.innerHTML = '<div class="painel"><h3>Logomarcas dos clientes</h3>'
-    + '<p class="nota">Carregando…</p></div>';
-
-  let fila = [];
-  try{
-    fila = DEMO ? [] : await get('v_logos_a_regerar?select=*&order=razao_social');
-  }catch(e){
-    c.innerHTML = '<div class="painel"><h3>Logomarcas dos clientes</h3>'
-      + '<div class="aviso"><b>Não deu para ler a lista.</b><br>' + esc(e.message)
-      + '<br>Se a mensagem fala em <b>v_logos_a_regerar</b>, falta rodar o '
-      + '<b>sql/54_ajustes_s34.sql</b>.</div>'
-      + '<button class="btn" id="lgRetry">Tentar de novo</button></div>';
-    document.getElementById('lgRetry').addEventListener('click', cfgLogomarcas);
-    return;
-  }
-
-  const comOriginal = fila.filter(x => x.tem_original);
-  const sem         = fila.filter(x => !x.tem_original);
-
-  c.innerHTML = '<div class="painel"><h3>Logomarcas dos clientes</h3>'
-    + '<p class="nota">A faixa de logomarca do card cresceu nesta versão '
-    + '(52 → 88 px). Junto com ela mudou o jeito de gerar a miniatura: até o '
-    + 'S33 a imagem era colada no meio de um <b>quadrado</b>, com tarja branca '
-    + 'em volta — e era a tarja, não o tamanho, que fazia a logo ocupar metade '
-    + 'da faixa. A miniatura nova é <b>rente</b> à imagem.</p>'
-    + '<p class="nota">Isto aqui regera as miniaturas antigas a partir da '
-    + 'imagem de 600&nbsp;px que o cadastro já guarda. Ninguém precisa reenviar '
-    + 'logo nenhuma. Pode fechar a tela no meio: o que já passou está gravado.</p>'
-    + (fila.length === 0
-        ? '<div class="aviso ok">Todas as logomarcas já estão no formato novo. Nada a fazer.</div>'
-        : '<div class="aviso"><b>' + fila.length + '</b> logomarca(s) ainda no formato antigo'
-          + (sem.length ? ', sendo <b>' + sem.length + '</b> sem a imagem de 600&nbsp;px guardada' : '')
-          + '.</div>')
-    + (comOriginal.length
-        ? '<button class="btn pri" id="lgGo" style="width:100%;padding:11px">Regerar '
-          + comOriginal.length + ' miniatura(s)</button>'
-          + '<div class="descGPrev" id="lgProg" aria-live="polite" hidden></div>'
-        : '')
-    + (sem.length
-        ? '<div class="secTit">Sem a imagem original</div>'
-          + '<p class="nota">Destes o cadastro só tem a miniatura antiga — ampliá-la '
-          + 'borraria a marca, que é pior do que deixá-la menor. Eles continuam '
-          + 'aparecendo, no tamanho de antes, até alguém reenviar a imagem pelo '
-          + '“Trocar” na ficha do cliente.</p>'
-          + '<div class="listaItens">' + sem.map(x =>
-              '<div class="lin"><span>' + esc(x.razao_social) + '</span></div>').join('') + '</div>'
-        : '')
-    + '</div>';
-
-  const b = document.getElementById('lgGo');
-  if (b) b.addEventListener('click', () => regerarMiniaturas(comOriginal, b));
-}
-
-async function regerarMiniaturas(fila, botao){
-  if (_regerando) return;
-  _regerando = true;
-  const prog = document.getElementById('lgProg');
-  prog.hidden = false;
-  botao.disabled = true;
-  let feitas = 0, falhas = 0;
-
-  for (const linha of fila){
-    prog.textContent = 'Regerando ' + (feitas + falhas + 1) + ' de ' + fila.length
-                     + ' — ' + linha.razao_social + '…';
-    try{
-      const r = await get('clientes_logo?select=original&cliente_id=eq.' + linha.cliente_id);
-      const orig = r && r[0] && r[0].original;
-      if (!orig) throw new Error('sem a imagem original');
-      const nova = await reduzirImagem(orig, LOGO_THUMB_PX, 0.82, true, true);
-      // o `original` NÃO vai de novo: ele é a fonte, e mandá-lo a cada
-      // regeração dobraria o tráfego à toa. A função do banco preserva o que
-      // já está lá quando ele vem nulo.
-      await rpc('tf_salvar_logo_cliente', { p_cliente_id: linha.cliente_id,
-        p_thumb: nova.dados, p_original: null,
-        p_largura: null, p_altura: null, p_bytes: null,
-        p_thumb_geracao: LOGO_THUMB_GERACAO });
-      _LOGOS.set(linha.cliente_id, nova.dados);
-      feitas++;
-    }catch(e){ falhas++; }
-  }
-
-  _regerando = false;
-  prog.textContent = feitas + ' miniatura(s) regerada(s)'
-    + (falhas ? ', ' + falhas + ' não deu(ram) certo — abra de novo para tentar nelas' : '') + '.';
-  prog.className = 'descGPrev ' + (falhas ? 'alto' : 'pronto');
-  toast(feitas + ' logomarca(s) atualizada(s).', falhas ? 'err' : 'ok');
-  setTimeout(cfgLogomarcas, 1200);
-}
+// ── ITEM 3 (S36): A FERRAMENTA "REGERAR MINIATURAS" SAIU ─────────────────────
+// Existiu no S34 e no S35 (Configurações › Logomarcas) para uma migração de uma
+// vez só: passar as miniaturas quadradas (com tarja) para o formato rente. As
+// 14 que existiam foram regeradas, e todo envio novo já passa por
+// `enviarLogoCliente`, que gera no formato atual. A tela passou a dizer "nada
+// a fazer" para sempre. Se um dia `LOGO_THUMB_GERACAO` mudar de novo, a
+// ferramenta está inteira no TFM_S35 (Versões anteriores) e a view
+// `v_logos_a_regerar` continua no banco — o `diagnostico_banco.sql` a usa.
 
 async function cfgPlanos(){
   const c = document.getElementById('cfgCorpo');
@@ -12713,7 +13113,11 @@ const NAV = [
     { v:'forn',  rot:'Fornecimento de Produtos',      ico:'forn',   cont:'nForn',  mod:'fornecimento' },
   ]},
   { id:'operacao', rot:'OPERAÇÃO', itens:[
-    { v:'age', rot:'Agenda',     ico:'agenda', cont:'nAge', mod:'os' },
+    // ITEM 4 (S36): sem `mod` DE PROPÓSITO — decisão do Bruno, a Agenda é de
+    // todo mundo. Até o S35 ela pedia o módulo "os" e só PARECIA aberta a
+    // todos porque os perfis em uso tinham esse módulo; o inspetor e o
+    // auxiliar do cadastro padrão não têm, e perderiam o "Minhas tarefas".
+    { v:'age', rot:'Agenda',     ico:'agenda', cont:'nAge' },
     { v:'cpr', rot:'Compras',    ico:'caixa', cont:'nCpr', mod:'compras' },
     { v:'doc', rot:'Documentos', ico:'doc',                mod:'documentos' },
   ]},
@@ -12901,8 +13305,38 @@ const AGENDA = {
   carga: [], itens: [], pool: [],
   chave: null,            // período já carregado, para não repetir consulta
   filtros: { cliente:'', os:'', etapa:'', quem:'' },
-  poolTudo: false
+  poolTudo: false,
+  soMinhas: null          // S36 · item 5 — null = ainda não decidido (ver agMinhasPadrao)
 };
+
+// ── ITEM 5 (S36): "MINHAS TAREFAS" ──────────────────────────────────────────
+// Um filtro, não uma tela: as quatro vistas continuam as mesmas, só que com a
+// pessoa logada. "Minha" é o que está no MEU nome — como dono, como apoio
+// (item 7) ou numa visita em que me marcaram. No "Sem dia", é o que tem o meu
+// nome e ainda não tem dia.
+//
+// DECISÃO MINHA (o documento deixou para o Bruno): vem LIGADO para todo mundo
+// menos o admin, que é quem acompanha a equipe inteira. Quem mexer na chave
+// fica com a escolha dele naquele computador. A preferência mora no
+// localStorage de propósito: é conveniência de quem olha, não dado do sistema.
+const _AG_MINHAS_KEY = 'tf_agenda_minhas';
+function agMinhasPadrao(){
+  try{
+    const v = localStorage.getItem(_AG_MINHAS_KEY);
+    if (v === '1') return true;
+    if (v === '0') return false;
+  }catch(e){}
+  return !(sessao && sessao.admin);
+}
+/** A linha é minha? `usuario_id` nas vistas por pessoa; no "Sem dia" a linha
+ *  é da tarefa, então vale o dono OU estar entre os apoios. */
+function agEhMinha(i){
+  const eu = String(meuId() || '');
+  if (!eu) return false;
+  if (i.usuario_id != null) return String(i.usuario_id) === eu;
+  return String(i.usuario_designado || '') === eu
+      || (i.apoios || []).map(String).indexOf(eu) >= 0;
+}
 
 const agBase   = () => AGENDA.base || isoHoje();
 const agData   = iso => new Date(iso + 'T12:00');
@@ -12954,6 +13388,7 @@ function agColunas(){
 
 async function pintarAgenda(){
   visao = 'age';
+  if (AGENDA.soMinhas === null) AGENDA.soMinhas = agMinhasPadrao();
   const board = document.getElementById('board');
   REPINTA.age = agPintar;   // buscar na tela repinta da memória, não do banco
 
@@ -13101,15 +13536,21 @@ const _AG_CONC_KEY = 'tf_agenda_concluidos';
 try{ AGENDA.concluidos = localStorage.getItem(_AG_CONC_KEY) === '1'; }catch(e){ AGENDA.concluidos = false; }
 AGENDA.resolvidos = []; AGENDA.chaveRes = null; AGENDA.erroRes = null;
 
+// ITEM 10 (S36): a chave vale nas TRÊS vistas com data, e o estado é um só
+// (`AGENDA.concluidos`, lembrado no localStorage): ligar no Dia e trocar para a
+// Semana continua ligado. A consulta passou a ser pelo PERÍODO da vista — o
+// dia, a semana ou o mês —, e a Semana e o Mês mostram a contagem de
+// resolvidos por célula; o clique leva ao Dia, que abre a lista.
 async function agCarregarResolvidos(){
-  if (AGENDA.vista !== 'dia' || !AGENDA.concluidos){ return; }
-  const dia = agPeriodo().de;
-  if (DEMO){ AGENDA.resolvidos = demoAgendaResolvidos(dia); AGENDA.chaveRes = dia; return; }
-  if (AGENDA.chaveRes === dia) return;
+  if (AGENDA.vista === 'pool' || !AGENDA.concluidos){ return; }
+  const p = agPeriodo();
+  const chave = p.de + '|' + p.ate;
+  if (DEMO){ AGENDA.resolvidos = demoAgendaResolvidos(p.de); AGENDA.chaveRes = chave; return; }
+  if (AGENDA.chaveRes === chave) return;
   try{
-    AGENDA.resolvidos = await get('v_agenda_resolvidos?select=*&dia=eq.' + dia
+    AGENDA.resolvidos = await get('v_agenda_resolvidos?select=*&dia=gte.' + p.de + '&dia=lte.' + p.ate
                                   + '&order=resolvido_em.asc.nullslast') || [];
-    AGENDA.chaveRes = dia; AGENDA.erroRes = null;
+    AGENDA.chaveRes = chave; AGENDA.erroRes = null;
   }catch(e){
     // sem o SQL 51 a view não existe — a tela diz isso em vez de fingir que não há nada
     AGENDA.resolvidos = []; AGENDA.chaveRes = null; AGENDA.erroRes = e.message;
@@ -13133,51 +13574,75 @@ const _hhmm = ts => { if (!ts) return ''; const d = new Date(ts);
 const _diaDe = ts => { if (!ts) return ''; const d = new Date(ts);
   return isNaN(d) ? '' : d.toLocaleDateString('sv-SE', { timeZone:'America/Sao_Paulo' }); };
 
+/** As chaves do topo da agenda (S36): "Minhas tarefas" nas quatro vistas e
+ *  "Mostrar concluídos" nas três que têm data. Uma função só, para as quatro
+ *  vistas não desenharem a mesma chave de quatro jeitos. */
+function agChavesHTML(nRes){
+  const comConc = AGENDA.vista !== 'pool';
+  return '<div class="agConcBar">'
+    + '<label class="agConc" title="Só o que está no seu nome — como responsável, como apoio ou numa visita">'
+    + '<input type="checkbox" id="agMinhasChk"' + (AGENDA.soMinhas ? ' checked' : '') + '>'
+    + '<span class="agConcSw" aria-hidden="true"></span><span>Minhas tarefas</span></label>'
+    + (comConc
+        ? '<label class="agConc"><input type="checkbox" id="agConcChk"' + (AGENDA.concluidos ? ' checked' : '') + '>'
+          + '<span class="agConcSw" aria-hidden="true"></span><span>Mostrar concluídos</span></label>'
+          + '<span class="agConcN" id="agConcN">' + (AGENDA.concluidos
+              ? (AGENDA.erroRes ? 'não deu para carregar os concluídos'
+                 : nRes ? nRes + ' resolvido' + (nRes > 1 ? 's' : '') + (AGENDA.vista === 'dia' ? ' neste dia' : ' no período')
+                 : 'nada resolvido ' + (AGENDA.vista === 'dia' ? 'neste dia' : 'no período') + ' ainda')
+              : 'o que já foi feito fica escondido') + '</span>'
+          + '<span class="agConcLeg">A barra conta só o que ainda falta.</span>'
+        : '')
+    + '</div>'
+    + (comConc && AGENDA.concluidos && AGENDA.erroRes
+        ? '<div class="aviso">Os concluídos não vieram: ' + esc(AGENDA.erroRes)
+          + (/v_agenda_resolvidos/.test(AGENDA.erroRes) ? ' — falta rodar o <b>51_ajustes_s29.sql</b>.' : '') + '</div>'
+        : '');
+}
+function agLigarChaves(){
+  const m = document.getElementById('agMinhasChk');
+  if (m) m.addEventListener('change', () => {
+    AGENDA.soMinhas = m.checked;
+    try{ localStorage.setItem(_AG_MINHAS_KEY, m.checked ? '1' : '0'); }catch(e){}
+    LOTE.clear();
+    agPintar();
+  });
+  const c = document.getElementById('agConcChk');
+  if (c) c.addEventListener('change', async () => {
+    AGENDA.concluidos = c.checked;
+    try{ localStorage.setItem(_AG_CONC_KEY, c.checked ? '1' : '0'); }catch(e){}
+    AGENDA.chaveRes = null;
+    await agCarregarResolvidos();
+    agPintar();
+  });
+}
+/** Os resolvidos do período, já com o filtro "Minhas" aplicado. */
+const agResolvidosVisiveis = () => AGENDA.concluidos
+  ? (AGENDA.resolvidos || []).filter(i => !AGENDA.soMinhas || agEhMinha(i)) : [];
+
 function agVistaDia(cx){
   const dia = agPeriodo().de;
   const q   = BUSCA.age || '';
   const cap = agCap(dia);
-  const doDia = (AGENDA.itens || []).filter(i => i.dia === dia);
-  const res   = AGENDA.concluidos ? (AGENDA.resolvidos || []).filter(i => i.dia === dia) : [];
+  const doDia = (AGENDA.itens || []).filter(i => i.dia === dia && (!AGENDA.soMinhas || agEhMinha(i)));
+  const res   = agResolvidosVisiveis().filter(i => i.dia === dia);
 
   const porPessoa = {}, resPessoa = {};
   doDia.forEach(i => { (porPessoa[i.usuario_id] = porPessoa[i.usuario_id] || []).push(i); });
   res.forEach(i => { (resPessoa[i.usuario_id] = resPessoa[i.usuario_id] || []).push(i); });
   // quem só tem resolvido também aparece (com a chave ligada)
-  const pessoas = agPessoas();
+  const pessoas = agPessoas().filter(([id]) => !AGENDA.soMinhas || id === String(meuId()));
   res.forEach(i => { if (!pessoas.some(([id]) => id === String(i.usuario_id)))
                         pessoas.push([String(i.usuario_id), i.usuario || '(sem nome)']); });
 
-  const texto = i => [i.os_numero, i.cliente, i.tarefa, i.fase, i.categoria, i.descricao].join(' ');
+  const texto = i => [i.os_numero, i.negocio_numero, i.cliente, i.tarefa, i.fase, i.categoria,
+                       i.descricao, i.principal, i.apoios_nomes].join(' ');
   const linhas = pessoas.filter(([id, nome]) =>
     ((porPessoa[id] || []).length || (resPessoa[id] || []).length)
     && casa(nome + ' ' + (porPessoa[id]||[]).concat(resPessoa[id]||[]).map(texto).join(' '), q));
 
-  const chave = '<div class="agConcBar">'
-    + '<label class="agConc"><input type="checkbox" id="agConcChk"' + (AGENDA.concluidos ? ' checked' : '') + '>'
-    + '<span class="agConcSw" aria-hidden="true"></span><span>Mostrar concluídos</span></label>'
-    + '<span class="agConcN" id="agConcN">' + (AGENDA.concluidos
-        ? (AGENDA.erroRes ? 'não deu para carregar os concluídos'
-           : res.length ? res.length + ' resolvido' + (res.length > 1 ? 's' : '') + ' neste dia'
-           : 'nada resolvido neste dia ainda')
-        : 'o que já foi feito fica escondido') + '</span>'
-    + '<span class="agConcLeg">A barra conta só o que ainda falta.</span></div>'
-    + (AGENDA.concluidos && AGENDA.erroRes
-        ? '<div class="aviso">Os concluídos não vieram: ' + esc(AGENDA.erroRes)
-          + (/v_agenda_resolvidos/.test(AGENDA.erroRes) ? ' — falta rodar o <b>51_ajustes_s29.sql</b>.' : '') + '</div>'
-        : '');
-
-  const ligarChave = () => {
-    const c = document.getElementById('agConcChk');
-    if (!c) return;
-    c.addEventListener('change', async () => {
-      AGENDA.concluidos = c.checked;
-      try{ localStorage.setItem(_AG_CONC_KEY, c.checked ? '1' : '0'); }catch(e){}
-      AGENDA.chaveRes = null;
-      await agCarregarResolvidos();
-      agPintar();
-    });
-  };
+  const chave = agChavesHTML(res.length);
+  const ligarChave = agLigarChaves;
 
   if (!agEhUtil(dia) && !doDia.length && !res.length){
     cx.innerHTML = chave + '<div class="vazio2"><b>' + esc(dataBR(dia)) + ' não é dia útil</b>'
@@ -13187,8 +13652,11 @@ function agVistaDia(cx){
   }
   if (!linhas.length){
     cx.innerHTML = chave + '<div class="vazio2"><b>' + (q ? 'Nada bate com “' + esc(q) + '”'
-      : (AGENDA.concluidos ? 'Nada marcado nem resolvido em ' : 'Ninguém com tarefa pendente em ')
+      : (AGENDA.soMinhas
+          ? (AGENDA.concluidos ? 'Nada seu marcado nem resolvido em ' : 'Nada pendente no seu nome em ')
+          : (AGENDA.concluidos ? 'Nada marcado nem resolvido em ' : 'Ninguém com tarefa pendente em '))
         + esc(dataBR(dia))) + '</b>'
+      + (AGENDA.soMinhas && !q ? '<p>A chave <b>Minhas tarefas</b> está ligada — desligue para ver a equipe.</p>' : '')
       + '<p>' + (AGENDA.concluidos || q ? '' : 'Se o dia já foi feito, ligue <b>Mostrar concluídos</b>. ')
       + 'Use a vista <b>Sem dia</b> para escolher o que entra neste dia.</p></div>';
     ligarChave();
@@ -13217,7 +13685,8 @@ function agVistaDia(cx){
         + '</div>';
     }
     return '<button class="agT agRes ' + esc(i.situacao) + '" type="button" data-res="1" data-u="' + esc(id) + '" data-k="' + k + '">'
-      + '<span class="agTn"><span class="agResT"></span> ' + selo + '</span>'
+      + '<span class="agTn"><span class="agResT"></span> ' + selo
+      + (i.papel === 'apoio' ? ' <span class="chip apoio">apoio de ' + esc(i.principal || '?') + '</span>' : '') + '</span>'
       + '<span class="agTs"></span>'
       + '<span class="agTm">' + (i.tempo_estimado_min ? minHora(i.tempo_estimado_min) : '') + '</span>'
       + '</button>';
@@ -13239,7 +13708,17 @@ function agVistaDia(cx){
       + '<div class="agBar"><i style="width:' + Math.min(100, Math.round(oc*100)) + '%"'
       +   (oc > 1 ? ' class="cheio"' : oc > .7 ? ' class="quase"' : '') + '></i></div>'
       + '<div class="agTar">' + (its.length ? '' : '<p class="nota agNadaPend">Nada pendente neste dia.</p>')
-      + its.map((i,k) => i.origem === 'avulso'
+      + its.map((i,k) => i.origem === 'visita'
+        // ITEM 7 (S36): a visita do negócio, na agenda de cada pessoa marcada.
+        // Não tem "feito": é um compromisso com hora, e passa com o dia.
+        ? '<button class="agT agVis" type="button" data-vis="1" data-u="' + esc(id) + '" data-k="' + k + '">'
+          + '<span class="agTn">' + esc(i.tarefa || 'Visita')
+          +   ' <span class="chip vis">visita' + (i.hora ? ' · ' + esc(i.hora) : '') + '</span></span>'
+          + '<span class="agTs">' + esc([i.negocio_numero || i.os_numero, i.cliente, i.descricao,
+                                         i.apoios_nomes ? 'com ' + i.apoios_nomes : ''].filter(Boolean).join(' · ')) + '</span>'
+          + '<span class="agTm">' + minHora(i.tempo_estimado_min) + '</span>'
+          + '</button>'
+        : i.origem === 'avulso'
         // ITEM 9 (S28): compromisso avulso — checkbox de feito e ícone próprio
         ? '<div class="agT agAv">'
           + '<span class="agTn"><input type="checkbox" class="agAvChk" title="Marcar como feito" '
@@ -13251,8 +13730,12 @@ function agVistaDia(cx){
           + '</div>'
         : '<button class="agT" type="button" data-u="' + esc(id) + '" data-k="' + k + '">'
         + '<span class="agTn">' + esc(i.tarefa || '')
-        + (Number(i.prioridade_rank) >= 3 ? ' <span class="chip urg">urgente</span>' : '') + '</span>'
-        + '<span class="agTs">' + esc([i.os_numero, i.cliente, i.fase_rotulo || i.fase].filter(Boolean).join(' · ')) + '</span>'
+        + (Number(i.prioridade_rank) >= 3 ? ' <span class="chip urg">urgente</span>' : '')
+        // ITEM 7 (S36): quem é dono e quem vai junto, dito na linha
+        + (i.papel === 'apoio' ? ' <span class="chip apoio">apoio de ' + esc(i.principal || '?') + '</span>' : '')
+        + '</span>'
+        + '<span class="agTs">' + esc([i.os_numero, i.cliente, i.fase_rotulo || i.fase,
+                                       i.papel !== 'apoio' && i.apoios_nomes ? 'apoio: ' + i.apoios_nomes : ''].filter(Boolean).join(' · ')) + '</span>'
         + '<span class="agTm">' + (i.tempo_estimado_min ? minHora(i.tempo_estimado_min) : 'sem estimativa') + '</span>'
         + '</button>').join('')
       + (rs.length ? '<div class="agResSep">Já resolvido</div>' + rs.map((i,k) => linhaRes(i, id, k)).join('') : '')
@@ -13262,7 +13745,9 @@ function agVistaDia(cx){
 
   cx.querySelectorAll('button.agT:not([data-res]), .agAvB:not(.agResB)').forEach(b => b.addEventListener('click', () => {
     const its = porPessoa[b.dataset.u] || [];
-    agAbrirTarefa(its[Number(b.dataset.k)]);
+    const i = its[Number(b.dataset.k)];
+    if (i && i.origem === 'visita') return agAbrirVisita(i);
+    agAbrirTarefa(i);
   }));
   // resolvido: a tarefa de OS abre a OS (designar não faz sentido); o compromisso abre a ficha
   cx.querySelectorAll('button.agT[data-res], .agResB').forEach(b => b.addEventListener('click', () => {
@@ -13309,16 +13794,28 @@ function carimboRes(i, dia){
 }
 
 // ── VISTA: SEMANA ───────────────────────────────────────────────────────────
+// S36: as duas chaves do topo valem aqui também. "Minhas tarefas" deixa só a
+// sua linha; "Mostrar concluídos" põe, em cada célula, quantos já foram
+// resolvidos naquele dia — e a célula que só tem resolvido também abre o Dia.
 function agVistaSemana(cx){
   const q = BUSCA.age || '';
   const dias = agColunas();
+  const eu = String(meuId() || '');
   // S29: capacidade por dia — ver agCap()
   const porChave = {};
   (AGENDA.carga || []).forEach(c => { porChave[c.usuario_id + '|' + c.dia] = c; });
-  const linhas = agPessoas().filter(([id, nome]) => casa(nome, q));
+  const res = agResolvidosVisiveis();
+  const resChave = {};
+  res.forEach(r => { const k = r.usuario_id + '|' + r.dia; resChave[k] = (resChave[k] || 0) + 1; });
+  const pessoas = agPessoas();
+  // quem só tem resolvido na semana também ganha linha (com a chave ligada)
+  res.forEach(r => { if (!pessoas.some(([id]) => id === String(r.usuario_id)))
+                        pessoas.push([String(r.usuario_id), r.usuario || '(sem nome)']); });
+  const linhas = pessoas.filter(([id, nome]) => (!AGENDA.soMinhas || id === eu) && casa(nome, q));
   const hoje = isoHoje();
 
-  let html = '<div class="agGrade"><table><thead><tr><th>Pessoa</th>'
+  let html = agChavesHTML(res.filter(r => dias.indexOf(r.dia) >= 0).length)
+    + '<div class="agGrade"><table><thead><tr><th>Pessoa</th>'
     + dias.map(d => '<th class="' + (d === hoje ? 'hoje' : '') + (agEhUtil(d) ? '' : ' extra') + '">'
         + esc(['dom','seg','ter','qua','qui','sex','sáb'][agData(d).getDay()]) + ' '
         + esc(dataBR(d).slice(0,5)) + (d === hoje ? ' · hoje' : agEhUtil(d) ? '' : ' · fora do turno')
@@ -13327,30 +13824,35 @@ function agVistaSemana(cx){
 
   if (!linhas.length){
     html += '<tr><td colspan="' + (dias.length+1) + '" style="color:var(--ink-3)">'
-          + (q ? 'Ninguém bate com “' + esc(q) + '”.' : 'Nenhuma pessoa ativa no time.') + '</td></tr>';
+          + (q ? 'Ninguém bate com “' + esc(q) + '”.'
+               : AGENDA.soMinhas ? 'Seu usuário não está no time ativo.' : 'Nenhuma pessoa ativa no time.') + '</td></tr>';
   }
   linhas.forEach(([id, nome]) => {
     html += '<tr><td class="pessoa">' + esc(nome) + '</td>';
     dias.forEach(d => {
       const c = porChave[id + '|' + d];
+      const nr = resChave[id + '|' + d] || 0;
       const min = c ? Number(c.minutos || 0) : 0;
       // S29: a capacidade é a do DIA (a view já manda a dela; a tela confere)
       const cap = c && c.capacidade_min != null ? Number(c.capacidade_min) : agCap(d);
       const oc = cap > 0 ? min / cap : (min > 0 ? 2 : 0);
+      const clicavel = c || nr;
       html += '<td class="agCel' + (oc > 1 ? ' cheio' : oc > .7 ? ' quase' : '')
-            + (c ? ' temItens" data-u="' + esc(id) + '" data-d="' + esc(d)
+            + (clicavel ? ' temItens" data-u="' + esc(id) + '" data-d="' + esc(d)
                  + '" tabindex="0" role="button" title="Ver as tarefas deste dia' : '"') + '">'
         + (c ? '<span class="agH">' + minHora(min) + ' / ' + (cap > 0 ? minHora(cap) : 'fora do turno') + (oc > 1 ? ' ⚠' : '') + '</span>'
              + '<div class="agBar"><i style="width:' + Math.min(100, Math.round(oc*100)) + '%"></i></div>'
              + '<div class="agN">' + c.tarefas + ' tarefa' + (c.tarefas > 1 ? 's' : '') + '</div>'
              + (c.sem_estimativa ? '<div class="agSem">' + c.sem_estimativa + ' sem estimativa</div>' : '')
-             : '<span style="color:var(--rule)">—</span>')
+             : (nr ? '' : '<span style="color:var(--rule)">—</span>'))
+        + (nr ? '<div class="agResC">✓ ' + nr + ' resolvido' + (nr > 1 ? 's' : '') + '</div>' : '')
         + '</td>';
     });
     html += '</tr>';
   });
   html += '</tbody></table></div>';
   cx.innerHTML = html;
+  agLigarChaves();
 
   const abrir = td => { AGENDA.vista = 'dia'; AGENDA.base = td.dataset.d; pintarAgenda(); };
   cx.querySelectorAll('td.temItens').forEach(td => {
@@ -13362,18 +13864,23 @@ function agVistaSemana(cx){
 }
 
 // ── VISTA: MÊS ──────────────────────────────────────────────────────────────
+// S36: com "Minhas tarefas" a barra do dia compara com o SEU turno, não com o
+// do time inteiro — senão 8h suas num dia apareceriam como 7% de ocupação.
 function agVistaMes(cx){
   const p = agPeriodo();
   const cap = TURNO.capacidade_min || 540;
   const porDia = {};
-  (AGENDA.carga || []).forEach(c => {
+  (AGENDA.carga || []).filter(c => !AGENDA.soMinhas || agEhMinha(c)).forEach(c => {
     const o = porDia[c.dia] = porDia[c.dia] || { min:0, tarefas:0, gente:new Set() };
     o.min += Number(c.minutos || 0); o.tarefas += Number(c.tarefas || 0);
     o.gente.add(String(c.usuario_id));
   });
+  const res = agResolvidosVisiveis();
+  const resDia = {};
+  res.forEach(r => { resDia[r.dia] = (resDia[r.dia] || 0) + 1; });
   // A capacidade do DIA no mês é a do time todo: um dia com 4 pessoas cabe 4×.
   // S29: e cada dia da semana tem a sua (a sexta é mais curta).
-  const time = Math.max(1, agPessoas().length);
+  const time = AGENDA.soMinhas ? 1 : Math.max(1, agPessoas().length);
   const capDia = d => agCap(d) * time;
 
   const prim = agData(p.de);
@@ -13386,29 +13893,36 @@ function agVistaMes(cx){
   }
   const hoje = isoHoje(), mes = agData(p.de).getMonth();
 
-  cx.innerHTML = '<div class="agMes">'
+  cx.innerHTML = agChavesHTML(res.length) + '<div class="agMes">'
     + ['seg','ter','qua','qui','sex','sáb','dom'].map(r => '<div class="agMesH">' + r + '</div>').join('')
     + cels.map(d => {
         const o = porDia[d];
+        const nr = resDia[d] || 0;
         const oc = o ? (capDia(d) > 0 ? o.min / capDia(d) : 2) : 0;
         const fora = agData(d).getMonth() !== mes;
+        const clicavel = o || nr;
         return '<div class="agMesD' + (fora ? ' fora' : '') + (d === hoje ? ' hoje' : '')
-             + (o ? ' temItens' : '') + (agEhUtil(d) ? '' : ' naoUtil')
+             + (clicavel ? ' temItens' : '') + (agEhUtil(d) ? '' : ' naoUtil')
              + (oc > 1 ? ' cheio' : oc > .7 ? ' quase' : '') + '"'
-             + (o ? ' data-d="' + esc(d) + '" tabindex="0" role="button"' : '') + '>'
+             + (clicavel ? ' data-d="' + esc(d) + '" tabindex="0" role="button"' : '') + '>'
           + '<span class="agMesN">' + agData(d).getDate() + '</span>'
           + (o ? '<span class="agMesH2">' + minHora(o.min) + '</span>'
-               + '<span class="agMesP">' + o.gente.size + ' pessoa' + (o.gente.size > 1 ? 's' : '')
-               + ' · ' + o.tarefas + ' tarefa' + (o.tarefas > 1 ? 's' : '') + '</span>'
+               + '<span class="agMesP">' + (AGENDA.soMinhas ? '' : o.gente.size + ' pessoa' + (o.gente.size > 1 ? 's' : '') + ' · ')
+               + o.tarefas + ' tarefa' + (o.tarefas > 1 ? 's' : '') + '</span>'
                + '<div class="agBar"><i style="width:' + Math.min(100, Math.round(oc*100)) + '%"></i></div>'
              : '')
+          + (nr ? '<span class="agResC">✓ ' + nr + ' resolvido' + (nr > 1 ? 's' : '') + '</span>' : '')
           + '</div>';
       }).join('')
     + '</div>'
-    + '<p class="agLeg">A barra do mês compara com a capacidade do <b>time inteiro</b> naquele dia '
-    + '(o turno daquele dia da semana × ' + time + ' pessoa' + (time > 1 ? 's' : '') + '; '
-    + 'no dia típico, ' + minHora(cap) + ' × ' + time + '). '
+    + '<p class="agLeg">' + (AGENDA.soMinhas
+        ? 'Com <b>Minhas tarefas</b>, a barra do mês compara com o <b>seu</b> turno naquele dia '
+          + '(no dia típico, ' + minHora(cap) + '). '
+        : 'A barra do mês compara com a capacidade do <b>time inteiro</b> naquele dia '
+          + '(o turno daquele dia da semana × ' + time + ' pessoa' + (time > 1 ? 's' : '') + '; '
+          + 'no dia típico, ' + minHora(cap) + ' × ' + time + '). ')
     + 'Dia fora do turno aparece hachurado.</p>';
+  agLigarChaves();
 
   const abrir = el => { AGENDA.vista = 'dia'; AGENDA.base = el.dataset.d; pintarAgenda(); };
   cx.querySelectorAll('.agMesD.temItens').forEach(el => {
@@ -13513,7 +14027,8 @@ async function agAssumirLote(itens){
 function agVistaPool(cx){
   const q = BUSCA.age || '';
   const F = AGENDA.filtros;
-  const todos = AGENDA.pool || [];
+  // S36 · item 5: "Minhas" no Sem dia = o que já tem o meu nome e falta o dia
+  const todos = (AGENDA.pool || []).filter(t => !AGENDA.soMinhas || agEhMinha(t));
 
   const unicos = (campo, rot) => {
     const m = new Map();
@@ -13530,7 +14045,7 @@ function agVistaPool(cx){
     && (!F.etapa   || String(t.fase)       === F.etapa)
     && (!F.quem    || (F.quem === '__nin' ? !t.usuario_designado
                                           : String(t.usuario_designado) === F.quem))
-    && casa([t.os_numero, t.cliente, t.tarefa, t.usuario, t.fase].join(' '), q);
+    && casa([t.os_numero, t.cliente, t.tarefa, t.usuario, t.fase, t.apoios_nomes].join(' '), q);
 
   const lista = todos.filter(passa);
   const sel = (id, rot, opts, val) =>
@@ -13551,7 +14066,7 @@ function agVistaPool(cx){
   const validas = new Set(assumiveis.map(chaveAg));
   [...LOTE].forEach(k => { if (!validas.has(k)) LOTE.delete(k); });
 
-  let html = '<div class="agFiltros">'
+  let html = agChavesHTML(0) + '<div class="agFiltros">'
     + sel('fCli','Cliente', clientes, F.cliente)
     + sel('fOs','OS', oss, F.os)
     + sel('fEt','Etapa', etapas, F.etapa)
@@ -13575,8 +14090,10 @@ function agVistaPool(cx){
   }
 
   if (!lista.length){
-    html += '<div class="vazio2"><b>' + (todos.length ? 'Nada bate com o filtro' : 'Nada solto')
+    html += '<div class="vazio2"><b>' + (todos.length ? 'Nada bate com o filtro'
+              : AGENDA.soMinhas ? 'Nada no seu nome sem dia' : 'Nada solto')
           + '</b><p>' + (todos.length ? 'Limpe os filtros para ver as ' + todos.length + ' tarefas.'
+              : AGENDA.soMinhas ? 'Desligue <b>Minhas tarefas</b> para ver as tarefas sem dono.'
               : 'Toda tarefa aberta tem dia marcado.') + '</p></div>';
   } else {
     // Agrupado por OS: 69 linhas soltas é uma lista; agrupada, é uma decisão
@@ -13611,7 +14128,8 @@ function agVistaPool(cx){
               + '"' + (LOTE.has(chaveAg(t)) ? ' checked' : '')
               + ' aria-label="Assumir ' + esc(t.tarefa || '') + '"></span>'
             : '<span class="agCk agCkVazio" title="' + esc(agPorQueNao(t)) + '"></span>')
-        + '<span class="agLt">' + esc(t.tarefa || '') + '</span>'
+        + '<span class="agLt">' + esc(t.tarefa || '')
+        + (t.apoios_nomes ? ' <span class="chip apoio">apoio: ' + esc(t.apoios_nomes) + '</span>' : '') + '</span>'
         + '<span class="agLe">' + esc(t.fase || '') + '</span>'
         + '<button class="btn mini agLq" type="button" data-quem="'
         + esc(chaveAg(t)) + '">'
@@ -13626,6 +14144,7 @@ function agVistaPool(cx){
             + 'Mostrar as outras ' + (ordenados.length - LIM) + ' OS</button>';
   }
   cx.innerHTML = html;
+  agLigarChaves();
 
   const troca = (id, campo) => {
     const el = document.getElementById(id);
@@ -13885,10 +14404,28 @@ function agAbrirTarefa(i, doPool){
     // S31: o modal avisa quando a pessoa está fora do perfil responsável —
     // e para isso precisa saber qual é. A view da agenda já trazia.
     perfis_responsaveis: i.perfis_responsaveis || [],
-    usuario_designado:i.usuario_designado || i.usuario_id || null,
+    // S36: a linha de APOIO está no nome do apoio — o dono vem em `dono_id`
+    usuario_designado:i.dono_id || i.usuario_designado || i.usuario_id || null,
+    apoios: i.apoios || [],
     data_prevista: doPool ? null : i.dia,
     tempo_estimado_min:i.tempo_estimado_min
   }, async () => { AGENDA.chave = null; AGENDA.pool = []; await pintarAgenda(); });
+}
+
+/** A visita, clicada na agenda: abre o negócio na aba Agenda, onde se trocam
+ *  as pessoas. Visita de OS (sem negócio) abre a OS. */
+async function agAbrirVisita(i){
+  if (DEMO) return toast('Modo demonstração: a visita não abre daqui.', 'err');
+  if (i.negocio_id) return abrirNegocioPorId(i.negocio_id, 'agenda');
+  if (i.os_id) return abrirOSPorId(i.os_id);
+}
+async function abrirNegocioPorId(id, aba){
+  try{
+    const r = await get('v_negocios_kanban?select=*&id=eq.' + id);
+    if (!r || !r[0]) return toast('Negócio não encontrado.', 'err');
+    if (aba) abaNeg = aba;
+    abrirNegocio(r[0]);
+  }catch(e){ toast(e.message, 'err'); }
 }
 
 function demoAgendaItens(){
@@ -14624,7 +15161,12 @@ async function iniciar(){
 }
 
 (function boot(){
-  document.getElementById('demoBar').hidden = !DEMO;
+  // ITEM 12 (S36): conectado, o aviso de demonstração SAI do documento — não
+  // basta esconder. Com `hidden` ele já não era lido por leitor de tela, mas
+  // continuava no DOM, e ferramenta que lê o texto da página (a inspeção que
+  // o Bruno usou) dizia "MODO DEMO" com o sistema ligado no banco real.
+  { const d = document.getElementById('demoBar');
+    if (d){ if (DEMO) d.hidden = false; else d.remove(); } }
   if (DEMO){
     sessao = { token:null, nome:'Modo demo', email:null, perfil:'admin', admin:true };
     iniciar();
