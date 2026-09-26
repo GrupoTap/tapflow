@@ -284,6 +284,18 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 .cxSenha .olho .fechado{display:none}
 .cxSenha .olho.ver .aberto{display:none}
 .cxSenha .olho.ver .fechado{display:block}
+/* ── S39 · extras encontrados na inspeção ─────── */
+.painel.extras{border-left:4px solid var(--warn)}
+.exLista{margin:10px 0 4px;display:flex;flex-direction:column;gap:6px}
+.exLinha{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;line-height:1.35;
+  padding:8px 0;border-top:1px solid var(--rule)}
+.exLinha .q{flex:0 0 auto;min-width:26px;font-weight:700;text-align:center}
+.exLinha .d{flex:1;min-width:0}
+.exLinha .d small{display:block;color:var(--ink-3);font-size:12px;margin-top:2px}
+.chip.okc{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.chip.imp{background:var(--crit-soft);color:var(--crit);border-color:transparent}
+.exNota{font-size:12.5px;color:var(--ink-3);margin:8px 0 0;line-height:1.45}
+.exPend{font-size:13.5px;color:var(--warn);font-weight:600;margin:8px 0 0}
 </style>
 </head>
 <body>
@@ -344,7 +356,7 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S13';
+const APP_VERSION = 'S14';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -360,6 +372,9 @@ const K_SESSAO = 'tf_sessao';
 const K_SESSAO_VELHA = 'tff_sessao';
 const K_FILA   = 'tff_fila';
 const K_DRAFT  = 'tff_draft_';
+// S39 · os EXTRAS de uma inspeção têm rascunho próprio: a coleta de acessórios
+// de uma OS de fornecimento e os achados de uma inspeção nunca se misturam.
+const K_EXTRA  = 'tff_extra_';
 const K_PARAM  = 'tff_param';
 const K_CAT    = 'tff_catalogo';
 
@@ -699,9 +714,11 @@ async function flushFila(){
         } else {
           const r = await rpc(e.funcao, e.payload);
           filaRemover(e.assinatura);
-          LS.del(K_DRAFT + e.osId);
+          LS.del(e.draftKey || (K_DRAFT + e.osId));
           await enfileirarFotosDoEnvio(e, r);
-          toast('Levantamento da ' + e.rotulo + ' enviado.', 'ok');
+          toast(e.tipo === 'extras'
+            ? 'Extras da ' + e.rotulo + ' enviados ao comercial' + (r && r.numero ? ' (' + r.numero + ')' : '') + '.'
+            : 'Levantamento da ' + e.rotulo + ' enviado.', 'ok');
         }
       }catch(err){
         if (err.negocio){
@@ -734,6 +751,12 @@ async function enfileirarFotosDoEnvio(entrada, resposta){
   const ids = (resposta && resposta.itens_ids) || [];
   for (const f of fotos){
     const meta = Object.assign({}, f.meta, { os_item_id: ids[f.indice] || null });
+    // S39 · o extra lançado na inspeção vira item de OUTRA OS (a da venda
+    // adicional). A foto vai para onde o item está — é lá que o comercial a
+    // procura para mandar ao cliente.
+    if (resposta && resposta.os_id && entrada.tipo === 'extras'){
+      meta.os_id = resposta.os_id; meta.os_numero = resposta.numero || meta.os_numero;
+    }
     filaAdd({ tipo:'anexo', assinatura:'anx|'+meta.client_uid, osId: entrada.osId,
               rotulo: entrada.rotulo, idbKey: f.idbKey, meta });
   }
@@ -745,7 +768,7 @@ function pintarFila(){
   const bar = document.getElementById('barFila');
   bar.hidden = !f.length;
   if (f.length){
-    const soLev = f.every(e => e.tipo !== 'execucao');
+    const soLev = f.every(e => e.tipo === 'levantamento' || e.tipo === 'anexo');
     const rot = soLev ? ['levantamento aguardando envio','levantamentos aguardando envio']
                       : ['registro aguardando envio','registros aguardando envio'];
     document.getElementById('filaTxt').textContent =
@@ -1053,7 +1076,15 @@ async function abrirOS(o){
           get('equipamentos?select=id,tag,tipo,localizacao&cliente_id=eq.' + o.cliente_id + '&ativo=eq.true&order=tag'),
           get('v_os_coleta?select=inspetor,total_itens,enviado_em,fase&os_id=eq.' + o.os_id + '&order=enviado_em')
         ]);
-    atual = { os:o, tarefas, equipamentos, coletas: coletas || [] };
+    atual = { os:o, tarefas, equipamentos, coletas: coletas || [], extras: [] };
+    // S39 · na inspeção, o que o campo já lançou de extra e em que pé está.
+    // Falhar aqui não impede de abrir a OS: o painel diz que não conseguiu ler.
+    if (ehInspecao(o)){
+      try{
+        atual.extras = DEMO ? [] : await get('v_extras_campo?select=*&origem_os_id=eq.' + o.os_id
+                                             + '&order=created_at,ordem');
+      }catch(e){ atual.extras = null; }
+    }
     pintarOS();
   }catch(e){
     m.innerHTML = '<div class="vazio"><b>Não deu para abrir</b><p></p></div>';
@@ -1066,6 +1097,9 @@ function pintarOS(){
   const t = tarefas.find(x => x.tarefa_id === os.tarefa_atual_id);
   const m = document.getElementById('main');
   m.innerHTML = '';
+  // S39 · os extras vêm PRIMEIRO na inspeção: é o que o inspetor tem na mão
+  // enquanto anda pela planta, e não pode depender de em que etapa a OS está.
+  if (ehInspecao(os)) m.appendChild(painelExtras());
 
   const naFila = filaLer().find(e => e.osId === os.os_id && e.tipo === 'levantamento');
   if (naFila){
@@ -1116,8 +1150,8 @@ function pintarOS(){
   }
 
   if (!t){
-    if (!coletaAberta)
-      m.innerHTML = '<div class="vazio"><b>Nada pendente aqui</b><p>Esta OS não tem tarefa aberta para o campo.</p></div>';
+    if (!coletaAberta)   // S39: acrescenta, não substitui — o painel de extras fica
+      m.insertAdjacentHTML('beforeend', '<div class="vazio"><b>Nada pendente aqui</b><p>Esta OS não tem tarefa aberta para o campo.</p></div>');
     return;
   }
 
@@ -1565,6 +1599,134 @@ const TIPOS = [
   ['dcbi','DCBI'], ['conexao','Conexão'], ['outro','Outro']
 ];
 
+// ════════════════════════════════════════════════════════════════════════════
+// S39 · EXTRAS ENCONTRADOS NA INSPEÇÃO — a venda adicional nasce aqui
+// ----------------------------------------------------------------------------
+// A dor, nas palavras do Fernando (26/09): o inspetor achava a válvula
+// quebrada, não anotava, pegava a peça na Proper sem baixa, instalava — e
+// ninguém cobrava. Agora o achado é lançado AQUI, na OS da inspeção, vaso por
+// vaso: item do catálogo (com foto), quantidade, foto do achado e se ele
+// impede o equipamento de operar.
+//
+// Enviar manda para o COMERCIAL. Não existe "instalado agora": nada é
+// instalado antes do sim do cliente. O primeiro envio cria a venda adicional
+// (um negócio + uma OS de fornecimento, ligados a esta inspeção); os seguintes
+// SOMAM nela enquanto a proposta não tiver saído. Por isso dá para mandar no
+// penúltimo vaso — o comercial começa enquanto o inspetor ainda está lá.
+// ════════════════════════════════════════════════════════════════════════════
+const ehInspecao = o => !!o && o.template_id === 'INSPECAO_NR13';
+
+const SIT_EXTRA = {
+  'com o comercial':'', 'proposta enviada':'alt', 'aprovado':'eu', 'peça a caminho':'eu',
+  'pronto para instalar':'okc', 'instalado':'okc', 'não aprovado':'urg', 'retirado':'', 'cancelada':''
+};
+
+function painelExtras(){
+  const { os } = atual;
+  const p = document.createElement('div');
+  p.className = 'painel extras';
+  const rasc = LS.get(K_EXTRA + os.os_id, null);
+  const nRasc = rasc && rasc.itens ? rasc.itens.length : 0;
+  const nFila = filaLer().filter(e => e.tipo === 'extras' && e.osId === os.os_id).length;
+  const ex = atual.extras;
+  p.innerHTML = '<div class="et">Extras encontrados</div>'
+    + '<h2 style="font-size:17px">Achou peça a trocar ou serviço a fazer?</h2>'
+    + '<p class="exNota" style="margin-top:0">Lance aqui, vaso por vaso. Vai para o comercial, que faz a '
+    + 'proposta ao cliente. <b>Nada é instalado antes do sim do cliente</b> — nem o que está no carro.</p>'
+    + '<div class="exLista"></div>'
+    + (nRasc ? '<p class="exPend">' + nRasc + ' extra(s) guardado(s) no aparelho, ainda não enviado(s).</p>' : '')
+    + (nFila ? '<p class="exPend">' + nFila + ' envio(s) de extras na fila — sobem quando o sinal voltar.</p>' : '')
+    + '<button class="btn pri" id="bExtra" style="margin-top:10px">'
+    + (nRasc ? 'Continuar lançando (' + nRasc + ')' : 'Lançar extra') + '</button>';
+  const L = p.querySelector('.exLista');
+  if (ex === null){
+    L.innerHTML = '<p class="exNota">Não deu para ler o que já foi lançado (sem sinal?). '
+      + 'Lançar continua funcionando.</p>';
+  } else if (ex && ex.length){
+    ex.forEach(x => {
+      const d = document.createElement('div'); d.className = 'exLinha';
+      d.innerHTML = '<div class="q"></div><div class="d"><b></b><small></small></div>'
+        + '<span class="chip ' + (SIT_EXTRA[x.situacao] || '') + '"></span>';
+      d.querySelector('.q').textContent = Number(x.quantidade) || 1;
+      d.querySelector('b').textContent = x.descricao;
+      d.querySelector('small').textContent = [x.tag, x.os_numero, x.impede_operar ? '⚠ impede operar' : null]
+        .filter(Boolean).join(' · ');
+      d.querySelector('.chip').textContent = x.situacao;
+      L.appendChild(d);
+    });
+  }
+  p.querySelector('#bExtra').addEventListener('click', abrirExtras);
+  return p;
+}
+
+function abrirExtras(){
+  const { os } = atual;
+  const d = LS.get(K_EXTRA + os.os_id, null);
+  coleta = (d && d.modo === 'extra') ? d : { modo:'extra', client_uid: uid(), fase: 1, itens: [] };
+  salvarDraft();
+  tela = 'coleta';
+  pintarColeta();
+}
+
+async function enviarExtras(){
+  const { os } = atual;
+  if (!coleta.itens.length) return;
+  const itens = coleta.itens.slice();
+  const payload = {
+    p_os_origem: os.os_id,
+    p_client_uid: coleta.client_uid,
+    p_itens: itens.map(i => ({
+      descricao: i.descricao, tipo_acessorio: i.tipo_acessorio, quantidade: i.quantidade,
+      catalogo_item_id: i.catalogo_item_id || null,
+      equipamento_id: i.equipamento_id || null,
+      requer_calibracao: !!i.requer_calibracao, requer_lacre: !!i.requer_lacre,
+      impede_operar: !!i.impede_operar,
+      observacao: i.observacao || null,
+      dados: i.equipamento_id ? {} : { tag: i.tagTexto || '' }
+    }))
+  };
+  const assinatura = 'ext|' + os.os_id + '|' + coleta.client_uid;
+  const fotos = itens.map((i, indice) => !i.fotoKey ? null : ({
+    indice, idbKey: i.fotoKey,
+    meta: { os_id: os.os_id, cliente: os.cliente, os_numero: os.numero,
+            categoria: 'foto_item', nome: 'extra-' + (indice+1) + '.jpg',
+            client_uid: 'anx-' + coleta.client_uid + '-' + indice }
+  })).filter(Boolean);
+  const entrada = { tipo:'extras', funcao:'tf_lancar_extras', payload, assinatura,
+                    osId: os.os_id, rotulo: os.numero, fotos, draftKey: K_EXTRA + os.os_id };
+
+  document.querySelectorAll('#main .btn').forEach(b => b.disabled = true);
+
+  if (!DEMO && (navigator.onLine === false || !conectado)){
+    filaAdd(entrada);
+    toast('Sem sinal — os extras ficaram na fila' + (fotos.length ? ', com as fotos' : '')
+          + '. Sobem sozinhos quando conectar.', 'err');
+    voltarParaOS(); return;
+  }
+
+  setConn('sync','enviando…');
+  try{
+    const resp = DEMO ? { os_id:'demo', numero:'OS-DEMO', nova:true } : await rpc('tf_lancar_extras', payload);
+    LS.del(K_EXTRA + os.os_id);           // só depois do OK do servidor
+    coleta = null;
+    setConn('ok','conectado');
+    await enfileirarFotosDoEnvio(entrada, resp);
+    toast((resp && resp.nova ? 'Enviado ao comercial — virou a venda adicional ' : 'Enviado — somou na venda adicional ')
+          + ((resp && resp.numero) || '') + '.', 'ok');
+    await abrirOS(atual.os);
+  }catch(e){
+    if (e.negocio){
+      setConn('ok','conectado');
+      toast('Recusado: ' + e.message, 'err');
+      document.querySelectorAll('#main .btn').forEach(b => b.disabled = false);
+    } else {
+      filaAdd(entrada);
+      toast('Não deu para enviar agora — ficou na fila, nada se perdeu.', 'err');
+      voltarParaOS();
+    }
+  }
+}
+
 function abrirColeta(fase){
   const { os } = atual;
   const d = LS.get(K_DRAFT + os.os_id, null);
@@ -1574,23 +1736,29 @@ function abrirColeta(fase){
   pintarColeta();
 }
 
+const chaveDraft = () => (coleta && coleta.modo === 'extra' ? K_EXTRA : K_DRAFT) + atual.os.os_id;
 function salvarDraft(){
   if (!coleta || !atual) return;
-  if (!LS.set(K_DRAFT + atual.os.os_id, coleta))
+  if (!LS.set(chaveDraft(), coleta))
     toast('Sem espaço no aparelho para salvar o rascunho. Envie o que já lançou.', 'err');
 }
 
 function pintarColeta(){
   const { os } = atual;
-  document.getElementById('hTit').textContent = coleta.fase === 2 ? 'Instalação' : 'Lançamento';
+  const ext = coleta.modo === 'extra';
+  document.getElementById('hTit').textContent = ext ? 'Extras da inspeção'
+    : (coleta.fase === 2 ? 'Instalação' : 'Lançamento');
   document.getElementById('hSub').textContent = os.numero + ' · ' + os.cliente;
   const m = document.getElementById('main');
   m.innerHTML = '';
 
   if (!coleta.itens.length){
     const v = document.createElement('div'); v.className = 'vazio';
-    v.innerHTML = '<b>Nenhum item ainda</b><p>Toque em “Adicionar item” para começar.<br>' +
-      'O que você lançar fica salvo no aparelho mesmo sem sinal.</p>';
+    v.innerHTML = ext
+      ? '<b>Nenhum extra ainda</b><p>Toque em “Adicionar extra”: escolha o vaso, o item do '
+        + 'catálogo e tire a foto do que achou.<br>Fica salvo no aparelho mesmo sem sinal.</p>'
+      : '<b>Nenhum item ainda</b><p>Toque em “Adicionar item” para começar.<br>' +
+        'O que você lançar fica salvo no aparelho mesmo sem sinal.</p>';
     m.appendChild(v);
   } else {
     coleta.itens.forEach((it, i) => m.appendChild(itemEl(it, i)));
@@ -1600,14 +1768,21 @@ function pintarColeta(){
   const total = coleta.itens.reduce((s,i) => s + (Number(i.quantidade)||0), 0);
   barra.innerHTML =
     '<div class="resumo">' + coleta.itens.length + ' tipo(s) · ' + total + ' peça(s)</div>' +
-    '<button class="btn" id="bAdd">Adicionar item</button>' +
-    '<button class="btn pri" id="bEnv">Enviar levantamento</button>';
+    '<button class="btn" id="bAdd">' + (ext ? 'Adicionar extra' : 'Adicionar item') + '</button>' +
+    '<button class="btn pri" id="bEnv">' + (ext ? 'Enviar ao comercial' : 'Enviar levantamento') + '</button>';
+  if (ext){
+    const n = document.createElement('p'); n.className = 'exNota';
+    n.textContent = 'Pode enviar agora, vaso por vaso, ou tudo no fim. O que você mandar depois soma '
+      + 'na mesma venda adicional enquanto a proposta não sair — é assim que o comercial começa '
+      + 'antes de você deixar o cliente.';
+    m.appendChild(n);
+  }
   m.appendChild(barra);
 
   document.getElementById('bAdd').addEventListener('click', () => formItem(null));
   const be = document.getElementById('bEnv');
   be.disabled = !coleta.itens.length;
-  be.addEventListener('click', enviar);
+  be.addEventListener('click', ext ? enviarExtras : enviar);
 }
 
 function itemEl(it, i){
@@ -1615,8 +1790,8 @@ function itemEl(it, i){
   const flags = [];
   if (it.requer_calibracao) flags.push('calibração');
   if (it.requer_lacre) flags.push('lacre');
-  if (it.instalado_imediatamente) flags.push('instalado na hora');
-  if (it.tag) flags.unshift(it.tag);
+  if (it.impede_operar) flags.unshift('⚠ impede operar');
+  if (it.tag || it.tagTexto) flags.unshift(it.tag || ('TAG ' + it.tagTexto));
   if (it.fotoKey) flags.push('com foto');
   d.innerHTML = '<div class="q"></div><div class="d"><b></b><small></small></div>' +
                 '<button class="x" aria-label="Remover">×</button>';
@@ -1634,16 +1809,21 @@ function itemEl(it, i){
 function formItem(idx, preenchido){
   const it = preenchido ? preenchido : (idx == null
     ? { tipo_acessorio:'manometro', descricao:'', quantidade:1, equipamento_id:'', tag:'',
-        requer_calibracao:false, requer_lacre:false, instalado_imediatamente:false }
+        requer_calibracao:false, requer_lacre:false }
     : Object.assign({}, coleta.itens[idx]));
 
   const m = document.getElementById('main');
   m.innerHTML = '';
   const box = document.createElement('div'); box.className = 'painel';
 
-  const eqOpts = ['<option value="">— sem equipamento —</option>'].concat(
+  // S39 · no extra o vaso é OBRIGATÓRIO: é por ele que a proposta, a compra e
+  // a instalação se orientam. Vaso sem cadastro entra digitando a TAG.
+  const ext = coleta && coleta.modo === 'extra';
+  const eqOpts = [ext ? '<option value="">— escolha o vaso —</option>'
+                      : '<option value="">— sem equipamento —</option>'].concat(
     atual.equipamentos.map(e => '<option value="'+e.id+'">'+ esc(e.tag) +
-      (e.localizacao ? ' · ' + esc(e.localizacao) : '') + '</option>'));
+      (e.localizacao ? ' · ' + esc(e.localizacao) : '') + '</option>'))
+    .concat(ext ? ['<option value="__outro">Outro — digitar a TAG</option>'] : []);
 
   // A origem do item aparece no topo: escolhido do catálogo ou digitado.
   // Sem isso o inspetor não sabe se o escritório vai receber a peça certa.
@@ -1662,14 +1842,19 @@ function formItem(idx, preenchido){
       '<input id="fD" type="text" placeholder="ex.: Manômetro 63mm 0-14 kgf/cm² · 1/4&quot; NPT"></div>' +
     '<div class="campo"><label for="fQ">Quantidade</label>' +
       '<input id="fQ" type="number" inputmode="numeric" min="1" step="1"></div>' +
-    '<div class="campo"><label for="fE">Equipamento</label>' +
+    '<div class="campo"><label for="fE">' + (ext ? 'Vaso / equipamento' : 'Equipamento') + '</label>' +
       '<select id="fE">' + eqOpts.join('') + '</select></div>' +
+    (ext ? '<div class="campo" id="fTagC" hidden><label for="fTag">TAG do vaso</label>'
+         + '<input id="fTag" type="text" autocomplete="off" placeholder="ex.: VP-07"></div>' : '') +
     '<label class="check"><input type="checkbox" id="fC"><span>Exige calibração</span></label>' +
     '<label class="check"><input type="checkbox" id="fL"><span>Exige lacre</span></label>' +
-    '<label class="check"><input type="checkbox" id="fI"><span>Instalado agora, em campo</span></label>' +
-    '<p style="font-size:12.5px;color:var(--ink-3);margin:2px 0 14px;line-height:1.45">' +
-      'Item instalado agora sai do orçamento — entra na OS como executado, não como algo a cotar.</p>' +
-    '<div class="campo"><label>Foto do ponto (opcional)</label>' +
+    // S39 · "Instalado agora, em campo" SAIU. Ele tirava o item do orçamento
+    // (elegivel = false) — peça instalada sem proposta e sem aprovação, que é
+    // exatamente como a cobrança se perdia. Tudo passa pelo comercial.
+    (ext ? '<label class="check"><input type="checkbox" id="fImp"><span>Impede o equipamento de operar</span></label>'
+         + '<div class="campo"><label for="fObs">Observação (opcional)</label>'
+         + '<input id="fObs" type="text" autocomplete="off" placeholder="ex.: visor quebrado, vazando pela rosca"></div>' : '') +
+    '<div class="campo"><label>' + (ext ? 'Foto do achado (recomendada)' : 'Foto do ponto (opcional)') + '</label>' +
       '<button class="btn" id="fFoto" type="button" style="margin:0"></button>' +
       '<p class="dicaFoto" id="fFotoTxt" style="font-size:12px;color:var(--ink-3);margin:6px 0 0"></p></div>' +
     '<button class="btn pri" id="fOk">' + (idx==null ? 'Adicionar' : 'Salvar') + '</button>' +
@@ -1695,7 +1880,15 @@ function formItem(idx, preenchido){
   document.getElementById('fE').value = it.equipamento_id || '';
   document.getElementById('fC').checked = !!it.requer_calibracao;
   document.getElementById('fL').checked = !!it.requer_lacre;
-  document.getElementById('fI').checked = !!it.instalado_imediatamente;
+  if (ext){
+    const sel = document.getElementById('fE'), tc = document.getElementById('fTagC');
+    if (!it.equipamento_id && it.tagTexto) sel.value = '__outro';
+    const mostra = () => { tc.hidden = sel.value !== '__outro'; };
+    sel.addEventListener('change', mostra); mostra();
+    document.getElementById('fTag').value = it.tagTexto || '';
+    document.getElementById('fImp').checked = !!it.impede_operar;
+    document.getElementById('fObs').value = it.observacao || '';
+  }
 
   // ── catálogo ──
   // Escolher preenche descrição, tipo, calibração e lacre — e guarda o vínculo,
@@ -1728,7 +1921,7 @@ function formItem(idx, preenchido){
   const pintaFoto = () => {
     btF.textContent = it.fotoKey ? 'Trocar foto' : 'Tirar foto';
     txF.textContent = it.fotoKey
-      ? 'Foto guardada no aparelho — sobe junto com o levantamento.'
+      ? 'Foto guardada no aparelho — sobe junto com o envio.'
       : (driveLigado() ? 'Ajuda o escritório a entender o ponto na hora de cotar.'
                        : 'O Drive ainda não foi configurado — sem fotos por enquanto.');
     btF.disabled = !driveLigado();
@@ -1749,15 +1942,24 @@ function formItem(idx, preenchido){
     if (!desc){ toast('Escreva a descrição do item.','err'); return; }
     if (!q || q < 1){ toast('Quantidade tem que ser 1 ou mais.','err'); return; }
     const sel = document.getElementById('fE');
+    const outro = sel.value === '__outro';
+    const tagTexto = ext && outro ? document.getElementById('fTag').value.trim() : '';
+    if (ext && !sel.value){ toast('Escolha em qual vaso está o que você achou.','err'); return; }
+    if (ext && outro && !tagTexto){ toast('Digite a TAG do vaso.','err'); return; }
     Object.assign(it, {
       descricao: desc, quantidade: q,
-      equipamento_id: sel.value || '',
-      tag: sel.value ? sel.options[sel.selectedIndex].text.split(' · ')[0] : '',
+      equipamento_id: (sel.value && !outro) ? sel.value : '',
+      tag: (sel.value && !outro) ? sel.options[sel.selectedIndex].text.split(' · ')[0] : '',
+      tagTexto,
       tipo_rotulo: (TIPOS.find(t => t[0] === it.tipo_acessorio)||[])[1] || '',
       requer_calibracao: document.getElementById('fC').checked,
-      requer_lacre: document.getElementById('fL').checked,
-      instalado_imediatamente: document.getElementById('fI').checked
+      requer_lacre: document.getElementById('fL').checked
     });
+    if (ext){
+      it.impede_operar = document.getElementById('fImp').checked;
+      it.observacao = document.getElementById('fObs').value.trim();
+    }
+    delete it.instalado_imediatamente;
     if (idx == null) coleta.itens.push(it); else coleta.itens[idx] = it;
     salvarDraft(); pintarColeta();
   });
@@ -1775,7 +1977,7 @@ async function enviar(){
       catalogo_item_id: i.catalogo_item_id || null,
       equipamento_id: i.equipamento_id || null,
       requer_calibracao: !!i.requer_calibracao, requer_lacre: !!i.requer_lacre,
-      instalado_imediatamente: !!i.instalado_imediatamente,
+      instalado_imediatamente: false,   // S39: nada é instalado antes do sim do cliente
       dados: {}
     }))
   };

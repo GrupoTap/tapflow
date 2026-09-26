@@ -24,7 +24,7 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S13';
+const VERSAO = 'S14';
 const CACHE  = 'tapflow-field-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -73,6 +73,12 @@ self.addEventListener('fetch', ev => {
   let url;
   try { url = new URL(req.url); } catch (e) { return; }
   if (url.origin !== self.location.origin) return;   // Supabase, Drive: passa direto
+  // S39 · e API NUNCA, mesmo no mesmo endereço. Em produção o Supabase é outro
+  // endereço e já passava direto; no teste local (e em qualquer proxy que sirva
+  // a API junto do app) o ramo "ícones" abaixo guardava a PRIMEIRA resposta de
+  // /rest/v1 e a devolvia para sempre — a lista de extras ficava vazia depois
+  // do envio. É exatamente a "segunda verdade" que o cabeçalho deste arquivo proíbe.
+  if (url.pathname.indexOf('/rest/v1/') !== -1 || url.pathname.indexOf('/auth/v1/') !== -1) return;
 
   // ── abrir o app ──
   if (req.mode === 'navigate') {
