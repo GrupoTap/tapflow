@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S15</title>
+<title>TapFlow Field · S16</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -311,6 +311,27 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 .chip.imp{background:var(--crit-soft);color:var(--crit);border-color:transparent}
 .exNota{font-size:12.5px;color:var(--ink-3);margin:8px 0 0;line-height:1.45}
 .exPend{font-size:13.5px;color:var(--warn);font-weight:600;margin:8px 0 0}
+/* ── S16 · Minha Segurança (RH, fase R1) ───────── */
+.abasTopo{display:flex;gap:6px;margin:0 0 12px;background:var(--surface);border:1px solid var(--rule);
+  border-radius:7px;padding:4px}
+.abasTopo button{flex:1;padding:10px 6px;border:0;border-radius:5px;background:none;font-size:14.5px;
+  font-weight:600;color:var(--ink-2)}
+.abasTopo button.on{background:var(--accent);color:#fff}
+.abasTopo .bolha{display:inline-block;min-width:20px;padding:0 6px;border-radius:10px;background:var(--crit);
+  color:#fff;font-size:12px;line-height:20px;margin-left:4px}
+.painel.epiPend,.painel.lote{border-left:4px solid var(--warn)}
+.painel.pinNovo{border-left:4px solid var(--accent)}
+.epiLin{border-top:1px solid var(--rule-2);padding:9px 0}
+.epiLin:first-of-type{border-top:0}
+.epiLin b{display:block;font-size:15px;line-height:1.3}
+.epiLin small{display:block;font-size:12.5px;color:var(--ink-3);margin-top:2px;line-height:1.4}
+.epiLin .lnk{font-size:12.5px}
+.epiLin .lnk[data-nr]{color:var(--crit)}
+details.termo{border:1px solid var(--rule);border-radius:5px;padding:8px 11px;margin-top:10px;background:var(--surface-2)}
+details.termo summary{font-size:13px;font-weight:700;color:var(--ink-2);cursor:pointer}
+details.termo p{font-size:12.5px;line-height:1.5;color:var(--ink-2);margin:8px 0 2px;white-space:pre-line}
+.atrasadas .al.apoio{opacity:.85}
+.atrasadas .al.apoio b::after{content:' (apoio)';font-weight:400;color:var(--ink-3);font-size:12.5px}
 </style>
 </head>
 <body>
@@ -371,7 +392,7 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S15';
+const APP_VERSION = 'S16';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -815,14 +836,20 @@ async function carregar(silencioso){
   try{
     // As duas juntas: a lista de OS do campo e o ROTEIRO de hoje desta pessoa.
     // O roteiro não substitui a lista — ele diz por onde começar.
-    const [lst, dia, atr, reag] = await Promise.all([
+    const [lst, dia, atr, reag, seg, apo] = await Promise.all([
       get('v_os_campo?select=*&order=coluna_ordem,numero'),
       get('v_meu_dia?select=*').catch(() => []),   // sem roteiro, o app segue igual
       // S15 · item 7 do S41 — sem o 61 no banco, as duas voltam vazias e o
       // app segue como no S14 (sem aviso e sem marca), sem erro na tela
       rpc('tf_minhas_atrasadas', {}).catch(() => []),
-      get('v_reagendamentos_resumo?select=os_id,tarefa_id,compromisso_id,vezes,original').catch(() => [])
+      get('v_reagendamentos_resumo?select=os_id,tarefa_id,compromisso_id,vezes,original').catch(() => []),
+      // S16 · RH (Minha Segurança) e S9 (atrasadas em que sou apoio). Sem o 62
+      // no banco, as duas voltam vazias e o app segue como no S15.
+      rpc('tf_rh_meu_resumo', {}).catch(() => null),
+      rpc('tf_atrasadas_como_apoio', {}).catch(() => [])
     ]);
+    SEG = seg || null;
+    APOIO_ATR = apo || [];
     listaOS = lst || [];
     MEU_DIA = dia || [];
     ATRASADAS = atr || [];
@@ -831,6 +858,7 @@ async function carregar(silencioso){
     falhaCarga = null;
     pararRecon(); setConn('ok','conectado');
     if (tela === 'lista') pintarLista();
+    else if (tela === 'seg' && !silencioso) pintarSeg();
   }catch(e){
     // guarda O MOTIVO da falha: lista vazia por erro não pode ser desenhada
     // como "nada para fazer hoje" — foi assim que o "JWT expired" virou susto
@@ -881,6 +909,8 @@ function ampliarFoto(src, titulo){
 }
 
 function pintarLista(){
+  // S16 · quem é de escritório só usa o Field para a Minha Segurança
+  if (soSeg() && SEG && SEG.tem_ficha) return pintarSeg();
   tela = 'lista'; atual = null; coleta = null;
   document.getElementById('btnBack').hidden = true;
   document.getElementById('hTit').textContent = 'Minhas ordens';
@@ -892,7 +922,8 @@ function pintarLista(){
   // S13: o "Hoje" pode ter coisa mesmo sem OS no campo — uma VISITA de negócio
   // (não é OS) ou uma etapa de escritório no seu nome. Até o S12 a lista vazia
   // saía cedo com "Nada no campo agora" e escondia o roteiro do dia.
-  if (!listaOS.length && !(MEU_DIA || []).length && !(ATRASADAS || []).length && !(ESCALADAS || []).length){
+  if (!listaOS.length && !(MEU_DIA || []).length && !(ATRASADAS || []).length && !(ESCALADAS || []).length
+      && !(APOIO_ATR || []).length && !(SEG && SEG.tem_ficha)){
     if (falhaCarga){
       const v = document.createElement('div'); v.className = 'vazio';
       v.innerHTML = '<b>Não deu para carregar suas ordens</b><p class="mt"></p>' +
@@ -933,6 +964,8 @@ function pintarLista(){
   // que pede uma decisão (qual dia novo), e ela não se resolve sozinha.
   try{ const pa = painelAtrasadas(); if (pa) m.insertBefore(pa, m.firstChild); }
   catch(e){ console.error('[atrasadas]', e); }
+  // S16 · a entrega de EPI para confirmar vem antes de tudo (item 17)
+  try{ const pe = painelEpiPendente(); if (pe) m.insertBefore(pe, m.firstChild); }catch(e){ console.error('[epi]', e); }
   try{ pintarMeuDia(m); }
   catch(e){
     console.error('[roteiro]', e);
@@ -943,6 +976,12 @@ function pintarLista(){
   bloco('Para você', minhas, false);
   bloco('Da equipe', outras, true);
   try{ const pe = painelEscaladas(); if (pe) m.appendChild(pe); }catch(e){ console.error('[escaladas]', e); }
+  if (!listaOS.length && !(MEU_DIA || []).length && !(ESCALADAS || []).length){
+    const v = document.createElement('div'); v.className = 'vazio';
+    v.innerHTML = '<b>Nada no campo agora</b><p>Quando o escritório abrir uma OS para você, ela aparece aqui.</p>';
+    m.appendChild(v);
+  }
+  abasTopo(m, 'lista');
 }
 
 /* ── S15 · ITEM 7 DO S41: AS MINHAS ATRASADAS ───────────────────────────────
@@ -962,13 +1001,27 @@ function chipReag(osId, tarefaId, compId){
 const isoHojeF = () => { const x = new Date();
   return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0'); };
 function painelAtrasadas(){
-  if (!(ATRASADAS || []).length) return null;
+  if (!(ATRASADAS || []).length && !(APOIO_ATR || []).length) return null;
   const p = document.createElement('div');
   p.className = 'painel atrasadas';
-  p.innerHTML = '<div class="et" style="color:#9E1B14">' + ATRASADAS.length
+  p.innerHTML = (ATRASADAS.length ? '<div class="et" style="color:#9E1B14">' + ATRASADAS.length
     + (ATRASADAS.length === 1 ? ' tarefa atrasada' : ' tarefas atrasadas') + '</div>'
     + '<p style="font-size:13px;color:var(--ink-3);margin:4px 0 4px">Marcadas para um dia que já passou. '
-    + 'Escolha o dia novo — nada muda sozinho.</p>';
+    + 'Escolha o dia novo — nada muda sozinho.</p>' : '<div class="et" style="color:#9E1B14">Atrasadas em que você é apoio</div>');
+  // S16 · resposta S9: o APOIO vê a atrasada, só para saber — quem escolhe o
+  // dia é o responsável, e a linha diz quem é. Sem botões.
+  setTimeout(() => {
+    (APOIO_ATR || []).forEach(a => {
+      const d = document.createElement('div'); d.className = 'al apoio';
+      d.innerHTML = '<b></b><small></small>';
+      d.querySelector('b').textContent = a.tarefa;
+      d.querySelector('small').innerHTML = esc([a.os_numero, a.cliente].filter(Boolean).join(' · ')) + '<br>'
+        + '<span class="quando">atrasada desde ' + esc(dataBR(a.data_prevista).slice(0,5)) + '</span> ('
+        + a.dias_atraso + (a.dias_atraso === 1 ? ' dia' : ' dias') + ') · responsável: <b style="display:inline;font-size:inherit">'
+        + esc(a.dono_nome || '?') + '</b> — quem escolhe o dia é ele(a)';
+      p.appendChild(d);
+    });
+  }, 0);
   ATRASADAS.forEach(a => {
     const d = document.createElement('div');
     d.className = 'al';
@@ -2832,7 +2885,11 @@ async function entrar(email, senha){
   // O servidor diz quem é a pessoa e o que ela abre — ver sql/26_acesso.sql.
   const a = await rpc('tf_meu_acesso', {});
   if (!a || !a.perfil) throw new Error('Login criado, mas você ainda não tem perfil no sistema. Fale com o Fernando.');
-  if (!a.usa_campo) throw new Error('Seu perfil (' + (a.perfil_nome || a.perfil) + ') não trabalha em campo. Entre pela Gestão.');
+  if (!a.usa_campo){
+    // S16 · de escritório com ficha de RH entra só para a Minha Segurança
+    let temFicha = false; try{ temFicha = !!(await rpc('tf_rh_tenho_ficha', {})); }catch(e){}
+    if (!temFicha) throw new Error('Seu perfil (' + (a.perfil_nome || a.perfil) + ') não trabalha em campo. Entre pela Gestão.');
+  }
   Object.assign(sessao, { nome:a.nome, perfil:a.perfil, perfil_nome:a.perfil_nome,
     admin:!!a.admin, modulos:a.modulos || [], executa_em:a.executa_em });
   LS.set(K_SESSAO, sessao);
@@ -2875,6 +2932,336 @@ try{
     c.focus();
   });
 }catch(e){}
+
+/* S16 · a logomarca da Engetap para a ficha em PDF (embutida, como o favicon). */
+const LOGO_ENGETAP_F = 'data:image/jpeg;base64,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';
+
+// ════════════════════════════════════════════════════════════════════════════
+// S16 · MINHA SEGURANÇA (RH, fase R1 — documento de 26/09, item 17)
+// ----------------------------------------------------------------------------
+// O que o funcionário vê de si: as entregas de EPI para CONFIRMAR (com o PIN,
+// no celular dele — é a assinatura da ficha), os EPIs que estão com ele, os
+// tamanhos (ele muda; o RH é avisado), a receita de óculos e a própria ficha
+// de EPI em PDF — SEM as rubricas (resposta R11: a imagem da assinatura nunca
+// sai do servidor para o celular). Nada de colega, estoque ou custo.
+//
+// Quem é de escritório (perfil que não trabalha em campo) também confirma EPI
+// aqui: o hub abre o Field direto nesta aba para quem tem ficha de RH.
+// ════════════════════════════════════════════════════════════════════════════
+let SEG = null;            // tf_rh_meu_resumo(); null = banco sem o 62 ou falha
+let APOIO_ATR = [];        // S9 · atrasadas em que sou apoio (só leitura)
+const soSeg = () => sessao.executa_em === 'adm';
+/** Escrita do RH NÃO se repete sozinha: um PIN reenviado depois de um
+ *  "não respondeu" contaria como tentativa errada. */
+const rpc1 = (f, p) => req('/rest/v1/rpc/' + f, { method:'POST', body: JSON.stringify(p || {}) }, 0);
+const rhDTf = t => t ? new Date(t).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit',
+  month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }).replace(',', '') : '—';
+const rhMesF = d => d ? String(d).slice(5,7) + '/' + String(d).slice(0,4) : '—';
+const RH_MOT_F = { primeira:'primeira entrega', entrega_inicial:'entrega inicial', vistoria:'reprovado em vistoria',
+  danificado:'danificado em serviço', extravio:'extravio', limite_fabricante:'limite do fabricante',
+  troca_tamanho:'troca de tamanho', reposicao:'reposição' };
+
+/** As duas abas no topo da lista. Só aparece para quem tem ficha de RH. */
+function abasTopo(m, qual){
+  if (!(SEG && SEG.tem_ficha)) return;
+  const n = (SEG.pendentes || []).length;
+  const d = document.createElement('div'); d.className = 'abasTopo';
+  d.innerHTML = (soSeg() ? '' : '<button type="button" data-t="lista" class="' + (qual === 'lista' ? 'on' : '') + '">Ordens</button>')
+    + '<button type="button" data-t="seg" class="' + (qual === 'seg' ? 'on' : '') + '">Minha Segurança'
+    + (n ? ' <span class="bolha">' + n + '</span>' : '') + '</button>';
+  d.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.t === 'seg') pintarSeg(); else pintarLista();
+  }));
+  m.insertBefore(d, m.firstChild);
+}
+/** Na lista de OS, a pendência de EPI vem no topo (item 17: "pendências dele no topo"). */
+function painelEpiPendente(){
+  const n = SEG && SEG.tem_ficha ? (SEG.pendentes || []).length : 0;
+  if (!n) return null;
+  const p = document.createElement('div'); p.className = 'painel epiPend';
+  p.innerHTML = '<div class="et" style="color:var(--warn)">EPI para confirmar</div>'
+    + '<p style="margin:4px 0 10px">' + n + (n === 1 ? ' entrega de EPI espera' : ' entregas de EPI esperam')
+    + ' a sua confirmação.</p><button class="btn pri sm" type="button">Conferir e confirmar</button>';
+  p.querySelector('button').addEventListener('click', pintarSeg);
+  return p;
+}
+
+async function recarregarSeg(){
+  try{ SEG = await rpc('tf_rh_meu_resumo', {}); }catch(e){ toast(e.message, 'err'); }
+  pintarSeg();
+}
+
+function pintarSeg(){
+  tela = 'seg'; atual = null;
+  document.getElementById('btnBack').hidden = true;
+  document.getElementById('hTit').textContent = 'Minha Segurança';
+  document.getElementById('hSub').textContent = (sessao.nome || '') + (SEG && SEG.funcao ? ' · ' + SEG.funcao : '');
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+  if (!SEG || !SEG.tem_ficha){
+    m.innerHTML = '<div class="vazio"><b>Sua ficha de segurança ainda não foi aberta</b>'
+      + '<p>Quando o Bruno abrir a sua ficha de RH, as entregas de EPI aparecem aqui para você confirmar.</p></div>';
+    abasTopo(m, 'seg');
+    return;
+  }
+  const temPin = SEG.pin && SEG.pin.ativo;
+  const bloq = SEG.pin && SEG.pin.bloqueado_ate && new Date(SEG.pin.bloqueado_ate) > new Date();
+
+  // 1 · PIN (sem ele não se confirma nada)
+  if (!temPin){
+    const p = document.createElement('div'); p.className = 'painel pinNovo';
+    p.innerHTML = '<div class="et">Crie o seu PIN</div>'
+      + '<p style="margin:6px 0 10px">Seis números que <b>só você</b> sabe. É com ele que você confirma cada entrega de EPI — '
+      + 'vale como a sua assinatura na ficha. Não use sequência (123456) nem número repetido (111111).</p>'
+      + '<div class="campo"><label for="pn1">Novo PIN</label><input id="pn1" type="password" inputmode="numeric" maxlength="6" autocomplete="off" pattern="[0-9]*"></div>'
+      + '<div class="campo"><label for="pn2">Repita o PIN</label><input id="pn2" type="password" inputmode="numeric" maxlength="6" autocomplete="off" pattern="[0-9]*"></div>'
+      + '<button class="btn pri" type="button" id="pnOk">Criar PIN</button>';
+    m.appendChild(p);
+    const b = p.querySelector('#pnOk');
+    b.addEventListener('click', async () => {
+      const a = p.querySelector('#pn1').value, c = p.querySelector('#pn2').value;
+      if (!/^\d{6}$/.test(a)){ toast('O PIN tem 6 números.', 'err'); return; }
+      if (a !== c){ toast('Os dois PINs não batem.', 'err'); return; }
+      b.disabled = true;
+      try{ const r = await rpc1('tf_rh_meu_pin_definir', { p_pin_novo: a, p_pin_atual: null });
+           if (r && r.status !== 'ok') throw new Error('Não deu para criar o PIN.');
+           toast('PIN criado.', 'ok'); await recarregarSeg(); }
+      catch(e){ toast(e.message, 'err'); b.disabled = false; }
+    });
+  } else if (bloq){
+    const p = document.createElement('div'); p.className = 'painel';
+    p.style.borderLeft = '4px solid var(--crit)';
+    p.innerHTML = '<div class="et" style="color:var(--crit)">PIN travado</div><p style="margin:6px 0 0">Cinco tentativas erradas. '
+      + 'Tente de novo depois de ' + esc(rhDTf(SEG.pin.bloqueado_ate).slice(11)) + '. Esqueceu? Peça ao Bruno para liberar um novo PIN.</p>';
+    m.appendChild(p);
+  }
+
+  // 2 · entregas para confirmar, agrupadas pelo lançamento
+  const pend = SEG.pendentes || [];
+  const lotes = {};
+  pend.forEach(e => { (lotes[e.lote] = lotes[e.lote] || []).push(e); });
+  Object.keys(lotes).forEach(k => m.appendChild(painelLote(lotes[k], temPin && !bloq)));
+
+  // 3 · meus EPIs
+  const h1 = document.createElement('div'); h1.className = 'sec'; h1.textContent = 'Meus EPIs'; m.appendChild(h1);
+  const me = SEG.meus_epis || [];
+  const cx = document.createElement('div'); cx.className = 'painel';
+  cx.innerHTML = me.length ? me.map(e => {
+      const lim = e.limite_em ? (e.limite_em <= isoHojeF() ? '<span class="chip atr">limite do fabricante vencido</span>'
+        : '<span class="chip">' + 'vence em ' + esc(rhMesF(e.limite_em)) + '</span>') : '';
+      return '<div class="epiLin"><b>' + esc(e.epi_nome) + (e.tamanho ? ' (' + esc(e.tamanho) + ')' : '') + '</b>'
+        + '<small>CA ' + esc(e.ca) + ' · recebido em ' + esc(dataBR(e.data_entrega)) + (e.quantidade > 1 ? ' · ' + e.quantidade + ' un.' : '') + '</small>'
+        + (lim ? '<div class="chips" style="margin-top:4px">' + lim + '</div>' : '') + '</div>';
+    }).join('') : '<p style="margin:0">Nenhum EPI confirmado ainda.</p>';
+  m.appendChild(cx);
+
+  // 4 · meu cadastro: tamanhos e receita
+  const h2 = document.createElement('div'); h2.className = 'sec'; h2.textContent = 'Meu cadastro'; m.appendChild(h2);
+  const cad = document.createElement('div'); cad.className = 'painel';
+  cad.innerHTML = (SEG.tamanhos || []).map(t => '<div class="campo"><label for="tm_' + esc(t.epi_id) + '">' + esc(t.epi_nome)
+      + '</label><select id="tm_' + esc(t.epi_id) + '" data-epi="' + esc(t.epi_id) + '"><option value="">—</option>'
+      + (t.opcoes || []).map(o => '<option' + (o === t.tamanho ? ' selected' : '') + '>' + esc(o) + '</option>').join('')
+      + '</select></div>').join('')
+    + '<p style="font-size:12.5px;color:var(--ink-3);margin:0 0 12px">Mudou o tamanho? Troque aqui — o Bruno é avisado.</p>'
+    + '<div class="grupoTit" style="margin-top:4px">Óculos de grau</div>'
+    + '<p style="font-size:14px;margin:0 0 8px">' + (SEG.usa_oculos_grau ? 'Você usa óculos de segurança com lente graduada.'
+      : 'Na sua ficha: não usa óculos de grau. Se usa, mande a receita.') + '</p>'
+    + (SEG.receitas || []).map(r => '<div class="epiLin"><b>' + esc(r.nome) + '</b><small>enviada em ' + esc(rhDTf(r.criado_em))
+      + '</small><button class="lnk" type="button" data-rec="' + esc(r.id) + '">abrir</button></div>').join('')
+    + '<label class="btn sm" style="cursor:pointer;margin-top:8px">Enviar receita nova (foto ou PDF)'
+    + '<input type="file" id="recArq" accept="image/*,application/pdf" hidden></label>'
+    + '<p style="font-size:12.5px;color:var(--ink-3);margin:6px 0 0">Receita nova avisa o Bruno para encomendar o óculos; o atual vale até o novo chegar. '
+    + 'Só você, o Bruno e o Fernando veem a receita.</p>';
+  m.appendChild(cad);
+  cad.querySelectorAll('select[data-epi]').forEach(s => s.addEventListener('change', async () => {
+    s.disabled = true;
+    try{ await rpc1('tf_rh_definir_tamanho', { p_usuario: meuId(), p_epi: s.dataset.epi, p_tamanho: s.value || null });
+         toast('Tamanho gravado. O Bruno foi avisado.', 'ok'); }
+    catch(e){ toast(e.message, 'err'); }
+    s.disabled = false;
+  }));
+  cad.querySelectorAll('[data-rec]').forEach(b => b.addEventListener('click', () => abrirArquivoRH(b.dataset.rec)));
+  cad.querySelector('#recArq').addEventListener('change', async ev => {
+    const f = ev.target.files && ev.target.files[0]; if (!f) return;
+    try{
+      let mime = 'image/jpeg', dados;
+      if (f.type === 'application/pdf'){
+        if (f.size > 5 * 1024 * 1024) throw new Error('PDF grande demais (máx. 5 MB). Mande uma foto.');
+        mime = 'application/pdf';
+        dados = await new Promise((ok, er) => { const fr = new FileReader(); fr.onload = () => ok(fr.result);
+          fr.onerror = () => er(new Error('Não consegui ler o arquivo.')); fr.readAsDataURL(f); });
+      } else dados = await reduzirFoto(f, 1800, 0.85);
+      await rpc1('tf_rh_enviar_receita', { p_usuario: meuId(), p_nome: f.name || 'receita', p_mime: mime, p_conteudo: dados });
+      toast('Receita enviada. O Bruno foi avisado.', 'ok'); await recarregarSeg();
+    }catch(e){ toast(e.message, 'err'); }
+  });
+
+  // 5 · a minha ficha e o PIN
+  const h3 = document.createElement('div'); h3.className = 'sec'; h3.textContent = 'Documentos'; m.appendChild(h3);
+  const dc = document.createElement('div'); dc.className = 'painel';
+  dc.innerHTML = '<button class="btn sm" type="button" id="bFicha">Minha ficha de EPI (PDF)</button>'
+    + (temPin ? '<button class="btn sm" type="button" id="bTrocaPin">Trocar meu PIN</button>' : '')
+    + '<p style="font-size:12.5px;color:var(--ink-3);margin:6px 0 0">A ficha tem as entregas que você confirmou, com o selo da confirmação. '
+    + 'ASO, treinamentos e os vídeos da integração chegam aqui nas próximas fases.</p>';
+  m.appendChild(dc);
+  dc.querySelector('#bFicha').addEventListener('click', async ev => {
+    const b = ev.currentTarget; b.disabled = true;
+    try{ await minhaFichaPDF(); }catch(e){ toast(e.message, 'err'); }
+    b.disabled = false;
+  });
+  const bt = dc.querySelector('#bTrocaPin');
+  if (bt) bt.addEventListener('click', trocarPin);
+  abasTopo(m, 'seg');
+}
+
+function painelLote(itens, podeConfirmar){
+  const e0 = itens[0];
+  const p = document.createElement('div'); p.className = 'painel lote';
+  p.innerHTML = '<div class="et" style="color:var(--warn)">Entrega para confirmar</div>'
+    + '<p style="margin:4px 0 8px;font-size:13px">Lançada por ' + esc(e0.lancado_por_nome || 'o escritório') + ' em ' + esc(rhDTf(e0.lancado_em)) + '</p>'
+    + itens.map(e => '<div class="epiLin" data-id="' + esc(e.id) + '"><b>' + esc(e.epi_nome) + ' × ' + e.quantidade
+      + (e.tamanho ? ' · tamanho ' + esc(e.tamanho) : '') + '</b><small>CA ' + esc(e.ca) + ' · ' + esc(RH_MOT_F[e.motivo] || e.motivo)
+      + (e.condicao === 'reaproveitado' ? ' · reaproveitado' : '') + (e.fabricacao ? ' · fabricado em ' + esc(rhMesF(e.fabricacao)) : '')
+      + (e.serie_lote ? ' · série ' + esc(e.serie_lote) : '') + (e.anterior_ao_sistema ? ' · já estava com você em ' + esc(dataBR(e.data_entrega)) : '')
+      + '</small><button class="lnk" type="button" data-nr="' + esc(e.id) + '">não recebi este</button></div>').join('')
+    + '<details class="termo" open><summary>Termo de responsabilidade</summary><p></p></details>'
+    + '<details class="termo"><summary>Orientações de uso</summary><p></p></details>'
+    + (podeConfirmar
+      ? '<div class="campo" style="margin-top:12px"><label>Seu PIN</label><input class="pinC" type="password" inputmode="numeric" maxlength="6" autocomplete="off" pattern="[0-9]*"></div>'
+        + '<button class="btn pri" type="button" data-conf>Confirmo o recebimento</button>'
+      : '<p style="font-size:13px;color:var(--warn);margin:10px 0 0">Crie o seu PIN (acima) para confirmar.</p>');
+  const ps = p.querySelectorAll('details.termo p');
+  ps[0].textContent = e0.termo_texto || '';
+  ps[1].textContent = e0.orientacoes || '';
+  p.querySelectorAll('[data-nr]').forEach(b => b.addEventListener('click', async () => {
+    const e = itens.find(x => x.id === b.dataset.nr);
+    const obs = prompt('"Não recebi" — ' + e.epi_nome + '\nQuer explicar? (opcional)', '');
+    if (obs === null) return;
+    b.disabled = true;
+    try{ await rpc1('tf_rh_nao_recebi', { p_id: e.id, p_obs: obs }); toast('Avisado: o Bruno vai ver.', 'ok'); await recarregarSeg(); }
+    catch(er){ toast(er.message, 'err'); b.disabled = false; }
+  }));
+  const bc = p.querySelector('[data-conf]');
+  if (bc) bc.addEventListener('click', async () => {
+    const pin = p.querySelector('.pinC').value;
+    if (!/^\d{6}$/.test(pin)){ toast('Digite os 6 números do seu PIN.', 'err'); return; }
+    bc.disabled = true;
+    try{
+      const r = await rpc1('tf_rh_confirmar_entregas', { p_ids: itens.map(e => e.id), p_pin: pin });
+      if (r.status === 'ok'){ toast('Recebimento confirmado (' + r.n + ').', 'ok'); await recarregarSeg(); if (tela === 'lista') pintarLista(); return; }
+      if (r.status === 'pin_errado') toast('PIN errado. Restam ' + r.restantes + ' tentativa(s) antes de travar 15 minutos.', 'err');
+      else if (r.status === 'bloqueado') { toast('PIN travado por 15 minutos.', 'err'); await recarregarSeg(); return; }
+      else if (r.status === 'sem_pin') { toast('Crie o seu PIN antes.', 'err'); await recarregarSeg(); return; }
+      p.querySelector('.pinC').value = '';
+    }catch(e){ toast(e.message, 'err'); }
+    bc.disabled = false;
+  });
+  return p;
+}
+
+function trocarPin(){
+  const m = document.getElementById('main');
+  const p = document.createElement('div'); p.className = 'painel'; p.id = 'pnTroca';
+  const velho = document.getElementById('pnTroca'); if (velho) velho.remove();
+  p.innerHTML = '<div class="et">Trocar o PIN</div>'
+    + '<div class="campo" style="margin-top:8px"><label for="pa">PIN atual</label><input id="pa" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></div>'
+    + '<div class="campo"><label for="pb">PIN novo</label><input id="pb" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></div>'
+    + '<div class="campo"><label for="pc">Repita o novo</label><input id="pc" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></div>'
+    + '<div class="linha"><button class="btn" type="button" id="pX">Cancelar</button><button class="btn pri" type="button" id="pOk">Trocar</button></div>'
+    + '<p style="font-size:12.5px;color:var(--ink-3);margin:8px 0 0">Esqueceu o atual? Peça ao Bruno para liberar um novo.</p>';
+  m.insertBefore(p, m.children[1] || null);
+  p.scrollIntoView({ behavior:'smooth', block:'start' });
+  p.querySelector('#pX').addEventListener('click', () => p.remove());
+  p.querySelector('#pOk').addEventListener('click', async ev => {
+    const a = p.querySelector('#pa').value, b = p.querySelector('#pb').value, c = p.querySelector('#pc').value;
+    if (!/^\d{6}$/.test(b)){ toast('O PIN novo tem 6 números.', 'err'); return; }
+    if (b !== c){ toast('Os dois PINs novos não batem.', 'err'); return; }
+    ev.currentTarget.disabled = true;
+    try{ const r = await rpc1('tf_rh_meu_pin_definir', { p_pin_novo: b, p_pin_atual: a });
+         if (r.status === 'ok'){ toast('PIN trocado.', 'ok'); await recarregarSeg(); return; }
+         toast(r.status === 'pin_errado' ? 'PIN atual errado. Restam ' + r.restantes + ' tentativa(s).' : 'PIN travado por 15 minutos.', 'err'); }
+    catch(e){ toast(e.message, 'err'); }
+    ev.currentTarget.disabled = false;
+  });
+}
+
+async function abrirArquivoRH(id){
+  try{
+    const a = await rpc('tf_rh_arquivo', { p_id: id });
+    const blob = await (await fetch(a.conteudo)).blob();
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, '_blank');
+    if (!w) location.href = url;
+  }catch(e){ toast(e.message, 'err'); }
+}
+
+let _jspdfF = null;
+function carregarJsPDFf(){
+  if (_jspdfF) return _jspdfF;
+  _jspdfF = new Promise((ok, err) => {
+    if (window.jspdf && window.jspdf.jsPDF) return ok(window.jspdf.jsPDF);
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s.onload = () => (window.jspdf && window.jspdf.jsPDF) ? ok(window.jspdf.jsPDF) : err(new Error('A biblioteca de PDF não inicializou.'));
+    s.onerror = () => { _jspdfF = null; err(new Error('Sem internet para gerar o PDF agora. Tente com sinal.')); };
+    document.head.appendChild(s);
+  });
+  return _jspdfF;
+}
+/** A ficha no celular: a MESMA da versão cliente, sem as rubricas (R11). */
+async function minhaFichaPDF(){
+  const jsPDF = await carregarJsPDFf();
+  const ficha = await rpc('tf_rh_minha_ficha', {});
+  const doc = new jsPDF({ unit:'mm', format:'a4' });
+  const M = 12, W = 210 - 2 * M, F = ficha.funcionario;
+  const col = [ { t:'Equipamento', w:62 }, { t:'CA', w:18 }, { t:'Entrega', w:20 }, { t:'Devolução', w:20 }, { t:'Confirmação', w:66 } ];
+  let y, pag = 1;
+  const cab = () => {
+    try{ doc.addImage(LOGO_ENGETAP_F, 'JPEG', M, 10, 44, 10.7); }catch(e){}
+    doc.setFont('helvetica','bold'); doc.setFontSize(12);
+    doc.text('FICHA DE CONTROLE DE ENTREGA DE EPI', 210 - M, 14, { align:'right' });
+    doc.setFont('helvetica','normal'); doc.setFontSize(8);
+    doc.text('Cópia do funcionário (sem as rubricas)', 210 - M, 18.5, { align:'right' });
+    doc.setDrawColor(170); doc.line(M, 23, 210 - M, 23); doc.setFontSize(8.5);
+    const d = (k, v, x, yy) => { doc.setFont('helvetica','bold'); doc.text(k, x, yy); const kw = doc.getTextWidth(k) + 1.5;
+      doc.setFont('helvetica','normal'); doc.text(String(v || '—'), x + kw, yy); };
+    d('Empresa:', ficha.empresa, M, 28); d('Nome:', F.nome, M, 33); d('Setor:', F.setor, 120, 33);
+    d('Função:', F.funcao, M, 38); d('Admissão:', F.admissao ? dataBR(F.admissao) : '—', 120, 38);
+    y = 43;
+    if (pag === 1){ doc.setFontSize(7.6); const tx = doc.splitTextToSize(ficha.texto || '', W);
+      doc.text(tx, M, y + 1.5, { lineHeightFactor:1.15 }); y += tx.length * 7.6 * 0.405 + 4; }
+    doc.setFillColor(227, 238, 247); doc.rect(M, y, W, 7, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
+    let x = M; col.forEach(c => { doc.text(c.t, x + 1.2, y + 4.6); x += c.w; }); y += 7;
+  };
+  const rod = () => { doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(90);
+    doc.text('Ficha gerada em ' + rhDTf(ficha.gerada_em).replace(' ', ' às ') + ', contendo entregas confirmadas até esta data.', M, 284);
+    doc.text(doc.splitTextToSize(ficha.rodape || '', W - 20), M, 288);
+    doc.text('pág. ' + pag, 210 - M, 288, { align:'right' }); doc.setTextColor(0); };
+  cab();
+  const L = ficha.linhas || [];
+  if (!L.length){ doc.setFontSize(9); doc.text('Nenhuma entrega confirmada até esta data.', M + 2, y + 8); }
+  L.forEach(l => {
+    if (y + 12 > 278){ rod(); doc.addPage(); pag++; cab(); }
+    doc.setDrawColor(215); doc.rect(M, y, W, 12);
+    let x = M; doc.setFontSize(7.6); doc.setFont('helvetica','bold');
+    doc.text(doc.splitTextToSize(l.epi_nome + ' ×' + l.quantidade + (l.tamanho ? ' (' + l.tamanho + ')' : ''), col[0].w - 2.4).slice(0,2), x + 1.2, y + 4);
+    doc.setFont('helvetica','normal'); x += col[0].w;
+    doc.text(String(l.ca), x + 1.2, y + 5); x += col[1].w;
+    doc.text(dataBR(l.data_entrega), x + 1.2, y + 5); x += col[2].w;
+    doc.text('—', x + 1.2, y + 5); x += col[3].w;
+    doc.setFontSize(6.8);
+    doc.text(doc.splitTextToSize('Confirmado no celular do funcionário em ' + rhDTf(l.confirmado_em)
+      + (l.confirmado_metodo === 'pin' ? ' (PIN)' : '') + ' · lançado por ' + (l.lancado_por_nome || '?'), col[4].w - 2.4), x + 1.2, y + 4);
+    y += 12;
+  });
+  rod();
+  const nome = 'Minha ficha de EPI - ' + isoHojeF() + '.pdf';
+  const blob = doc.output('blob');
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove();
+}
+
 
 function iniciar(){
   pintarFila();

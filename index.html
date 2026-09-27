@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>TapFlow · H3</title>
+<title>TapFlow · H4</title>
 <meta name="theme-color" content="#102438">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -195,7 +195,7 @@ input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--a
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';
 
-const APP_VERSION = 'H3';
+const APP_VERSION = 'H4';
 try{ document.getElementById('selo').textContent = 'HUB · ' + APP_VERSION; }catch(e){}
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
@@ -209,7 +209,7 @@ const K_ANTIGAS  = ['tapflow_sessao', 'tff_sessao'];
 
 const VAZIA = { token:null, refresh:null, nome:null, email:null, perfil:null,
                 perfil_nome:null, admin:false, modulos:[], executa_em:null,
-                usa_gestao:false, usa_campo:false };
+                usa_gestao:false, usa_campo:false, rh_ficha:false };
 let sessao = Object.assign({}, VAZIA);
 
 function gravar(){ try{ localStorage.setItem(K_SESSAO, JSON.stringify(sessao)); }catch(e){} }
@@ -279,6 +279,12 @@ async function meuAcesso(){
     admin:!!a.admin, modulos:a.modulos || [], executa_em:a.executa_em,
     usa_gestao:!!a.usa_gestao, usa_campo:!!a.usa_campo
   });
+  // H4 · S42: quem é de escritório e tem ficha de RH confirma EPI pelo Field
+  // (Minha Segurança). Banco sem o 62 → falso, e o hub fica como no H3.
+  sessao.rh_ficha = false;
+  if (!sessao.usa_campo){
+    try{ sessao.rh_ficha = !!(await api('/rest/v1/rpc/tf_rh_tenho_ficha', { method:'POST', body:{} })); }catch(e){}
+  }
   gravar();
   return a;
 }
@@ -289,6 +295,8 @@ async function meuAcesso(){
 const IC_GESTAO = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>';
 const IC_CAMPO  = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3.5 4 6v13l5-2.5 6 3 5-2.5V4l-5 2.5z"/><path d="M9 3.5v13M15 6.5v13"/></svg>';
 
+const IC_SEG = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17a8 8 0 0 1 16 0z"/><path d="M2.5 17h19M12 9V5.5M9 6.5V11M15 6.5V11"/></svg>';
+
 const PORTAS = [
   { chave:'manager', href:'manager/', titulo:'Gestão', icone:IC_GESTAO,
     texto:'Quadros de OS, comercial, compras, propostas, documentos e relatórios.',
@@ -296,6 +304,11 @@ const PORTAS = [
   { chave:'field', href:'field/', titulo:'Campo', icone:IC_CAMPO,
     texto:'Levantamento e execução no cliente. Funciona sem sinal e envia depois.',
     liberado:s => s.usa_campo },
+  // H4 · S42: só para quem NÃO trabalha em campo — quem trabalha já tem a
+  // Minha Segurança dentro do Campo.
+  { chave:'seg', href:'field/', titulo:'Minha Segurança', icone:IC_SEG,
+    texto:'Confirmar as entregas de EPI no seu celular, ver seus EPIs e ajustar seus tamanhos.',
+    liberado:s => !s.usa_campo && s.rh_ficha },
 ];
 
 let autoIndo = null;
