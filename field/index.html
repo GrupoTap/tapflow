@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S13</title>
+<title>TapFlow Field · S15</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -128,6 +128,21 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
    risco é âmbar. O mesmo time olha as duas telas. */
 .chip.urg{background:var(--crit-soft);color:var(--crit)}
 .chip.atr{background:var(--crit-soft);color:var(--crit)}
+/* S15 · a marca de reagendada (Manager S41 · item 7): discreta, a mesma cor */
+.chip.reag{background:#EEE7F7;color:#4B2E83;border-color:transparent}
+/* S15 · o aviso de atrasadas no topo da lista */
+.atrasadas{border-left:4px solid #D0201A}
+.atrasadas .al{border-top:1px solid var(--rule-2);padding:11px 0 2px}
+.atrasadas .al:first-of-type{border-top:0}
+.atrasadas .al b{display:block;font-size:15px;line-height:1.3}
+.atrasadas .al small{display:block;font-size:12.5px;color:var(--ink-3);margin:2px 0 8px;line-height:1.4}
+.atrasadas .al .quando{color:#9E1B14;font-weight:700}
+.atrasadas input[type=date]{width:100%;font-size:16px;padding:10px;border:1px solid var(--rule);border-radius:5px;margin:0 0 8px}
+/* S15 · as etapas da OS que o meu perfil faz */
+.etapa{border-top:1px solid var(--rule-2);padding:10px 0}
+.etapa:first-of-type{border-top:0}
+.etapa b{display:block;font-size:14.5px;line-height:1.3}
+.etapa small{display:block;font-size:12.5px;color:var(--ink-3);margin:2px 0 7px;line-height:1.4}
 .chip.alt{background:var(--warn-soft);color:var(--warn)}
 .chip.risc{background:var(--warn-soft);color:var(--warn)}
 .osCard.sitAtr{border-left-color:var(--crit)}
@@ -356,7 +371,7 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S14';
+const APP_VERSION = 'S15';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -800,12 +815,19 @@ async function carregar(silencioso){
   try{
     // As duas juntas: a lista de OS do campo e o ROTEIRO de hoje desta pessoa.
     // O roteiro não substitui a lista — ele diz por onde começar.
-    const [lst, dia] = await Promise.all([
+    const [lst, dia, atr, reag] = await Promise.all([
       get('v_os_campo?select=*&order=coluna_ordem,numero'),
-      get('v_meu_dia?select=*').catch(() => [])   // sem roteiro, o app segue igual
+      get('v_meu_dia?select=*').catch(() => []),   // sem roteiro, o app segue igual
+      // S15 · item 7 do S41 — sem o 61 no banco, as duas voltam vazias e o
+      // app segue como no S14 (sem aviso e sem marca), sem erro na tela
+      rpc('tf_minhas_atrasadas', {}).catch(() => []),
+      get('v_reagendamentos_resumo?select=os_id,tarefa_id,compromisso_id,vezes,original').catch(() => [])
     ]);
     listaOS = lst || [];
     MEU_DIA = dia || [];
+    ATRASADAS = atr || [];
+    await carregarEscaladas();   // S15
+    REAG = new Map((reag || []).map(x => [chaveReag(x.os_id, x.tarefa_id, x.compromisso_id), x]));
     falhaCarga = null;
     pararRecon(); setConn('ok','conectado');
     if (tela === 'lista') pintarLista();
@@ -870,7 +892,7 @@ function pintarLista(){
   // S13: o "Hoje" pode ter coisa mesmo sem OS no campo — uma VISITA de negócio
   // (não é OS) ou uma etapa de escritório no seu nome. Até o S12 a lista vazia
   // saía cedo com "Nada no campo agora" e escondia o roteiro do dia.
-  if (!listaOS.length && !(MEU_DIA || []).length){
+  if (!listaOS.length && !(MEU_DIA || []).length && !(ATRASADAS || []).length && !(ESCALADAS || []).length){
     if (falhaCarga){
       const v = document.createElement('div'); v.className = 'vazio';
       v.innerHTML = '<b>Não deu para carregar suas ordens</b><p class="mt"></p>' +
@@ -907,6 +929,10 @@ function pintarLista(){
   // título "Hoje" e mais nada — e o `.catch(()=>pintarLista())` do boot
   // engolia o erro, então nem no console aparecia. Foi assim que um dataBR
   // que faltava virou tela em branco no teste.
+  // S15 · o aviso das atrasadas vem ANTES de tudo: é a única coisa da tela
+  // que pede uma decisão (qual dia novo), e ela não se resolve sozinha.
+  try{ const pa = painelAtrasadas(); if (pa) m.insertBefore(pa, m.firstChild); }
+  catch(e){ console.error('[atrasadas]', e); }
   try{ pintarMeuDia(m); }
   catch(e){
     console.error('[roteiro]', e);
@@ -916,6 +942,72 @@ function pintarLista(){
   }
   bloco('Para você', minhas, false);
   bloco('Da equipe', outras, true);
+  try{ const pe = painelEscaladas(); if (pe) m.appendChild(pe); }catch(e){ console.error('[escaladas]', e); }
+}
+
+/* ── S15 · ITEM 7 DO S41: AS MINHAS ATRASADAS ───────────────────────────────
+   Tarefa no MEU nome, com dia que já passou e ainda não concluída. O roteiro
+   já a mostrava ("era 24/09") — o que faltava era o que FAZER com ela. Dois
+   botões, e nada muda sozinho: enquanto a pessoa não escolher, a tarefa fica
+   no dia original e este aviso continua aqui. Reagendar deixa a marca
+   "reagendada Nx — original: DD/MM", que todos veem. */
+let ATRASADAS = [];
+let REAG = new Map();
+const chaveReag = (osId, tarefaId, compId) => compId ? 'av|' + compId : 'os|' + osId + '|' + tarefaId;
+function chipReag(osId, tarefaId, compId){
+  const r = REAG.get(chaveReag(osId, tarefaId, compId));
+  return r && r.vezes ? '<span class="chip reag">reagendada ' + r.vezes + 'x — original: '
+    + esc(dataBR(r.original).slice(0,5)) + '</span>' : '';
+}
+const isoHojeF = () => { const x = new Date();
+  return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0'); };
+function painelAtrasadas(){
+  if (!(ATRASADAS || []).length) return null;
+  const p = document.createElement('div');
+  p.className = 'painel atrasadas';
+  p.innerHTML = '<div class="et" style="color:#9E1B14">' + ATRASADAS.length
+    + (ATRASADAS.length === 1 ? ' tarefa atrasada' : ' tarefas atrasadas') + '</div>'
+    + '<p style="font-size:13px;color:var(--ink-3);margin:4px 0 4px">Marcadas para um dia que já passou. '
+    + 'Escolha o dia novo — nada muda sozinho.</p>';
+  ATRASADAS.forEach(a => {
+    const d = document.createElement('div');
+    d.className = 'al';
+    d.innerHTML = '<b></b><small></small>'
+      + '<div class="linha"><button type="button" class="btn sm pri" data-a="hoje">Mover pra hoje</button>'
+      + '<button type="button" class="btn sm" data-a="outro">Outro dia</button></div>'
+      + '<div class="outro" hidden style="margin-top:8px"><input type="date" aria-label="Novo dia" min="' + isoHojeF() + '">'
+      + '<button type="button" class="btn sm pri" data-a="ok">Gravar este dia</button></div>';
+    d.querySelector('b').textContent = a.tarefa + (a.origem === 'avulso' ? ' (compromisso)' : '');
+    d.querySelector('small').innerHTML = esc([a.os_numero, a.cliente].filter(Boolean).join(' · '))
+      + (a.os_numero || a.cliente ? '<br>' : '')
+      + '<span class="quando">atrasada desde ' + esc(dataBR(a.data_prevista).slice(0,5)) + '</span> ('
+      + a.dias_atraso + (a.dias_atraso === 1 ? ' dia' : ' dias') + ')'
+      + (a.reag_vezes ? ' · reagendada ' + a.reag_vezes + 'x — original: ' + esc(dataBR(a.reag_original).slice(0,5)) : '');
+    const gravar = async (dia, via, b) => {
+      d.querySelectorAll('button').forEach(x => x.disabled = true);
+      try{
+        const r = await rpc('tf_reagendar_atrasada', { p_os_id: a.os_id || null, p_tarefa_id: a.tarefa_id || null,
+          p_compromisso_id: a.compromisso_id || null, p_data: dia, p_via: via });
+        toast('Foi para ' + (dia === isoHojeF() ? 'hoje' : dataBR(dia)) + (r && r.vezes ? ' · reagendada ' + r.vezes + 'x' : '') + '.', 'ok');
+        await carregar(true);
+      }catch(e){ toast(e.message, 'err'); d.querySelectorAll('button').forEach(x => x.disabled = false); }
+    };
+    d.querySelector('[data-a="hoje"]').addEventListener('click', e => gravar(isoHojeF(), 'hoje', e.target));
+    d.querySelector('[data-a="outro"]').addEventListener('click', () => {
+      const o = d.querySelector('.outro'); o.hidden = false;
+      const i = o.querySelector('input'); if (!i.value){ const t = new Date(Date.now() + 864e5);
+        i.value = t.getFullYear() + '-' + String(t.getMonth()+1).padStart(2,'0') + '-' + String(t.getDate()).padStart(2,'0'); }
+      i.focus();
+    });
+    d.querySelector('[data-a="ok"]').addEventListener('click', e => {
+      const v = d.querySelector('.outro input').value;
+      if (!v){ toast('Escolha o dia.', 'err'); return; }
+      if (v < isoHojeF()){ toast('Escolha hoje ou um dia à frente.', 'err'); return; }
+      gravar(v, 'outro_dia', e.target);
+    });
+    p.appendChild(d);
+  });
+  return p;
 }
 
 /* ── O ROTEIRO DE HOJE ──────────────────────────────────────────────────────
@@ -982,6 +1074,7 @@ function pintarMeuDia(m){
     if (t.ja_comecou) chips.push('<span class="chip eu">você começou</span>');
     if (t.atrasada_no_roteiro)
       chips.push('<span class="chip atr">era ' + dataBR(t.data_prevista) + '</span>');
+    if (t.origem !== 'visita') { const cr = chipReag(t.os_id, t.tarefa_id, null); if (cr) chips.push(cr); }   // S15
     if (Number(t.prioridade_rank) >= 3) chips.push('<span class="chip urg">🔴 urgente</span>');
     if (t.dias_restantes != null){
       const d = Number(t.dias_restantes);
@@ -1071,12 +1164,14 @@ async function abrirOS(o){
     const [tarefas, equipamentos, coletas] = DEMO
       ? [demoTarefas(o.os_id), demoEquip(), demoColeta(o.os_id)]
       : await Promise.all([
-          get('pipeline_tarefas?select=tarefa_id,nome,descricao,tipo,fase,status,perfis_responsaveis,lock_por,requisitos'
+          get('pipeline_tarefas?select=tarefa_id,nome,descricao,tipo,fase,status,perfis_responsaveis,lock_por,requisitos,'
+              + 'lock_expira,usuario_designado,apoios,data_prevista'
               + '&os_id=eq.' + o.os_id + '&ativo=eq.SIM&order=camada,fase_ordem,ordem'),
           get('equipamentos?select=id,tag,tipo,localizacao&cliente_id=eq.' + o.cliente_id + '&ativo=eq.true&order=tag'),
           get('v_os_coleta?select=inspetor,total_itens,enviado_em,fase&os_id=eq.' + o.os_id + '&order=enviado_em')
         ]);
     atual = { os:o, tarefas, equipamentos, coletas: coletas || [], extras: [] };
+    await carregarNomes();   // S15: para dizer COM QUEM a tarefa está
     // S39 · na inspeção, o que o campo já lançou de extra e em que pé está.
     // Falhar aqui não impede de abrir a OS: o painel diz que não conseguiu ler.
     if (ehInspecao(o)){
@@ -1092,7 +1187,172 @@ async function abrirOS(o){
   }
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// S15 · ITEM 1 DO S41 — "ASSUMIR" NO APP DE CAMPO
+// ----------------------------------------------------------------------------
+// O S38 pôs o "assumir" no Manager (lista de tarefas da OS e Agenda) e deixou o
+// Field de fora — e é justamente no Field que o Filipe está quando o Gabriel
+// liga dizendo que não vai. O banco já aceitava (tf_assumir_tarefa, 58_):
+//   · pendente / em andamento → a tarefa passa para quem assumiu, com a
+//     fechadura de 8 h;
+//   · bloqueada → SÓ o nome muda; ela continua esperando a etapa anterior.
+// "Substitui, não soma": quem estava sai (o apoio que assume troca de papel
+// com o dono, regra do S36). A troca vai para o histórico da OS.
+// ════════════════════════════════════════════════════════════════════════════
+let NOMES = {};
+async function carregarNomes(){
+  if (DEMO || Object.keys(NOMES).length) return;
+  try{ (await get('usuarios?select=id,nome') || []).forEach(u => { NOMES[u.id] = u.nome; }); }
+  catch(e){ /* sem nome, a tela diz "outra pessoa" */ }
+}
+function meuId(){
+  try{
+    const p = String(sessao.token || '').split('.')[1] || '';
+    return JSON.parse(atob(p.replace(/-/g,'+').replace(/_/g,'/'))).sub || null;
+  }catch(e){ return null; }
+}
+const nomeDe = id => (id && NOMES[id]) || (id ? 'outra pessoa' : null);
+const lockVivo = t => !!t.lock_por && (!t.lock_expira || new Date(t.lock_expira) > new Date());
+/** A MESMA conta do banco: não resolvida, não é minha, e o meu perfil está em
+ *  "quem faz" (ou a tarefa não nomeia perfil, ou sou admin). */
+function possoAssumir(t){
+  if (!t || DEMO) return false;
+  if (t.status === 'completo' || t.status === 'dispensado') return false;
+  if (t.usuario_designado && String(t.usuario_designado) === String(meuId())) return false;
+  if (sessao.admin) return true;
+  const ps = t.perfis_responsaveis || [];
+  return !ps.length || ps.includes(sessao.perfil);
+}
+/** Confirma (o celular não tem hover: o nome de quem sai vai no texto) e assume.
+ *  `forcar`: tomar o lugar de quem está com a fechadura — o "combinamos por
+ *  telefone". O banco aceita de quem está em "quem faz". */
+async function assumirNoCampo(t, botao, osId){
+  osId = osId || (atual && atual.os && atual.os.os_id);
+  const dono = t.usuario_designado && String(t.usuario_designado) !== String(meuId()) ? nomeDe(t.usuario_designado) : null;
+  const bloq = !(t.status === 'pendente' || t.status === 'em_andamento');
+  const souApoio = (t.apoios || []).some(a => String(a) === String(meuId()));
+  const txt = (dono ? '"' + t.nome + '" está com ' + dono + '.\n\nAo assumir, você passa a ser o responsável'
+                      + (souApoio ? ' e ' + dono + ' vira o apoio (vocês trocam de papel).' : ' e ' + dono + ' sai da tarefa.')
+                    : 'Assumir "' + t.nome + '"?')
+    + (bloq ? '\n\nEla continua bloqueada até a etapa anterior fechar — só o seu nome entra nela.' : '')
+    + '\n\nA troca fica no histórico da OS.';
+  if (!confirm(txt)) return;
+  if (botao) botao.disabled = true;
+  try{
+    const r = await rpc('tf_assumir_tarefa', { p_os_id: osId, p_tarefa_id: t.tarefa_id, p_forcar: true });
+    if (r && r.status === 'recusado')
+      throw new Error(r.motivo === 'perfil_nao_autorizado'
+        ? 'Esta etapa é de ' + ((r.perfis||[]).join(' ou ') || 'outro perfil') + '.'
+        : 'O servidor recusou (' + (r.motivo || '?') + (r.status_atual ? ', a tarefa está ' + r.status_atual : '') + ').');
+    toast(r && r.so_designacao ? 'Assumida — o seu nome já está nela; ela abre quando a etapa anterior fechar.'
+                               : 'Assumida — agora a tarefa é sua.', 'ok');
+    await carregar(true);
+    if (tela === 'os' && atual && atual.os){
+      const novo = listaOS.find(x => x.os_id === atual.os.os_id) || atual.os;
+      abrirOS(novo);
+    }
+  }catch(e){ toast(e.message, 'err'); if (botao) botao.disabled = false; }
+}
+
+/* S15 · as tarefas do MEU perfil que o escritório escalou para um COLEGA,
+   de 3 dias atrás a 14 dias à frente — em qualquer OS, inclusive as que ainda
+   estão no escritório (e por isso não aparecem na lista do campo) e as
+   BLOQUEADAS. É daqui que o Filipe pega a inspeção do Gabriel sem abrir a
+   Gestão. Vem de v_agenda_itens (a mesma fonte da Agenda do Manager), só a
+   linha do DONO. Começa fechado: é exceção, não rotina. */
+let ESCALADAS = [];
+async function carregarEscaladas(){
+  if (DEMO || !sessao.perfil){ ESCALADAS = []; return; }
+  const eu = meuId();
+  const hoje = isoHojeF();
+  const d = n => { const x = new Date(Date.now() + n*864e5);
+    return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0'); };
+  try{
+    const r = await get('v_agenda_itens?select=os_id,os_numero,cliente,tarefa_id,tarefa,status,dia,usuario_id,usuario,'
+      + 'perfis_responsaveis,apoios,fase_rotulo&origem=eq.os&papel=eq.principal'
+      + '&perfis_responsaveis=cs.%7B' + encodeURIComponent(sessao.perfil) + '%7D'
+      + (eu ? '&usuario_id=neq.' + eu : '') + '&dia=gte.' + d(-3) + '&dia=lte.' + d(14) + '&order=dia,os_numero');
+    ESCALADAS = (r || []).filter(x => !(x.apoios || []).some(a => String(a) === String(eu)));
+  }catch(e){ ESCALADAS = []; }
+}
+function painelEscaladas(){
+  if (!ESCALADAS.length) return null;
+  const det = document.createElement('details');
+  det.className = 'painel';
+  det.innerHTML = '<summary style="cursor:pointer;font-weight:600;font-size:14.5px">Do seu perfil, com colegas · '
+    + ESCALADAS.length + '</summary>'
+    + '<p style="font-size:13px;color:var(--ink-3);margin:8px 0 4px">Tarefas que o seu perfil faz e que o escritório '
+    + 'marcou para outra pessoa. Se combinaram de você ir no lugar, assuma aqui.</p>';
+  ESCALADAS.forEach(x => {
+    const d = document.createElement('div');
+    d.className = 'etapa';
+    d.innerHTML = '<b></b><small></small>';
+    d.querySelector('b').textContent = x.tarefa;
+    d.querySelector('small').textContent = [x.os_numero, x.cliente].filter(Boolean).join(' · ')
+      + ' · ' + dataBR(x.dia) + ' · com ' + (x.usuario || 'outra pessoa')
+      + ((x.status === 'bloqueado' || x.status === 'condicional') ? ' · ainda não liberada' : '');
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn sm';
+    b.textContent = 'Assumir no lugar de ' + (x.usuario || 'outra pessoa');
+    b.addEventListener('click', () => assumirNoCampo({ tarefa_id:x.tarefa_id, nome:x.tarefa, status:x.status,
+      usuario_designado:x.usuario_id, apoios:x.apoios || [] }, b, x.os_id));
+    d.appendChild(b);
+    det.appendChild(d);
+  });
+  return det;
+}
+/** As etapas desta OS que o MEU perfil faz, com quem está cada uma e o botão
+ *  de assumir — inclusive as bloqueadas (a troca é hoje, a inspeção amanhã). */
+function painelEtapas(){
+  const { os, tarefas } = atual;
+  // Bloqueada SEM responsável fica de fora: ninguém escalou ninguém, e uma
+  // fila de "Assumir" em etapas que nem abriram vira ruído (a OS de inspeção
+  // tem seis do inspetor). O caso do pedido é a escalada de um colega.
+  const minhas = (tarefas || []).filter(t => t.tarefa_id !== os.tarefa_atual_id
+    && t.status !== 'completo' && t.status !== 'dispensado'
+    && (t.usuario_designado || t.status === 'pendente' || t.status === 'em_andamento')
+    && (sessao.admin || !(t.perfis_responsaveis || []).length || (t.perfis_responsaveis || []).includes(sessao.perfil)));
+  if (!minhas.length) return null;
+  const p = document.createElement('div');
+  p.className = 'painel';
+  p.innerHTML = '<div class="et">Outras etapas do seu perfil nesta OS</div>'
+    + '<p style="font-size:13px;color:var(--ink-3);margin:4px 0 6px">Se combinaram de você ir no lugar de alguém, '
+    + 'assuma aqui — não precisa esperar o escritório.</p>';
+  minhas.forEach(t => {
+    const d = document.createElement('div');
+    d.className = 'etapa';
+    const eu = t.usuario_designado && String(t.usuario_designado) === String(meuId());
+    const quem = eu ? 'com você' : (t.usuario_designado ? 'com ' + nomeDe(t.usuario_designado) : 'sem responsável');
+    const est = (t.status === 'bloqueado' || t.status === 'condicional') ? 'ainda não liberada'
+              : t.status === 'em_andamento' ? 'em andamento' : 'liberada';
+    d.innerHTML = '<b></b><small></small>';
+    d.querySelector('b').textContent = t.nome;
+    d.querySelector('small').textContent = est + ' · ' + quem
+      + (t.data_prevista ? ' · ' + dataBR(t.data_prevista) : '');
+    if (possoAssumir(t)){
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn sm';
+      b.textContent = t.usuario_designado ? 'Assumir no lugar de ' + nomeDe(t.usuario_designado) : 'Assumir';
+      b.addEventListener('click', () => assumirNoCampo(t, b));
+      d.appendChild(b);
+    }
+    p.appendChild(d);
+  });
+  return p;
+}
+
 function pintarOS(){
+  pintarOSBase();
+  // S15: as outras etapas vêm por último, depois da etapa atual. Não entram
+  // quando o levantamento está na fila (a tela inteira é o aviso da fila).
+  try{
+    if (tela !== 'os' || !atual || document.getElementById('bFl')) return;
+    const pe = painelEtapas();
+    if (pe) document.getElementById('main').appendChild(pe);
+  }catch(e){ console.error('[etapas]', e); }
+}
+
+function pintarOSBase(){
   const { os, tarefas } = atual;
   const t = tarefas.find(x => x.tarefa_id === os.tarefa_atual_id);
   const m = document.getElementById('main');
@@ -1177,8 +1437,18 @@ function pintarOS(){
   if (t.status === 'bloqueado' || t.status === 'condicional'){
     const a = document.createElement('p');
     a.style.cssText = 'font-size:14px;color:var(--ink-3)';
-    a.textContent = 'Ainda não liberada — abre sozinha quando a etapa anterior fechar.';
-    p.appendChild(a); return;
+    a.textContent = 'Ainda não liberada — abre sozinha quando a etapa anterior fechar.'
+      + (t.usuario_designado ? ' Está com ' + (String(t.usuario_designado) === String(meuId()) ? 'você' : nomeDe(t.usuario_designado)) + '.' : '');
+    p.appendChild(a);
+    // S15 · item 1 do S41: assumir também a bloqueada (só o nome muda)
+    if (possoAssumir(t)){
+      const b = document.createElement('button');
+      b.className = 'btn';
+      b.textContent = t.usuario_designado ? 'Assumir no lugar de ' + nomeDe(t.usuario_designado) : 'Assumir esta etapa';
+      b.addEventListener('click', () => assumirNoCampo(t, b));
+      p.appendChild(b);
+    }
+    return;
   }
 
   // ── tarefa de coleta ──
@@ -1297,14 +1567,26 @@ function pintarOS(){
   }
 
   // ── tarefa manual simples ──
-  if (t.status === 'pendente' && !t.lock_por){
+  // S15: até o S14 o "Assumir" só existia em `pendente` sem fechadura. Com a
+  // tarefa já assumida por outra pessoa (o caso do Gabriel que não pode ir),
+  // o Filipe via só "Concluir etapa" — era o que o Bruno viu em 26/09.
+  const outroDono = t.usuario_designado && String(t.usuario_designado) !== String(meuId());
+  const lockDeOutro = lockVivo(t) && String(t.lock_por) !== String(meuId());
+  if (lockDeOutro || (outroDono && possoAssumir(t))){
+    const b = document.createElement('button');
+    b.className = 'btn';
+    b.textContent = 'Assumir no lugar de ' + nomeDe(lockDeOutro ? t.lock_por : t.usuario_designado);
+    b.addEventListener('click', () => assumirNoCampo(t, b));
+    p.appendChild(b);
+  } else if (t.status === 'pendente' && !t.lock_por){
     const b = document.createElement('button');
     b.className = 'btn pri'; b.textContent = 'Assumir esta OS';
     b.addEventListener('click', () => agir('assumir', t));
     p.appendChild(b);
   }
   const c = document.createElement('button');
-  c.className = 'btn' + (t.status === 'em_andamento' ? ' pri' : '');
+  // S15: com a etapa nas mãos de OUTRA pessoa, o botão cheio é o de assumir
+  c.className = 'btn' + (t.status === 'em_andamento' && !lockDeOutro ? ' pri' : '');
   c.textContent = 'Concluir etapa';
   c.addEventListener('click', () => agir('concluir', t));
   p.appendChild(c);
