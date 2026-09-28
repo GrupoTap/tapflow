@@ -15138,7 +15138,8 @@ function irPara(v){
   if (v === 'finrsv') return pintarReservas();
   if (v === 'fincat') return pintarCategorias();
   if (v === 'finre') return pintarContasReceber();
-  if (v === 'finp' || v === 'finpg' || v === 'finrl') return pintarFinBreve(v);
+  if (v === 'finpg') return pintarContasPagar();
+  if (v === 'finp' || v === 'finrl') return pintarFinBreve(v);
   return pintar();
 }
 
@@ -16342,6 +16343,7 @@ const PLACEHOLDER_BUSCA = {
   ffor:'Buscar fornecedor, CNPJ ou CPF…',
   finb:'Buscar conta ou banco…',
   finre:'Buscar cliente, descrição, nota ou OS…',
+  finpg:'Buscar fornecedor, descrição, nota ou OS…',
 };
 /** Multi-termo E: cada palavra digitada tem que aparecer no texto da linha.
  *  (`norm` já existe mais acima, no seletor de catálogo — é a mesma função.) */
@@ -17129,7 +17131,7 @@ function pintarRHBreve(v){
 // ════════════════════════════════════════════════════════════════════════════
 function pintarFinBreve(v){
   const board = document.getElementById('board');
-  const t = { finp:'Painel', finpg:'Contas a Pagar', finrl:'Relatórios' }[v] || v;
+  const t = { finp:'Painel', finrl:'Relatórios' }[v] || v;
   board.innerHTML = '<div class="tela"><div class="telaCab"><h2>' + t + ' <span class="tag">em breve</span></h2>'
     + '<p>O lugar está reservado no menu. A tela de verdade vem num passo seguinte.</p></div></div>';
 }
@@ -17520,9 +17522,9 @@ function modalSubcategoria(g, s){
 // Duas etapas: "a faturar" (lançamento inicial, vencimento é só estimativa) e
 // "faturado" (depois de preparar a nota — item 7 — ou, por ora, digitando o
 // número na mão aqui mesmo). Faturar recalcula o vencimento: data da nota +
-// prazo do cliente (tf_fin_faturar_titulo já faz essa conta). Baixa (item 11)
-// e anulação (item 12) ainda não têm tela — vêm depois, junto com Contas a
-// Pagar, que usa a mesma tabela fin_titulos.
+// prazo do cliente (tf_fin_faturar_titulo já faz essa conta). Anulação (item
+// 12) adiantada nesta tela. Baixa (item 11) ainda não tem tela — vem depois,
+// junto com Contas a Pagar (mesma tabela fin_titulos, tipo='p').
 // ════════════════════════════════════════════════════════════════════════════
 let FINRE = { lista:null };
 const FORMA_PREVISTA_FIN = ['PIX', 'Boleto', 'Transferência / depósito', 'Cartão de débito', 'Cartão de crédito', 'Dinheiro'];
@@ -17706,6 +17708,178 @@ function modalAnularTitulo(t){
         try{
           await rpc('tf_fin_anular_titulo', { p_titulo_id: t.id, p_motivo: motivo });
           fecharModal(); toast('Título anulado.', 'ok'); await finreCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CONTAS A PAGAR — item 8 do módulo Financeiro (Fase 1)
+// Mesma tabela fin_titulos (tipo='p'), sem a etapa de faturar/NFS-e do Contas
+// a Receber — o lançamento já nasce pronto. Categoria (grupo de despesa) é
+// obrigatória e escolhida na hora, diferente de Receber (que só tem o grupo
+// Recebimentos). Editar (item 12) liberado enquanto não houver baixa
+// registrada — hoje ainda não existe baixa nessa tela (item 11), então vale
+// pra qualquer título não anulado; quando a baixa for ligada, o próprio banco
+// passa a bloquear a edição de título já baixado.
+// ════════════════════════════════════════════════════════════════════════════
+let FINPG = { lista:null };
+
+async function pintarContasPagar(){
+  visao = 'finpg';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Contas a Pagar</h2>'
+    + '<p>Título errado se anula, com motivo; título ainda sem baixa pode ser editado direto.</p></div>'
+    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="finpgNovo">+ Nova conta a pagar</button></div>'
+    + '<div class="lista" id="finpgLista"><p class="nota">Carregando…</p></div></div>';
+  document.getElementById('finpgNovo').addEventListener('click', () => modalTituloPagar());
+  await finpgCarregar();
+}
+async function finpgCarregar(){
+  const el = document.getElementById('finpgLista'); if (!el) return;
+  try{ FINPG.lista = await rpc('tf_fin_titulos_pagar_listar', {}); }
+  catch(e){
+    el.innerHTML = '<div class="vazio2"><b>Não consegui abrir as contas a pagar</b><p></p>'
+      + '<button class="btn" type="button" id="finpgDeNovo">Tentar de novo</button></div>';
+    el.querySelector('p').textContent = e.message;
+    document.getElementById('finpgDeNovo').addEventListener('click', finpgCarregar);
+    return;
+  }
+  finpgDesenhar();
+}
+function finpgDesenhar(){
+  const el = document.getElementById('finpgLista'); if (!el) return;
+  const q = BUSCA.finpg || '';
+  const L = (FINPG.lista || []).filter(t => casa([t.fornecedor_nome, t.descricao, t.nf_numero, t.os_codigo, t.grupo_nome, t.subcategoria_nome].join(' '), q));
+  if (!L.length){
+    el.innerHTML = '<p class="nota" style="padding:12px">Nenhuma conta a pagar ainda' + (q ? ' com essa busca' : '') + '.</p>';
+    return;
+  }
+  el.innerHTML = '<div class="ccLin cab"><span>Vencimento</span><span>Fornecedor</span><span>Descrição</span>'
+    + '<span class="n">Valor</span><span></span><span></span></div>'
+    + L.map(t => {
+        const editavel = !t.anulado && Number(t.saldo) === Number(t.valor);
+        return '<div class="ccLin' + (t.anulado ? ' riscada' : '') + '"><span>' + esc(dataBR(t.vencimento)) + '</span>'
+          + '<span class="ccNome">' + esc(t.fornecedor_nome || '—') + '</span>'
+          + '<span class="ccDesc">' + esc(t.descricao) + (t.os_codigo ? ' <small style="color:var(--ink-3)">· ' + esc(t.os_codigo) + '</small>' : '')
+            + (t.anulado && t.anulado_motivo ? ' <small style="color:var(--ink-3)">— anulado: ' + esc(t.anulado_motivo) + '</small>' : '') + '</span>'
+          + '<span class="n v">' + esc(BRL(t.valor)) + '</span>'
+          + '<span>' + (t.grupo_nome ? '<span class="chip">' + esc(t.grupo_nome) + (t.subcategoria_nome ? ' / ' + esc(t.subcategoria_nome) : '') + '</span>' : '') + '</span>'
+          + '<span class="a">' + (t.anulado ? '' :
+              (editavel ? '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editar="' + esc(t.id) + '">Editar</button> ' : '')
+              + '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-anular="' + esc(t.id) + '">Anular</button>')
+            + '</span></div>';
+      }).join('');
+  el.querySelectorAll('[data-editar]').forEach(b => b.addEventListener('click', () => {
+    const t = (FINPG.lista || []).find(x => x.id === b.dataset.editar);
+    if (t) modalTituloPagar(t);
+  }));
+  el.querySelectorAll('[data-anular]').forEach(b => b.addEventListener('click', () => {
+    const t = (FINPG.lista || []).find(x => x.id === b.dataset.anular);
+    if (t) modalAnularTituloPagar(t);
+  }));
+}
+REPINTA.finpg = finpgDesenhar;
+
+/** Sem parâmetro `t`: lançamento novo. Com `t`: edita o título existente
+ * (só chega aqui quando ainda não tem baixa — finpgDesenhar já filtra). */
+async function modalTituloPagar(t){
+  const editando = !!t;
+  let grupos = [];
+  try{ grupos = (await rpc('tf_fin_grupos_listar', {})).filter(g => g.tipo === 'p'); } // banco guarda 'p'/'r'
+  catch(e){ toast('Não consegui carregar as categorias: ' + e.message, 'err'); return; }
+  if (!grupos.length){ toast('Nenhuma categoria de despesa cadastrada — confira a tela Categorias.', 'err'); return; }
+
+  let fornecedores = [];
+  try{ fornecedores = await rpc('tf_fin_fornecedores_listar', {}); }catch(e){ /* segue vazio, aviso abaixo */ }
+
+  const grupoAtualId = editando ? t.grupo_id : '';
+
+  abrirModal(editando ? 'Editar — ' + t.descricao : 'Nova conta a pagar',
+      '<div class="campo"><label for="tpForn">Fornecedor</label><select id="tpForn">'
+    +   '<option value="">Selecione…</option>'
+    +   fornecedores.map(f => '<option value="' + esc(f.id) + '"' + (editando && f.id === t.fornecedor_id ? ' selected' : '') + '>' + esc(f.nome) + '</option>').join('')
+    + '</select>'
+    + (fornecedores.length ? '' : '<p class="nota">Nenhum fornecedor cadastrado ainda — cadastre em Fornecedores.</p>')
+    + '</div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="tpGrupo">Categoria</label><select id="tpGrupo">'
+    +    '<option value="">Selecione…</option>'
+    +    grupos.map(g => '<option value="' + esc(g.id) + '"' + (g.id === grupoAtualId ? ' selected' : '') + '>' + esc(g.nome) + '</option>').join('')
+    +  '</select></div>'
+    +  '<div class="campo"><label for="tpSub">Subcategoria (opcional)</label><select id="tpSub"><option value="">—</option></select></div>'
+    + '</div>'
+    + '<div class="campo"><label for="tpDesc">Descrição</label><input id="tpDesc" type="text" value="' + (editando ? esc(t.descricao) : '') + '" autocomplete="off"></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="tpValor">Valor</label><input id="tpValor" type="number" step="0.01" value="' + (editando ? Number(t.valor) : 0) + '"></div>'
+    +  '<div class="campo"><label for="tpForma">Forma prevista (opcional)</label><select id="tpForma">'
+    +    '<option value="">—</option>'
+    +    FORMA_PREVISTA_FIN.map(f => '<option value="' + esc(f) + '"' + (editando && t.forma_prevista === f ? ' selected' : '') + '>' + esc(f) + '</option>').join('')
+    +  '</select></div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="tpComp">Competência (mês da despesa)</label><input id="tpComp" type="month" value="' + (editando ? String(t.competencia).slice(0, 7) : '') + '"></div>'
+    +  '<div class="campo"><label for="tpVenc">Vencimento</label><input id="tpVenc" type="date" value="' + (editando ? t.vencimento : '') + '"></div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="tpNf">Nº da nota fiscal (opcional)</label><input id="tpNf" type="text" value="' + (editando ? esc(t.nf_numero || '') : '') + '" autocomplete="off"></div>'
+    +  '<div class="campo"><label for="tpOs">OS (opcional)</label><input id="tpOs" type="text" placeholder="Ex.: OS-26043" value="' + (editando ? esc(t.os_codigo || '') : '') + '" autocomplete="off"></div></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label: editando ? 'Salvar' : 'Lançar', pri:true, onClick: async () => {
+        const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+        const fornecedorId = v('tpForn');
+        if (!fornecedorId){ toast('Selecione o fornecedor.', 'err'); return; }
+        const grupoId = v('tpGrupo');
+        if (!grupoId){ toast('Selecione a categoria.', 'err'); return; }
+        const valor = Number(v('tpValor'));
+        if (!valor || valor <= 0){ toast('Informe um valor maior que zero.', 'err'); return; }
+        const desc = v('tpDesc');
+        if (!desc){ toast('A descrição é obrigatória.', 'err'); return; }
+        const comp = v('tpComp');
+        if (!comp){ toast('Informe a competência.', 'err'); return; }
+        const venc = v('tpVenc');
+        if (!venc){ toast('Informe o vencimento.', 'err'); return; }
+        const campos = {
+          p_fornecedor_id: fornecedorId, p_grupo_id: grupoId, p_descricao: desc, p_valor: valor,
+          p_competencia: comp + '-01', p_vencimento: venc,
+          p_subcategoria_id: v('tpSub') || null, p_forma_prevista: v('tpForma') || null,
+          p_os_codigo: v('tpOs') || null, p_nf_numero: v('tpNf') || null
+        };
+        try{
+          if (editando){
+            await rpc('tf_fin_titulo_pagar_editar', Object.assign({ p_titulo_id: t.id }, campos));
+            fecharModal(); toast('Conta a pagar atualizada.', 'ok'); await finpgCarregar();
+          } else {
+            await rpc('tf_fin_titulo_pagar_criar', campos);
+            fecharModal(); toast('Conta a pagar lançada.', 'ok'); await finpgCarregar();
+          }
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+
+  // Subcategoria depende da categoria escolhida — repopula ao trocar de grupo.
+  const selGrupo = document.getElementById('tpGrupo');
+  const selSub = document.getElementById('tpSub');
+  const repopularSub = (grupoId, subSelecionada) => {
+    const g = grupos.find(x => x.id === grupoId);
+    const subs = (g && g.subcategorias) || [];
+    selSub.innerHTML = '<option value="">—</option>' + subs.map(s =>
+      '<option value="' + esc(s.id) + '"' + (s.id === subSelecionada ? ' selected' : '') + '>' + esc(s.nome) + '</option>').join('');
+  };
+  selGrupo.addEventListener('change', () => repopularSub(selGrupo.value, null));
+  if (grupoAtualId) repopularSub(grupoAtualId, editando ? t.subcategoria_id : null);
+}
+
+/** Título errado se anula, nunca se edita a ponto de mudar fornecedor/valor
+ * por cima de erro grave — pra isso, anula este e lança um novo, certo. */
+function modalAnularTituloPagar(t){
+  abrirModal('Anular — ' + t.descricao,
+      '<p class="nota" style="margin-top:0">O título não é apagado, fica marcado como anulado com o motivo. '
+    + 'Se foi erro de valor, fornecedor ou qualquer outro dado, lance uma conta nova depois de anular esta.</p>'
+    + '<div class="campo"><label for="tpaMot">Motivo</label><input id="tpaMot" type="text" placeholder="Ex.: valor digitado errado" autocomplete="off"></div>',
+    [{ label:'Voltar', onClick: fecharModal },
+     { label:'Anular', onClick: async () => {
+        const motivo = (document.getElementById('tpaMot') || {}).value.trim();
+        if (!motivo){ toast('Informe o motivo da anulação.', 'err'); return; }
+        try{
+          await rpc('tf_fin_anular_titulo', { p_titulo_id: t.id, p_motivo: motivo });
+          fecharModal(); toast('Título anulado.', 'ok'); await finpgCarregar();
         }catch(e){ toast(e.message, 'err'); }
      }}]);
 }
