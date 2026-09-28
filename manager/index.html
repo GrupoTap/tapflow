@@ -17331,44 +17331,146 @@ async function finpCarregar(){
   }
   finpDesenhar(d);
 }
+/** Anel de progresso (SVG) — "X% do previsto". Não deixa passar de 100% no
+ * desenho (satura visualmente), mas o número mostrado é o real. */
+function finpAnel(pct, cor){
+  const pctDesenho = Math.max(0, Math.min(100, pct));
+  const r = 42, c = 2 * Math.PI * r;
+  const dash = (pctDesenho / 100) * c;
+  return '<svg viewBox="0 0 100 100" style="width:112px;height:112px;flex:none">'
+    + '<circle cx="50" cy="50" r="' + r + '" fill="none" stroke="var(--rule)" stroke-width="10"></circle>'
+    + '<circle cx="50" cy="50" r="' + r + '" fill="none" stroke="' + cor + '" stroke-width="10" stroke-linecap="round" '
+    +   'stroke-dasharray="' + dash.toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 50 50)"></circle>'
+    + '<text x="50" y="46" text-anchor="middle" font-size="19" font-weight="700" fill="' + cor + '">' + Math.round(pct) + '%</text>'
+    + '<text x="50" y="61" text-anchor="middle" font-size="7.5" fill="var(--ink-3)">do previsto</text>'
+    + '</svg>';
+}
+/** Uma linha do "mês anterior × atual": duas barrinhas finas, mais a
+ * variação percentual com seta. Escala é relativa ao maior dos dois valores
+ * DESSA linha — cada categoria lê bem, independente da escala das outras. */
+function finpCompLinha(c, cor){
+  const atual = Number(c.atual) || 0, anterior = Number(c.anterior) || 0;
+  const semNada = !atual && !anterior;
+  const maxV = Math.max(atual, anterior, 1);
+  const pctAtual = Math.min(100, (atual / maxV) * 100);
+  const pctAnterior = Math.min(100, (anterior / maxV) * 100);
+  const subiu = atual >= anterior;
+  const variacao = anterior > 0 ? Math.abs((atual - anterior) / anterior * 100) : (atual > 0 ? 100 : 0);
+  const rotuloVar = semNada ? 'sem lançamento' : (variacao.toFixed(0) + '% ' + (subiu ? '↑' : '↓'));
+  return '<div style="margin-bottom:9px">'
+    + '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'
+    +   '<span>' + esc(c.rotulo) + '</span>'
+    +   '<span style="color:var(--ink-3)">' + esc(rotuloVar) + '</span>'
+    + '</div>'
+    + '<div style="height:6px;border-radius:3px;background:var(--rule-2);overflow:hidden;margin-bottom:2px">'
+    +   '<div style="width:' + pctAtual.toFixed(1) + '%;height:100%;background:' + cor + '"></div></div>'
+    + '<div style="height:6px;border-radius:3px;background:var(--rule-2);overflow:hidden">'
+    +   '<div style="width:' + pctAnterior.toFixed(1) + '%;height:100%;background:var(--ink-3);opacity:.45"></div></div>'
+    + '</div>';
+}
+/** Card "Receitas do mês" / "Despesas do mês": anel + valores + comparativo
+ * com o mês anterior, por categoria. */
+function finpCardMes(titulo, cor, realizado, previsto, comparativos){
+  const pct = previsto > 0 ? (realizado / previsto * 100) : (realizado > 0 ? 100 : 0);
+  const diferenca = previsto - realizado;
+  const estourou = titulo === 'Despesas' && diferenca < 0;
+  const corDif = estourou ? 'var(--crit)' : cor;
+  return '<div class="painel" style="padding:14px">'
+    + '<h3 style="margin-top:0">' + esc(titulo) + ' do mês</h3>'
+    + '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:6px">'
+    +   finpAnel(pct, cor)
+    +   '<div>'
+    +     '<div style="font-size:21px;font-weight:700;color:' + cor + '">' + esc(BRL(realizado)) + '</div>'
+    +     '<div style="font-size:12.5px;color:var(--ink-3);margin-top:5px">Previsto: <b style="color:var(--ink-2)">' + esc(BRL(previsto)) + '</b></div>'
+    +     '<div style="font-size:12.5px;color:var(--ink-3)">Diferença: <b style="color:' + corDif + '">' + esc(BRL(Math.abs(diferenca))) + (estourou ? ' acima' : '') + '</b></div>'
+    +   '</div>'
+    + '</div>'
+    + (!comparativos.length ? ''
+        : '<p class="nota" style="margin:10px 0 6px;font-weight:600;color:var(--ink-2)">Mês anterior × atual</p>'
+          + comparativos.map(c => finpCompLinha(c, cor)).join(''))
+    + '</div>';
+}
+/** Gráfico de fluxo de caixa: barras de recebe (acima da linha de base) e
+ * paga (abaixo), mais a linha de saldo acumulado — tudo na mesma escala em
+ * R$ (nunca dois eixos). Meses já realizados entram mais opacos que os
+ * previstos, pra diferenciar sem depender só da cor. */
+function finpGraficoFluxo(pontos){
+  if (!pontos.length) return '<p class="nota" style="margin:0">Sem dados suficientes ainda.</p>';
+  const W = 720, H = 230, padTop = 12, padBottom = 30, padSide = 6;
+  const n = pontos.length;
+  const bandW = (W - padSide * 2) / n;
+  const plotH = H - padTop - padBottom;
+  const baseline = padTop + plotH / 2;
+  const maxAbs = Math.max(1, ...pontos.map(p =>
+    Math.max(Number(p.entra) || 0, Number(p.sai) || 0, Math.abs(Number(p.saldo_acumulado) || 0))));
+  const escala = (plotH / 2) / maxAbs;
+
+  let barras = '', marcas = '', rotulos = '';
+  const pts = [];
+  pontos.forEach((p, i) => {
+    const x0 = padSide + i * bandW;
+    const entra = Number(p.entra) || 0, sai = Number(p.sai) || 0, saldo = Number(p.saldo_acumulado) || 0;
+    const op = p.realizado ? '1' : '.65';
+    const hEntra = entra * escala, hSai = sai * escala;
+    const mesTxt = esc(finpMesBR(p.mes));
+    barras += '<rect x="' + (x0 + bandW * 0.14).toFixed(1) + '" y="' + (baseline - hEntra).toFixed(1)
+      + '" width="' + (bandW * 0.32).toFixed(1) + '" height="' + hEntra.toFixed(1) + '" rx="2" fill="var(--ok)" opacity="' + op + '">'
+      + '<title>' + mesTxt + ' · Recebe ' + esc(BRL(entra)) + '</title></rect>';
+    barras += '<rect x="' + (x0 + bandW * 0.54).toFixed(1) + '" y="' + baseline.toFixed(1)
+      + '" width="' + (bandW * 0.32).toFixed(1) + '" height="' + hSai.toFixed(1) + '" rx="2" fill="var(--warn)" opacity="' + op + '">'
+      + '<title>' + mesTxt + ' · Paga ' + esc(BRL(sai)) + '</title></rect>';
+    const xMeio = x0 + bandW * 0.5, yLinha = baseline - saldo * escala;
+    pts.push(xMeio.toFixed(1) + ',' + yLinha.toFixed(1));
+    marcas += '<circle cx="' + xMeio.toFixed(1) + '" cy="' + yLinha.toFixed(1) + '" r="3" fill="var(--accent)">'
+      + '<title>' + mesTxt + ' · Saldo ' + esc(BRL(saldo)) + '</title></circle>';
+    rotulos += '<text x="' + xMeio.toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="9.5" fill="var(--ink-3)">' + mesTxt + '</text>';
+  });
+  const linha = '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--accent)" stroke-width="2"></polyline>';
+
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block">'
+    + '<line x1="' + padSide + '" y1="' + baseline.toFixed(1) + '" x2="' + (W - padSide) + '" y2="' + baseline.toFixed(1) + '" stroke="var(--rule)" stroke-width="1"></line>'
+    + barras + linha + marcas + rotulos
+    + '</svg>'
+    + '<div style="display:flex;gap:16px;justify-content:center;margin-top:8px;font-size:12px;color:var(--ink-2)">'
+    +   '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--ok);margin-right:4px;vertical-align:-1px"></span>Recebe</span>'
+    +   '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--warn);margin-right:4px;vertical-align:-1px"></span>Paga</span>'
+    +   '<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent);margin-right:4px;vertical-align:-1px"></span>Saldo acumulado</span>'
+    + '</div>';
+}
 function finpDesenhar(d){
   const el = document.getElementById('finpCorpo'); if (!el) return;
   const pend = d.pendencias || [];
-  const grupos = d.despesas_por_grupo || [];
-  const fluxo = d.fluxo_caixa || [];
+  const fluxoGrafico = d.fluxo_caixa_grafico || [];
+  const comp = d.comparativo_mes || [];
+  const compReceita = comp.filter(c => c.tipo === 'r');
+  const compDespesa = comp.filter(c => c.tipo === 'p');
+  const vencidos = pend.filter(p => p.vencido).length;
+  const vencendo = pend.length - vencidos;
 
   const blocoPendencias = '<div class="painel" style="margin-bottom:14px;padding:14px">'
-    + '<h3 style="margin-top:0">Precisa de ação' + (pend.length ? ' <span class="chip">' + pend.length + '</span>' : '') + '</h3>'
+    + '<h3 style="margin-top:0">Precisa de ação'
+    +   (vencidos ? ' <span class="chip" style="background:var(--crit-soft);color:var(--crit)">' + vencidos + ' vencido' + (vencidos > 1 ? 's' : '') + '</span>' : '')
+    +   (vencendo ? ' <span class="chip" style="background:var(--warn-soft);color:var(--warn)">' + vencendo + ' vencendo</span>' : '')
+    + '</h3>'
     + (!pend.length ? '<p class="nota" style="margin:0">Nada vencido ou vencendo nos próximos 7 dias.</p>'
-        : '<div class="ccLin cab"><span>Vencimento</span><span>Quem</span><span>Descrição</span><span class="n">Saldo</span></div>'
-          + pend.map(p => '<div class="ccLin">'
-              + '<span class="ccData">' + esc(dataBR(p.vencimento)) + (p.vencido ? ' <small style="color:#c0392b">vencido</small>' : '') + '</span>'
-              + '<span class="ccNome">' + esc(p.quem || '—') + '</span>'
-              + '<span class="ccDesc">' + esc(p.descricao) + ' <small style="color:var(--ink-3)">· ' + (p.tipo === 'p' ? 'a pagar' : 'a receber') + '</small></span>'
-              + '<span class="n v">' + esc(BRL(p.saldo)) + '</span></div>').join('')) + '</div>';
+        : pend.map(p => '<div class="ccLin" style="border-left:3px solid ' + (p.vencido ? 'var(--crit)' : 'var(--warn)') + ';padding-left:8px">'
+            + '<span class="ccData">' + esc(dataBR(p.vencimento)) + (p.vencido ? ' <small style="color:var(--crit)">vencido</small>' : '') + '</span>'
+            + '<span class="ccNome">' + esc(p.quem || '—') + '</span>'
+            + '<span class="ccDesc">' + esc(p.descricao) + ' <small style="color:var(--ink-3)">· ' + (p.tipo === 'p' ? 'a pagar' : 'a receber') + '</small></span>'
+            + '<span class="n v">' + esc(BRL(p.saldo)) + '</span></div>').join('')) + '</div>';
 
-  const blocoPrevisto = '<div class="painel" style="margin-bottom:14px;padding:14px">'
-    + '<h3 style="margin-top:0">Previsto × realizado do mês</h3>'
-    + '<div class="ccLin cab"><span></span><span class="n">Previsto</span><span class="n">Realizado</span></div>'
-    + '<div class="ccLin"><span>Despesas</span><span class="n v">' + esc(BRL(d.previsto_despesa)) + '</span><span class="n v">' + esc(BRL(d.realizado_despesa)) + '</span></div>'
-    + '<div class="ccLin"><span>Receitas</span><span class="n v">' + esc(BRL(d.previsto_receita)) + '</span><span class="n v">' + esc(BRL(d.realizado_receita)) + '</span></div>'
+  const blocoFluxo = '<div class="painel" style="margin-bottom:14px;padding:14px">'
+    + '<h3 style="margin-top:0">Fluxo de caixa</h3>'
+    + '<p class="nota" style="margin:-4px 0 10px">Últimos 5 meses realizados, o mês atual, e os 5 seguintes previstos.</p>'
+    + finpGraficoFluxo(fluxoGrafico)
     + '</div>';
 
-  const blocoGrupo = '<div class="painel" style="margin-bottom:14px;padding:14px">'
-    + '<h3 style="margin-top:0">Despesas pagas no mês, por categoria</h3>'
-    + (!grupos.length ? '<p class="nota" style="margin:0">Nenhuma baixa de despesa este mês ainda.</p>'
-        : grupos.map(g => '<div class="ccLin"><span>' + esc(g.grupo_nome || '—') + '</span><span class="n v">' + esc(BRL(g.total)) + '</span></div>').join('')) + '</div>';
+  const blocoCards = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">'
+    + finpCardMes('Receitas', 'var(--ok)', d.realizado_receita, d.previsto_receita, compReceita)
+    + finpCardMes('Despesas', 'var(--warn)', d.realizado_despesa, d.previsto_despesa, compDespesa)
+    + '</div>';
 
-  const blocoFluxo = '<div class="painel" style="padding:14px">'
-    + '<h3 style="margin-top:0">Fluxo de caixa previsto</h3>'
-    + (!fluxo.length ? '<p class="nota" style="margin:0">Sem títulos em aberto à frente.</p>'
-        : '<div class="ccLin cab"><span>Mês</span><span class="n">Entra</span><span class="n">Sai</span><span class="n">Saldo</span></div>'
-          + fluxo.map(f => '<div class="ccLin"><span>' + esc(finpMesBR(f.mes)) + '</span>'
-              + '<span class="n v">' + esc(BRL(f.entra)) + '</span>'
-              + '<span class="n v">' + esc(BRL(f.sai)) + '</span>'
-              + '<span class="n v">' + esc(BRL(f.saldo_acumulado)) + '</span></div>').join('')) + '</div>';
-
-  el.innerHTML = blocoPendencias + blocoPrevisto + blocoGrupo + blocoFluxo;
+  el.innerHTML = blocoPendencias + blocoFluxo + blocoCards;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
