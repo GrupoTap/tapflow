@@ -17563,16 +17563,24 @@ function finreDesenhar(){
         const etiqueta = t.anulado ? 'Anulado' : (t.etapa === 'faturado' ? 'Faturado' : 'A faturar');
         return '<div class="ccLin' + (t.anulado ? ' riscada' : '') + '"><span>' + esc(dataBR(t.vencimento)) + '</span>'
           + '<span>' + esc(t.cliente_nome || '—') + '</span>'
-          + '<span>' + esc(t.descricao) + (t.os_codigo ? ' <small style="color:var(--ink-3)">· ' + esc(t.os_codigo) + '</small>' : '') + '</span>'
+          + '<span>' + esc(t.descricao) + (t.os_codigo ? ' <small style="color:var(--ink-3)">· ' + esc(t.os_codigo) + '</small>' : '')
+            + (t.anulado && t.anulado_motivo ? ' <small style="color:var(--ink-3)">— anulado: ' + esc(t.anulado_motivo) + '</small>' : '') + '</span>'
           + '<span class="n">' + esc(BRL(t.valor)) + '</span>'
           + '<span><span class="chip">' + esc(etiqueta) + '</span></span>'
-          + '<span class="a">' + (!t.anulado && t.etapa === 'a_faturar'
-              ? '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-faturar="' + esc(t.id) + '">Faturar</button>'
-              : '') + '</span></div>';
+          + '<span class="a">' + (t.anulado ? '' :
+              (t.etapa === 'a_faturar'
+                ? '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-faturar="' + esc(t.id) + '">Faturar</button> '
+                : '')
+              + '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-anular="' + esc(t.id) + '">Anular</button>')
+            + '</span></div>';
       }).join('');
   el.querySelectorAll('[data-faturar]').forEach(b => b.addEventListener('click', () => {
     const t = (FINRE.lista || []).find(x => x.id === b.dataset.faturar);
     if (t) modalFaturarTitulo(t);
+  }));
+  el.querySelectorAll('[data-anular]').forEach(b => b.addEventListener('click', () => {
+    const t = (FINRE.lista || []).find(x => x.id === b.dataset.anular);
+    if (t) modalAnularTitulo(t);
   }));
 }
 REPINTA.finre = finreDesenhar;
@@ -17680,6 +17688,24 @@ function modalFaturarTitulo(t){
           await rpc('tf_fin_faturar_titulo', { p_titulo_id: t.id, p_nf_numero: numero,
             p_nf_data: v('tfData'), p_nf_valor: v('tfValor') ? Number(v('tfValor')) : null });
           fecharModal(); toast('Título faturado.', 'ok'); await finreCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+}
+
+/** Título errado se anula, nunca se edita ou apaga — fica no histórico com o
+ * motivo. Pra corrigir de verdade: anula este e lança um novo, certo. */
+function modalAnularTitulo(t){
+  abrirModal('Anular — ' + t.descricao,
+      '<p class="nota" style="margin-top:0">O título não é apagado, fica marcado como anulado com o motivo. '
+    + 'Se foi erro de valor, cliente ou qualquer outro dado, lance uma conta nova depois de anular esta.</p>'
+    + '<div class="campo"><label for="taMot">Motivo</label><input id="taMot" type="text" placeholder="Ex.: valor digitado errado" autocomplete="off"></div>',
+    [{ label:'Voltar', onClick: fecharModal },
+     { label:'Anular', onClick: async () => {
+        const motivo = (document.getElementById('taMot') || {}).value.trim();
+        if (!motivo){ toast('Informe o motivo da anulação.', 'err'); return; }
+        try{
+          await rpc('tf_fin_anular_titulo', { p_titulo_id: t.id, p_motivo: motivo });
+          fecharModal(); toast('Título anulado.', 'ok'); await finreCarregar();
         }catch(e){ toast(e.message, 'err'); }
      }}]);
 }
