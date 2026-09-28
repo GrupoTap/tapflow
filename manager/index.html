@@ -17422,13 +17422,15 @@ function catDesenhar(){
       + '<h3 style="margin-top:0">' + esc(g.nome)
       +   ' <small style="color:var(--ink-3);font-weight:normal">(' + (despesa ? 'despesa' : 'receita') + ')</small></h3>'
       + (subs.length
-          ? '<div class="ccLin cab"><span>Subcategoria</span><span class="n">' + (despesa ? 'Orçamento/mês' : '') + '</span></div>'
+          ? '<div class="ccLin cab"><span>Subcategoria</span><span class="n">' + (despesa ? 'Orçamento/mês' : '') + '</span><span></span></div>'
             + subs.map(s => '<div class="ccLin"><span>' + esc(s.nome) + '</span>'
               + '<span class="n">' + (despesa
                   ? '<input type="number" step="0.01" class="catOrc" data-sub="' + esc(s.id)
                     + '" value="' + (s.orcamento_mensal != null ? Number(s.orcamento_mensal) : '')
                     + '" placeholder="—" style="width:110px;text-align:right">'
-                  : '') + '</span></div>').join('')
+                  : '') + '</span>'
+              + '<span class="a"><button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editarsub="'
+                + esc(s.id) + '" data-grupo="' + esc(g.id) + '">Editar</button></span></div>').join('')
           : '<p class="nota" style="padding:6px 0">Nenhuma subcategoria ainda.</p>')
       + '<div style="display:flex;gap:8px;margin-top:10px">'
       +   '<input type="text" placeholder="Nova subcategoria…" class="catNovoNome" data-grupo="' + esc(g.id) + '" style="flex:1">'
@@ -17453,6 +17455,36 @@ function catDesenhar(){
       toast('Subcategoria adicionada.', 'ok'); await catCarregar();
     }catch(e){ toast(e.message, 'err'); }
   })));
+
+  el.querySelectorAll('[data-editarsub]').forEach(b => b.addEventListener('click', () => {
+    const g = G.find(x => x.id === b.dataset.grupo);
+    const s = g && (g.subcategorias || []).find(x => x.id === b.dataset.editarsub);
+    if (s) modalSubcategoria(g, s);
+  }));
+}
+
+function modalSubcategoria(g, s){
+  const despesa = g.tipo !== 'receita';
+  abrirModal('Editar subcategoria',
+      '<div class="campo"><label for="csN">Nome</label><input id="csN" type="text" value="'
+    +   esc(s.nome) + '" autocomplete="off"></div>'
+    + (despesa
+        ? '<div class="campo"><label for="csO">Orçamento mensal</label><input id="csO" type="number" step="0.01" value="'
+          + (s.orcamento_mensal != null ? Number(s.orcamento_mensal) : '') + '" placeholder="—"></div>'
+        : ''),
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Salvar', pri:true, onClick: async () => {
+        const nome = (document.getElementById('csN') || {}).value.trim();
+        if (!nome){ toast('O nome da subcategoria é obrigatório.', 'err'); return; }
+        const oEl = document.getElementById('csO');
+        const orcamento = despesa
+          ? (oEl.value === '' ? null : Number(oEl.value))
+          : (s.orcamento_mensal != null ? Number(s.orcamento_mensal) : null);
+        try{
+          await rpc('tf_fin_subcategoria_gravar', { p_id: s.id, p_grupo_id: null, p_nome: nome, p_orcamento_mensal: orcamento });
+          fecharModal(); toast('Subcategoria salva.', 'ok'); await catCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
