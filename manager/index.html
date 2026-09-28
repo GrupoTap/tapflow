@@ -17568,17 +17568,20 @@ function finreDesenhar(){
           + '<span class="ccDesc">' + esc(t.descricao) + (t.os_codigo ? ' <small style="color:var(--ink-3)">· ' + esc(t.os_codigo) + '</small>' : '')
             + (t.anulado && t.anulado_motivo ? ' <small style="color:var(--ink-3)">— anulado: ' + esc(t.anulado_motivo) + '</small>' : '') + '</span>'
           + '<span class="n v">' + esc(BRL(t.valor)) + '</span>'
-          + '<span><span class="chip">' + esc(etiqueta) + '</span></span>'
+          + '<span><span class="chip">' + esc(etiqueta) + '</span>'
+            + (t.nf_pdf_url ? ' <a href="' + esc(t.nf_pdf_url) + '" target="_blank" rel="noopener" style="font-size:11px">PDF</a>' : '')
+            + (t.nf_xml_url ? ' <a href="' + esc(t.nf_xml_url) + '" target="_blank" rel="noopener" style="font-size:11px">XML</a>' : '')
+            + '</span>'
           + '<span class="a">' + (t.anulado ? '' :
               (t.etapa === 'a_faturar'
-                ? '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-faturar="' + esc(t.id) + '">Faturar</button> '
+                ? '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-faturar="' + esc(t.id) + '">Preparar nota</button> '
                 : '')
               + '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-anular="' + esc(t.id) + '">Anular</button>')
             + '</span></div>';
       }).join('');
   el.querySelectorAll('[data-faturar]').forEach(b => b.addEventListener('click', () => {
     const t = (FINRE.lista || []).find(x => x.id === b.dataset.faturar);
-    if (t) modalFaturarTitulo(t);
+    if (t) modalPrepararNota(t);
   }));
   el.querySelectorAll('[data-anular]').forEach(b => b.addEventListener('click', () => {
     const t = (FINRE.lista || []).find(x => x.id === b.dataset.anular);
@@ -17672,26 +17675,127 @@ async function modalTituloReceber(){
   });
 }
 
-function modalFaturarTitulo(t){
+/**
+ * Item 7 — Preparar Nota (NFS-e semiautomática). Primeiro mostra os dados
+ * prontos pra copiar na emissão (cliente, descrição, valor, código de
+ * serviço fixo 14.01.01 — mesmo código pra todo tipo de serviço da Engetap).
+ * Depois de emitir no Emissor Nacional, o Vinícius volta aqui: sobe o XML
+ * (lê sozinho número/data/valor — padrão nacional da NFS-e, xmlns
+ * sped.fazenda.gov.br/nfse) e o PDF (fica guardado pra mandar pro cliente
+ * depois). Nº/Data/Valor continuam editáveis pra conferência antes de
+ * faturar, como pedido no item 7.
+ */
+function lerXmlNFSe(texto){
+  const doc = new DOMParser().parseFromString(texto, 'application/xml');
+  if (doc.querySelector('parsererror'))
+    throw new Error('Não consegui ler esse arquivo como XML — confere se é o certo.');
+  const pegar = tag => { const el = doc.getElementsByTagName(tag)[0]; return el ? el.textContent.trim() : ''; };
+  const numero = pegar('nNFSe');
+  const dhEmi = pegar('dhProc') || pegar('dhEmi');
+  const data = dhEmi ? dhEmi.slice(0, 10) : '';
+  const valorTxt = pegar('vLiq') || pegar('vServ');
+  if (!numero || !data || !valorTxt)
+    throw new Error('Não achei número, data ou valor nesse XML — confere se é o arquivo certo, ou preenche à mão.');
+  return { numero, data, valor: Number(valorTxt) };
+}
+
+/** Mesmo endpoint do Drive que o subirArquivo() usa, mas sem registrar em
+ * fin_titulos exige p_os_id na tabela `anexos` — não dá pra usar aqui. */
+async function subirArquivoDrive(dataUrl, meta){
+  if (DEMO) return { url: 'https://drive.google.com/demo', file_id: 'demo' };
+  if (!driveLigado())
+    throw Object.assign(new Error('O Google Drive ainda não foi configurado — veja o Passo 8 do guia.'),
+                        { negocio: true });
+  const r = await fetch(PARAM.drive_url, {
+    method: 'POST', redirect: 'follow', signal: sinal(true),
+    body: JSON.stringify({
+      chave: PARAM.drive_chave, token: sessao.token,
+      client_uid: meta.client_uid, cliente: meta.cliente, os_numero: meta.os_numero,
+      categoria: meta.categoria, nome: meta.nome,
+      mime: meta.mime || 'application/octet-stream', base64: dataUrl
+    })
+  });
+  const j = await r.json().catch(() => null);
+  if (!j) throw new Error('O serviço de arquivos não respondeu como esperado.');
+  if (j.status !== 'ok')
+    throw Object.assign(new Error(j.mensagem || 'Falha ao gravar no Drive'),
+                        { negocio: j.codigo === 'CHAVE' || j.codigo === 'TOKEN' });
+  return j;
+}
+
+function modalPrepararNota(t){
   const hoje = new Date().toISOString().slice(0, 10);
-  abrirModal('Faturar — ' + t.descricao,
-      '<p class="nota" style="margin-top:0">O vencimento vai ser recalculado: data da nota + prazo do cliente.</p>'
+  let xmlUrl = null, pdfUrl = null;
+  abrirModal('Preparar nota — ' + t.descricao,
+      '<p class="nota" style="margin-top:0">Dados pra copiar na emissão, no Emissor Nacional da NFS-e:</p>'
+    + '<div class="campo"><label>Cliente</label><input type="text" value="' + esc(t.cliente_nome || '') + '" readonly></div>'
+    + '<div class="campo"><label>Descrição do serviço</label><input type="text" value="' + esc(t.descricao) + '" readonly></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label>Valor</label><input type="text" value="' + esc(BRL(t.valor)) + '" readonly></div>'
+    +  '<div class="campo"><label>Código de serviço (LC 116)</label><input type="text" value="14.01.01" readonly></div></div>'
+    + '<hr style="margin:14px 0;border:none;border-top:1px solid var(--linha)">'
+    + '<p class="nota">Depois de emitir, sobe aqui o XML (lê o número/data/valor sozinho) e o PDF (fica guardado pra mandar pro cliente):</p>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label class="btn" style="cursor:pointer;display:inline-block;text-align:center">Selecionar XML'
+    +     '<input type="file" id="tfXml" accept=".xml,text/xml,application/xml" hidden></label>'
+    +     '<p class="nota" id="tfXmlNome" style="margin:4px 0 0"></p></div>'
+    +  '<div class="campo"><label class="btn" style="cursor:pointer;display:inline-block;text-align:center">Selecionar PDF'
+    +     '<input type="file" id="tfPdf" accept="application/pdf" hidden></label>'
+    +     '<p class="nota" id="tfPdfNome" style="margin:4px 0 0"></p></div>'
+    + '</div>'
     + '<div class="campo"><label for="tfNum">Nº da nota fiscal</label><input id="tfNum" type="text" autocomplete="off"></div>'
     + '<div class="dupla">'
     +  '<div class="campo"><label for="tfData">Data da nota</label><input id="tfData" type="date" value="' + hoje + '"></div>'
     +  '<div class="campo"><label for="tfValor">Valor da nota (opcional)</label><input id="tfValor" type="number" step="0.01" value="' + Number(t.valor) + '"></div></div>',
     [{ label:'Cancelar', onClick: fecharModal },
      { label:'Faturar', pri:true, onClick: async () => {
-        const v = id => (document.getElementById(id) || {}).value.trim();
+        const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
         const numero = v('tfNum');
         if (!numero){ toast('Informe o número da nota.', 'err'); return; }
         if (!v('tfData')){ toast('Informe a data da nota.', 'err'); return; }
         try{
           await rpc('tf_fin_faturar_titulo', { p_titulo_id: t.id, p_nf_numero: numero,
-            p_nf_data: v('tfData'), p_nf_valor: v('tfValor') ? Number(v('tfValor')) : null });
+            p_nf_data: v('tfData'), p_nf_valor: v('tfValor') ? Number(v('tfValor')) : null,
+            p_nf_xml_url: xmlUrl, p_nf_pdf_url: pdfUrl });
           fecharModal(); toast('Título faturado.', 'ok'); await finreCarregar();
         }catch(e){ toast(e.message, 'err'); }
      }}]);
+
+  document.getElementById('tfXml').addEventListener('change', async ev => {
+    const f = ev.target.files[0]; if (!f) return;
+    const nomeEl = document.getElementById('tfXmlNome');
+    nomeEl.textContent = 'Lendo ' + f.name + '…';
+    try{
+      const texto = await f.text();
+      const lido = lerXmlNFSe(texto);
+      document.getElementById('tfNum').value = lido.numero;
+      document.getElementById('tfData').value = lido.data;
+      document.getElementById('tfValor').value = lido.valor;
+      nomeEl.textContent = 'Enviando ' + f.name + '…';
+      const dataUrl = await arquivoParaBase64(f);
+      const up = await subirArquivoDrive(dataUrl, {
+        client_uid: 'nfxml-' + t.id + '-' + Date.now(), cliente: t.cliente_nome || '',
+        os_numero: t.os_codigo || '', categoria: 'nfse_xml', nome: f.name, mime: 'text/xml' });
+      xmlUrl = up.url;
+      nomeEl.textContent = 'Lido e salvo: ' + f.name;
+      toast('XML lido — confira os campos antes de faturar.', 'ok');
+    }catch(e){ nomeEl.textContent = ''; toast(e.message, 'err'); }
+  });
+
+  document.getElementById('tfPdf').addEventListener('change', async ev => {
+    const f = ev.target.files[0]; if (!f) return;
+    const nomeEl = document.getElementById('tfPdfNome');
+    nomeEl.textContent = 'Enviando ' + f.name + '…';
+    try{
+      const dataUrl = await arquivoParaBase64(f);
+      const up = await subirArquivoDrive(dataUrl, {
+        client_uid: 'nfpdf-' + t.id + '-' + Date.now(), cliente: t.cliente_nome || '',
+        os_numero: t.os_codigo || '', categoria: 'nfse_pdf', nome: f.name, mime: 'application/pdf' });
+      pdfUrl = up.url;
+      nomeEl.textContent = 'Salvo: ' + f.name;
+      toast('PDF salvo.', 'ok');
+    }catch(e){ nomeEl.textContent = ''; toast(e.message, 'err'); }
+  });
 }
 
 /** Título errado se anula, nunca se edita ou apaga — fica no histórico com o
