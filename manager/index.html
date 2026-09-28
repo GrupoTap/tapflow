@@ -17563,12 +17563,14 @@ function finreDesenhar(){
     + '<span class="n">Valor</span><span></span><span></span></div>'
     + L.map(t => {
         const etiqueta = t.anulado ? 'Anulado' : (t.etapa === 'faturado' ? 'Faturado' : 'A faturar');
+        const statusBaixa = t.anulado ? '' : (Number(t.saldo) <= 0 ? 'Recebido' : (Number(t.saldo) < Number(t.valor) ? 'Parcial' : ''));
         return '<div class="ccLin' + (t.anulado ? ' riscada' : '') + '"><span class="ccData">' + esc(dataBR(t.vencimento)) + '</span>'
           + '<span class="ccNome">' + esc(t.cliente_nome || '—') + '</span>'
           + '<span class="ccDesc">' + esc(t.descricao) + (t.os_codigo ? ' <small style="color:var(--ink-3)">· ' + esc(t.os_codigo) + '</small>' : '')
             + (t.anulado && t.anulado_motivo ? ' <small style="color:var(--ink-3)">— anulado: ' + esc(t.anulado_motivo) + '</small>' : '') + '</span>'
           + '<span class="n v">' + esc(BRL(t.valor)) + '</span>'
           + '<span><span class="chip">' + esc(etiqueta) + '</span>'
+            + (statusBaixa ? ' <span class="chip">' + esc(statusBaixa) + '</span>' : '')
             + (t.nf_pdf_url ? ' <a href="' + esc(t.nf_pdf_url) + '" target="_blank" rel="noopener" style="font-size:11px">PDF</a>' : '')
             + (t.nf_xml_url ? ' <a href="' + esc(t.nf_xml_url) + '" target="_blank" rel="noopener" style="font-size:11px">XML</a>' : '')
             + '</span>'
@@ -17576,12 +17578,24 @@ function finreDesenhar(){
               (t.etapa === 'a_faturar'
                 ? '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-faturar="' + esc(t.id) + '">Preparar nota</button> '
                 : '')
+              + (Number(t.saldo) > 0
+                  ? '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-baixar="' + esc(t.id) + '">Baixar</button> '
+                  : '')
+              + '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-baixas="' + esc(t.id) + '">Baixas</button> '
               + '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-anular="' + esc(t.id) + '">Anular</button>')
             + '</span></div>';
       }).join('');
   el.querySelectorAll('[data-faturar]').forEach(b => b.addEventListener('click', () => {
     const t = (FINRE.lista || []).find(x => x.id === b.dataset.faturar);
     if (t) modalPrepararNota(t);
+  }));
+  el.querySelectorAll('[data-baixar]').forEach(b => b.addEventListener('click', () => {
+    const t = (FINRE.lista || []).find(x => x.id === b.dataset.baixar);
+    if (t) modalBaixarTitulo(t, finreCarregar);
+  }));
+  el.querySelectorAll('[data-baixas]').forEach(b => b.addEventListener('click', () => {
+    const t = (FINRE.lista || []).find(x => x.id === b.dataset.baixas);
+    if (t) modalVerBaixas(t, finreCarregar);
   }));
   el.querySelectorAll('[data-anular]').forEach(b => b.addEventListener('click', () => {
     const t = (FINRE.lista || []).find(x => x.id === b.dataset.anular);
@@ -17862,20 +17876,34 @@ function finpgDesenhar(){
     + '<span class="n">Valor</span><span></span><span></span></div>'
     + L.map(t => {
         const editavel = !t.anulado && Number(t.saldo) === Number(t.valor);
+        const statusBaixa = t.anulado ? '' : (Number(t.saldo) <= 0 ? 'Pago' : (Number(t.saldo) < Number(t.valor) ? 'Parcial' : ''));
         return '<div class="ccLin' + (t.anulado ? ' riscada' : '') + '"><span class="ccData">' + esc(dataBR(t.vencimento)) + '</span>'
           + '<span class="ccNome">' + esc(t.fornecedor_nome || '—') + '</span>'
           + '<span class="ccDesc">' + esc(t.descricao) + (t.os_codigo ? ' <small style="color:var(--ink-3)">· ' + esc(t.os_codigo) + '</small>' : '')
             + (t.anulado && t.anulado_motivo ? ' <small style="color:var(--ink-3)">— anulado: ' + esc(t.anulado_motivo) + '</small>' : '') + '</span>'
           + '<span class="n v">' + esc(BRL(t.valor)) + '</span>'
-          + '<span>' + (t.grupo_nome ? '<span class="chip">' + esc(t.grupo_nome) + (t.subcategoria_nome ? ' / ' + esc(t.subcategoria_nome) : '') + '</span>' : '') + '</span>'
+          + '<span>' + (t.grupo_nome ? '<span class="chip">' + esc(t.grupo_nome) + (t.subcategoria_nome ? ' / ' + esc(t.subcategoria_nome) : '') + '</span>' : '')
+            + (statusBaixa ? ' <span class="chip">' + esc(statusBaixa) + '</span>' : '') + '</span>'
           + '<span class="a">' + (t.anulado ? '' :
               (editavel ? '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editar="' + esc(t.id) + '">Editar</button> ' : '')
+              + (Number(t.saldo) > 0
+                  ? '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-baixar="' + esc(t.id) + '">Baixar</button> '
+                  : '')
+              + '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-baixas="' + esc(t.id) + '">Baixas</button> '
               + '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-anular="' + esc(t.id) + '">Anular</button>')
             + '</span></div>';
       }).join('');
   el.querySelectorAll('[data-editar]').forEach(b => b.addEventListener('click', () => {
     const t = (FINPG.lista || []).find(x => x.id === b.dataset.editar);
     if (t) modalTituloPagar(t);
+  }));
+  el.querySelectorAll('[data-baixar]').forEach(b => b.addEventListener('click', () => {
+    const t = (FINPG.lista || []).find(x => x.id === b.dataset.baixar);
+    if (t) modalBaixarTitulo(t, finpgCarregar);
+  }));
+  el.querySelectorAll('[data-baixas]').forEach(b => b.addEventListener('click', () => {
+    const t = (FINPG.lista || []).find(x => x.id === b.dataset.baixas);
+    if (t) modalVerBaixas(t, finpgCarregar);
   }));
   el.querySelectorAll('[data-anular]').forEach(b => b.addEventListener('click', () => {
     const t = (FINPG.lista || []).find(x => x.id === b.dataset.anular);
@@ -17984,6 +18012,125 @@ function modalAnularTituloPagar(t){
         try{
           await rpc('tf_fin_anular_titulo', { p_titulo_id: t.id, p_motivo: motivo });
           fecharModal(); toast('Título anulado.', 'ok'); await finpgCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// BAIXA — item 11 do módulo Financeiro (Fase 1)
+// Registro separado do título (tf_fin_baixar_titulo já existia) — permite
+// baixa parcial (o saldo em aberto é valor - soma das baixas não estornadas,
+// tf_fin_saldo_titulo já faz essa conta) e estorno (marca, nunca apaga).
+// Compartilhado entre Contas a Receber e Contas a Pagar: o `recarregar` que
+// cada tela passa (finreCarregar/finpgCarregar) é quem muda o comportamento.
+// ════════════════════════════════════════════════════════════════════════════
+async function modalBaixarTitulo(t, recarregar){
+  let contas = [];
+  try{ contas = await rpc('tf_fin_contas_listar', {}); }
+  catch(e){ toast('Não consegui carregar as contas bancárias: ' + e.message, 'err'); return; }
+  if (!contas.length){ toast('Nenhuma conta bancária cadastrada — confira a tela Contas Bancárias.', 'err'); return; }
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const saldoAberto = Number(t.saldo != null ? t.saldo : t.valor);
+  let envelopes = null; // só busca se a conta escolhida for de reserva
+
+  abrirModal('Baixar — ' + t.descricao,
+      '<div class="dupla">'
+    +  '<div class="campo"><label for="bxData">Data</label><input id="bxData" type="date" value="' + hoje + '"></div>'
+    +  '<div class="campo"><label for="bxConta">Conta bancária</label><select id="bxConta">'
+    +    '<option value="">Selecione…</option>'
+    +    contas.map(c => '<option value="' + esc(c.id) + '">' + esc(c.nome) + (c.papel === 'reserva' ? ' (reserva)' : '') + '</option>').join('')
+    +  '</select></div></div>'
+    + '<div class="campo" id="bxEnvelopeCampo" style="display:none"><label for="bxEnvelope">Sai de qual reserva?</label><select id="bxEnvelope"><option value="">Selecione…</option></select></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="bxForma">Forma de pagamento (opcional)</label><select id="bxForma">'
+    +    '<option value="">—</option>'
+    +    FORMA_PREVISTA_FIN.map(f => '<option value="' + esc(f) + '"' + (t.forma_prevista === f ? ' selected' : '') + '>' + esc(f) + '</option>').join('')
+    +  '</select></div>'
+    +  '<div class="campo"><label for="bxValor">Valor</label><input id="bxValor" type="number" step="0.01" value="' + saldoAberto.toFixed(2) + '"></div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="bxDesc">Desconto concedido (opcional)</label><input id="bxDesc" type="number" step="0.01" value="0"></div>'
+    +  '<div class="campo"><label for="bxJuros">Juros/multa (opcional)</label><input id="bxJuros" type="number" step="0.01" value="0"></div></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Registrar baixa', pri:true, onClick: async () => {
+        const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+        const contaId = v('bxConta');
+        if (!contaId){ toast('Selecione a conta bancária.', 'err'); return; }
+        if (!v('bxData')){ toast('Informe a data.', 'err'); return; }
+        const valor = Number(v('bxValor'));
+        if (!valor || valor <= 0){ toast('Informe um valor maior que zero.', 'err'); return; }
+        const contaEscolhida = contas.find(c => c.id === contaId);
+        const envelopeId = v('bxEnvelope');
+        if (contaEscolhida && contaEscolhida.papel === 'reserva' && !envelopeId){
+          toast('Selecione de qual reserva o valor sai/entra.', 'err'); return;
+        }
+        try{
+          await rpc('tf_fin_baixar_titulo', {
+            p_titulo_id: t.id, p_data: v('bxData'), p_conta_id: contaId, p_valor: valor,
+            p_forma_pagamento: v('bxForma') || null,
+            p_desconto: v('bxDesc') ? Number(v('bxDesc')) : 0,
+            p_juros_multa: v('bxJuros') ? Number(v('bxJuros')) : 0,
+            p_envelope_id: envelopeId || null
+          });
+          fecharModal(); toast('Baixa registrada.', 'ok'); await recarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+
+  document.getElementById('bxConta').addEventListener('change', async () => {
+    const contaId = document.getElementById('bxConta').value;
+    const conta = contas.find(c => c.id === contaId);
+    const campo = document.getElementById('bxEnvelopeCampo');
+    if (!conta || conta.papel !== 'reserva'){ campo.style.display = 'none'; return; }
+    campo.style.display = '';
+    if (!envelopes){
+      try{ envelopes = await rpc('tf_fin_envelopes_listar', {}); }
+      catch(e){ toast('Não consegui carregar as reservas: ' + e.message, 'err'); envelopes = []; }
+      const sel = document.getElementById('bxEnvelope');
+      sel.innerHTML = '<option value="">Selecione…</option>' + envelopes.map(en =>
+        '<option value="' + esc(en.id) + '">' + esc(en.nome) + '</option>').join('');
+    }
+  });
+}
+
+async function modalVerBaixas(t, recarregar){
+  let baixas = [];
+  try{ baixas = await rpc('tf_fin_titulo_baixas_listar', { p_titulo_id: t.id }); }
+  catch(e){ toast('Não consegui abrir as baixas: ' + e.message, 'err'); return; }
+
+  const corpo = !baixas.length
+    ? '<p class="nota" style="margin-top:0">Nenhuma baixa registrada ainda.</p>'
+    : '<div class="ccLin cab"><span>Data</span><span>Conta</span><span class="n">Valor</span><span></span></div>'
+      + baixas.map(b => '<div class="ccLin' + (b.estornado ? ' riscada' : '') + '">'
+          + '<span class="ccData">' + esc(dataBR(b.data)) + '</span>'
+          + '<span class="ccNome">' + esc(b.conta_nome || '—') + (b.envelope_nome ? ' <small style="color:var(--ink-3)">· ' + esc(b.envelope_nome) + '</small>' : '')
+            + (b.forma_pagamento ? ' <small style="color:var(--ink-3)">· ' + esc(b.forma_pagamento) + '</small>' : '')
+            + (b.estornado && b.estornado_motivo ? ' <small style="color:var(--ink-3)">— estornado: ' + esc(b.estornado_motivo) + '</small>' : '') + '</span>'
+          + '<span class="n v">' + esc(BRL(b.valor))
+            + ((Number(b.desconto) || Number(b.juros_multa))
+                ? ' <small style="color:var(--ink-3)">(' + (Number(b.desconto) ? '-' + esc(BRL(b.desconto)) : '') + (Number(b.juros_multa) ? ' +' + esc(BRL(b.juros_multa)) : '') + ')</small>'
+                : '') + '</span>'
+          + '<span class="a">' + (b.estornado ? '' : '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-estornar="' + esc(b.id) + '">Estornar</button>') + '</span>'
+        + '</div>').join('');
+
+  abrirModal('Baixas — ' + t.descricao, corpo, [{ label:'Fechar', pri:true, onClick: fecharModal }]);
+
+  document.querySelectorAll('[data-estornar]').forEach(b => b.addEventListener('click', () => {
+    const baixa = baixas.find(x => x.id === b.dataset.estornar);
+    if (baixa) modalEstornarBaixa(baixa, recarregar);
+  }));
+}
+
+function modalEstornarBaixa(baixa, recarregar){
+  abrirModal('Estornar baixa — ' + dataBR(baixa.data),
+      '<p class="nota" style="margin-top:0">A baixa não é apagada, fica marcada como estornada com o motivo.</p>'
+    + '<div class="campo"><label for="esMot">Motivo</label><input id="esMot" type="text" placeholder="Ex.: valor lançado errado" autocomplete="off"></div>',
+    [{ label:'Voltar', onClick: fecharModal },
+     { label:'Estornar', onClick: async () => {
+        const motivo = (document.getElementById('esMot') || {}).value.trim();
+        if (!motivo){ toast('Informe o motivo do estorno.', 'err'); return; }
+        try{
+          await rpc('tf_fin_estornar_baixa', { p_baixa_id: baixa.id, p_motivo: motivo });
+          fecharModal(); toast('Baixa estornada.', 'ok'); await recarregar();
         }catch(e){ toast(e.message, 'err'); }
      }}]);
 }
