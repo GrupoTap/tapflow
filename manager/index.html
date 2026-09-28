@@ -1997,9 +1997,16 @@ let CC_AUT = false;
 /* S42 · esta pessoa está na lista do RH (`tf_rh_autorizado`)? Declarada AQUI,
    no topo: o menu é montado no carregamento do arquivo, antes do bloco do RH. */
 let RH_AUT = false;
+/* Financeiro · esta pessoa está na lista do financeiro (`tf_fin_autorizado`)?
+   Mesmo padrão de CC_AUT/RH_AUT — por PESSOA, não por perfil. */
+let FIN_AUT = false;
 async function carregarCC(){
   if (DEMO){ CC_AUT = true; return; }
   try{ CC_AUT = !!(await rpc('tf_cc_autorizado', {})); }catch(e){ CC_AUT = false; }
+}
+async function carregarFin(){
+  if (DEMO){ FIN_AUT = true; return; }
+  try{ FIN_AUT = !!(await rpc('tf_fin_autorizado', {})); }catch(e){ FIN_AUT = false; }
 }
 let falhaCarga = null;   // motivo do último erro, para a tela vazia não mentir
 let quadro = 'campo';
@@ -14941,7 +14948,12 @@ const NAV = [
   // por perfil — admin não basta). Aqui só ESCONDE; quem tranca é o banco:
   // as duas tabelas têm RLS force e cada função confere `tf_cc_autorizado()`.
   { id:'financeiro', rot:'FINANCEIRO', itens:[
-    { v:'ccp', rot:'Conta corrente Proper', ico:'moeda', cc:true },
+    { v:'finp',  rot:'Painel',                ico:'grafico', fin:true },
+    { v:'finre', rot:'Contas a Receber',      ico:'moeda',   fin:true },
+    { v:'finpg', rot:'Contas a Pagar',        ico:'moeda',   fin:true },
+    { v:'finb',  rot:'Contas Bancárias',      ico:'predio',  fin:true },
+    { v:'finrl', rot:'Relatórios',            ico:'grafico', fin:true },
+    { v:'ccp',   rot:'Conta corrente Proper', ico:'moeda',   cc:true },
   ]},
   // S42 · RECURSOS HUMANOS, entre FINANCEIRO e CADASTROS (item 1 do documento
   // de 26/09). `rh:true` = só quem está em `rh_autorizados` (por PESSOA, como a
@@ -14953,9 +14965,10 @@ const NAV = [
     { v:'rhd', rot:'Documentos do Funcionário', ico:'pasta',    rh:true, breve:true },
   ]},
   { id:'cadastros', rot:'CADASTROS', itens:[
-    { v:'cad', rot:'Clientes',   ico:'predio', mod:'cadastros' },
-    { v:'dup', rot:'Duplicados', ico:'duplo',  cont:'nDup', mod:'cadastros' },
-    { v:'cat', rot:'Catálogo',   ico:'tag',    mod:'cadastros' },
+    { v:'cad',  rot:'Clientes',     ico:'predio', mod:'cadastros' },
+    { v:'dup',  rot:'Duplicados',   ico:'duplo',  cont:'nDup', mod:'cadastros' },
+    { v:'cat',  rot:'Catálogo',     ico:'tag',    mod:'cadastros' },
+    { v:'ffor', rot:'Fornecedores', ico:'predio', fin:true },
   ]},
   { id:'sistema', rot:'SISTEMA', fim:true, itens:[
     // ITEM 3 (S32): sem `mod` de propósito — "Meu perfil" é de quem estiver
@@ -14979,7 +14992,7 @@ function podeVer(mod){
 
 /** Só os itens que esta pessoa abre, e só os grupos que sobraram com algo. */
 function navVisivel(){
-  return NAV.map(g => Object.assign({}, g, { itens: g.itens.filter(i => podeVer(i.mod) && (!i.cc || CC_AUT) && (!i.rh || RH_AUT)) }))
+  return NAV.map(g => Object.assign({}, g, { itens: g.itens.filter(i => podeVer(i.mod) && (!i.cc || CC_AUT) && (!i.rh || RH_AUT) && (!i.fin || FIN_AUT)) }))
             .filter(g => g.itens.length);
 }
 
@@ -15050,6 +15063,8 @@ const ROTULO = { campo:'Equipes de Inspeção', adm:'Equipe Administrativa',
   cpr:'Compras', age:'Agenda', doc:'Documentos', rel:'Relatórios',
   cad:'Clientes', dup:'Duplicados', cat:'Catálogo', cfg:'Configurações',
   eu:'Meu perfil', ccp:'Conta corrente Proper',
+  finp:'Painel Financeiro', finre:'Contas a Receber', finpg:'Contas a Pagar',
+  finb:'Contas Bancárias', finrl:'Relatórios Financeiros', ffor:'Fornecedores',
   rhf:'Funcionários', rhs:'Segurança do Trabalho', rhp:'Folha de Ponto', rhd:'Documentos do Funcionário' };
 const GRUPO_DE = {};
 NAV.forEach(g => g.itens.forEach(i => { GRUPO_DE[i.v] = g.rot; }));
@@ -15109,6 +15124,7 @@ function irPara(v){
   if (v === 'rhf') return pintarRHFuncionarios();
   if (v === 'rhs') return pintarRHSeguranca();
   if (v === 'rhp' || v === 'rhd') return pintarRHBreve(v);
+  if (v === 'finp' || v === 'finre' || v === 'finpg' || v === 'finb' || v === 'finrl' || v === 'ffor') return pintarFinBreve(v);
   return pintar();
 }
 
@@ -17089,6 +17105,17 @@ function pintarRHBreve(v){
         + 'Um cuidado já anotado: ponto por aplicativo segue a Portaria MTP 671/2021 (REP-P) — vale falar com a contabilidade antes.'
       : 'O lugar está reservado no menu. O conteúdo vem num prompt próprio (o nome é "do Funcionário" para não '
         + 'confundir com Documentos, em OPERAÇÃO).') + '</p></div></div>';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// FINANCEIRO — lugar reservado (as telas de verdade vêm nos próximos passos)
+// ════════════════════════════════════════════════════════════════════════════
+function pintarFinBreve(v){
+  const board = document.getElementById('board');
+  const t = { finp:'Painel', finre:'Contas a Receber', finpg:'Contas a Pagar',
+              finb:'Contas Bancárias', finrl:'Relatórios', ffor:'Fornecedores' }[v] || v;
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>' + t + ' <span class="tag">em breve</span></h2>'
+    + '<p>O lugar está reservado no menu. A tela de verdade vem num passo seguinte.</p></div></div>';
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -20077,6 +20104,7 @@ async function iniciar(){
   // mundo. Foi o teste de tela que pegou — o perfil comercial via Compras.
   await carregarCC();
   await carregarRH();          // S42 · Recursos Humanos: quem vê é o banco
+  await carregarFin();         // Financeiro: quem vê é o banco (mesmo padrão)
   montarNav();
   pintarCracha();
   await carregarColunas();
