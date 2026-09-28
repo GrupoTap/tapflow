@@ -10283,6 +10283,7 @@ function pintarCracha(){
 const CC_TIPO = { historico:'histórico', aumento:'aumento', pagamento:'pagamento',
   abatimento:'fornecimento', ajuste:'ajuste', estorno:'estorno' };
 let CC = null;
+let FFOR = { lista:null };   // Financeiro · Fornecedores (item 2 do módulo)
 
 /** "1.234,56" / "-1234.5" / "R$ 10" / número → Number (NaN se não der). */
 function ccValor(v){
@@ -15124,7 +15125,8 @@ function irPara(v){
   if (v === 'rhf') return pintarRHFuncionarios();
   if (v === 'rhs') return pintarRHSeguranca();
   if (v === 'rhp' || v === 'rhd') return pintarRHBreve(v);
-  if (v === 'finp' || v === 'finre' || v === 'finpg' || v === 'finb' || v === 'finrl' || v === 'ffor') return pintarFinBreve(v);
+  if (v === 'ffor') return pintarFornecedores();
+  if (v === 'finp' || v === 'finre' || v === 'finpg' || v === 'finb' || v === 'finrl') return pintarFinBreve(v);
   return pintar();
 }
 
@@ -16325,6 +16327,7 @@ const PLACEHOLDER_BUSCA = {
   cat:'Buscar item, código, marca…',
   age:'Buscar pessoa, OS, cliente, tarefa…',
   rhf:'Buscar funcionário, função…',
+  ffor:'Buscar fornecedor, CNPJ ou CPF…',
 };
 /** Multi-termo E: cada palavra digitada tem que aparecer no texto da linha.
  *  (`norm` já existe mais acima, no seletor de catálogo — é a mesma função.) */
@@ -17113,9 +17116,74 @@ function pintarRHBreve(v){
 function pintarFinBreve(v){
   const board = document.getElementById('board');
   const t = { finp:'Painel', finre:'Contas a Receber', finpg:'Contas a Pagar',
-              finb:'Contas Bancárias', finrl:'Relatórios', ffor:'Fornecedores' }[v] || v;
+              finb:'Contas Bancárias', finrl:'Relatórios' }[v] || v;
   board.innerHTML = '<div class="tela"><div class="telaCab"><h2>' + t + ' <span class="tag">em breve</span></h2>'
     + '<p>O lugar está reservado no menu. A tela de verdade vem num passo seguinte.</p></div></div>';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// FORNECEDORES — item 2 do módulo Financeiro (Fase 1)
+// Cadastro simples: Nome (obrigatório) e CNPJ ou CPF (opcional). Serve tanto
+// para uma empresa (ex.: CEMIG) quanto para uma categoria de gasto sem
+// fornecedor único (ex.: "Funcionários (folha)").
+// ════════════════════════════════════════════════════════════════════════════
+async function pintarFornecedores(){
+  visao = 'ffor';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Fornecedores</h2>'
+    + '<p>Quem recebe nas contas a pagar — inclusive categorias sem fornecedor único, como "Funcionários (folha)".</p></div>'
+    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="fforNovo">+ Novo fornecedor</button></div>'
+    + '<div class="lista" id="fforLista"><p class="nota">Carregando…</p></div></div>';
+  document.getElementById('fforNovo').addEventListener('click', () => modalFornecedor(null));
+  await fforCarregar();
+}
+async function fforCarregar(){
+  const el = document.getElementById('fforLista'); if (!el) return;
+  try{ FFOR.lista = await rpc('tf_fin_fornecedores_listar', {}); }
+  catch(e){
+    el.innerHTML = '<div class="vazio2"><b>Não consegui abrir os fornecedores</b><p></p>'
+      + '<button class="btn" type="button" id="fforDeNovo">Tentar de novo</button></div>';
+    el.querySelector('p').textContent = e.message;
+    document.getElementById('fforDeNovo').addEventListener('click', fforCarregar);
+    return;
+  }
+  fforDesenhar();
+}
+function fforDesenhar(){
+  const el = document.getElementById('fforLista'); if (!el) return;
+  const q = BUSCA.ffor || '';
+  const L = (FFOR.lista || []).filter(f => casa([f.nome, f.cnpj_cpf].join(' '), q));
+  if (!L.length){
+    el.innerHTML = '<p class="nota" style="padding:12px">Nenhum fornecedor ainda' + (q ? ' com essa busca' : '') + '.</p>';
+    return;
+  }
+  el.innerHTML = '<div class="ccLin cab"><span>Nome</span><span>CNPJ/CPF</span><span></span></div>'
+    + L.map(f => '<div class="ccLin"><span>' + esc(f.nome) + '</span>'
+      + '<span>' + esc(f.cnpj_cpf || '—') + '</span>'
+      + '<span class="a"><button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editar="'
+      + esc(f.id) + '">Editar</button></span></div>').join('');
+  el.querySelectorAll('[data-editar]').forEach(b => b.addEventListener('click', () => {
+    const f = (FFOR.lista || []).find(x => x.id === b.dataset.editar);
+    if (f) modalFornecedor(f);
+  }));
+}
+REPINTA.ffor = fforDesenhar;
+
+function modalFornecedor(f){
+  abrirModal(f ? 'Editar fornecedor' : 'Novo fornecedor',
+      '<div class="campo"><label for="ffN">Nome</label><input id="ffN" type="text" value="'
+    +   esc(f ? f.nome : '') + '" autocomplete="off"></div>'
+    + '<div class="campo"><label for="ffD">CNPJ ou CPF (opcional)</label><input id="ffD" type="text" value="'
+    +   esc(f ? f.cnpj_cpf : '') + '" autocomplete="off"></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label: f ? 'Salvar' : 'Adicionar', pri:true, onClick: async () => {
+        const v = id => (document.getElementById(id) || {}).value.trim();
+        if (!v('ffN')){ toast('O nome do fornecedor é obrigatório.', 'err'); return; }
+        try{
+          await rpc('tf_fin_fornecedor_gravar', { p_id: f ? f.id : null, p_nome: v('ffN'), p_cnpj_cpf: v('ffD') || null });
+          fecharModal(); toast('Fornecedor salvo.', 'ok'); await fforCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
