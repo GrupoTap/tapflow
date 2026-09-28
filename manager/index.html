@@ -17333,11 +17333,35 @@ function finrsvDesenhar(){
     el.innerHTML = '<p class="nota" style="padding:12px">Nenhum envelope encontrado — confira se o Passo 1 do banco foi executado.</p>';
     return;
   }
-  el.innerHTML = '<div class="ccLin cab"><span>Envelope</span><span class="n">Saldo atual</span></div>'
+  el.innerHTML = '<div class="ccLin cab"><span>Envelope</span><span class="n">Saldo atual</span><span></span></div>'
     + L.map(e => '<div class="ccLin"><span>' + esc(e.nome) + '</span>'
-      + '<span class="n">' + esc(BRL(e.saldo_atual)) + '</span></div>').join('');
+      + '<span class="n">' + esc(BRL(e.saldo_atual)) + '</span>'
+      + '<span class="a"><button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editarenv="'
+        + esc(e.id) + '">Editar</button></span></div>').join('');
+  el.querySelectorAll('[data-editarenv]').forEach(b => b.addEventListener('click', () => {
+    const env = (FINRSV.envelopes || []).find(x => x.id === b.dataset.editarenv);
+    if (env) modalEnvelope(env);
+  }));
 }
 REPINTA.finrsv = finrsvDesenhar;
+
+function modalEnvelope(env){
+  abrirModal('Editar envelope',
+      '<div class="campo"><label for="feN">Nome</label><input id="feN" type="text" value="'
+    +   esc(env.nome) + '" autocomplete="off"></div>'
+    + '<div class="campo"><label for="feS">Saldo inicial</label><input id="feS" type="number" step="0.01" value="'
+    +   (env.saldo_inicial != null ? Number(env.saldo_inicial) : 0) + '"></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Salvar', pri:true, onClick: async () => {
+        const nome = (document.getElementById('feN') || {}).value.trim();
+        if (!nome){ toast('O nome do envelope é obrigatório.', 'err'); return; }
+        const saldo = Number((document.getElementById('feS') || {}).value) || 0;
+        try{
+          await rpc('tf_fin_envelope_gravar', { p_id: env.id, p_nome: nome, p_saldo_inicial: saldo });
+          fecharModal(); toast('Envelope salvo.', 'ok'); await finrsvCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+}
 
 /** Busca as contas OPERACIONAIS na hora (não depende de ter passado pela tela
  * de Contas Bancárias antes — finbCarregar() só roda se a lista dela estiver
