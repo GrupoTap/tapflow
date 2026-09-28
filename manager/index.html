@@ -10285,6 +10285,7 @@ const CC_TIPO = { historico:'histórico', aumento:'aumento', pagamento:'pagament
 let CC = null;
 let FFOR = { lista:null };   // Financeiro · Fornecedores (item 2 do módulo)
 let FINB = { lista:null };   // Financeiro · Contas Bancárias (item 3 do módulo)
+let FINCAT = { lista:null }; // Financeiro · Categorias e Orçamento (item 4 do módulo)
 
 /** "1.234,56" / "-1234.5" / "R$ 10" / número → Number (NaN se não der). */
 function ccValor(v){
@@ -14954,6 +14955,7 @@ const NAV = [
     { v:'finre', rot:'Contas a Receber',      ico:'moeda',   fin:true },
     { v:'finpg', rot:'Contas a Pagar',        ico:'moeda',   fin:true },
     { v:'finb',  rot:'Contas Bancárias',      ico:'predio',  fin:true },
+    { v:'fincat',rot:'Categorias',            ico:'tag',     fin:true },
     { v:'finrl', rot:'Relatórios',            ico:'grafico', fin:true },
     { v:'ccp',   rot:'Conta corrente Proper', ico:'moeda',   cc:true },
   ]},
@@ -15066,7 +15068,7 @@ const ROTULO = { campo:'Equipes de Inspeção', adm:'Equipe Administrativa',
   cad:'Clientes', dup:'Duplicados', cat:'Catálogo', cfg:'Configurações',
   eu:'Meu perfil', ccp:'Conta corrente Proper',
   finp:'Painel Financeiro', finre:'Contas a Receber', finpg:'Contas a Pagar',
-  finb:'Contas Bancárias', finrl:'Relatórios Financeiros', ffor:'Fornecedores',
+  finb:'Contas Bancárias', fincat:'Categorias e Orçamento', finrl:'Relatórios Financeiros', ffor:'Fornecedores',
   rhf:'Funcionários', rhs:'Segurança do Trabalho', rhp:'Folha de Ponto', rhd:'Documentos do Funcionário' };
 const GRUPO_DE = {};
 NAV.forEach(g => g.itens.forEach(i => { GRUPO_DE[i.v] = g.rot; }));
@@ -15128,6 +15130,7 @@ function irPara(v){
   if (v === 'rhp' || v === 'rhd') return pintarRHBreve(v);
   if (v === 'ffor') return pintarFornecedores();
   if (v === 'finb') return pintarContasBancarias();
+  if (v === 'fincat') return pintarCategorias();
   if (v === 'finp' || v === 'finre' || v === 'finpg' || v === 'finrl') return pintarFinBreve(v);
   return pintar();
 }
@@ -17288,6 +17291,80 @@ async function modalExtratoConta(id){
             + '<span>' + esc(m.descricao) + (m.quem ? ' <small style="color:var(--ink-3)">· ' + esc(m.quem) + '</small>' : '') + '</span>'
             + '<span class="n ' + (Number(m.valor) >= 0 ? 'mais' : 'menos') + '">' + esc(ccSinal(Number(m.valor))) + '</span></div>').join('')
         : '<p class="nota">Nenhuma movimentação lançada ainda.</p>');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CATEGORIAS E ORÇAMENTO — item 4 do módulo Financeiro (Fase 1)
+// Os 5 grupos são fixos (vieram do Passo 1). As subcategorias começam vazias
+// — o Vinícius cria cada uma conforme for precisando. Orçamento mensal só
+// faz sentido nos grupos de despesa; substitui a tela "PROVISÕES" do SIGE.
+// ════════════════════════════════════════════════════════════════════════════
+async function pintarCategorias(){
+  visao = 'fincat';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Categorias e Orçamento</h2>'
+    + '<p>As subcategorias começam vazias — vá criando conforme for lançando contas. '
+    +   'O orçamento mensal é o previsto para comparar com o realizado.</p></div>'
+    + '<div id="catCorpo"><p class="nota">Carregando…</p></div></div>';
+  await catCarregar();
+}
+async function catCarregar(){
+  const el = document.getElementById('catCorpo'); if (!el) return;
+  try{ FINCAT.lista = await rpc('tf_fin_grupos_listar', {}); }
+  catch(e){
+    el.innerHTML = '<div class="vazio2"><b>Não consegui abrir as categorias</b><p></p>'
+      + '<button class="btn" type="button" id="catDeNovo">Tentar de novo</button></div>';
+    el.querySelector('p').textContent = e.message;
+    document.getElementById('catDeNovo').addEventListener('click', catCarregar);
+    return;
+  }
+  catDesenhar();
+}
+function catDesenhar(){
+  const el = document.getElementById('catCorpo'); if (!el) return;
+  const G = FINCAT.lista || [];
+  if (!G.length){
+    el.innerHTML = '<p class="nota" style="padding:12px">Nenhum grupo encontrado — confira se o Passo 1 do banco foi executado.</p>';
+    return;
+  }
+  el.innerHTML = G.map(g => {
+    const subs = g.subcategorias || [];
+    const despesa = g.tipo !== 'receita';
+    return '<div class="painel" style="margin-bottom:14px;padding:14px">'
+      + '<h3 style="margin-top:0">' + esc(g.nome)
+      +   ' <small style="color:var(--ink-3);font-weight:normal">(' + (despesa ? 'despesa' : 'receita') + ')</small></h3>'
+      + (subs.length
+          ? '<div class="ccLin cab"><span>Subcategoria</span><span class="n">' + (despesa ? 'Orçamento/mês' : '') + '</span></div>'
+            + subs.map(s => '<div class="ccLin"><span>' + esc(s.nome) + '</span>'
+              + '<span class="n">' + (despesa
+                  ? '<input type="number" step="0.01" class="catOrc" data-sub="' + esc(s.id)
+                    + '" value="' + (s.orcamento_mensal != null ? Number(s.orcamento_mensal) : '')
+                    + '" placeholder="—" style="width:110px;text-align:right">'
+                  : '') + '</span></div>').join('')
+          : '<p class="nota" style="padding:6px 0">Nenhuma subcategoria ainda.</p>')
+      + '<div style="display:flex;gap:8px;margin-top:10px">'
+      +   '<input type="text" placeholder="Nova subcategoria…" class="catNovoNome" data-grupo="' + esc(g.id) + '" style="flex:1">'
+      +   '<button class="btn" type="button" data-add="' + esc(g.id) + '">Adicionar</button>'
+      + '</div></div>';
+  }).join('');
+
+  el.querySelectorAll('.catOrc').forEach(inp => inp.addEventListener('change', async () => {
+    try{
+      await rpc('tf_fin_subcategoria_gravar', { p_id: inp.dataset.sub, p_grupo_id: null, p_nome: null,
+        p_orcamento_mensal: inp.value === '' ? null : Number(inp.value) });
+      toast('Orçamento salvo.', 'ok');
+    }catch(e){ toast(e.message, 'err'); catCarregar(); }
+  }));
+
+  el.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => _semDuploEnvio_(b, async () => {
+    const inp = el.querySelector('.catNovoNome[data-grupo="' + b.dataset.add + '"]');
+    const nome = inp.value.trim();
+    if (!nome){ toast('Digite o nome da subcategoria.', 'err'); return; }
+    try{
+      await rpc('tf_fin_subcategoria_gravar', { p_id: null, p_grupo_id: b.dataset.add, p_nome: nome, p_orcamento_mensal: null });
+      toast('Subcategoria adicionada.', 'ok'); await catCarregar();
+    }catch(e){ toast(e.message, 'err'); }
+  })));
 }
 
 // ════════════════════════════════════════════════════════════════════════════
