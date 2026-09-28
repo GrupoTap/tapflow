@@ -15142,7 +15142,7 @@ function irPara(v){
   if (v === 'finpg') return pintarContasPagar();
   if (v === 'finrec') return pintarRecorrentes();
   if (v === 'finp') return pintarPainelFin();
-  if (v === 'finrl') return pintarFinBreve(v);
+  if (v === 'finrl') return pintarRelatoriosFin();
   return pintar();
 }
 
@@ -17131,13 +17131,167 @@ function pintarRHBreve(v){
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// FINANCEIRO — lugar reservado (as telas de verdade vêm nos próximos passos)
+// RELATÓRIOS FINANCEIROS — item 14 do módulo Financeiro (Fase 1)
+// Os 4 relatórios que o SIGE já oferece: síntese, fluxo de caixa (realizado
+// dos últimos meses + previsto, este reaproveitado do Painel), DRE anual
+// (por data de pagamento nesta fase — por competência fica pra Fase 3) e
+// extrato bancário (reaproveita a mesma tf_fin_conta_extrato de Contas
+// Bancárias, só que dá pra trocar de conta sem sair da tela).
 // ════════════════════════════════════════════════════════════════════════════
-function pintarFinBreve(v){
+const FINRL_ABAS = [['sintese','Síntese'], ['fluxo','Fluxo de Caixa'], ['dre','DRE Anual'], ['extrato','Extrato Bancário']];
+let FINRL = { aba:'sintese', sinteseIni:null, sinteseFim:null, dreAno:null, extratoContaId:null };
+
+async function pintarRelatoriosFin(){
+  visao = 'finrl';
   const board = document.getElementById('board');
-  const t = { finrl:'Relatórios' }[v] || v;
-  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>' + t + ' <span class="tag">em breve</span></h2>'
-    + '<p>O lugar está reservado no menu. A tela de verdade vem num passo seguinte.</p></div></div>';
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Relatórios Financeiros</h2>'
+    + '<p>Os mesmos relatórios do SIGE, recriados no TapFlow.</p></div>'
+    + '<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'
+    +   FINRL_ABAS.map(([k,rot]) => '<button class="btn' + (FINRL.aba === k ? ' pri' : '') + '" type="button" data-aba="' + k + '">' + rot + '</button>').join('')
+    + '</div>'
+    + '<div id="finrlCorpo"><p class="nota">Carregando…</p></div></div>';
+  board.querySelectorAll('[data-aba]').forEach(b => b.addEventListener('click', () => {
+    FINRL.aba = b.dataset.aba;
+    pintarRelatoriosFin();
+  }));
+  await finrlCarregar();
+}
+async function finrlCarregar(){
+  const el = document.getElementById('finrlCorpo'); if (!el) return;
+  if (FINRL.aba === 'sintese') return finrlSintese(el);
+  if (FINRL.aba === 'fluxo') return finrlFluxo(el);
+  if (FINRL.aba === 'dre') return finrlDre(el);
+  return finrlExtrato(el);
+}
+
+async function finrlSintese(el){
+  const hoje = isoHoje();
+  const iniPadrao = hoje.slice(0, 7) + '-01';
+  const ini = FINRL.sinteseIni || iniPadrao;
+  const fim = FINRL.sinteseFim || hoje;
+  el.innerHTML = '<div class="painel" style="padding:14px;margin-bottom:14px">'
+    + '<div class="dupla">'
+    +   '<div class="campo"><label for="rlIni">De</label><input id="rlIni" type="date" value="' + esc(ini) + '"></div>'
+    +   '<div class="campo"><label for="rlFim">Até</label><input id="rlFim" type="date" value="' + esc(fim) + '"></div>'
+    + '</div>'
+    + '<button class="btn pri" type="button" id="rlBuscar">Buscar</button>'
+    + '</div>'
+    + '<div id="rlSinteseResultado"><p class="nota">Carregando…</p></div>';
+  const buscar = async () => {
+    FINRL.sinteseIni = document.getElementById('rlIni').value || ini;
+    FINRL.sinteseFim = document.getElementById('rlFim').value || fim;
+    const alvo = document.getElementById('rlSinteseResultado');
+    alvo.innerHTML = '<p class="nota">Carregando…</p>';
+    let d;
+    try{ d = await rpc('tf_fin_relatorio_sintese', { p_inicio: FINRL.sinteseIni, p_fim: FINRL.sinteseFim }); }
+    catch(e){ alvo.innerHTML = '<p class="nota">' + esc(e.message) + '</p>'; return; }
+    const det = d.detalhe || [];
+    alvo.innerHTML = '<div class="painel" style="padding:14px">'
+      + '<div class="ccLin"><span>Receitas</span><span class="n v">' + esc(BRL(d.receita_total)) + '</span></div>'
+      + '<div class="ccLin"><span>Despesas</span><span class="n v">' + esc(BRL(d.despesa_total)) + '</span></div>'
+      + '<div class="ccLin"><span><b>Resultado</b></span><span class="n v"><b>' + esc(BRL(d.resultado)) + '</b></span></div>'
+      + '</div>'
+      + '<div class="painel" style="padding:14px;margin-top:14px">'
+      +   '<h3 style="margin-top:0">Por grupo e subcategoria</h3>'
+      +   (!det.length ? '<p class="nota" style="margin:0">Nada no período.</p>'
+          : det.map(x => '<div class="ccLin"><span>' + (x.tipo === 'r' ? 'Receita' : 'Despesa') + ' · ' + esc(x.grupo_nome || '—') + (x.subcategoria_nome ? ' / ' + esc(x.subcategoria_nome) : '') + '</span>'
+              + '<span class="n v">' + esc(BRL(x.total)) + '</span></div>').join(''))
+      + '</div>';
+  };
+  document.getElementById('rlBuscar').addEventListener('click', buscar);
+  await buscar();
+}
+
+async function finrlFluxo(el){
+  el.innerHTML = '<p class="nota">Carregando…</p>';
+  let d;
+  try{ d = await rpc('tf_fin_relatorio_fluxo_caixa', {}); }
+  catch(e){ el.innerHTML = '<p class="nota">' + esc(e.message) + '</p>'; return; }
+  const hist = d.historico || [];
+  const prev = d.previsto || [];
+  el.innerHTML = '<div class="painel" style="padding:14px;margin-bottom:14px">'
+    + '<h3 style="margin-top:0">Realizado (últimos meses)</h3>'
+    + (!hist.length ? '<p class="nota" style="margin:0">Sem movimento ainda.</p>'
+        : '<div class="ccLin cab"><span>Mês</span><span class="n">Entrou</span><span class="n">Saiu</span><span class="n">Saldo do mês</span></div>'
+          + hist.map(h => '<div class="ccLin"><span>' + esc(finpMesBR(h.mes)) + '</span>'
+              + '<span class="n v">' + esc(BRL(h.entra)) + '</span>'
+              + '<span class="n v">' + esc(BRL(h.sai)) + '</span>'
+              + '<span class="n v">' + esc(BRL(Number(h.entra) - Number(h.sai))) + '</span></div>').join('')) + '</div>'
+    + '<div class="painel" style="padding:14px">'
+    + '<h3 style="margin-top:0">Previsto (a partir de agora)</h3>'
+    + (!prev.length ? '<p class="nota" style="margin:0">Sem títulos em aberto à frente.</p>'
+        : '<div class="ccLin cab"><span>Mês</span><span class="n">Entra</span><span class="n">Sai</span><span class="n">Saldo</span></div>'
+          + prev.map(f => '<div class="ccLin"><span>' + esc(finpMesBR(f.mes)) + '</span>'
+              + '<span class="n v">' + esc(BRL(f.entra)) + '</span>'
+              + '<span class="n v">' + esc(BRL(f.sai)) + '</span>'
+              + '<span class="n v">' + esc(BRL(f.saldo_acumulado)) + '</span></div>').join('')) + '</div>';
+}
+
+async function finrlDre(el){
+  const ano = FINRL.dreAno || new Date().getFullYear();
+  el.innerHTML = '<div class="painel" style="padding:14px;margin-bottom:14px">'
+    + '<div class="campo" style="max-width:160px"><label for="rlAno">Ano</label><input id="rlAno" type="number" value="' + ano + '" step="1"></div>'
+    + '<button class="btn pri" type="button" id="rlDreBuscar">Buscar</button>'
+    + '</div>'
+    + '<div id="rlDreResultado"><p class="nota">Carregando…</p></div>';
+  const buscar = async () => {
+    const anoEsc = Number(document.getElementById('rlAno').value) || ano;
+    FINRL.dreAno = anoEsc;
+    const alvo = document.getElementById('rlDreResultado');
+    alvo.innerHTML = '<p class="nota">Carregando…</p>';
+    let d;
+    try{ d = await rpc('tf_fin_relatorio_dre', { p_ano: anoEsc }); }
+    catch(e){ alvo.innerHTML = '<p class="nota">' + esc(e.message) + '</p>'; return; }
+    const meses = d.meses || [];
+    const NOMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    alvo.innerHTML = '<div class="painel" style="padding:14px">'
+      + '<div class="ccLin cab"><span>Mês</span><span class="n">Receitas</span><span class="n">Despesas</span><span class="n">Resultado</span></div>'
+      + meses.map(m => '<div class="ccLin"><span>' + esc(NOMES[m.mes - 1]) + '</span>'
+          + '<span class="n v">' + esc(BRL(m.receitas)) + '</span>'
+          + '<span class="n v">' + esc(BRL(m.despesas)) + '</span>'
+          + '<span class="n v">' + esc(BRL(Number(m.receitas) - Number(m.despesas))) + '</span></div>').join('')
+      + '<div class="ccLin" style="border-top:2px solid var(--rule)"><span><b>Total do ano</b></span>'
+      +   '<span class="n v"><b>' + esc(BRL(d.receita_total)) + '</b></span>'
+      +   '<span class="n v"><b>' + esc(BRL(d.despesa_total)) + '</b></span>'
+      +   '<span class="n v"><b>' + esc(BRL(d.resultado_total)) + '</b></span></div>'
+      + '</div>';
+  };
+  document.getElementById('rlDreBuscar').addEventListener('click', buscar);
+  await buscar();
+}
+
+async function finrlExtrato(el){
+  el.innerHTML = '<p class="nota">Carregando…</p>';
+  let contas = [];
+  try{ contas = await rpc('tf_fin_contas_listar', {}); }
+  catch(e){ el.innerHTML = '<p class="nota">' + esc(e.message) + '</p>'; return; }
+  if (!contas.length){ el.innerHTML = '<p class="nota">Nenhuma conta cadastrada — confira Contas Bancárias.</p>'; return; }
+  if (!FINRL.extratoContaId || !contas.some(c => c.id === FINRL.extratoContaId)) FINRL.extratoContaId = contas[0].id;
+  el.innerHTML = '<div class="painel" style="padding:14px;margin-bottom:14px">'
+    + '<div class="campo"><label for="rlConta">Conta</label><select id="rlConta">'
+    +   contas.map(c => '<option value="' + esc(c.id) + '"' + (c.id === FINRL.extratoContaId ? ' selected' : '') + '>' + esc(c.nome) + (c.papel === 'reserva' ? ' (reserva)' : '') + '</option>').join('')
+    + '</select></div></div>'
+    + '<div id="rlExtratoResultado"><p class="nota">Carregando…</p></div>';
+  const carregarExtrato = async () => {
+    const alvo = document.getElementById('rlExtratoResultado');
+    alvo.innerHTML = '<p class="nota">Carregando…</p>';
+    let r;
+    try{ r = await rpc('tf_fin_conta_extrato', { p_conta_id: FINRL.extratoContaId }); }
+    catch(e){ alvo.innerHTML = '<p class="nota">' + esc(e.message) + '</p>'; return; }
+    const mv = r.movimentos || [];
+    alvo.innerHTML = '<div class="painel" style="padding:14px">'
+      + '<p class="nota" style="margin-top:0">Saldo atual: <b>' + esc(BRL(r.saldo_atual)) + '</b></p>'
+      + (mv.length
+          ? '<div class="ccLin cab"><span>Data</span><span>Descrição</span><span class="n">Valor</span></div>'
+            + mv.map(m => '<div class="ccLin' + (m.estornado ? ' riscada' : '') + '">'
+              + '<span>' + esc(dataBR(m.data)) + '</span>'
+              + '<span>' + esc(m.descricao) + (m.quem ? ' <small style="color:var(--ink-3)">· ' + esc(m.quem) + '</small>' : '') + '</span>'
+              + '<span class="n ' + (Number(m.valor) >= 0 ? 'mais' : 'menos') + '">' + esc(ccSinal(Number(m.valor))) + '</span></div>').join('')
+          : '<p class="nota">Nenhuma movimentação lançada ainda.</p>')
+      + '</div>';
+  };
+  document.getElementById('rlConta').addEventListener('change', (e) => { FINRL.extratoContaId = e.target.value; carregarExtrato(); });
+  await carregarExtrato();
 }
 
 // ════════════════════════════════════════════════════════════════════════════
