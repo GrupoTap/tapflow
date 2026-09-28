@@ -10285,6 +10285,7 @@ const CC_TIPO = { historico:'histórico', aumento:'aumento', pagamento:'pagament
 let CC = null;
 let FFOR = { lista:null };   // Financeiro · Fornecedores (item 2 do módulo)
 let FINB = { lista:null };   // Financeiro · Contas Bancárias (item 3 do módulo)
+let FINRSV = { envelopes:null }; // Financeiro · Reservas/Envelopes (item 5 do módulo)
 let FINCAT = { lista:null }; // Financeiro · Categorias e Orçamento (item 4 do módulo)
 
 /** "1.234,56" / "-1234.5" / "R$ 10" / número → Number (NaN se não der). */
@@ -14955,6 +14956,7 @@ const NAV = [
     { v:'finre', rot:'Contas a Receber',      ico:'moeda',   fin:true },
     { v:'finpg', rot:'Contas a Pagar',        ico:'moeda',   fin:true },
     { v:'finb',  rot:'Contas Bancárias',      ico:'predio',  fin:true },
+    { v:'finrsv',rot:'Reservas',              ico:'caixa',   fin:true },
     { v:'fincat',rot:'Categorias',            ico:'tag',     fin:true },
     { v:'finrl', rot:'Relatórios',            ico:'grafico', fin:true },
     { v:'ccp',   rot:'Conta corrente Proper', ico:'moeda',   cc:true },
@@ -15068,7 +15070,7 @@ const ROTULO = { campo:'Equipes de Inspeção', adm:'Equipe Administrativa',
   cad:'Clientes', dup:'Duplicados', cat:'Catálogo', cfg:'Configurações',
   eu:'Meu perfil', ccp:'Conta corrente Proper',
   finp:'Painel Financeiro', finre:'Contas a Receber', finpg:'Contas a Pagar',
-  finb:'Contas Bancárias', fincat:'Categorias e Orçamento', finrl:'Relatórios Financeiros', ffor:'Fornecedores',
+  finb:'Contas Bancárias', finrsv:'Reservas e Transferências', fincat:'Categorias e Orçamento', finrl:'Relatórios Financeiros', ffor:'Fornecedores',
   rhf:'Funcionários', rhs:'Segurança do Trabalho', rhp:'Folha de Ponto', rhd:'Documentos do Funcionário' };
 const GRUPO_DE = {};
 NAV.forEach(g => g.itens.forEach(i => { GRUPO_DE[i.v] = g.rot; }));
@@ -15130,6 +15132,7 @@ function irPara(v){
   if (v === 'rhp' || v === 'rhd') return pintarRHBreve(v);
   if (v === 'ffor') return pintarFornecedores();
   if (v === 'finb') return pintarContasBancarias();
+  if (v === 'finrsv') return pintarReservas();
   if (v === 'fincat') return pintarCategorias();
   if (v === 'finp' || v === 'finre' || v === 'finpg' || v === 'finrl') return pintarFinBreve(v);
   return pintar();
@@ -17291,6 +17294,91 @@ async function modalExtratoConta(id){
             + '<span>' + esc(m.descricao) + (m.quem ? ' <small style="color:var(--ink-3)">· ' + esc(m.quem) + '</small>' : '') + '</span>'
             + '<span class="n ' + (Number(m.valor) >= 0 ? 'mais' : 'menos') + '">' + esc(ccSinal(Number(m.valor))) + '</span></div>').join('')
         : '<p class="nota">Nenhuma movimentação lançada ainda.</p>');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// RESERVAS (ENVELOPES) E TRANSFERÊNCIAS — item 5 do módulo Financeiro (Fase 1)
+// Os 3 envelopes são fixos (13º salário, Impostos do início do ano, Rescisões).
+// Cada um soma as transferências recebidas ("reserva") menos as resgatadas
+// ("resgate"). Os envelopes são uma divisão lógica dentro da conta "reserva"
+// (hoje Nubank) — não são contas de verdade; por isso toda transferência
+// sempre parte de/para uma conta OPERACIONAL, nunca de uma conta "reserva".
+// ════════════════════════════════════════════════════════════════════════════
+async function pintarReservas(){
+  visao = 'finrsv';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Reservas e Transferências</h2>'
+    + '<p>13º salário, impostos do início do ano e rescisões — cada envelope soma o que entrou (reserva) menos o que saiu (resgate).</p></div>'
+    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="finrsvNova">+ Nova transferência</button></div>'
+    + '<div class="lista" id="finrsvLista"><p class="nota">Carregando…</p></div></div>';
+  document.getElementById('finrsvNova').addEventListener('click', () => modalTransferencia());
+  await finrsvCarregar();
+}
+async function finrsvCarregar(){
+  const el = document.getElementById('finrsvLista'); if (!el) return;
+  try{ FINRSV.envelopes = await rpc('tf_fin_envelopes_listar', {}); }
+  catch(e){
+    el.innerHTML = '<div class="vazio2"><b>Não consegui abrir as reservas</b><p></p>'
+      + '<button class="btn" type="button" id="finrsvDeNovo">Tentar de novo</button></div>';
+    el.querySelector('p').textContent = e.message;
+    document.getElementById('finrsvDeNovo').addEventListener('click', finrsvCarregar);
+    return;
+  }
+  finrsvDesenhar();
+}
+function finrsvDesenhar(){
+  const el = document.getElementById('finrsvLista'); if (!el) return;
+  const L = FINRSV.envelopes || [];
+  if (!L.length){
+    el.innerHTML = '<p class="nota" style="padding:12px">Nenhum envelope encontrado — confira se o Passo 1 do banco foi executado.</p>';
+    return;
+  }
+  el.innerHTML = '<div class="ccLin cab"><span>Envelope</span><span class="n">Saldo atual</span></div>'
+    + L.map(e => '<div class="ccLin"><span>' + esc(e.nome) + '</span>'
+      + '<span class="n">' + esc(BRL(e.saldo_atual)) + '</span></div>').join('');
+}
+REPINTA.finrsv = finrsvDesenhar;
+
+/** Busca as contas OPERACIONAIS na hora (não depende de ter passado pela tela
+ * de Contas Bancárias antes — finbCarregar() só roda se a lista dela estiver
+ * na tela, o que não é o caso aqui). */
+async function modalTransferencia(){
+  const envs = FINRSV.envelopes || [];
+  if (!envs.length){ toast('Abra a tela de Reservas antes de lançar uma transferência.', 'err'); return; }
+  let contas;
+  try{ contas = await rpc('tf_fin_contas_listar', {}); }
+  catch(e){ toast(e.message, 'err'); return; }
+  const contasOp = (contas || []).filter(c => c.papel === 'operacional');
+  if (!contasOp.length){ toast('Cadastre uma conta operacional em Contas Bancárias antes de lançar uma transferência.', 'err'); return; }
+  const hoje = new Date().toISOString().slice(0, 10);
+  abrirModal('Nova transferência',
+      '<div class="campo"><label for="ftT">Tipo</label><select id="ftT">'
+    +   '<option value="reserva">Reserva mensal (conta → envelope)</option>'
+    +   '<option value="resgate">Resgate (envelope → conta)</option>'
+    + '</select></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="ftC">Conta operacional</label><select id="ftC">'
+    +    contasOp.map(c => '<option value="' + esc(c.id) + '">' + esc(c.nome) + '</option>').join('')
+    +  '</select></div>'
+    +  '<div class="campo"><label for="ftE">Envelope</label><select id="ftE">'
+    +    envs.map(e => '<option value="' + esc(e.id) + '">' + esc(e.nome) + '</option>').join('')
+    +  '</select></div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="ftV">Valor</label><input id="ftV" type="number" step="0.01" value="0"></div>'
+    +  '<div class="campo"><label for="ftD">Data</label><input id="ftD" type="date" value="' + hoje + '"></div></div>'
+    + '<div class="campo"><label for="ftDesc">Descrição (opcional)</label><input id="ftDesc" type="text" autocomplete="off"></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Lançar', pri:true, onClick: async () => {
+        const v = id => (document.getElementById(id) || {}).value.trim();
+        const valor = Number(v('ftV'));
+        if (!valor || valor <= 0){ toast('Informe um valor maior que zero.', 'err'); return; }
+        if (!v('ftD')){ toast('Informe a data.', 'err'); return; }
+        try{
+          await rpc('tf_fin_transferencia_criar', { p_conta_id: v('ftC'), p_envelope_id: v('ftE'),
+            p_tipo: v('ftT'), p_valor: valor, p_data: v('ftD'), p_descricao: v('ftDesc') || null });
+          fecharModal(); toast('Transferência lançada.', 'ok'); await finrsvCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
