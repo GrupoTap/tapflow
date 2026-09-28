@@ -10284,6 +10284,7 @@ const CC_TIPO = { historico:'histórico', aumento:'aumento', pagamento:'pagament
   abatimento:'fornecimento', ajuste:'ajuste', estorno:'estorno' };
 let CC = null;
 let FFOR = { lista:null };   // Financeiro · Fornecedores (item 2 do módulo)
+let FINB = { lista:null };   // Financeiro · Contas Bancárias (item 3 do módulo)
 
 /** "1.234,56" / "-1234.5" / "R$ 10" / número → Number (NaN se não der). */
 function ccValor(v){
@@ -15126,7 +15127,8 @@ function irPara(v){
   if (v === 'rhs') return pintarRHSeguranca();
   if (v === 'rhp' || v === 'rhd') return pintarRHBreve(v);
   if (v === 'ffor') return pintarFornecedores();
-  if (v === 'finp' || v === 'finre' || v === 'finpg' || v === 'finb' || v === 'finrl') return pintarFinBreve(v);
+  if (v === 'finb') return pintarContasBancarias();
+  if (v === 'finp' || v === 'finre' || v === 'finpg' || v === 'finrl') return pintarFinBreve(v);
   return pintar();
 }
 
@@ -16328,6 +16330,7 @@ const PLACEHOLDER_BUSCA = {
   age:'Buscar pessoa, OS, cliente, tarefa…',
   rhf:'Buscar funcionário, função…',
   ffor:'Buscar fornecedor, CNPJ ou CPF…',
+  finb:'Buscar conta ou banco…',
 };
 /** Multi-termo E: cada palavra digitada tem que aparecer no texto da linha.
  *  (`norm` já existe mais acima, no seletor de catálogo — é a mesma função.) */
@@ -17116,7 +17119,7 @@ function pintarRHBreve(v){
 function pintarFinBreve(v){
   const board = document.getElementById('board');
   const t = { finp:'Painel', finre:'Contas a Receber', finpg:'Contas a Pagar',
-              finb:'Contas Bancárias', finrl:'Relatórios' }[v] || v;
+              finrl:'Relatórios' }[v] || v;
   board.innerHTML = '<div class="tela"><div class="telaCab"><h2>' + t + ' <span class="tag">em breve</span></h2>'
     + '<p>O lugar está reservado no menu. A tela de verdade vem num passo seguinte.</p></div></div>';
 }
@@ -17184,6 +17187,107 @@ function modalFornecedor(f){
           fecharModal(); toast('Fornecedor salvo.', 'ok'); await fforCarregar();
         }catch(e){ toast(e.message, 'err'); }
      }}]);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CONTAS BANCÁRIAS — item 3 do módulo Financeiro (Fase 1)
+// Cada conta tem papel operacional (dia a dia) ou reserva (13º, impostos,
+// rescisões). O saldo e o extrato vêm só do que foi lançado no TapFlow
+// (baixas e transferências) — não é o extrato real do banco (isso é Fase 3).
+// ════════════════════════════════════════════════════════════════════════════
+async function pintarContasBancarias(){
+  visao = 'finb';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Contas Bancárias</h2>'
+    + '<p>Saldo a partir do que for lançado aqui no TapFlow (baixas e transferências) — não é o extrato real do banco.</p></div>'
+    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="finbNovo">+ Nova conta</button></div>'
+    + '<div class="lista" id="finbLista"><p class="nota">Carregando…</p></div></div>';
+  document.getElementById('finbNovo').addEventListener('click', () => modalConta(null));
+  await finbCarregar();
+}
+async function finbCarregar(){
+  const el = document.getElementById('finbLista'); if (!el) return;
+  try{ FINB.lista = await rpc('tf_fin_contas_listar', {}); }
+  catch(e){
+    el.innerHTML = '<div class="vazio2"><b>Não consegui abrir as contas</b><p></p>'
+      + '<button class="btn" type="button" id="finbDeNovo">Tentar de novo</button></div>';
+    el.querySelector('p').textContent = e.message;
+    document.getElementById('finbDeNovo').addEventListener('click', finbCarregar);
+    return;
+  }
+  finbDesenhar();
+}
+function finbDesenhar(){
+  const el = document.getElementById('finbLista'); if (!el) return;
+  const q = BUSCA.finb || '';
+  const L = (FINB.lista || []).filter(c => casa([c.nome, c.codigo_banco].join(' '), q));
+  if (!L.length){
+    el.innerHTML = '<p class="nota" style="padding:12px">Nenhuma conta cadastrada ainda' + (q ? ' com essa busca' : '') + '.</p>';
+    return;
+  }
+  el.innerHTML = '<div class="ccLin cab"><span>Nome</span><span>Papel</span><span class="n">Saldo atual</span><span></span></div>'
+    + L.map(c => '<div class="ccLin"><span>' + esc(c.nome)
+      + (c.codigo_banco ? ' <small style="color:var(--ink-3)">(' + esc(c.codigo_banco) + ')</small>' : '') + '</span>'
+      + '<span>' + (c.papel === 'reserva' ? 'Reserva' : 'Operacional') + '</span>'
+      + '<span class="n">' + esc(BRL(c.saldo_atual)) + '</span>'
+      + '<span class="a">'
+      +   '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-extrato="' + esc(c.id) + '">Ver extrato</button> '
+      +   '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editar="' + esc(c.id) + '">Editar</button>'
+      + '</span></div>').join('');
+  el.querySelectorAll('[data-editar]').forEach(b => b.addEventListener('click', () => {
+    const c = (FINB.lista || []).find(x => x.id === b.dataset.editar);
+    if (c) modalConta(c);
+  }));
+  el.querySelectorAll('[data-extrato]').forEach(b => b.addEventListener('click', () => modalExtratoConta(b.dataset.extrato)));
+}
+REPINTA.finb = finbDesenhar;
+
+function modalConta(c){
+  abrirModal(c ? 'Editar conta' : 'Nova conta',
+      '<div class="campo"><label for="fcN">Nome</label><input id="fcN" type="text" value="'
+    +   esc(c ? c.nome : '') + '" autocomplete="off"></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="fcB">Banco (opcional)</label><input id="fcB" type="text" value="'
+    +    esc(c ? c.codigo_banco : '') + '" autocomplete="off"></div>'
+    +  '<div class="campo"><label for="fcP">Papel</label><select id="fcP">'
+    +    '<option value="operacional"' + (c && c.papel === 'operacional' ? ' selected' : '') + '>Operacional</option>'
+    +    '<option value="reserva"' + (c && c.papel === 'reserva' ? ' selected' : '') + '>Reserva</option>'
+    +  '</select></div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="fcS">Saldo inicial</label><input id="fcS" type="number" step="0.01" value="'
+    +    (c ? Number(c.saldo_inicial || 0) : 0) + '"></div>'
+    +  '<div class="campo"><label for="fcD">Data de corte</label><input id="fcD" type="date" value="'
+    +    (c && c.data_corte ? c.data_corte : '') + '"></div></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label: c ? 'Salvar' : 'Adicionar', pri:true, onClick: async () => {
+        const v = id => (document.getElementById(id) || {}).value.trim();
+        if (!v('fcN')){ toast('O nome da conta é obrigatório.', 'err'); return; }
+        if (!v('fcD')){ toast('A data de corte é obrigatória.', 'err'); return; }
+        try{
+          await rpc('tf_fin_conta_gravar', { p_id: c ? c.id : null, p_nome: v('fcN'),
+            p_papel: v('fcP'), p_saldo_inicial: Number(v('fcS')) || 0, p_data_corte: v('fcD'),
+            p_codigo_banco: v('fcB') || null });
+          fecharModal(); toast('Conta salva.', 'ok'); await finbCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+}
+
+async function modalExtratoConta(id){
+  abrirModal('Extrato', '<p class="nota">Carregando…</p>', [{ label:'Fechar', pri:true, onClick: fecharModal }]);
+  let r;
+  try{ r = await rpc('tf_fin_conta_extrato', { p_conta_id: id }); }
+  catch(e){ document.getElementById('mBody').innerHTML = '<p class="nota">' + esc(e.message) + '</p>'; return; }
+  document.getElementById('mTit').textContent = 'Extrato — ' + r.nome;
+  const mv = r.movimentos || [];
+  document.getElementById('mBody').innerHTML =
+      '<p class="nota" style="margin-top:0">Saldo atual: <b>' + esc(BRL(r.saldo_atual)) + '</b></p>'
+    + (mv.length
+        ? '<div class="ccLin cab"><span>Data</span><span>Descrição</span><span class="n">Valor</span></div>'
+          + mv.map(m => '<div class="ccLin' + (m.estornado ? ' riscada' : '') + '">'
+            + '<span>' + esc(dataBR(m.data)) + '</span>'
+            + '<span>' + esc(m.descricao) + (m.quem ? ' <small style="color:var(--ink-3)">· ' + esc(m.quem) + '</small>' : '') + '</span>'
+            + '<span class="n ' + (Number(m.valor) >= 0 ? 'mais' : 'menos') + '">' + esc(ccSinal(Number(m.valor))) + '</span></div>').join('')
+        : '<p class="nota">Nenhuma movimentação lançada ainda.</p>');
 }
 
 // ════════════════════════════════════════════════════════════════════════════
