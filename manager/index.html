@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S43</title>
+<title>TapFlow Manager · S44</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -662,6 +662,16 @@ body.emQuadro .board:not(.livre){height:100%}
 .rhSt.confirmado{background:var(--ok-soft);color:var(--ok)}
 .rhSt.nao_recebido,.rhSt.anulada{background:var(--crit-soft);color:var(--crit)}
 .rhSt.cancelada{background:var(--surface-2);color:var(--ink-3)}
+.rhSt.separado{background:var(--accent-soft);color:var(--accent-ink)}
+/* S44 · R4 — a linha da devolução: o item e o destino (reuso / descarte / não devolvido) */
+.rhDevL{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:8px 10px;
+  border:1px solid var(--rule);border-radius:5px;margin:0 0 6px;background:var(--surface)}
+.rhDevL .chk small{display:block;color:var(--ink-3);font-size:11.5px;margin-left:22px}
+.rhDevOp{display:flex;gap:4px;flex-wrap:wrap}
+.rhDevOp label{display:inline-flex;gap:5px;align-items:center;border:1px solid var(--rule);border-radius:4px;padding:4px 9px;
+  font-size:12.5px;cursor:pointer;background:var(--surface-2)}
+.rhDevOp label:has(input:checked){border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+.rhDevOp label:has(input:disabled){opacity:.45;cursor:not-allowed}
 .rhCa{font:600 11.5px var(--mono);color:var(--ink-2)}
 .rhCa.falta{color:var(--crit)}
 .rhSem{display:inline-block;width:11px;height:11px;border-radius:50%;flex:0 0 auto;background:var(--ink-3);
@@ -1659,7 +1669,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S43';
+const APP_VERSION = 'S44';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -8122,7 +8132,7 @@ async function negPropostas(n, b){
           // pode ter sido feita no sistema de sempre) — mas a linha diz se o
           // TapFlow gerou o papel
           + '<td class="docCel">' + (p.documentos
-              ? 'gerado ' + esc(dataBR(String(p.ultimo_documento_em || '').slice(0,10)))
+              ? 'gerado ' + esc(rhDT(p.ultimo_documento_em).slice(0,10))
               : '<span class="nota">—</span>') + '</td>'
           + '<td class="acoesPropTd" data-p="' + esc(p.id) + '"></td></tr>').join('')
       + '</tbody></table></div>';
@@ -17016,8 +17026,15 @@ async function carregarRH(){
 const RH_MOTIVO = { primeira:'Primeira entrega', entrega_inicial:'Entrega inicial (já estava com ele)',
   vistoria:'Reprovado em vistoria', danificado:'Danificado em serviço', extravio:'Extravio',
   limite_fabricante:'Limite do fabricante', troca_tamanho:'Troca de tamanho', reposicao:'Reposição' };
-const RH_STATUS = { aguardando:'aguardando confirmação', confirmado:'confirmada',
+const RH_STATUS = { separado:'separado — falta entregar', aguardando:'aguardando confirmação', confirmado:'confirmada',
   nao_recebido:'"não recebi"', cancelada:'cancelada' };
+// S44 · R4 — devolução
+const RH_DESTINO = { reuso:'devolvido para reuso', descarte:'devolvido para descarte', nao_devolvido:'não devolvido' };
+const RH_DESTINO_CURTO = { reuso:'reuso', descarte:'descarte', nao_devolvido:'não devolvido' };
+const RH_DEV_ST = { aguardando:'aguardando o funcionário', confirmada:'confirmada no celular', contestada:'NÃO CONCORDOU',
+  sem_confirmacao:'sem a confirmação dele', cancelada:'cancelada' };
+/** A devolução que VALE na ficha: confirmada no celular ou registrada sem a confirmação dele. */
+const rhDevVale = d => !!(d && (d.status === 'confirmada' || d.status === 'sem_confirmacao'));
 const rhDT = t => t ? new Date(t).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit',
   month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }).replace(',', '') : '—';
 const rhMes = d => d ? String(d).slice(5,7) + '/' + String(d).slice(0,4) : '—';
@@ -17080,7 +17097,7 @@ function pintarRHBreve(v){
 // S43: + Pedidos, Estoque, Documentos da empresa e Kit do cliente; "Treinamentos"
 // virou a casa das listas, dos modelos, dos vídeos e das dúvidas. Catálogo de
 // EPI e Textos ficam SÓ aqui em cima (item 1.2: o painel os repetia).
-const RH_ABAS = [ ['painel','Painel'], ['entregas','Entregas'], ['pedidos','Pedidos'], ['estoque','Estoque'],
+const RH_ABAS = [ ['painel','Painel'], ['entregas','Entregas'], ['pedidos','Pedidos'], ['estoque','Estoque'], ['devol','Devoluções'],
   ['trein','Treinamentos'], ['docs','Documentos da empresa'], ['kit','Kit do cliente'],
   ['epis','Catálogo de EPI'], ['textos','Textos e termo'], ['quem','Quem vê'] ];
 
@@ -17089,8 +17106,8 @@ async function pintarRHSeguranca(){
   const board = document.getElementById('board');
   if (DEMO) return rhDemo(board, 'Segurança do Trabalho');
   board.innerHTML = '<div class="tela rhTela"><div class="telaCab"><h2>Segurança do Trabalho</h2>'
-    + '<p>EPI, estoque, ASO, treinamentos e o kit de documentos para os clientes — tudo confirmado pelo funcionário no celular. '
-    + 'Vistoria bimestral (R3), devolução no desligamento (R4) e confirmação por digital (R7) chegam nas próximas fases.</p></div>'
+    + '<p>EPI, estoque, devolução, ASO, treinamentos e o kit de documentos para os clientes — tudo confirmado pelo funcionário no celular. '
+    + 'Vistoria bimestral (R3) e confirmação por digital (R7) chegam nas próximas fases.</p></div>'
     + '<div class="chips" id="rhAbas"></div><div id="rhCorpo"><p class="nota">Carregando…</p></div></div>';
   const ab = document.getElementById('rhAbas');
   RH_ABAS.forEach(([k, r]) => {
@@ -17107,6 +17124,7 @@ async function pintarRHSeguranca(){
     if (RH.aba === 'trein')    return await rhTreinHub(corpo);
     if (RH.aba === 'pedidos')  return await rhPedidos(corpo);
     if (RH.aba === 'estoque')  return await rhEstoque(corpo);
+    if (RH.aba === 'devol')    return await rhDevolucoes(corpo);
     if (RH.aba === 'docs')     return await rhDocsEmpresa(corpo);
     if (RH.aba === 'kit')      return await rhKit(corpo);
     if (RH.aba === 'textos')   return await rhTextos(corpo);
@@ -17151,7 +17169,12 @@ function rhListaEntregas(el, L, comNome, depois){
     sub.push(RH_MOTIVO[e.motivo] || e.motivo);
     if (e.status === 'confirmado') sub.push('confirmada no celular em ' + rhDT(e.confirmado_em)
       + (e.confirmado_aparelho ? ' (' + rhAparelho(e.confirmado_aparelho) + ')' : ''));
-    if (e.status === 'aguardando') sub.push('lançada por ' + (e.lancado_por_nome || '?') + ' em ' + rhDT(e.lancado_em));
+    if (e.status === 'separado') sub.push('separado por ' + (e.lancado_por_nome || '?') + ' em ' + rhDT(e.lancado_em) + ' — falta clicar "Entreguei"');
+    if (e.status === 'aguardando') sub.push(e.entregue_em ? 'entregue por ' + (e.entregue_por_nome || '?') + ' em ' + rhDT(e.entregue_em)
+                                                          : 'lançada por ' + (e.lancado_por_nome || '?') + ' em ' + rhDT(e.lancado_em));
+    if (e.origem_avaliado_em) sub.push('unidade avaliada em ' + rhDT(e.origem_avaliado_em).slice(0,10));
+    if (e.devolucao) sub.push((rhDevVale(e.devolucao) ? RH_DESTINO[e.devolucao.destino] + ' em ' + dataBR(e.devolucao.data)
+      : 'devolução ' + (RH_DEV_ST[e.devolucao.status] || e.devolucao.status)) + (e.devolucao.status === 'sem_confirmacao' ? ' (sem a confirmação dele)' : ''));
     if (e.status === 'nao_recebido') sub.push('"não recebi" em ' + rhDT(e.nao_recebido_em) + (e.nao_recebido_obs ? ': ' + e.nao_recebido_obs : ''));
     if (e.status === 'cancelada') sub.push('cancelada por ' + (e.cancelado_por_nome || '?') + ': ' + (e.cancelado_motivo || ''));
     if (anul) sub.push('ANULADA em ' + rhDT(e.anulado_em) + ' por ' + (e.anulado_por_nome || '?') + ': ' + (e.anulado_motivo || ''));
@@ -17167,7 +17190,8 @@ function rhListaEntregas(el, L, comNome, depois){
       const w = document.createElement('a'); w.className = 'btn mini'; w.target = '_blank'; w.rel = 'noopener';
       w.href = rhWhats(e.celular, e.funcionario, e.epi_nome); w.textContent = 'WhatsApp'; a.appendChild(w);
     }
-    if (e.status === 'aguardando' || e.status === 'nao_recebido') bt('Cancelar', () => rhCancelar(e.id, depois));
+    if (e.status === 'separado') bt('Entreguei', () => rhEntreguei([e.id], depois));
+    if (e.status === 'separado' || e.status === 'aguardando' || e.status === 'nao_recebido') bt('Cancelar', () => rhCancelar(e.id, depois));
     if (e.status === 'confirmado' && !anul) bt('Anular', () => rhAnular(e, depois));
     el.appendChild(d);
   });
@@ -17202,12 +17226,37 @@ function rhAnular(e, depois){
       } } ]);
 }
 
+/** S44 · Q3 — o segundo passo do pedido: o EPI separado foi deixado na mesa
+ *  dele. Só agora a entrega aparece no Field para confirmar com o PIN. */
+async function rhEntreguei(ids, depois){
+  try{
+    const r = await rpc('tf_rh_entreguei', { p_ids: ids });
+    contarRH();
+    const w = rhWhats(r.celular, r.funcionario, r.itens);
+    abrirModal('Entregue',
+      '<p style="margin-top:0"><b>' + esc(r.itens) + '</b> — agora no celular de <b>' + esc(r.funcionario)
+      + '</b>, aguardando a confirmação dele com o PIN.</p>'
+      + '<p class="nota">Os 2 dias do "sem confirmação" contam de agora.</p>'
+      + (w ? '<p><a class="btn pri" target="_blank" rel="noopener" href="' + esc(w) + '">Avisar pelo WhatsApp</a></p>'
+           : '<p class="nota">Cadastre o celular na ficha para avisar pelo WhatsApp com um toque.</p>'),
+      [ { label:'Fechar', onClick: () => { fecharModal(); depois && depois(); } } ]);
+  }catch(e){ toast(e.message, 'err'); }
+}
+
+/** S44 · R4 — as unidades avaliadas de um EPI, para escolher na entrega. */
+function rhRotuloUnidade(u){
+  return [u.tamanho ? 'tam. ' + u.tamanho : '', u.fabricacao ? 'fab. ' + rhMes(u.fabricacao) : '',
+    u.serie_lote ? 'série ' + u.serie_lote : '', 'de ' + (u.de || '?'),
+    'avaliado em ' + rhDT(u.avaliado_em).slice(0,10)].filter(Boolean).join(' · ');
+}
+
 // ── NOVA ENTREGA ────────────────────────────────────────────────────────────
 async function rhNovaEntrega(uid){
-  let lista, cat, ficha = null, est = [];
+  let lista, cat, ficha = null, est = [], reap = [];
   try{
-    [lista, cat, est] = await Promise.all([rpc('tf_rh_funcionarios', {}), rpc('tf_rh_epis', {}),
-      rpc('tf_rh_estoque', {}).catch(() => [])]);   // S43 · sem o 63: sem saldo, sem erro
+    [lista, cat, est, reap] = await Promise.all([rpc('tf_rh_funcionarios', {}), rpc('tf_rh_epis', {}),
+      rpc('tf_rh_estoque', {}).catch(() => []),        // S43 · sem o 63: sem saldo, sem erro
+      rpc('tf_rh_reaproveitados', {}).catch(() => [])]);   // S44 · sem o 64: sem unidades
     if (uid) ficha = await rpc('tf_rh_funcionario', { p_usuario: uid });
   }catch(e){ toast(e.message, 'err'); return; }
   const pessoas = lista.filter(f => f.tem_ficha && f.situacao === 'ativo');
@@ -17240,6 +17289,7 @@ async function rhNovaEntrega(uid){
           '<option value="' + k + '">' + esc(RH_MOTIVO[k]) + '</option>').join('') + '</select></div>'
       + '<div class="campo"><label>Condição</label><select class="nC"><option value="novo">Novo</option>'
       + '<option value="reaproveitado">Reaproveitado</option></select></div>'
+      + '<div class="campo c2 nUniC" hidden><label>Unidade reaproveitada (avaliada)</label><select class="nUni"></select></div>'
       + '<div class="campo nFabC" hidden><label>Fabricação (mês/ano)</label><input class="nFab" type="month"></div>'
       + '<div class="campo nSerC" hidden><label>Nº de série / lote</label><input class="nSer" type="text" maxlength="60"></div>'
       + '<div class="campo nIniC" hidden><label>Data em que recebeu</label><input class="nData" type="date" max="' + isoHoje() + '"></div>'
@@ -17265,23 +17315,54 @@ async function rhNovaEntrega(uid){
         + '. EPI comprado com CA válido segue em uso; o aviso é para a próxima compra.');
       if (x && x.sob_encomenda) av.push('Item sob encomenda (óculos graduado): confira a receita na ficha antes de entregar.');
       if (ini) av.push('Entrega inicial: o que o funcionário JÁ tinha antes do sistema. Informe a data e o CA gravado na peça, se forem outros.');
-      // S43 · o saldo da caixa (a entrega dá baixa; a inicial não)
+      // S44 · R4 — a unidade avaliada (casco, cinto, abafador, perneira; e a armação do óculos graduado)
+      const uns = x ? (reap || []).filter(u => u.epi_id === x.id) : [];
+      const uniC = d.querySelector('.nUniC'), uni = d.querySelector('.nUni');
+      const condSel = d.querySelector('.nC');
+      const mostraUni = !!(x && uns.length && !ini && (condSel.value === 'reaproveitado' || x.sob_encomenda));
+      uniC.hidden = !mostraUni;
+      if (mostraUni && uni.dataset.epi !== x.id){
+        uni.dataset.epi = x.id;
+        uni.innerHTML = '<option value="">' + (x.sob_encomenda ? '— armação nova (lente e armação) —' : '— sem escolher a unidade —') + '</option>'
+          + uns.map(u => '<option value="' + esc(u.devolucao_id) + '">' + esc(rhRotuloUnidade(u)) + '</option>').join('');
+      }
+      if (!mostraUni){ uni.value = ''; uni.dataset.epi = ''; }
+      const u = mostraUni && uni.value ? uns.find(y => y.devolucao_id === uni.value) : null;
+      if (u){
+        condSel.value = 'reaproveitado';
+        if (u.fabricacao && !d.querySelector('.nFab').value) d.querySelector('.nFab').value = String(u.fabricacao).slice(0,7);
+        if (u.serie_lote && !d.querySelector('.nSer').value) d.querySelector('.nSer').value = u.serie_lote;
+        if (u.tamanho && x.tem_tamanho) d.querySelector('.nT').value = u.tamanho;
+      }
+      if (x && x.sob_encomenda && uns.length && !ini) av.push('Há ' + uns.length + ' armação(ões) graduada(s) reaproveitada(s), avaliada(s) e aprovada(s): se servir no rosto dele, escolha abaixo e encomende só as lentes.');
+      // S43 · o saldo da caixa (a entrega dá baixa; a inicial não) — S44: SEM SALDO, TRAVA (Q4)
+      d.dataset.semSaldo = '';
       const es = x && (est || []).find(y => y.epi_id === x.id);
-      if (es && es.controlado && !ini){
+      const cond = condSel.value;
+      const ctrl = es && (cond === 'reaproveitado' ? (es.controlado_reap ?? es.controlado) : (es.controlado_novo ?? es.controlado));
+      const armacao = !!(u && x.sob_encomenda);
+      if (ctrl && !ini && !armacao){
         const t = x.tem_tamanho ? d.querySelector('.nT').value : '';
         const l = (es.linhas || []).find(y => y.tamanho === t);
-        const cond = d.querySelector('.nC').value;
         const n = l ? Number(cond === 'reaproveitado' ? l.reaproveitado : l.novo) : 0;
-        av.push((x.tem_tamanho && !t ? 'Estoque: escolha o tamanho.' : 'Estoque' + (t ? ' ' + t : '') + (cond === 'reaproveitado' ? ' (reaproveitado)' : '')
-          + ': ' + n + (n < Number(d.querySelector('.nQ').value || 1) ? ' — MENOS do que sai; grava assim mesmo e o painel pede contagem.' : '.')));
+        const q = Number(d.querySelector('.nQ').value || 1);
+        if (x.tem_tamanho && !t) av.push('Estoque: escolha o tamanho.');
+        else if (n < q){
+          d.dataset.semSaldo = '1';
+          av.push('SEM SALDO: o estoque' + (t ? ' do ' + t : '') + (cond === 'reaproveitado' ? ' (reaproveitado)' : '') + ' tem ' + Math.max(n, 0)
+            + ' e sairiam ' + q + ' — o sistema não deixa lançar. Dê entrada da compra (Estoque › Entrada) ou, se a caixa tem, faça a contagem.');
+        } else av.push('Estoque' + (t ? ' ' + t : '') + (cond === 'reaproveitado' ? ' (reaproveitado)' : '') + ': ' + n + '.');
       }
-      d.querySelector('.nAv').textContent = av.join(' ');
+      const avEl = d.querySelector('.nAv');
+      avEl.textContent = av.join(' ');
+      avEl.style.color = d.dataset.semSaldo ? 'var(--crit)' : '';
     };
     e.addEventListener('change', acerta);
     d.querySelector('.nM').addEventListener('change', acerta);
     d.querySelector('.nT').addEventListener('change', acerta);
     d.querySelector('.nC').addEventListener('change', acerta);
     d.querySelector('.nQ').addEventListener('input', acerta);
+    d.querySelector('.nUni').addEventListener('change', acerta);
     d.querySelector('.nTirar').addEventListener('click', () => d.remove());
     if (epiId){ e.value = epiId; }
     acerta();
@@ -17325,9 +17406,13 @@ async function rhGravarEntrega(epis){
       motivo: d.querySelector('.nM').value, condicao: d.querySelector('.nC').value,
       fabricacao: d.querySelector('.nFab').value || null, serie_lote: d.querySelector('.nSer').value || null,
       data_entrega: d.querySelector('.nM').value === 'entrega_inicial' ? (d.querySelector('.nData').value || null) : null,
-      ca: d.querySelector('.nM').value === 'entrega_inicial' ? (d.querySelector('.nCA').value || null) : null });
+      ca: d.querySelector('.nM').value === 'entrega_inicial' ? (d.querySelector('.nCA').value || null) : null,
+      devolucao_id: d.querySelector('.nUni').value || null });   // S44 · a unidade avaliada
   }
   if (!itens.length){ msg.textContent = 'Escolha ao menos um EPI.'; return; }
+  if (document.querySelector('#rhNLinhas .rhNL[data-sem-saldo="1"]')){
+    msg.textContent = 'Há item sem saldo no estoque (em vermelho). Dê entrada ou faça a contagem antes — ou tire a linha.'; return;
+  }
   try{
     const r = await rpc('tf_rh_lancar_entregas', { p_usuario: uid, p_itens: itens });
     const f = await rpc('tf_rh_funcionario', { p_usuario: uid });
@@ -17390,7 +17475,12 @@ function rhEditarEpi(e, depois){
     + ck('eTT', 'Tem tamanho', e.tem_tamanho)
     + '<div class="campo" id="eTamC"><label for="eTam">Tamanhos (separados por vírgula)</label><input id="eTam" type="text" value="' + esc((e.tamanhos || []).join(', ')) + '"></div>'
     + ck('eLA', 'Livre acesso', e.livre_acesso, 'NR-06 6.5.1.2: fica na caixa, sem registro individual (ex.: creme protetor)')
-    + ck('eRe', 'Reaproveitável na devolução', e.reaproveitavel)
+    + ck('eRe', 'Reaproveitável na devolução', e.reaproveitavel, 'volta ao estoque como reaproveitado depois de avaliado')
+    // S44 · R4: as peças que o reaproveitamento troca (saem do estoque na avaliação)
+    + '<div class="campo" id="ePRC"><label>Peças trocadas no reaproveitamento</label>'
+    + ((RH.epis || []).filter(x => x.componente && x.id !== e.id).map(x => '<label class="chk" style="margin:2px 0"><input type="checkbox" class="ePR" value="'
+        + esc(x.id) + '"' + ((e.pecas_reuso || []).includes(x.id) ? ' checked' : '') + '> ' + esc(x.nome) + '</label>').join('')
+       || '<p class="nota" style="margin:0">Nenhum item marcado "peça de reposição" no catálogo.</p>') + '</div>'
     + ck('ePF', 'Pede data de fabricação na entrega', e.pede_fabricacao, 'capacete, cinto')
     + ck('ePS', 'Pede nº de série/lote', e.pede_serie, 'cinto')
     + ck('eSE', 'Item individual / sob encomenda', e.sob_encomenda, 'óculos graduado')
@@ -17407,14 +17497,15 @@ function rhEditarEpi(e, depois){
             tamanhos: g('eTam').value.split(',').map(s => s.trim()).filter(Boolean),
             livre_acesso: g('eLA').checked, reaproveitavel: g('eRe').checked, pede_fabricacao: g('ePF').checked,
             pede_serie: g('ePS').checked, sob_encomenda: g('eSE').checked, componente: g('eCo').checked,
-            limite_meses: g('eLM').value, ordem: g('eOr').value, ativo: g('eAt').checked };
+            limite_meses: g('eLM').value, ordem: g('eOr').value, ativo: g('eAt').checked,
+            pecas_reuso: g('eRe').checked ? Array.from(document.querySelectorAll('.ePR:checked')).map(c => c.value) : [] };
           try{ await rpc('tf_rh_salvar_epi', { p_id: e.id || null, p_dados: dados });
                fecharModal(); toast('EPI salvo.', 'ok'); depois(); }
           catch(er){ g('rhMsg').textContent = er.message; }
       } } ]);
-  const tt = document.getElementById('eTT');
-  const acerta = () => { document.getElementById('eTamC').hidden = !tt.checked; };
-  tt.addEventListener('change', acerta); acerta();
+  const tt = document.getElementById('eTT'), re = document.getElementById('eRe');
+  const acerta = () => { document.getElementById('eTamC').hidden = !tt.checked; document.getElementById('ePRC').hidden = !re.checked; };
+  tt.addEventListener('change', acerta); re.addEventListener('change', acerta); acerta();
 }
 
 // ── TEXTOS E TERMO ──────────────────────────────────────────────────────────
@@ -17574,7 +17665,7 @@ function rhFDados(c, f){
     + (f.ficha && !desl ? '<button class="btn perigo" type="button" id="fDesl">Desligar…</button>' : '')
     + (desl ? '<button class="btn" type="button" id="fReat">Reativar</button>' : '') + '</div>'
     + (desl ? '<p class="nota">Desligado em ' + esc(dataBR(fi.desligado_em)) + (fi.desligado_motivo ? ' — ' + esc(fi.desligado_motivo) : '')
-      + '. Ficha, termo e entregas continuam guardados (guarda legal); a receita foi apagada e o PIN desativado.</p>' : '')
+      + '. Ficha, termo, entregas e devoluções continuam guardados (guarda legal); a receita foi apagada e o PIN desativado.</p>' : '')
     // S43 · documento pessoal (identidade/CNH), pedido por alguns clientes no kit
     + (f.ficha ? '<div class="secTit">Documento pessoal (identidade ou CNH)</div>'
       + (fi.doc_pessoal_arquivo_id ? '<div class="rhLin"><span class="t">Anexado<small>vai no kit de quem exige</small></span><span class="a">'
@@ -17598,21 +17689,7 @@ function rhFDados(c, f){
     catch(e){ toast(e.message, 'err'); }
   }));
   const bd = document.getElementById('fDesl');
-  if (bd) bd.addEventListener('click', () => abrirModal('Desligar ' + f.usuario.nome,
-      '<p style="margin-top:0">A ficha fica guardada (a lei pede guarda longa): entregas, termo e assinatura <b>não</b> se apagam. '
-    + 'Só a <b>receita de óculos</b> é apagada, e o PIN é desativado. O login do sistema continua como está — '
-    + 'desative-o em Configurações › Usuários se for o caso.</p>'
-    + '<p class="nota">A devolução dos EPIs (reuso, descarte) chega na R2.</p>'
-    + '<div class="campo"><label for="dD">Data do desligamento</label><input id="dD" type="date" value="' + isoHoje() + '"></div>'
-    + '<div class="campo"><label for="dM">Motivo (opcional)</label><input id="dM" type="text" maxlength="200"></div>'
-    + '<p class="nota" id="rhMsg" style="color:var(--crit)"></p>',
-    [ { label:'Cancelar', onClick: fecharModal },
-      { label:'Desligar', onClick: async () => {
-          try{ const r = await rpc('tf_rh_desligar', { p_usuario: f.usuario.id, p_data: document.getElementById('dD').value,
-                 p_motivo: document.getElementById('dM').value });
-               fecharModal(); toast('Desligado.' + (r.receitas_apagadas ? ' Receita apagada.' : ''), 'ok'); await rhRecarregar(); }
-          catch(e){ document.getElementById('rhMsg').textContent = e.message; }
-      } } ]));
+  if (bd) bd.addEventListener('click', () => rhDesligamento(f.usuario.id, rhRecarregar));   // S44 · R4: guiado
   const br = document.getElementById('fReat');
   if (br) br.addEventListener('click', () => _semDuploEnvio_(br, async () => {
     try{ await rpc('tf_rh_reativar', { p_usuario: f.usuario.id }); toast('Ficha reativada.', 'ok'); await rhRecarregar(); }
@@ -17746,12 +17823,20 @@ function rhFPrev(c, f){
 
 function rhFEpis(c, f){
   const antigas = (f.arquivos || []).filter(a => a.tipo === 'ficha_antiga');
+  const devs = (f.devolucoes || []);
   c.innerHTML = '<div class="rhBarra"><button class="btn pri" type="button" id="feNova">Nova entrega</button>'
+    + (f.ficha.situacao === 'ativo' ? '<button class="btn" type="button" id="feDev">Registrar devolução</button>' : '')
     + '<button class="btn" type="button" id="feFicha">Ficha de EPI (cliente)</button>'
     + '<button class="btn" type="button" id="feCompleta">Ficha completa (auditoria)</button></div>'
     + '<p class="nota" style="margin-top:0">A ficha é montada <b>na hora</b> com as entregas <b>confirmadas</b>. A do cliente não mostra as anuladas; '
     + 'a completa mostra, riscadas, com data, quem anulou e o motivo. Pendentes de confirmação não entram em nenhuma.</p>'
     + '<div class="ccLista" id="feL"></div>'
+    + (devs.length ? '<div class="secTit">Devoluções</div><div class="ccLista">' + devs.map(d => '<div class="rhLin' + (d.status === 'cancelada' ? ' riscada' : '')
+        + '"><span class="t"><b>' + esc(d.epi_nome) + '</b> — ' + esc(RH_DESTINO[d.destino]) + ' em ' + esc(dataBR(d.data)) + '<small>'
+        + esc([RH_DEV_ST[d.status] || d.status, d.status === 'confirmada' ? rhDT(d.confirmado_em) : '',
+               d.status === 'sem_confirmacao' ? d.sem_conf_motivo : '', d.status === 'contestada' ? '"' + (d.contestado_obs || '') + '"' : '',
+               d.avaliacao ? (d.avaliacao === 'aprovado' ? 'aprovado para reuso' : 'reprovado: ' + (d.avaliacao_obs || '')) : '',
+               d.contexto === 'desligamento' ? 'desligamento' : ''].filter(Boolean).join(' · ')) + '</small></span></div>').join('') + '</div>' : '')
     + '<div class="secTit">Histórico anterior ao sistema (fichas de papel)</div>'
     + (antigas.length ? antigas.map(a => '<div class="rhLin"><span class="t">' + esc(a.nome) + '<small>' + esc(rhDT(a.criado_em))
       + '</small></span><span class="a"><button class="btn mini" type="button" data-arq="' + esc(a.id) + '">Abrir</button></span></div>').join('')
@@ -17761,6 +17846,8 @@ function rhFEpis(c, f){
   rhListaEntregas(document.getElementById('feL'), (f.entregas || []).map(e => Object.assign({ celular: f.ficha.celular,
     funcionario: f.usuario.nome }, e)), false, rhRecarregar);
   document.getElementById('feNova').addEventListener('click', () => rhNovaEntrega(f.usuario.id));
+  const bdv = document.getElementById('feDev');
+  if (bdv) bdv.addEventListener('click', () => rhRegistrarDevolucao(f.usuario.id, 'avulsa', rhRecarregar));
   const b1 = document.getElementById('feFicha'), b2 = document.getElementById('feCompleta');
   b1.addEventListener('click', () => _semDuploEnvio_(b1, () => rhBaixarFicha(f.usuario.id, false)));
   b2.addEventListener('click', () => _semDuploEnvio_(b2, () => rhBaixarFicha(f.usuario.id, true)));
@@ -18149,7 +18236,7 @@ async function rhFichaPDF(jsPDF, ficha, ass){
     doc.setFont('helvetica','normal'); doc.setFontSize(7.6);
     const eq = [l.epi_nome + ' ×' + l.quantidade + (l.tamanho ? ' (' + l.tamanho + ')' : '')];
     const det = [];
-    if (l.condicao === 'reaproveitado') det.push('reaproveitado');
+    if (l.condicao === 'reaproveitado') det.push('reaproveitado' + (l.origem_avaliado_em ? ' — avaliado em ' + rhDT(l.origem_avaliado_em).slice(0,10) : ''));
     if (l.fabricacao) det.push('fab. ' + rhMes(l.fabricacao) + (l.limite_em ? ' · limite ' + rhMes(l.limite_em) : ''));
     if (l.serie_lote) det.push('série ' + l.serie_lote);
     if (l.anterior_ao_sistema) det.push('anterior ao sistema');
@@ -18162,7 +18249,15 @@ async function rhFichaPDF(jsPDF, ficha, ass){
     x += col[0].w;
     doc.setFontSize(7.6); doc.text(String(l.ca), x + 1.2, y + 5); x += col[1].w;
     doc.text(dataBR(l.data_entrega), x + 1.2, y + 5); x += col[2].w;
-    doc.text('—', x + 1.2, y + 5); x += col[3].w;          // devolução: R2
+    // devolução (S44 · R4): a que VALE — confirmada no celular ou registrada sem a confirmação dele
+    if (rhDevVale(l.devolucao)){
+      doc.text(dataBR(l.devolucao.data), x + 1.2, y + 5);
+      doc.setFontSize(5.6);
+      doc.text(doc.splitTextToSize(RH_DESTINO_CURTO[l.devolucao.destino] + (l.devolucao.status === 'sem_confirmacao'
+        ? ' · sem confirmação do funcionário' : ' · confirmada no celular'), col[3].w - 2), x + 1.2, y + 8.4);
+      doc.setFontSize(7.6);
+    } else doc.text('—', x + 1.2, y + 5);
+    x += col[3].w;
     // assinatura do funcionário: rubrica + selo, sempre juntos
     img(F.usuario_id, x + 1, y + 0.8, col[4].w - 2, 8.6);
     doc.setFontSize(5.6);
@@ -18208,7 +18303,7 @@ const RH_TIPO_ASO = { admissional:'Admissional', periodico:'Periódico', retorno
   mudanca_risco:'Mudança de risco', demissional:'Demissional' };
 const RH_TIPO_MOV = { inventario:'Inventário inicial', entrada:'Entrada (compra)', saida_entrega:'Saída — entrega',
   estorno:'Voltou ao estoque', ajuste:'Ajuste de contagem', reabastecimento:'Reabastecimento da caixa',
-  saida_avulsa:'Saída avulsa' };
+  saida_avulsa:'Saída avulsa', retorno_reuso:'Voltou do reuso (avaliado)' };
 const RH_DOCS_SUGERIDOS = ['PGR','PCMSO','LTCAT','PCA','PPR','Cartão CNPJ','Certidão negativa (FGTS)','Certidão negativa (INSS)'];
 
 /** "vence em 12 dias" / "venceu há 3 dias" / "vence hoje". */
@@ -18284,8 +18379,11 @@ function carregarPdfLib(){
 function rhContarPainel(p){
   const velhas = (p.aguardando || []).filter(e => Number(e.dias_aguardando) > 2).length;
   const vencidos = (p.docs_vencendo || []).filter(x => Number(x.dias) < 0).length;
+  // S44: as separadas (falta o "entreguei"), a devolução contestada e o que espera avaliação
+  const contest = (p.devolucoes_pendentes || []).filter(x => x.status === 'contestada').length;
   return velhas + (p.nao_recebidas || []).length + (p.avisos || []).length + (p.pedidos || []).length
-       + (p.duvidas_abertas || []).length + vencidos;
+       + (p.duvidas_abertas || []).length + vencidos
+       + (p.separadas || []).length + contest + (p.aguardando_avaliacao || []).length;
 }
 async function contarRH(){
   if (!RH_AUT || DEMO) return;
@@ -18332,12 +18430,21 @@ async function rhPainel(corpo){
     '<div class="rhLin"><span class="t"><b>' + esc(x.funcionario) + '</b> — ' + esc(x.epi) + (x.tamanho ? ' (' + esc(x.tamanho) + ')' : '')
     + ' ×' + x.quantidade + '<small>' + esc(RH_MOT_PED[x.motivo] || x.motivo) + ' · pedido em ' + esc(rhDT(x.criado_em)) + '</small></span>'
     + '<span class="a"><button class="btn mini pri" type="button" data-separar="' + esc(x.id) + '">Separar</button></span></div>').join(''));
+  // S44 · Q3 — separadas, falta deixar na mesa ("Entreguei")
+  const sp = (p.separadas || []);
+  blocos += sec('Separados — falta entregar', sp.length, sp.map(e =>
+    '<div class="rhLin' + (Number(e.dias_separado) > 1 ? ' velha' : '') + '"><span class="t"><b>' + esc(e.funcionario) + '</b> — ' + esc(e.epi_nome)
+    + ' ×' + e.quantidade + (e.tamanho ? ' (' + esc(e.tamanho) + ')' : '') + '<small>separado em ' + esc(rhDT(e.lancado_em))
+    + (Number(e.dias_separado) > 0 ? ' · há ' + e.dias_separado + ' dia(s)' : '') + ' · o estoque já baixou · só aparece no celular dele depois do "Entreguei"</small></span>'
+    + '<span class="a"><button class="btn mini pri" type="button" data-entreguei="' + esc(e.id) + '">Entreguei</button>'
+    + '<button class="btn mini" type="button" data-cancelar="' + esc(e.id) + '">Cancelar</button></span></div>').join(''),
+    'deixou na mesa? clique Entreguei');
   // 3 · entregas aguardando (as de +2 dias em vermelho), "não recebi", avisos
   const ag = (p.aguardando || []);
   blocos += sec('Entregas aguardando a confirmação do funcionário', ag.length, ag.map(e =>
     '<div class="rhLin' + (Number(e.dias_aguardando) > 2 ? ' velha' : '') + '" data-ent="' + esc(e.id) + '">'
     + '<span class="t"><b>' + esc(e.funcionario) + '</b> — ' + esc(e.epi_nome) + ' ×' + e.quantidade
-    + (e.tamanho ? ' (' + esc(e.tamanho) + ')' : '') + '<small>lançada em ' + esc(rhDT(e.lancado_em))
+    + (e.tamanho ? ' (' + esc(e.tamanho) + ')' : '') + '<small>' + (e.entregue_em ? 'entregue em ' + esc(rhDT(e.entregue_em)) : 'lançada em ' + esc(rhDT(e.lancado_em)))
     + ' · há ' + e.dias_aguardando + ' dia(s)' + (Number(e.dias_aguardando) > 2 ? ' — passou de 2 dias' : '')
     + (e.pedido_id ? ' · pedido pelo Field' : '') + '</small></span>'
     + '<span class="a">' + (e.celular ? '<a class="btn mini" target="_blank" rel="noopener" href="'
@@ -18351,8 +18458,27 @@ async function rhPainel(corpo){
     + '</small></span><span class="a"><button class="btn mini" type="button" data-cancelar="' + esc(e.id)
     + '">Cancelar a entrega</button><button class="btn mini" type="button" data-ficha="' + esc(e.usuario_id)
     + '">Abrir ficha</button></span></div>').join(''));
+  // S44 · R4 — a devolução que espera o funcionário (ou que ele contestou)
+  const dp = (p.devolucoes_pendentes || []);
+  blocos += sec('Devolução de EPI aguardando o funcionário', dp.length, dp.map(x =>
+    '<div class="rhLin' + (x.status === 'contestada' ? ' velha' : '') + '"><span class="t"><b>' + esc(x.funcionario) + '</b> — ' + esc(x.itens)
+    + '<small>' + (x.status === 'contestada' ? 'NÃO CONCORDOU: "' + esc(x.contestado_obs || '') + '"'
+      : 'registrada em ' + esc(rhDT(x.lancado_em)) + (Number(x.dias) > 0 ? ' · há ' + x.dias + ' dia(s)' : '') + (x.tem_pin ? '' : ' · ele ainda não tem PIN'))
+    + (x.contexto === 'desligamento' ? ' · desligamento' : '') + '</small></span><span class="a">'
+    + (x.status === 'aguardando' && x.celular ? '<a class="btn mini" target="_blank" rel="noopener" href="' + esc(rhWhatsDev(x.celular, x.funcionario, x.itens)) + '">WhatsApp</a>' : '')
+    + '<button class="btn mini" type="button" data-devsem="' + esc(x.lote) + '">Sem a confirmação dele</button>'
+    + '<button class="btn mini" type="button" data-devcanc="' + esc(x.lote) + '">Cancelar</button>'
+    + '<button class="btn mini" type="button" data-ficha="' + esc(x.usuario_id) + '">Abrir ficha</button></span></div>').join(''));
+  // S44 · R4 — item 7 do painel: devolvidos para reuso aguardando avaliação
+  const aa = (p.aguardando_avaliacao || []);
+  blocos += sec('Devolvidos para reuso aguardando avaliação', aa.length, aa.map(x =>
+    '<div class="rhLin"><span class="t"><b>' + esc(x.epi_nome) + (x.tamanho ? ' (' + esc(x.tamanho) + ')' : '') + '</b> — devolvido por ' + esc(x.funcionario)
+    + '<small>' + esc([dataBR(x.data), x.fabricacao ? 'fab. ' + rhMes(x.fabricacao) : '', x.serie_lote ? 'série ' + x.serie_lote : '',
+        x.sob_encomenda ? 'armação do óculos graduado' : ''].filter(Boolean).join(' · ')) + '</small></span>'
+    + '<span class="a"><button class="btn mini pri" type="button" data-avaliar="' + esc(x.id) + '">Avaliar</button></span></div>').join(''),
+    'aprovado volta ao estoque como reaproveitado');
   const av = (p.avisos || []);
-  blocos += sec('Avisos do Field (tamanho, receita)', av.length, av.map(a =>
+  blocos += sec('Avisos do Field (tamanho, receita, devolução)', av.length, av.map(a =>
     '<div class="rhLin"><span class="t">' + esc(a.texto) + '<small>' + esc(rhDT(a.criado_em)) + '</small></span>'
     + '<span class="a"><button class="btn mini" type="button" data-ficha="' + esc(a.usuario_id) + '">Abrir ficha</button>'
     + '<button class="btn mini" type="button" data-visto="' + esc(a.id) + '">Visto</button></span></div>').join(''));
@@ -18440,6 +18566,11 @@ async function rhPainel(corpo){
   }));
   corpo.querySelectorAll('[data-entregar]').forEach(b => b.addEventListener('click', () => rhNovaEntrega(b.dataset.entregar)));
   corpo.querySelectorAll('[data-cancelar]').forEach(b => b.addEventListener('click', () => rhCancelar(b.dataset.cancelar, pintarRHSeguranca)));
+  // S44
+  corpo.querySelectorAll('[data-entreguei]').forEach(b => b.addEventListener('click', () => _semDuploEnvio_(b, () => rhEntreguei([b.dataset.entreguei], pintarRHSeguranca))));
+  corpo.querySelectorAll('[data-devsem]').forEach(b => b.addEventListener('click', () => rhDevSemConfirmacao(b.dataset.devsem, pintarRHSeguranca)));
+  corpo.querySelectorAll('[data-devcanc]').forEach(b => b.addEventListener('click', () => rhDevCancelar(b.dataset.devcanc, pintarRHSeguranca)));
+  corpo.querySelectorAll('[data-avaliar]').forEach(b => b.addEventListener('click', () => rhAvaliarPorId(b.dataset.avaliar, pintarRHSeguranca)));
   corpo.querySelectorAll('[data-epi]').forEach(b => b.addEventListener('click', async () => {
     const r = await rpc('tf_rh_epis', {}); RH.epis = r.epis; RH.trein = r.treinamentos;
     rhEditarEpi(RH.epis.find(e => e.id === b.dataset.epi), pintarRHSeguranca);
@@ -18458,8 +18589,8 @@ async function rhPedidos(corpo){
   RH.pedFiltro = RH.pedFiltro || 'pedido';
   const L = await rpc('tf_rh_pedidos', { p_status: RH.pedFiltro });
   corpo.innerHTML = '<p class="nota" style="margin-top:0">O funcionário pede pelo Field (Minha Segurança › Pedir EPI), com o tamanho da ficha. '
-    + '<b>Separar</b> é pegar na caixa: o estoque baixa e a entrega aparece no celular dele para confirmar com o PIN — '
-    + 'só então entra na ficha. O pedido sozinho não baixa nada.</p>'
+    + 'Dois passos: <b>Separar</b> é pegar na caixa (o estoque baixa; sem saldo, não deixa); <b>Entreguei</b> é deixar na mesa dele — '
+    + 'só aí a entrega aparece no celular para confirmar com o PIN, e só depois entra na ficha. O pedido sozinho não baixa nada.</p>'
     + '<div class="rhBarra"><div class="chips" id="rhPF"></div></div><div class="ccLista" id="rhPL"></div>';
   const f = document.getElementById('rhPF');
   RH_PED_FILTROS.forEach(([k, r]) => {
@@ -18471,7 +18602,9 @@ async function rhPedidos(corpo){
   const ST = { pedido:'aguardando separar', separado:'separado', recusado:'recusado', cancelado:'cancelado' };
   L.forEach(x => {
     const d = document.createElement('div'); d.className = 'rhLin';
+    const ctrlN = x.controlado_novo ?? x.controlado;
     const est = x.controlado ? 'estoque ' + (x.tamanho ? x.tamanho + ': ' : '') + x.saldo + (x.saldo_reap ? ' + ' + x.saldo_reap + ' reaproveitado(s)' : '')
+                               + (ctrlN && x.saldo < x.quantidade && !(x.saldo_reap >= x.quantidade) ? ' — SEM SALDO para separar' : '')
                              : 'sem controle de estoque';
     d.innerHTML = '<span class="t"><span class="rhSt ' + (x.status === 'pedido' ? 'aguardando' : x.status === 'separado' ? 'confirmado' : 'cancelada')
       + '">' + esc(ST[x.status] || x.status) + '</span> <b>' + esc(x.funcionario) + '</b> — ' + esc(x.epi)
@@ -18480,9 +18613,16 @@ async function rhPedidos(corpo){
         x.observacao ? '"' + x.observacao + '"' : '',
         x.status === 'pedido' ? est : '',
         x.status === 'separado' ? 'separado por ' + (x.separado_por_nome || '?') + ' em ' + rhDT(x.separado_em)
-          + ' · entrega ' + (RH_STATUS[x.entrega_status] || x.entrega_status || '') : '',
+          + (x.entregue_em ? ' · entregue em ' + rhDT(x.entregue_em) : '')
+          + ' · ' + (RH_STATUS[x.entrega_status] || x.entrega_status || '') : '',
         x.encerrado_motivo && x.status !== 'separado' ? x.encerrado_motivo : ''].filter(Boolean).join(' · ')) + '</small></span><span class="a"></span>';
     const a = d.querySelector('.a');
+    if (x.status === 'separado' && x.entrega_status === 'separado'){
+      const be = document.createElement('button'); be.type = 'button'; be.className = 'btn mini pri'; be.textContent = 'Entreguei';
+      be.addEventListener('click', () => _semDuploEnvio_(be, () => rhEntreguei([x.entrega_id], pintarRHSeguranca))); a.appendChild(be);
+      const bc = document.createElement('button'); bc.type = 'button'; bc.className = 'btn mini'; bc.textContent = 'Cancelar';
+      bc.addEventListener('click', () => rhCancelar(x.entrega_id, pintarRHSeguranca)); a.appendChild(bc);
+    }
     if (x.status === 'pedido'){
       const b1 = document.createElement('button'); b1.type = 'button'; b1.className = 'btn mini pri'; b1.textContent = 'Separar';
       b1.addEventListener('click', () => rhSepararPedido(x, pintarRHSeguranca)); a.appendChild(b1);
@@ -18502,38 +18642,338 @@ async function rhPedidos(corpo){
     el.appendChild(d);
   });
 }
-function rhSepararPedido(x, depois){
+async function rhSepararPedido(x, depois){
   const precisaFab = x.pede_fabricacao || x.limite_meses;
+  let reap = [];
+  try{ reap = (await rpc('tf_rh_reaproveitados', {})).filter(u => u.epi_id === x.epi_id); }catch(e){}
+  const ctrlN = x.controlado_novo ?? x.controlado, ctrlR = x.controlado_reap ?? x.controlado;
   abrirModal('Separar o pedido',
     '<p style="margin-top:0"><b>' + esc(x.funcionario) + '</b> pediu <b>' + esc(x.epi) + (x.tamanho ? ' ' + esc(x.tamanho) : '')
     + '</b> ×' + x.quantidade + ' — ' + esc(RH_MOT_PED[x.motivo] || x.motivo) + (x.observacao ? ' ("' + esc(x.observacao) + '")' : '') + '.</p>'
     + '<div class="dupla">'
     + (x.tamanho ? '<div class="campo"><label for="spT">Tamanho</label><input id="spT" type="text" maxlength="12" value="' + esc(x.tamanho) + '"></div>' : '')
     + '<div class="campo"><label for="spQ">Quantidade</label><input id="spQ" type="number" min="1" max="10" value="' + x.quantidade + '"></div>'
-    + '<div class="campo"><label for="spC">Condição</label><select id="spC"><option value="novo">Novo (' + (x.controlado ? x.saldo : '—') + ' em estoque)</option>'
-    + '<option value="reaproveitado">Reaproveitado (' + (x.controlado ? x.saldo_reap : '—') + ')</option></select></div></div>'
+    + '<div class="campo"><label for="spC">Condição</label><select id="spC"><option value="novo">Novo (' + (ctrlN ? x.saldo : 'sem controle') + ' em estoque)</option>'
+    + '<option value="reaproveitado">Reaproveitado (' + (ctrlR ? x.saldo_reap : 'sem controle') + ')</option></select></div></div>'
+    + (reap.length ? '<div class="campo" id="spUC" hidden><label for="spU">Unidade reaproveitada (avaliada)</label><select id="spU"><option value="">— sem escolher a unidade —</option>'
+      + reap.map(u => '<option value="' + esc(u.devolucao_id) + '">' + esc(rhRotuloUnidade(u)) + '</option>').join('') + '</select></div>' : '')
     + (precisaFab ? '<div class="campo"><label for="spF">Fabricação (mês/ano, gravada na peça)</label><input id="spF" type="month"></div>' : '')
     + (x.pede_serie ? '<div class="campo"><label for="spS">Nº de série / lote</label><input id="spS" type="text" maxlength="60"></div>' : '')
-    + '<p class="nota">Ao separar, o estoque baixa e a entrega aparece no Field dele para confirmar com o PIN. '
-    + (x.controlado && x.saldo < x.quantidade ? '<b style="color:var(--warn)">O sistema tem só ' + x.saldo + ' — grava assim mesmo e pede contagem.</b>' : '') + '</p>'
+    + '<p class="nota" id="spAv"></p>'
+    + '<p class="nota">Separar é o <b>primeiro passo</b>: o estoque baixa agora. Quando deixar na mesa dele, clique <b>Entreguei</b> — '
+    + 'só então a entrega aparece no celular para ele confirmar com o PIN.</p>'
     + '<p class="nota" id="rhMsg" style="color:var(--crit)"></p>',
     [ { label:'Voltar', onClick: fecharModal },
-      { label:'Separar e avisar', pri:true, onClick: async () => {
+      { label:'Separar', pri:true, onClick: async () => {
           const g = id => document.getElementById(id);
           try{
             const r = await rpc('tf_rh_separar_pedido', { p_id: x.id, p_dados: {
               tamanho: g('spT') ? g('spT').value : null, quantidade: g('spQ').value, condicao: g('spC').value,
+              devolucao_id: g('spU') && g('spC').value === 'reaproveitado' ? (g('spU').value || null) : null,
               fabricacao: g('spF') ? g('spF').value : null, serie_lote: g('spS') ? g('spS').value : null } });
             fecharModal(); contarRH();
-            const w = rhWhats(x.celular, x.funcionario, x.epi);
-            abrirModal('Separado',
-              '<p style="margin-top:0">A entrega de <b>' + esc(x.epi) + '</b> está no celular de <b>' + esc(x.funcionario)
-              + '</b> aguardando a confirmação dele.</p>'
-              + ((r.avisos || []).length ? '<div class="aviso">' + r.avisos.map(esc).join('<br>') + '</div>' : '')
-              + (w ? '<p><a class="btn pri" target="_blank" rel="noopener" href="' + esc(w) + '">Avisar pelo WhatsApp</a></p>' : ''),
-              [ { label:'Fechar', onClick: () => { fecharModal(); depois && depois(); } } ]);
+            abrirModal('Separado da caixa',
+              '<p style="margin-top:0"><b>' + esc(x.epi) + '</b> de <b>' + esc(x.funcionario) + '</b> saiu do estoque.</p>'
+              + '<p>Ainda <b>não</b> aparece no celular dele. Quando deixar na mesa, clique <b>Entreguei</b> — aqui, no painel ou na aba Pedidos.</p>',
+              [ { label:'Depois', onClick: () => { fecharModal(); depois && depois(); } },
+                { label:'Entreguei agora', pri:true, onClick: () => { fecharModal(); rhEntreguei([r.entrega_id], depois); } } ]);
           }catch(e){ g('rhMsg').textContent = e.message; }
       } } ]);
+  const acerta = () => {
+    const g = id => document.getElementById(id);
+    const cond = g('spC').value, q = Number(g('spQ').value || 1);
+    if (g('spUC')) g('spUC').hidden = cond !== 'reaproveitado';
+    const u = g('spU') && cond === 'reaproveitado' && g('spU').value ? reap.find(y => y.devolucao_id === g('spU').value) : null;
+    if (u){ if (g('spF') && u.fabricacao && !g('spF').value) g('spF').value = String(u.fabricacao).slice(0,7);
+            if (g('spS') && u.serie_lote && !g('spS').value) g('spS').value = u.serie_lote; }
+    const ctrl = cond === 'reaproveitado' ? ctrlR : ctrlN, n = cond === 'reaproveitado' ? x.saldo_reap : x.saldo;
+    const av = g('spAv');
+    if (ctrl && n < q){ av.style.color = 'var(--crit)';
+      av.innerHTML = '<b>SEM SALDO:</b> o estoque tem ' + Math.max(n, 0) + ' e sairiam ' + q + '. O sistema não deixa separar — dê entrada da compra (Estoque › Entrada) ou, se a caixa tem, faça a contagem.'; }
+    else { av.style.color = ''; av.textContent = ''; }
+  };
+  ['spC','spQ','spU'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener(id === 'spQ' ? 'input' : 'change', acerta); });
+  acerta();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// S44 · R4 — DEVOLUÇÃO, AVALIAÇÃO DE REAPROVEITAMENTO E DESLIGAMENTO
+// ----------------------------------------------------------------------------
+// Item 8 do documento de 26/09. A ordem é a do documento: o sistema lista o
+// que está com a pessoa → o RH marca reuso / descarte / não devolvido → o
+// funcionário confirma no celular com o PIN → SÓ ENTÃO o desligamento (e o
+// PIN cai). Quem não confirma (saiu, não aparece) fica "sem a confirmação
+// dele", com motivo. O reuso passa pela AVALIAÇÃO antes de voltar ao estoque.
+// ════════════════════════════════════════════════════════════════════════════
+function rhWhatsDev(celular, nome, itens){
+  if (!celular) return null;
+  const campo = new URL('../field/', location.href).href;
+  const txt = 'Olá, ' + String(nome || '').split(' ')[0] + '! Registramos a devolução dos seus EPIs no TapFlow: ' + itens
+    + '. Abra o TapFlow Field (Minha Segurança), confira e confirme com o seu PIN. Se algo não confere, toque em "Não concordo". ' + campo;
+  return 'https://wa.me/' + celular + '?text=' + encodeURIComponent(txt);
+}
+function rhDevSemConfirmacao(lote, depois){
+  abrirModal('Devolução sem a confirmação dele',
+    '<p style="margin-top:0">Use quando o funcionário <b>não vai confirmar</b> no celular: saiu, não aparece, está sem o aparelho — '
+    + 'ou quando ele "não concordou" e o RH mantém o registro. A data de devolução entra na ficha marcada '
+    + '<b>"sem confirmação do funcionário"</b>, com o motivo no histórico.</p>'
+    + '<div class="campo"><label for="dsM">Motivo</label><input id="dsM" type="text" maxlength="200" placeholder="ex.: saiu sem retornar; conferido pelo Bruno na frente do Fernando"></div>'
+    + '<p class="nota" id="rhMsg" style="color:var(--crit)"></p>',
+    [ { label:'Voltar', onClick: fecharModal },
+      { label:'Registrar sem a confirmação', pri:true, onClick: async () => {
+          try{ await rpc('tf_rh_devolucao_sem_confirmacao', { p_lote: lote, p_motivo: document.getElementById('dsM').value });
+               fecharModal(); toast('Devolução registrada sem a confirmação dele.', 'ok'); contarRH(); depois && depois(); }
+          catch(e){ document.getElementById('rhMsg').textContent = e.message; }
+      } } ]);
+}
+function rhDevCancelar(lote, depois){
+  abrirModal('Cancelar a devolução',
+    '<p style="margin-top:0">Para corrigir um lançamento (destino errado, item a mais) <b>antes</b> de o funcionário confirmar. '
+    + 'Ela continua no histórico, cancelada; depois é só registrar de novo. Devolução confirmada não se cancela.</p>'
+    + '<div class="campo"><label for="dcM">Motivo</label><input id="dcM" type="text" maxlength="200" placeholder="ex.: o óculos graduado ficou com ele"></div>'
+    + '<p class="nota" id="rhMsg" style="color:var(--crit)"></p>',
+    [ { label:'Voltar', onClick: fecharModal },
+      { label:'Cancelar a devolução', onClick: async () => {
+          try{ await rpc('tf_rh_cancelar_devolucao', { p_lote: lote, p_motivo: document.getElementById('dcM').value });
+               fecharModal(); toast('Devolução cancelada.', 'ok'); contarRH(); depois && depois(); }
+          catch(e){ document.getElementById('rhMsg').textContent = e.message; }
+      } } ]);
+}
+
+/** Registrar devolução. contexto = 'desligamento' (tudo o que está com a
+ *  pessoa, já marcado) ou 'avulsa' (marca o que voltou). */
+async function rhRegistrarDevolucao(uid, contexto, depois){
+  let posse, f;
+  try{ [posse, f] = await Promise.all([rpc('tf_rh_em_posse', { p_usuario: uid, p_todas: true }), rpc('tf_rh_funcionario', { p_usuario: uid })]); }
+  catch(e){ toast(e.message, 'err'); return; }
+  const desl = contexto === 'desligamento';
+  const noSeu = posse.filter(x => x.em_posse), antigos = posse.filter(x => !x.em_posse);
+  if (!posse.length){ toast('Nada com esta pessoa para devolver (nenhuma entrega confirmada sem devolução).', 'err'); return; }
+  const linha = x => '<div class="rhDevL" data-e="' + esc(x.id) + '"><label class="chk" style="margin:0"><input type="checkbox" class="dvInc"'
+    + ((desl && x.em_posse) ? ' checked' : '') + '> <b>' + esc(x.epi_nome) + (x.tamanho ? ' (' + esc(x.tamanho) + ')' : '') + '</b>'
+    + (x.quantidade > 1 ? ' ×' + x.quantidade : '') + '<small>' + esc(['entregue em ' + dataBR(x.data_entrega), x.fabricacao ? 'fab. ' + rhMes(x.fabricacao) : '',
+        x.serie_lote ? 'série ' + x.serie_lote : '', x.condicao === 'reaproveitado' ? 'reaproveitado' : ''].filter(Boolean).join(' · ')) + '</small></label>'
+    + '<div class="rhDevOp" role="radiogroup" aria-label="Destino de ' + esc(x.epi_nome) + '">'
+    + ['reuso','descarte','nao_devolvido'].map(k => '<label><input type="radio" name="dv_' + esc(x.id) + '" value="' + k + '"'
+        + (k === x.destino_sugerido ? ' checked' : '') + (k === 'reuso' && x.destino_sugerido !== 'reuso' ? ' disabled' : '') + '> '
+        + esc(RH_DESTINO_CURTO[k]) + '</label>').join('') + '</div></div>';
+  abrirModal((desl ? 'Devolução no desligamento — ' : 'Registrar devolução — ') + f.usuario.nome,
+    '<p style="margin-top:0">' + (desl ? 'Tudo o que está com ' + esc(f.usuario.nome.split(' ')[0]) + ' hoje. Marque o destino de cada item.'
+        : 'Marque o que voltou e o destino.') + ' Voltam para <b>reuso</b> (só os reaproveitáveis): capacete — só o casco —, cinto paraquedista, '
+    + 'abafador tipo concha, perneira de bidim e a armação do óculos graduado. O restante é descarte. O reuso passa por avaliação antes de voltar ao estoque.</p>'
+    + '<div class="campo" style="max-width:220px"><label for="dvD">Data da devolução</label><input id="dvD" type="date" max="' + isoHoje() + '" value="' + isoHoje() + '"></div>'
+    + (noSeu.length ? '<div class="secTit" style="margin-top:6px">Com a pessoa (' + noSeu.length + ')</div>' + noSeu.map(linha).join('')
+                    : '<p class="nota">Nada em uso — só entregas antigas, já substituídas.</p>')
+    + (antigos.length ? '<details style="margin-top:8px"><summary class="nota" style="cursor:pointer">Entregas antigas, já substituídas por uma mais nova ('
+        + antigos.length + ') — marque só se voltaram</summary>' + antigos.map(linha).join('') + '</details>' : '')
+    + '<div class="campo"><label for="dvO">Observação (opcional)</label><input id="dvO" type="text" maxlength="200"></div>'
+    + '<p class="nota">A devolução vai para o celular dele confirmar com o PIN. A data entra na ficha de EPI depois da confirmação '
+    + '(ou quando o RH registrar "sem a confirmação dele").</p>'
+    + '<p class="nota" id="rhMsg" style="color:var(--crit)"></p>',
+    [ { label:'Cancelar', onClick: fecharModal },
+      { label:'Registrar e pedir a confirmação', pri:true, onClick: async () => {
+          const itens = [];
+          document.querySelectorAll('.rhDevL').forEach(d => {
+            if (!d.querySelector('.dvInc').checked) return;
+            const r = d.querySelector('input[type=radio]:checked');
+            itens.push({ entrega_id: d.dataset.e, destino: r ? r.value : null });
+          });
+          const msg = document.getElementById('rhMsg');
+          if (!itens.length){ msg.textContent = 'Marque ao menos um item.'; return; }
+          if (desl && itens.filter(i => noSeu.some(x => x.id === i.entrega_id)).length < noSeu.length){
+            msg.textContent = 'No desligamento, todo item que está com a pessoa precisa de destino (mesmo que "não devolvido").'; return;
+          }
+          try{
+            const r = await rpc('tf_rh_registrar_devolucao', { p_usuario: uid, p_dados: { contexto, data: document.getElementById('dvD').value,
+              observacao: document.getElementById('dvO').value, itens } });
+            fecharModal(); contarRH();
+            const w = rhWhatsDev(r.celular, r.funcionario, r.itens);
+            abrirModal('Devolução registrada',
+              '<p style="margin-top:0"><b>' + r.n + ' item(ns)</b>: ' + esc(r.itens) + '.</p>'
+              + '<p>Agora é com <b>' + esc(r.funcionario) + '</b>: abrir o <b>TapFlow Field › Minha Segurança</b> e confirmar com o PIN.</p>'
+              + (r.tem_pin ? '' : '<div class="aviso">Ele ainda não tem PIN. Se não for criar, use <b>"Sem a confirmação dele"</b> (no painel ou na aba Devoluções).</div>')
+              + (w ? '<p><a class="btn pri" target="_blank" rel="noopener" href="' + esc(w) + '">Avisar pelo WhatsApp</a></p>' : ''),
+              [ { label:'Fechar', onClick: () => { fecharModal(); depois && depois(); } } ]);
+          }catch(e){ msg.textContent = e.message; }
+      } } ]);
+  rhModalLargo();
+}
+
+/** O checklist de cada EPI na avaliação (item 8). Texto de ajuda — o que o
+ *  banco guarda é o que foi marcado; a regra dura é só a do cinto com queda. */
+function rhChecklistAval(d){
+  const n = String(d.epi_nome || '').toLowerCase();
+  if (d.sob_encomenda) return ['Hastes e dobradiças íntegras', 'Proteções laterais presentes', 'Higienizada',
+                               'A lente vai para descarte (encomendar só as lentes novas)'];
+  if (n.includes('capacete')) return ['Casco sem trinca, deformação ou desgaste', 'Casco higienizado',
+                                      'Suspensão e jugular antigas descartadas (vai suspensão nova)'];
+  if (n.includes('cinto')) return ['Costuras íntegras', 'Fitas sem corte, desfiado ou queimadura',
+                                   'Fivelas e argolas sem trinca ou ferrugem', 'Etiqueta legível (CA, fabricação, série)'];
+  if (n.includes('abafador')) return ['Conchas e haste íntegras', 'Kit higiene (almofadas) trocado', 'Higienizado'];
+  if (n.includes('perneira')) return ['Higienizada', 'Sem rasgo; fechos funcionando'];
+  return ['Íntegro', 'Higienizado'];
+}
+async function rhAvaliarPorId(id, depois){
+  try{ const L = await rpc('tf_rh_devolucoes', { p_filtro: 'abertas' });
+       const d = L.find(x => x.id === id); if (!d){ toast('Não achei este item — atualize a tela.', 'err'); return; }
+       rhAvaliar(d, depois); }
+  catch(e){ toast(e.message, 'err'); }
+}
+function rhAvaliar(d, depois){
+  const ck = rhChecklistAval(d), pc = d.pecas_sugeridas || [];
+  abrirModal('Avaliar para reuso — ' + d.epi_nome,
+    '<p style="margin-top:0">Devolvido por <b>' + esc(d.funcionario) + '</b> em ' + esc(dataBR(d.data))
+    + esc([d.tamanho ? ' · tam. ' + d.tamanho : '', d.fabricacao ? ' · fab. ' + rhMes(d.fabricacao) : '', d.serie_lote ? ' · série ' + d.serie_lote : ''].join('')) + '.</p>'
+    + '<div class="secTit" style="margin-top:0">Conferência</div>'
+    + ck.map((t, i) => '<label class="chk"><input type="checkbox" class="avCk" value="' + esc(t) + '" id="avc' + i + '"> ' + esc(t) + '</label>').join('')
+    + (d.pede_serie ? '<label class="chk" style="color:var(--crit)"><input type="checkbox" id="avQueda"> <b>Sofreu queda</b> — cinto que sofreu queda vai para descarte</label>' : '')
+    + (pc.length && !d.sob_encomenda ? '<div class="secTit">Peças trocadas (saem do estoque)</div>' + pc.map(x => '<label class="chk"><input type="checkbox" class="avPc" value="'
+        + esc(x.epi_id) + '" checked> ' + esc(x.nome) + ' <span class="nota" style="margin:0">— ' + (x.controlado ? 'estoque: ' + x.saldo
+        + (x.saldo < 1 ? ' (SEM SALDO: dê entrada antes ou desmarque)' : '') : 'sem controle de estoque: só fica anotado') + '</span></label>').join('') : '')
+    + '<div class="secTit">Resultado</div><div class="rhDevOp" role="radiogroup" aria-label="Resultado">'
+    + '<label><input type="radio" name="avR" value="aprovado"> Aprovado — ' + (d.sob_encomenda ? 'armação disponível para a próxima encomenda' : 'volta ao estoque como reaproveitado') + '</label>'
+    + '<label><input type="radio" name="avR" value="reprovado"> Reprovado — descarte</label></div>'
+    + '<div class="campo"><label for="avO">Observação (obrigatória se reprovado)</label><input id="avO" type="text" maxlength="200"></div>'
+    + '<p class="nota" id="rhMsg" style="color:var(--crit)"></p>',
+    [ { label:'Voltar', onClick: fecharModal },
+      { label:'Gravar a avaliação', pri:true, onClick: async () => {
+          const r = document.querySelector('input[name=avR]:checked');
+          const msg = document.getElementById('rhMsg');
+          if (!r){ msg.textContent = 'Aprovado ou reprovado?'; return; }
+          const q = document.getElementById('avQueda');
+          try{
+            await rpc('tf_rh_avaliar_devolucao', { p_id: d.id, p_dados: { resultado: r.value, obs: document.getElementById('avO').value,
+              queda: !!(q && q.checked),
+              itens: Array.from(document.querySelectorAll('.avCk')).map(c => ({ texto: c.value, ok: c.checked })),
+              pecas: r.value === 'aprovado' ? Array.from(document.querySelectorAll('.avPc:checked')).map(c => ({ epi_id: c.value, quantidade: 1 })) : [] } });
+            fecharModal(); contarRH();
+            toast(r.value === 'aprovado' ? (d.sob_encomenda ? 'Aprovado: armação disponível.' : 'Aprovado: voltou ao estoque como reaproveitado.')
+                                         : 'Reprovado: descarte registrado.', 'ok');
+            depois && depois();
+          }catch(e){ msg.textContent = e.message; }
+      } } ]);
+  const q = document.getElementById('avQueda');
+  if (q) q.addEventListener('change', () => { if (q.checked){ const rr = document.querySelector('input[name=avR][value=reprovado]'); rr.checked = true;
+    const o = document.getElementById('avO'); if (!o.value) o.value = 'Sofreu queda'; } });
+}
+
+// ── a aba DEVOLUÇÕES ────────────────────────────────────────────────────────
+async function rhDevolucoes(corpo){
+  RH.devFiltro = RH.devFiltro || 'abertas';
+  const [L, P, reap] = await Promise.all([rpc('tf_rh_devolucoes', { p_filtro: RH.devFiltro }), rpc('tf_rh_painel', {}),
+                                          rpc('tf_rh_reaproveitados', {})]);
+  corpo.innerHTML = '<p class="nota" style="margin-top:0">A devolução nasce do <b>desligamento</b> (Funcionários › a pessoa › Dados › Desligar…) '
+    + 'ou avulsa (a pessoa › EPIs › Registrar devolução). O funcionário confirma no celular com o PIN; o que voltou para <b>reuso</b> '
+    + 'passa pela avaliação — aprovado volta ao estoque como reaproveitado, reprovado vai para descarte.</p>'
+    + '<div class="rhBarra"><div class="chips" id="rhDF"></div><button class="btn" type="button" id="rhDNova">Registrar devolução…</button></div>'
+    + '<div class="ccLista" id="rhDL"></div>'
+    + '<div class="secTit">Unidades reaproveitadas disponíveis (' + reap.length + ')</div><div class="ccLista" id="rhDR"></div>';
+  const fl = document.getElementById('rhDF');
+  [['abertas','Esperando alguém'], ['todas','Todas']].forEach(([k, r]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'fchip' + (RH.devFiltro === k ? ' on' : '');
+    b.textContent = r; b.addEventListener('click', () => { RH.devFiltro = k; pintarRHSeguranca(); }); fl.appendChild(b);
+  });
+  document.getElementById('rhDNova').addEventListener('click', async () => {
+    let lista; try{ lista = (await rpc('tf_rh_funcionarios', {})).filter(f => f.tem_ficha && f.situacao === 'ativo'); }catch(e){ toast(e.message, 'err'); return; }
+    abrirModal('Registrar devolução', '<div class="campo"><label for="rdF">De quem</label><select id="rdF"><option value="">— escolha —</option>'
+      + lista.map(f => '<option value="' + esc(f.usuario_id) + '">' + esc(f.nome) + '</option>').join('') + '</select></div>'
+      + '<p class="nota">Para o desligamento, use Funcionários › a pessoa › Dados › <b>Desligar…</b> — ele guia a devolução inteira.</p>',
+      [ { label:'Cancelar', onClick: fecharModal },
+        { label:'Continuar', pri:true, onClick: () => { const u = document.getElementById('rdF').value; if (!u) return;
+            fecharModal(); rhRegistrarDevolucao(u, 'avulsa', pintarRHSeguranca); } } ]);
+  });
+  const el = document.getElementById('rhDL');
+  if (!L.length) el.innerHTML = '<p class="nota" style="padding:12px">' + (RH.devFiltro === 'abertas' ? 'Nenhuma devolução esperando o funcionário ou a avaliação.' : 'Nenhuma devolução registrada.') + '</p>';
+  L.forEach(d => {
+    const div = document.createElement('div');
+    div.className = 'rhLin' + (d.status === 'cancelada' ? ' riscada' : '') + (d.status === 'contestada' ? ' velha' : '');
+    const espAval = d.destino === 'reuso' && rhDevVale(d) && !d.avaliacao;
+    const st = d.status === 'cancelada' ? 'cancelada' : espAval ? 'aguardando avaliação' : d.avaliacao ? (d.avaliacao === 'aprovado' ? 'aprovado para reuso' : 'reprovado — descarte')
+             : RH_DEV_ST[d.status] || d.status;
+    const cls = d.status === 'cancelada' ? 'cancelada' : d.status === 'contestada' ? 'nao_recebido' : (d.status === 'aguardando' || espAval) ? 'aguardando' : 'confirmado';
+    const sub = [RH_DESTINO[d.destino], 'em ' + dataBR(d.data), d.contexto === 'desligamento' ? 'desligamento' : 'avulsa',
+      d.fabricacao ? 'fab. ' + rhMes(d.fabricacao) : '', d.serie_lote ? 'série ' + d.serie_lote : '',
+      d.status === 'confirmada' ? 'confirmada no celular em ' + rhDT(d.confirmado_em) : '',
+      d.status === 'sem_confirmacao' ? 'sem a confirmação dele — ' + (d.sem_conf_motivo || '') : '',
+      d.status === 'contestada' ? 'não concordou: "' + (d.contestado_obs || '') + '"' : '',
+      d.status === 'cancelada' ? 'cancelada: ' + (d.cancelado_motivo || '') : '',
+      d.avaliacao ? 'avaliado por ' + (d.avaliado_por_nome || '?') + ' em ' + rhDT(d.avaliado_em) + (d.avaliacao_obs ? ' — ' + d.avaliacao_obs : '') : '',
+      d.pecas_trocadas ? 'peças: ' + d.pecas_trocadas.map(x => x.nome + (x.baixou ? '' : ' (sem baixa)')).join(', ') : '',
+      d.reutilizada_por ? 'entregue de novo a ' + d.reutilizada_por : ''].filter(Boolean);
+    div.innerHTML = '<span class="t"><span class="rhSt ' + cls + '">' + esc(st) + '</span> <b>' + esc(d.funcionario) + '</b> — '
+      + '<span class="ccDesc">' + esc(d.epi_nome) + (d.quantidade > 1 ? ' ×' + d.quantidade : '') + (d.tamanho ? ' (' + esc(d.tamanho) + ')' : '')
+      + '</span><small>' + esc(sub.join(' · ')) + '</small></span><span class="a"></span>';
+    const a = div.querySelector('.a');
+    const bt = (rot, fn, pri) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn mini' + (pri ? ' pri' : '');
+      b.textContent = rot; b.addEventListener('click', fn); a.appendChild(b); };
+    if (espAval) bt('Avaliar', () => rhAvaliar(d, pintarRHSeguranca), true);
+    if (d.status === 'aguardando' && d.celular){ const w = document.createElement('a'); w.className = 'btn mini'; w.target = '_blank'; w.rel = 'noopener';
+      w.href = rhWhatsDev(d.celular, d.funcionario, d.epi_nome); w.textContent = 'WhatsApp'; a.appendChild(w); }
+    if (d.status === 'aguardando' || d.status === 'contestada') bt('Sem a confirmação dele', () => rhDevSemConfirmacao(d.lote, pintarRHSeguranca));
+    if ((d.status === 'aguardando' || d.status === 'contestada' || d.status === 'sem_confirmacao') && !d.avaliacao)
+      bt('Cancelar', () => rhDevCancelar(d.lote, pintarRHSeguranca));
+    el.appendChild(div);
+  });
+  const er = document.getElementById('rhDR');
+  er.innerHTML = reap.length ? reap.map(u => '<div class="rhLin"><span class="t"><b>' + esc(u.epi_nome) + '</b>' + (u.sob_encomenda ? ' — armação graduada' : '')
+      + '<small>' + esc(rhRotuloUnidade(u) + (u.limite_em ? ' · limite ' + rhMes(u.limite_em) : '')) + '</small></span></div>').join('')
+    : '<p class="nota" style="padding:8px 12px">Nenhuma. Aparecem aqui depois de aprovadas na avaliação; na entrega, escolha a unidade em "Condição: reaproveitado".</p>';
+}
+
+// ── o DESLIGAMENTO guiado (os três passos, na ordem do documento) ───────────
+async function rhDesligamento(uid, depois){
+  let f, posse;
+  try{ [f, posse] = await Promise.all([rpc('tf_rh_funcionario', { p_usuario: uid }), rpc('tf_rh_em_posse', { p_usuario: uid })]); }
+  catch(e){ toast(e.message, 'err'); return; }
+  const abertas = (f.entregas || []).filter(e => e.status === 'separado' || e.status === 'aguardando');
+  const devP = (f.devolucoes || []).filter(d => d.status === 'aguardando' || d.status === 'contestada');
+  const lotes = {}; devP.forEach(d => { (lotes[d.lote] = lotes[d.lote] || []).push(d); });
+  const p1 = !abertas.length, p2 = !devP.length && !posse.length;
+  const ok = '<span class="rhSt confirmado">feito</span> ', falta = '<span class="rhSt aguardando">falta</span> ';
+  let h = '<p style="margin-top:0">Na ordem do documento: o que está com ' + esc(f.usuario.nome.split(' ')[0]) + ' volta (ou fica registrado que não voltou), '
+    + 'ele confirma no celular com o PIN, e só então o desligamento — que desativa o PIN e apaga a receita de óculos. '
+    + 'Ficha, termo, entregas e devoluções ficam guardados (guarda legal). O login do sistema não muda: desative em Configurações › Usuários, se for o caso.</p>'
+    + '<div class="secTit">' + (p1 ? ok : falta) + '1 · Entregas em aberto</div>'
+    + (p1 ? '<p class="nota" style="margin:0">Nenhuma entrega separada ou esperando confirmação.</p>'
+          : abertas.map(e => '<div class="rhLin"><span class="t">' + esc(e.epi_nome) + '<small>' + esc(RH_STATUS[e.status]) + '</small></span>'
+              + '<span class="a"><button class="btn mini" type="button" data-canc="' + esc(e.id) + '">Cancelar</button></span></div>').join('')
+            + '<p class="nota">Peça a confirmação dele ou cancele — entrega aberta não deixa desligar.</p>')
+    + '<div class="secTit">' + (p2 ? ok : falta) + '2 · Devolução dos EPIs</div>';
+  if (devP.length){
+    h += Object.keys(lotes).map(k => { const L = lotes[k], c = L[0].status === 'contestada';
+      return '<div class="rhLin' + (c ? ' velha' : '') + '"><span class="t">' + esc(L.map(d => d.epi_nome + ' (' + RH_DESTINO_CURTO[d.destino] + ')').join(', '))
+        + '<small>' + (c ? 'NÃO CONCORDOU: "' + esc(L[0].contestado_obs || '') + '"' : 'aguardando a confirmação dele no celular desde ' + esc(rhDT(L[0].lancado_em))) + '</small></span>'
+        + '<span class="a">' + (!c && f.ficha.celular ? '<a class="btn mini" target="_blank" rel="noopener" href="' + esc(rhWhatsDev(f.ficha.celular, f.usuario.nome,
+            L.map(d => d.epi_nome).join(', '))) + '">WhatsApp</a>' : '')
+        + '<button class="btn mini" type="button" data-sem="' + esc(k) + '">Sem a confirmação dele</button>'
+        + '<button class="btn mini" type="button" data-dcanc="' + esc(k) + '">Cancelar e refazer</button></span></div>'; }).join('');
+  }
+  if (posse.length) h += '<div class="rhLin"><span class="t">' + posse.length + ' item(ns) com a pessoa sem devolução registrada<small>'
+      + esc(posse.map(x => x.epi_nome).join(', ')) + '</small></span><span class="a"><button class="btn mini pri" type="button" id="dsReg">Registrar a devolução…</button></span></div>';
+  if (p2) h += '<p class="nota" style="margin:0">' + ((f.devolucoes || []).some(d => d.status !== 'cancelada') ? 'Devolução registrada e resolvida.' : 'Nada com a pessoa.') + '</p>';
+  h += '<div class="secTit">' + ((p1 && p2) ? '' : falta) + '3 · Desligar</div>'
+    + '<div class="dupla"><div class="campo"><label for="dD">Data do desligamento</label><input id="dD" type="date" value="' + isoHoje() + '"></div>'
+    + '<div class="campo"><label for="dM">Motivo (opcional)</label><input id="dM" type="text" maxlength="200"></div></div>'
+    + ((p1 && p2) ? '' : '<p class="nota">Libera depois dos passos 1 e 2.</p>')
+    + '<p class="nota" id="rhMsg" style="color:var(--crit)"></p>';
+  abrirModal('Desligar ' + f.usuario.nome, h,
+    [ { label:'Fechar', onClick: () => { fecharModal(); depois && depois(); } },
+      { label:'Desligar', pri:true, onClick: async () => {
+          if (!(p1 && p2)){ document.getElementById('rhMsg').textContent = 'Faça antes os passos 1 e 2.'; return; }
+          try{ const r = await rpc('tf_rh_desligar', { p_usuario: uid, p_data: document.getElementById('dD').value,
+                 p_motivo: document.getElementById('dM').value });
+               fecharModal(); contarRH();
+               toast('Desligado.' + (r.receitas_apagadas ? ' Receita apagada.' : '') + (r.pedidos_cancelados ? ' Pedido do Field cancelado.' : ''), 'ok');
+               depois && depois(); }
+          catch(e){ document.getElementById('rhMsg').textContent = e.message; }
+      } } ]);
+  rhModalLargo();
+  const m = document.getElementById('modal');
+  m.querySelectorAll('[data-canc]').forEach(b => b.addEventListener('click', () => { fecharModal(); rhCancelar(b.dataset.canc, () => rhDesligamento(uid, depois)); }));
+  m.querySelectorAll('[data-sem]').forEach(b => b.addEventListener('click', () => { fecharModal(); rhDevSemConfirmacao(b.dataset.sem, () => rhDesligamento(uid, depois)); }));
+  m.querySelectorAll('[data-dcanc]').forEach(b => b.addEventListener('click', () => { fecharModal(); rhDevCancelar(b.dataset.dcanc, () => rhDesligamento(uid, depois)); }));
+  const br = document.getElementById('dsReg');
+  if (br) br.addEventListener('click', () => { fecharModal(); rhRegistrarDevolucao(uid, 'desligamento', () => rhDesligamento(uid, depois)); });
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -18547,8 +18987,9 @@ async function rhEstoque(corpo){
     + '<button class="btn" type="button" id="esSai">Reabastecer caixa / saída avulsa</button>'
     + '<button class="btn" type="button" id="esMov">Movimentos</button></div>'
     + '<p class="nota" style="margin-top:0">O saldo é a soma dos movimentos, por tamanho. A entrega dá baixa sozinha (a do '
-    + 'pedido, ao separar); "não recebi" devolve. Item que nunca teve movimento está <b>sem controle</b> — a entrega dele '
-    + 'segue sem baixa até a primeira contagem. <b>Usam</b> = quantas pessoas ativas têm o EPI previsto naquele tamanho.</p>'
+    + 'pedido, ao separar) e <b>sem saldo não sai</b> — dê entrada ou faça a contagem antes; "não recebi" devolve. Item que nunca teve '
+    + 'movimento está <b>sem controle</b> — a entrega dele segue sem baixa até a primeira contagem. O <b>reaproveitado</b> vem da devolução '
+    + 'avaliada (aba Devoluções). <b>Usam</b> = quantas pessoas ativas têm o EPI previsto naquele tamanho.</p>'
     + '<div id="esL"></div>';
   document.getElementById('esEnt').addEventListener('click', () => rhEntradaEstoque(null, pintarRHSeguranca));
   document.getElementById('esCont').addEventListener('click', () => rhContagem(pintarRHSeguranca));
@@ -18791,8 +19232,9 @@ async function rhListas(c){
   });
 }
 async function rhNovaSessao(depois){
-  let cat, lista;
-  try{ [cat, lista] = await Promise.all([rpc('tf_rh_epis', {}), rpc('tf_rh_funcionarios', {})]); RH.trein = cat.treinamentos; RH.lista = lista; }
+  let cat, lista, vids = [];
+  try{ [cat, lista, vids] = await Promise.all([rpc('tf_rh_epis', {}), rpc('tf_rh_funcionarios', {}),
+         rpc('tf_rh_videos', {}).catch(() => [])]); RH.trein = cat.treinamentos; RH.lista = lista; }
   catch(e){ toast(e.message, 'err'); return; }
   const tipos = cat.treinamentos.filter(t => t.interno && t.ativo);
   const pessoas = lista.filter(f => f.tem_ficha && f.situacao === 'ativo');
@@ -18806,6 +19248,10 @@ async function rhNovaSessao(depois){
       + esc(p.usuario_id) + '"> ' + esc(p.nome) + (p.tem_pin ? '' : ' <span class="nota" style="margin:0">(sem PIN)</span>') + '</label>').join('') + '</div>'
     + '<p class="nota">A lista copia o modelo de hoje (tema, declaração, conteúdo e instrutor com a qualificação completa). '
     + 'Cada participante confirma a presença no Field, com o PIN — até lá ele aparece "aguardando".</p>'
+    // S44 · resposta Q5 ao parecer S43 ("Bruno irá inserir em Nova Lista de Treinamento"): os links
+    // não se colam por lista — entram UMA vez em Treinamentos › Vídeos e valem para todas.
+    // Aqui a lista diz quantos já têm link e leva até lá.
+    + '<div class="aviso" id="nsVid" hidden></div>'
     + '<p class="nota" id="rhMsg" style="color:var(--crit)"></p>',
     [ { label:'Cancelar', onClick: fecharModal },
       { label:'Criar lista', pri:true, onClick: async () => {
@@ -18817,7 +19263,16 @@ async function rhNovaSessao(depois){
           catch(e){ document.getElementById('rhMsg').textContent = e.message; }
       } } ]);
   const s = document.getElementById('nsT');
-  const h = () => { const t = tipos.find(x => x.id === s.value); document.getElementById('nsH').value = (t && t.horario) || ''; };
+  const h = () => { const t = tipos.find(x => x.id === s.value); document.getElementById('nsH').value = (t && t.horario) || '';
+    const vv = (vids || []).filter(v => v.tipo_id === s.value && v.ativo), com = vv.filter(v => v.youtube_id).length;
+    const av = document.getElementById('nsVid');
+    av.hidden = !(t && t.tem_videos && vv.length && com < vv.length);
+    if (!av.hidden){
+      av.innerHTML = '<b>Vídeos: ' + com + ' de ' + vv.length + ' módulos com link.</b> O link de cada vídeo se cola <b>uma vez só</b>, '
+        + 'em Treinamentos › Vídeos da Integração, e vale para todas as listas — não precisa colar de novo aqui. '
+        + '<button class="btn mini" type="button" id="nsVidIr">Colar os links agora</button>';
+      document.getElementById('nsVidIr').addEventListener('click', () => { fecharModal(); RH.aba = 'trein'; RH.trAba = 'videos'; irPara('rhs'); });
+    } };
   s.addEventListener('change', h); h();
 }
 async function rhAbrirSessao(id){

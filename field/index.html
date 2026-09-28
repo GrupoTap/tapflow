@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S17</title>
+<title>TapFlow Field · S18</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -397,7 +397,7 @@ details.termo.faq{margin-top:6px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S17';
+const APP_VERSION = 'S18';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -2984,10 +2984,12 @@ function abasTopo(m, qual){
 function painelEpiPendente(){
   const n = SEG && SEG.tem_ficha ? (SEG.pendentes || []).length : 0;
   const np = SEG && SEG.tem_ficha ? (SEG.presencas || []).filter(x => x.data <= isoHojeF()).length : 0;   // S17
-  if (!n && !np) return null;
+  const nd = SEG && SEG.tem_ficha ? (SEG.devolucoes || []).length : 0;   // S18 · R4
+  if (!n && !np && !nd) return null;
   const p = document.createElement('div'); p.className = 'painel epiPend';
-  p.innerHTML = '<div class="et" style="color:var(--warn)">' + (n ? 'EPI para confirmar' : 'Presença para confirmar') + '</div>'
+  p.innerHTML = '<div class="et" style="color:var(--warn)">' + (n ? 'EPI para confirmar' : nd ? 'Devolução para confirmar' : 'Presença para confirmar') + '</div>'
     + '<p style="margin:4px 0 10px">' + [n ? n + (n === 1 ? ' entrega de EPI espera' : ' entregas de EPI esperam') + ' a sua confirmação.' : '',
+        nd ? 'A devolução dos seus EPIs espera a sua confirmação.' : '',
         np ? np + (np === 1 ? ' lista de treinamento espera' : ' listas de treinamento esperam') + ' a sua presença.' : ''].filter(Boolean).join(' ')
     + '</p><button class="btn pri sm" type="button">Conferir e confirmar</button>';
   p.querySelector('button').addEventListener('click', pintarSeg);
@@ -3049,6 +3051,8 @@ function pintarSeg(){
   const lotes = {};
   pend.forEach(e => { (lotes[e.lote] = lotes[e.lote] || []).push(e); });
   Object.keys(lotes).forEach(k => m.appendChild(painelLote(lotes[k], temPin && !bloq)));
+  // S18 · R4 — a devolução dos EPIs, com o PIN (ou "não concordo")
+  (SEG.devolucoes || []).forEach(dv => m.appendChild(painelDevolucao(dv, temPin && !bloq)));
   // S17 · presença em treinamento, com o PIN
   (SEG.presencas || []).forEach(s => m.appendChild(painelPresenca(s, temPin && !bloq)));
 
@@ -3175,6 +3179,54 @@ function painelLote(itens, podeConfirmar){
   return p;
 }
 
+/** S18 · R4 — a devolução para confirmar (item 8: "o funcionário confirma com
+ *  a digital" — hoje o PIN). Um PIN para o lote todo; "Não concordo" pede o
+ *  motivo e avisa o Bruno. */
+const RH_DEST_F = { reuso:'devolvido para reuso', descarte:'devolvido para descarte', nao_devolvido:'NÃO devolvido' };
+function painelDevolucao(dv, podeConfirmar){
+  const p = document.createElement('div'); p.className = 'painel lote';
+  p.innerHTML = '<div class="et" style="color:var(--warn)">Devolução para confirmar</div>'
+    + '<p style="margin:4px 0 8px;font-size:13px">Registrada por ' + esc(dv.lancado_por_nome || 'o escritório') + ' em ' + esc(rhDTf(dv.lancado_em))
+    + ' · devolução em ' + esc(dataBR(dv.data)) + (dv.contexto === 'desligamento' ? ' · desligamento' : '') + '</p>'
+    + (dv.itens || []).map(i => '<div class="epiLin"><b>' + esc(i.epi_nome) + (i.quantidade > 1 ? ' × ' + i.quantidade : '')
+      + (i.tamanho ? ' · tamanho ' + esc(i.tamanho) : '') + '</b><small>recebido em ' + esc(dataBR(i.data_entrega))
+      + (i.observacao ? ' · ' + esc(i.observacao) : '') + '</small><div class="chips" style="margin-top:4px"><span class="chip'
+      + (i.destino === 'nao_devolvido' ? ' atr' : '') + '">' + esc(RH_DEST_F[i.destino] || i.destino) + '</span></div></div>').join('')
+    + '<p style="font-size:13px;margin:10px 0 0">Ao confirmar, você declara que a lista acima está certa: o que devolveu e o que não devolveu. '
+    + 'A data entra na sua ficha de EPI.</p>'
+    + (podeConfirmar
+      ? '<div class="campo" style="margin-top:12px"><label>Seu PIN</label><input class="pinD" type="password" inputmode="numeric" maxlength="6" autocomplete="off" pattern="[0-9]*"></div>'
+        + '<button class="btn pri" type="button" data-dconf>Confirmo a devolução</button> '
+        + '<button class="btn" type="button" data-dnao>Não concordo</button>'
+      : '<p style="font-size:13px;color:var(--warn);margin:10px 0 0">Crie o seu PIN (acima) para confirmar.</p>'
+        + '<button class="btn" type="button" data-dnao style="margin-top:8px">Não concordo</button>');
+  const bc = p.querySelector('[data-dconf]');
+  if (bc) bc.addEventListener('click', async () => {
+    const pin = p.querySelector('.pinD').value;
+    if (!/^\d{6}$/.test(pin)){ toast('Digite os 6 números do seu PIN.', 'err'); return; }
+    bc.disabled = true;
+    try{
+      const r = await rpc1('tf_rh_confirmar_devolucao', { p_lote: dv.lote, p_pin: pin });
+      if (r.status === 'ok'){ toast('Devolução confirmada.', 'ok'); await recarregarSeg(); return; }
+      if (r.status === 'pin_errado') toast('PIN errado. Restam ' + r.restantes + ' tentativa(s) antes de travar 15 minutos.', 'err');
+      else if (r.status === 'bloqueado') { toast('PIN travado por 15 minutos.', 'err'); await recarregarSeg(); return; }
+      else if (r.status === 'sem_pin') { toast('Crie o seu PIN antes.', 'err'); await recarregarSeg(); return; }
+      p.querySelector('.pinD').value = '';
+    }catch(e){ toast(e.message, 'err'); }
+    bc.disabled = false;
+  });
+  const bn = p.querySelector('[data-dnao]');
+  if (bn) bn.addEventListener('click', async () => {
+    const obs = prompt('O que não confere na devolução? (o Bruno vê)', '');
+    if (obs === null) return;
+    if (obs.trim().length < 5){ toast('Explique em poucas palavras o que não confere.', 'err'); return; }
+    bn.disabled = true;
+    try{ await rpc1('tf_rh_contestar_devolucao', { p_lote: dv.lote, p_obs: obs }); toast('Avisado: o Bruno vai ver.', 'ok'); await recarregarSeg(); }
+    catch(e){ toast(e.message, 'err'); bn.disabled = false; }
+  });
+  return p;
+}
+
 function trocarPin(){
   const m = document.getElementById('main');
   const p = document.createElement('div'); p.className = 'painel'; p.id = 'pnTroca';
@@ -3265,7 +3317,12 @@ async function minhaFichaPDF(){
     doc.setFont('helvetica','normal'); x += col[0].w;
     doc.text(String(l.ca), x + 1.2, y + 5); x += col[1].w;
     doc.text(dataBR(l.data_entrega), x + 1.2, y + 5); x += col[2].w;
-    doc.text('—', x + 1.2, y + 5); x += col[3].w;
+    // S18 · R4: a devolução que vale (confirmada ou registrada sem a confirmação)
+    const dv = l.devolucao && (l.devolucao.status === 'confirmada' || l.devolucao.status === 'sem_confirmacao') ? l.devolucao : null;
+    if (dv){ doc.text(dataBR(dv.data), x + 1.2, y + 5); doc.setFontSize(5.8);
+             doc.text({ reuso:'reuso', descarte:'descarte', nao_devolvido:'não devolvido' }[dv.destino] || '', x + 1.2, y + 8.4); doc.setFontSize(7.6); }
+    else doc.text('—', x + 1.2, y + 5);
+    x += col[3].w;
     doc.setFontSize(6.8);
     doc.text(doc.splitTextToSize('Confirmado no celular do funcionário em ' + rhDTf(l.confirmado_em)
       + (l.confirmado_metodo === 'pin' ? ' (PIN)' : '') + ' · lançado por ' + (l.lancado_por_nome || '?'), col[4].w - 2.4), x + 1.2, y + 4);
@@ -3301,7 +3358,8 @@ function chipValidade(iso){
 /** Pendências de treinamento que também contam na bolha da aba. */
 function nPendSeg(){
   if (!(SEG && SEG.tem_ficha)) return 0;
-  return (SEG.pendentes || []).length + (SEG.presencas || []).filter(p => p.data <= isoHojeF()).length;
+  return (SEG.pendentes || []).length + (SEG.presencas || []).filter(p => p.data <= isoHojeF()).length
+       + (SEG.devolucoes || []).length;   // S18 · R4
 }
 
 /** Confirmar a presença numa lista de treinamento (item 12: "cada
@@ -3358,10 +3416,12 @@ function painelPedidos(){
   const ST = { pedido:['alt','aguardando o Bruno separar'], separado:['','separado'], recusado:['atr','recusado'], cancelado:['','cancelado'] };
   cx.innerHTML = '<button class="btn pri sm" type="button" id="bPedir">Pedir EPI</button>'
     + '<p style="font-size:12.5px;color:var(--ink-3);margin:6px 0 0">Estragou, perdeu ou o tamanho não serve? Peça aqui — o tamanho já vem da sua ficha. '
-    + 'Quando o Bruno separar, a entrega aparece aqui em cima para você confirmar com o PIN.</p>'
+    + 'Quando o Bruno separar e deixar na sua mesa, a entrega aparece aqui em cima para você confirmar com o PIN.</p>'
     + P.map(x => { const st = ST[x.status] || ['', x.status];
-        const sub = x.status === 'separado' ? (x.entrega_status === 'aguardando' ? 'separado — confirme a entrega lá em cima'
-                    : x.entrega_status === 'confirmado' ? 'entregue e confirmado' : 'separado') : st[1];
+        const sub = x.status === 'separado' ? (x.entrega_status === 'separado' ? 'separado — o Bruno vai deixar na sua mesa'
+                    : x.entrega_status === 'aguardando' ? 'entregue — confirme a entrega lá em cima'
+                    : x.entrega_status === 'confirmado' ? 'entregue e confirmado'
+                    : x.entrega_status === 'cancelada' ? 'cancelado' : 'separado') : st[1];
         return '<div class="epiLin"><b>' + esc(x.epi) + (x.tamanho ? ' (' + esc(x.tamanho) + ')' : '') + (x.quantidade > 1 ? ' × ' + x.quantidade : '') + '</b>'
           + '<small>' + esc(RH_MOT_PED_F[x.motivo] || x.motivo) + ' · pedido em ' + esc(rhDTf(x.criado_em)) + '</small>'
           + '<div class="chips" style="margin-top:4px"><span class="chip ' + st[0] + '">' + esc(sub) + '</span></div>'
