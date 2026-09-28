@@ -15141,7 +15141,8 @@ function irPara(v){
   if (v === 'finre') return pintarContasReceber();
   if (v === 'finpg') return pintarContasPagar();
   if (v === 'finrec') return pintarRecorrentes();
-  if (v === 'finp' || v === 'finrl') return pintarFinBreve(v);
+  if (v === 'finp') return pintarPainelFin();
+  if (v === 'finrl') return pintarFinBreve(v);
   return pintar();
 }
 
@@ -17134,9 +17135,86 @@ function pintarRHBreve(v){
 // ════════════════════════════════════════════════════════════════════════════
 function pintarFinBreve(v){
   const board = document.getElementById('board');
-  const t = { finp:'Painel', finrl:'Relatórios' }[v] || v;
+  const t = { finrl:'Relatórios' }[v] || v;
   board.innerHTML = '<div class="tela"><div class="telaCab"><h2>' + t + ' <span class="tag">em breve</span></h2>'
     + '<p>O lugar está reservado no menu. A tela de verdade vem num passo seguinte.</p></div></div>';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PAINEL FINANCEIRO — item 13 do módulo Financeiro (Fase 1)
+// Tela inicial do módulo: o que precisa de atenção agora, previsto × realizado
+// do mês, despesas pagas por categoria, e o fluxo de caixa dos próximos meses.
+// Tudo montado numa função só no banco (tf_fin_painel) pra não fazer 6 idas e
+// voltas — a tela só desenha o que vier pronto.
+// ════════════════════════════════════════════════════════════════════════════
+const _FINP_MESES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function finpMesBR(m){
+  const s = String(m).slice(0, 7).split('-');
+  return _FINP_MESES[Number(s[1]) - 1] + '/' + s[0];
+}
+async function pintarPainelFin(){
+  visao = 'finp';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Painel Financeiro</h2>'
+    + '<p>O que precisa de atenção agora, o mês até aqui, e o que vem pela frente.</p></div>'
+    + '<div style="margin-bottom:14px"><button class="btn pri" type="button" id="finpNovaPagar">+ Conta a pagar</button> '
+    + '<button class="btn pri" type="button" id="finpNovaReceber">+ Conta a receber</button></div>'
+    + '<div id="finpCorpo"><p class="nota">Carregando…</p></div></div>';
+  document.getElementById('finpNovaPagar').addEventListener('click', () => modalTituloPagar());
+  document.getElementById('finpNovaReceber').addEventListener('click', () => modalTituloReceber());
+  await finpCarregar();
+}
+async function finpCarregar(){
+  const el = document.getElementById('finpCorpo'); if (!el) return;
+  let d;
+  try{ d = await rpc('tf_fin_painel', {}); }
+  catch(e){
+    el.innerHTML = '<div class="vazio2"><b>Não consegui abrir o painel</b><p></p>'
+      + '<button class="btn" type="button" id="finpDeNovo">Tentar de novo</button></div>';
+    el.querySelector('p').textContent = e.message;
+    document.getElementById('finpDeNovo').addEventListener('click', finpCarregar);
+    return;
+  }
+  finpDesenhar(d);
+}
+function finpDesenhar(d){
+  const el = document.getElementById('finpCorpo'); if (!el) return;
+  const pend = d.pendencias || [];
+  const grupos = d.despesas_por_grupo || [];
+  const fluxo = d.fluxo_caixa || [];
+
+  const blocoPendencias = '<div class="painel" style="margin-bottom:14px;padding:14px">'
+    + '<h3 style="margin-top:0">Precisa de ação' + (pend.length ? ' <span class="chip">' + pend.length + '</span>' : '') + '</h3>'
+    + (!pend.length ? '<p class="nota" style="margin:0">Nada vencido ou vencendo nos próximos 7 dias.</p>'
+        : '<div class="ccLin cab"><span>Vencimento</span><span>Quem</span><span>Descrição</span><span class="n">Saldo</span></div>'
+          + pend.map(p => '<div class="ccLin">'
+              + '<span class="ccData">' + esc(dataBR(p.vencimento)) + (p.vencido ? ' <small style="color:#c0392b">vencido</small>' : '') + '</span>'
+              + '<span class="ccNome">' + esc(p.quem || '—') + '</span>'
+              + '<span class="ccDesc">' + esc(p.descricao) + ' <small style="color:var(--ink-3)">· ' + (p.tipo === 'p' ? 'a pagar' : 'a receber') + '</small></span>'
+              + '<span class="n v">' + esc(BRL(p.saldo)) + '</span></div>').join('')) + '</div>';
+
+  const blocoPrevisto = '<div class="painel" style="margin-bottom:14px;padding:14px">'
+    + '<h3 style="margin-top:0">Previsto × realizado do mês</h3>'
+    + '<div class="ccLin cab"><span></span><span class="n">Previsto</span><span class="n">Realizado</span></div>'
+    + '<div class="ccLin"><span>Despesas</span><span class="n v">' + esc(BRL(d.previsto_despesa)) + '</span><span class="n v">' + esc(BRL(d.realizado_despesa)) + '</span></div>'
+    + '<div class="ccLin"><span>Receitas</span><span class="n v">' + esc(BRL(d.previsto_receita)) + '</span><span class="n v">' + esc(BRL(d.realizado_receita)) + '</span></div>'
+    + '</div>';
+
+  const blocoGrupo = '<div class="painel" style="margin-bottom:14px;padding:14px">'
+    + '<h3 style="margin-top:0">Despesas pagas no mês, por categoria</h3>'
+    + (!grupos.length ? '<p class="nota" style="margin:0">Nenhuma baixa de despesa este mês ainda.</p>'
+        : grupos.map(g => '<div class="ccLin"><span>' + esc(g.grupo_nome || '—') + '</span><span class="n v">' + esc(BRL(g.total)) + '</span></div>').join('')) + '</div>';
+
+  const blocoFluxo = '<div class="painel" style="padding:14px">'
+    + '<h3 style="margin-top:0">Fluxo de caixa previsto</h3>'
+    + (!fluxo.length ? '<p class="nota" style="margin:0">Sem títulos em aberto à frente.</p>'
+        : '<div class="ccLin cab"><span>Mês</span><span class="n">Entra</span><span class="n">Sai</span><span class="n">Saldo</span></div>'
+          + fluxo.map(f => '<div class="ccLin"><span>' + esc(finpMesBR(f.mes)) + '</span>'
+              + '<span class="n v">' + esc(BRL(f.entra)) + '</span>'
+              + '<span class="n v">' + esc(BRL(f.sai)) + '</span>'
+              + '<span class="n v">' + esc(BRL(f.saldo_acumulado)) + '</span></div>').join('')) + '</div>';
+
+  el.innerHTML = blocoPendencias + blocoPrevisto + blocoGrupo + blocoFluxo;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
