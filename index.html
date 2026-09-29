@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>TapFlow · H4</title>
+<title>TapFlow · H5</title>
 <meta name="theme-color" content="#102438">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -34,6 +34,9 @@
      ganha é o Field, como deve ser.
 -->
 <link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="TapFlow">
 <!-- ════════════════════════════════════════════════════════════════════════
      TAPFLOW · HUB — a porta única.
      ------------------------------------------------------------------------
@@ -135,6 +138,13 @@ input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--a
 .erro{color:var(--crit);font-size:12.5px;margin:12px 0 0;min-height:1em;line-height:1.4}
 .indo{font-size:13px;color:var(--ink-3);margin:18px 0 0}
 
+/* ── H5 · S45 item 1: o convite de instalar ──────────────────────────────── */
+.inst{margin-top:22px;background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--accent);
+  border-radius:5px;padding:14px 16px;font-size:13.5px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.inst p{margin:0;flex:1 1 260px;color:var(--ink-2);line-height:1.45}
+.inst b{color:var(--ink)}
+.inst .btn{width:auto;margin:0;padding:8px 14px}
+.inst .lnk{color:var(--ink-3)}
 @media(max-width:520px){
   main{padding:24px 14px 34px}
   .topo{padding:10px 14px}
@@ -163,6 +173,14 @@ input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--a
       Isso é configuração, não erro de senha. Peça ao Fernando para ajustar o perfil
       <code id="perfilCru"></code> na tabela <code>perfis</code>.
     </div>
+  </div>
+  <!-- H5 · S45 item 1: instalar como app. Aparece só quando dá para instalar
+       (o navegador avisou) ou no iPhone fora do app instalado, e some para
+       quem disse "agora não". -->
+  <div class="inst" id="inst" hidden>
+    <p id="instTxt"></p>
+    <button class="btn" type="button" id="instSim" hidden>Instalar</button>
+    <button class="lnk" type="button" id="instNao">agora não</button>
   </div>
   <p class="nota" id="nota"></p>
 </main>
@@ -195,7 +213,7 @@ input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--a
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';
 
-const APP_VERSION = 'H4';
+const APP_VERSION = 'H5';
 try{ document.getElementById('selo').textContent = 'HUB · ' + APP_VERSION; }catch(e){}
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
@@ -357,6 +375,7 @@ function montar(){
   }
   document.getElementById('corpo').hidden = false;
   document.getElementById('login').hidden = true;
+  pintarConvite();
 }
 
 function telaLogin(recado){
@@ -427,6 +446,49 @@ document.getElementById('frm').addEventListener('submit', async ev => {
 document.getElementById('btSair').addEventListener('click', () => {
   if (autoIndo){ clearTimeout(autoIndo); autoIndo = null; }
   limpar(); telaLogin('');
+});
+
+/* ── H5 · S45 item 1: o TapFlow como APP (PWA) ─────────────────────────────
+   O manifesto já existia (H3); faltava o service worker — sem ele o Chrome
+   não oferece "Instalar" em todo aparelho, e o Manager não abria sem sinal.
+   Um só, na raiz (sw.js), para o hub e o Manager; o Field continua com o dele.
+   Só em http(s): aberto do disco não existe service worker. */
+const K_INST = 'tf_inst_nao';
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
+const instalado = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches)
+                        || window.navigator.standalone === true;
+const ehIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent)
+                    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let promptInst = null;
+function pintarConvite(){
+  const cx = document.getElementById('inst');
+  let nao = false; try{ nao = localStorage.getItem(K_INST) === '1'; }catch(e){}
+  if (!cx || nao || instalado()){ if (cx) cx.hidden = true; return; }
+  const t = document.getElementById('instTxt'), b = document.getElementById('instSim');
+  if (promptInst){
+    t.innerHTML = '<b>Instale o TapFlow neste aparelho.</b> Fica um ícone na tela inicial e ele abre em '
+      + 'tela cheia, como um app — sem a barra do navegador.';
+    b.hidden = false; cx.hidden = false;
+  } else if (ehIOS()){
+    // O Safari do iPhone não tem o botão: o caminho é o menu Compartilhar.
+    t.innerHTML = '<b>No iPhone:</b> toque em <b>Compartilhar</b> (o quadrado com a seta para cima) e depois '
+      + 'em <b>Adicionar à Tela de Início</b>. O TapFlow passa a abrir em tela cheia, com o ícone da Engetap.';
+    b.hidden = true; cx.hidden = false;
+  } else cx.hidden = true;
+}
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); promptInst = e; pintarConvite(); });
+window.addEventListener('appinstalled', () => { promptInst = null; pintarConvite(); });
+document.getElementById('instSim').addEventListener('click', async () => {
+  if (!promptInst) return;
+  const p = promptInst; promptInst = null;
+  try{ p.prompt(); await p.userChoice; }catch(e){}
+  pintarConvite();
+});
+document.getElementById('instNao').addEventListener('click', () => {
+  try{ localStorage.setItem(K_INST, '1'); }catch(e){}
+  document.getElementById('inst').hidden = true;
 });
 
 /* ── entrada ──────────────────────────────────────────────────────────── */

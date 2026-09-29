@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S18</title>
+<title>TapFlow Field · S19</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -397,7 +397,7 @@ details.termo.faq{margin-top:6px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S18';
+const APP_VERSION = 'S19';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -1159,6 +1159,22 @@ function pintarMeuDia(m){
     // Sem a OS na lista do campo (tarefa administrativa, por exemplo) o cartão
     // ainda aparece — só não abre. Sumir seria pior: a pessoa fica sem saber.
     if (os) b.addEventListener('click', () => abrirOS(os));
+    else if (t.origem === 'os' && (t.status === 'pendente' || t.status === 'em_andamento')
+             && (t.executor === 'campo' || t.executor === 'ambos') && !DEMO){
+      // S19 · S45 item 2: com o molde novo da inspeção, o mapa de espessura
+      // abre junto com as revisões — a OS pode estar numa etapa do escritório
+      // (Revisão II) e a tarefa do dia ser do campo. Ela abre daqui mesmo.
+      b.addEventListener('click', async () => {
+        try{
+          const r = await get('v_os_kanban?select=*&os_id=eq.' + t.os_id);
+          if (r && r[0]) abrirOS(r[0]); else toast('Não achei esta OS.', 'err');
+        }catch(e){ toast(e.message, 'err'); }
+      });
+      const av = document.createElement('div');
+      av.className = 'semAbrir';
+      av.textContent = 'Liberada em paralelo — a OS está numa etapa do escritório, mas esta é sua.';
+      b.appendChild(av);
+    }
     else {
       // `disabled` + `title` num app de celular = cartão cinza sem explicação:
       // celular não tem hover e elemento desabilitado não recebe foco.
@@ -1223,7 +1239,7 @@ async function abrirOS(o){
       ? [demoTarefas(o.os_id), demoEquip(), demoColeta(o.os_id)]
       : await Promise.all([
           get('pipeline_tarefas?select=tarefa_id,nome,descricao,tipo,fase,status,perfis_responsaveis,lock_por,requisitos,'
-              + 'lock_expira,usuario_designado,apoios,data_prevista'
+              + 'lock_expira,usuario_designado,apoios,data_prevista,acao_terminal'
               + '&os_id=eq.' + o.os_id + '&ativo=eq.SIM&order=camada,fase_ordem,ordem'),
           get('equipamentos?select=id,tag,tipo,localizacao&cliente_id=eq.' + o.cliente_id + '&ativo=eq.true&order=tag'),
           get('v_os_coleta?select=inspetor,total_itens,enviado_em,fase&os_id=eq.' + o.os_id + '&order=enviado_em')
@@ -1394,9 +1410,36 @@ function painelEtapas(){
       b.addEventListener('click', () => assumirNoCampo(t, b));
       d.appendChild(b);
     }
+    // S19 · S45 item 2: a etapa LIBERADA em paralelo se conclui daqui — até o
+    // S18 só a etapa atual tinha "Concluir", e o mapa de espessura ficaria
+    // liberado sem botão enquanto a Revisão I não fechasse.
+    if (possoConcluirParalela(t)){
+      const c = document.createElement('button');
+      c.type = 'button'; c.className = 'btn sm pri';
+      c.textContent = 'Concluir etapa';
+      c.addEventListener('click', () => {
+        if (!confirm('Concluir "' + t.nome + '"?\n\nEla está liberada em paralelo com a etapa atual da OS. '
+            + 'A OS continua na etapa em que está.')) return;
+        agir('concluir', t);
+      });
+      d.appendChild(c);
+    }
     p.appendChild(d);
   });
   return p;
+}
+/** S19 · S45 item 2: liberada, não é a atual, manual, sem foto/checklist
+ *  obrigatório (esses têm a tela da etapa), não fecha fase nem OS, e do meu
+ *  perfil — a mesma conta do Manager (`possoConcluirParalela`). */
+function possoConcluirParalela(t){
+  if (!t || !atual || t.tarefa_id === atual.os.tarefa_atual_id) return false;
+  if (t.status !== 'pendente' && t.status !== 'em_andamento') return false;
+  const r = t.requisitos || {};
+  if (t.tipo !== 'manual' || t.acao_terminal
+      || (r.fotos || []).some(f => (f.min || 0) > 0) || (r.checklist || []).some(q => q.obrigatoria)) return false;
+  if (sessao.admin) return true;
+  const ps = t.perfis_responsaveis || [];
+  return !ps.length || ps.includes(sessao.perfil);
 }
 
 function pintarOS(){
@@ -1418,6 +1461,18 @@ function pintarOSBase(){
   // S39 · os extras vêm PRIMEIRO na inspeção: é o que o inspetor tem na mão
   // enquanto anda pela planta, e não pode depender de em que etapa a OS está.
   if (ehInspecao(os)) m.appendChild(painelExtras());
+  // S19 · S45 item 2: o que está liberado para mim em paralelo aparece logo
+  // em cima — quem veio pelo "Hoje" veio por causa dela, não da etapa atual.
+  const par = (tarefas || []).filter(possoConcluirParalela);
+  if (par.length){
+    const pa = document.createElement('div');
+    pa.className = 'painel';
+    pa.style.cssText = 'background:var(--accent-soft);border-color:transparent';
+    pa.innerHTML = '<div class="et">Liberada para você agora</div><p style="margin:0"></p>';
+    pa.querySelector('p').textContent = par.map(x => x.nome).join(' · ')
+      + ' — em paralelo com a etapa atual. O botão "Concluir etapa" está em "Outras etapas", no fim da tela.';
+    m.appendChild(pa);
+  }
 
   const naFila = filaLer().find(e => e.osId === os.os_id && e.tipo === 'levantamento');
   if (naFila){
