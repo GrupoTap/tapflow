@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S45</title>
+<title>TapFlow Manager · S45.1</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -129,9 +129,12 @@
 .nav-group.fechado .nav-car{transform:rotate(-90deg)}
 .nav-gn{margin-left:auto;font-size:9px;opacity:0;transition:opacity var(--t)}
 .nav-group.fechado .nav-gn{opacity:.6}
-/* grupo fechado esconde tudo MENOS onde você está — barra que esconde a sua
-   própria posição troca 4 pixels por desorientação */
-.nav-group.fechado .nav-item:not(.on){display:none}
+/* S44 · Bruno pediu pra recolher por completo (28/09/2026): antes o grupo
+   fechado escondia tudo MENOS o item ativo, pra não perder a própria posição
+   — só que isso deixava o grupo aberto sempre "vazando" uma linha e os outros
+   fechados de verdade, inconsistente. A posição atual já aparece no caminho
+   (breadcrumb) lá em cima, então agora fechado é fechado mesmo. */
+.nav-group.fechado .nav-item{display:none}
 
 .nav-item{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:10px;
   padding:8px 16px;font-size:13px;color:var(--sidebar-fg);cursor:pointer;
@@ -258,7 +261,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .ccLin .t small{display:block;color:var(--ink-3);font-size:11.5px;margin-top:2px}
 .ccLin .n{text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;white-space:nowrap}
 .ccLin .mais{color:var(--crit)} .ccLin .menos{color:var(--ok)}
-.ccLin.riscada .ccDesc,.ccLin.riscada .n.v{text-decoration:line-through;color:var(--ink-3)}
+.ccLin.riscada .ccData,.ccLin.riscada .ccDesc,.ccLin.riscada .ccNome,.ccLin.riscada .n.v{text-decoration:line-through;color:var(--ink-3)}
 .ccLin .a{text-align:right}
 .ccTipo{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:3px;
   background:var(--surface-2);color:var(--ink-2);margin-right:6px;text-transform:uppercase;letter-spacing:.3px}
@@ -1687,7 +1690,10 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
                                 // mas ela será desligada pelo Supabase no fim
                                 // de 2026 — prefira a Publishable.
 
-const APP_VERSION = 'S45';
+// S45.1 (29/09): o S45 com o módulo FINANCEIRO que foi ao ar direto no GitHub
+// em 28/09 (Contas a Receber/Pagar, Recorrentes, Bancos, Reservas, Categorias,
+// Relatórios, Fornecedores) e que não estava na pasta — o S45 o apagou do ar.
+const APP_VERSION = 'S45.1';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -2036,9 +2042,16 @@ let CC_AUT = false;
 /* S42 · esta pessoa está na lista do RH (`tf_rh_autorizado`)? Declarada AQUI,
    no topo: o menu é montado no carregamento do arquivo, antes do bloco do RH. */
 let RH_AUT = false;
+/* Financeiro · esta pessoa está na lista do financeiro (`tf_fin_autorizado`)?
+   Mesmo padrão de CC_AUT/RH_AUT — por PESSOA, não por perfil. */
+let FIN_AUT = false;
 async function carregarCC(){
   if (DEMO){ CC_AUT = true; return; }
   try{ CC_AUT = !!(await rpc('tf_cc_autorizado', {})); }catch(e){ CC_AUT = false; }
+}
+async function carregarFin(){
+  if (DEMO){ FIN_AUT = true; return; }
+  try{ FIN_AUT = !!(await rpc('tf_fin_autorizado', {})); }catch(e){ FIN_AUT = false; }
 }
 let falhaCarga = null;   // motivo do último erro, para a tela vazia não mentir
 let quadro = 'campo';
@@ -10339,6 +10352,10 @@ function pintarCracha(){
 const CC_TIPO = { historico:'histórico', aumento:'aumento', pagamento:'pagamento',
   abatimento:'fornecimento', ajuste:'ajuste', estorno:'estorno' };
 let CC = null;
+let FFOR = { lista:null };   // Financeiro · Fornecedores (item 2 do módulo)
+let FINB = { lista:null };   // Financeiro · Contas Bancárias (item 3 do módulo)
+let FINRSV = { envelopes:null }; // Financeiro · Reservas/Envelopes (item 5 do módulo)
+let FINCAT = { lista:null }; // Financeiro · Categorias e Orçamento (item 4 do módulo)
 
 /** "1.234,56" / "-1234.5" / "R$ 10" / número → Number (NaN se não der). */
 function ccValor(v){
@@ -15029,7 +15046,15 @@ const NAV = [
   // por perfil — admin não basta). Aqui só ESCONDE; quem tranca é o banco:
   // as duas tabelas têm RLS force e cada função confere `tf_cc_autorizado()`.
   { id:'financeiro', rot:'FINANCEIRO', itens:[
-    { v:'ccp', rot:'Conta corrente Proper', ico:'moeda', cc:true },
+    { v:'finp',  rot:'Painel',                ico:'grafico', fin:true },
+    { v:'finre', rot:'Contas a Receber',      ico:'moeda',   fin:true },
+    { v:'finpg', rot:'Contas a Pagar',        ico:'moeda',   fin:true },
+    { v:'finrec',rot:'Recorrentes',           ico:'moeda',   fin:true },
+    { v:'finb',  rot:'Contas Bancárias',      ico:'predio',  fin:true },
+    { v:'finrsv',rot:'Reservas',              ico:'caixa',   fin:true },
+    { v:'fincat',rot:'Categorias',            ico:'tag',     fin:true },
+    { v:'finrl', rot:'Relatórios',            ico:'grafico', fin:true },
+    { v:'ccp',   rot:'Conta corrente Proper', ico:'moeda',   cc:true },
   ]},
   // S42 · RECURSOS HUMANOS, entre FINANCEIRO e CADASTROS (item 1 do documento
   // de 26/09). `rh:true` = só quem está em `rh_autorizados` (por PESSOA, como a
@@ -15041,9 +15066,10 @@ const NAV = [
     { v:'rhd', rot:'Documentos do Funcionário', ico:'pasta',    rh:true, breve:true },
   ]},
   { id:'cadastros', rot:'CADASTROS', itens:[
-    { v:'cad', rot:'Clientes',   ico:'predio', mod:'cadastros' },
-    { v:'dup', rot:'Duplicados', ico:'duplo',  cont:'nDup', mod:'cadastros' },
-    { v:'cat', rot:'Catálogo',   ico:'tag',    mod:'cadastros' },
+    { v:'cad',  rot:'Clientes',     ico:'predio', mod:'cadastros' },
+    { v:'dup',  rot:'Duplicados',   ico:'duplo',  cont:'nDup', mod:'cadastros' },
+    { v:'cat',  rot:'Catálogo',     ico:'tag',    mod:'cadastros' },
+    { v:'ffor', rot:'Fornecedores', ico:'predio', fin:true },
   ]},
   { id:'sistema', rot:'SISTEMA', fim:true, itens:[
     // ITEM 3 (S32): sem `mod` de propósito — "Meu perfil" é de quem estiver
@@ -15067,7 +15093,7 @@ function podeVer(mod){
 
 /** Só os itens que esta pessoa abre, e só os grupos que sobraram com algo. */
 function navVisivel(){
-  return NAV.map(g => Object.assign({}, g, { itens: g.itens.filter(i => podeVer(i.mod) && (!i.cc || CC_AUT) && (!i.rh || RH_AUT)) }))
+  return NAV.map(g => Object.assign({}, g, { itens: g.itens.filter(i => podeVer(i.mod) && (!i.cc || CC_AUT) && (!i.rh || RH_AUT) && (!i.fin || FIN_AUT)) }))
             .filter(g => g.itens.length);
 }
 
@@ -15138,6 +15164,8 @@ const ROTULO = { campo:'Equipes de Inspeção', adm:'Equipe Administrativa',
   cpr:'Compras', age:'Agenda', doc:'Documentos', rel:'Relatórios',
   cad:'Clientes', dup:'Duplicados', cat:'Catálogo', cfg:'Configurações',
   eu:'Meu perfil', ccp:'Conta corrente Proper',
+  finp:'Painel Financeiro', finre:'Contas a Receber', finpg:'Contas a Pagar', finrec:'Contas Recorrentes',
+  finb:'Contas Bancárias', finrsv:'Reservas e Transferências', fincat:'Categorias e Orçamento', finrl:'Relatórios Financeiros', ffor:'Fornecedores',
   rhf:'Funcionários', rhs:'Segurança do Trabalho', rhp:'Folha de Ponto', rhd:'Documentos do Funcionário' };
 const GRUPO_DE = {};
 NAV.forEach(g => g.itens.forEach(i => { GRUPO_DE[i.v] = g.rot; }));
@@ -15197,6 +15225,15 @@ function irPara(v){
   if (v === 'rhf') return pintarRHFuncionarios();
   if (v === 'rhs') return pintarRHSeguranca();
   if (v === 'rhp' || v === 'rhd') return pintarRHBreve(v);
+  if (v === 'ffor') return pintarFornecedores();
+  if (v === 'finb') return pintarContasBancarias();
+  if (v === 'finrsv') return pintarReservas();
+  if (v === 'fincat') return pintarCategorias();
+  if (v === 'finre') return pintarContasReceber();
+  if (v === 'finpg') return pintarContasPagar();
+  if (v === 'finrec') return pintarRecorrentes();
+  if (v === 'finp') return pintarPainelFin();
+  if (v === 'finrl') return pintarRelatoriosFin();
   return pintar();
 }
 
@@ -16397,6 +16434,11 @@ const PLACEHOLDER_BUSCA = {
   cat:'Buscar item, código, marca…',
   age:'Buscar pessoa, OS, cliente, tarefa…',
   rhf:'Buscar funcionário, função…',
+  ffor:'Buscar fornecedor, CNPJ ou CPF…',
+  finb:'Buscar conta ou banco…',
+  finre:'Buscar cliente, descrição, nota ou OS…',
+  finpg:'Buscar fornecedor, descrição, nota ou OS…',
+  finrec:'Buscar fornecedor, descrição ou categoria…',
 };
 /** Multi-termo E: cada palavra digitada tem que aparecer no texto da linha.
  *  (`norm` já existe mais acima, no seletor de catálogo — é a mesma função.) */
@@ -17177,6 +17219,1542 @@ function pintarRHBreve(v){
         + 'Um cuidado já anotado: ponto por aplicativo segue a Portaria MTP 671/2021 (REP-P) — vale falar com a contabilidade antes.'
       : 'O lugar está reservado no menu. O conteúdo vem num prompt próprio (o nome é "do Funcionário" para não '
         + 'confundir com Documentos, em OPERAÇÃO).') + '</p></div></div>';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// RELATÓRIOS FINANCEIROS — item 14 do módulo Financeiro (Fase 1)
+// Os 4 relatórios que o SIGE já oferece: síntese, fluxo de caixa (realizado
+// dos últimos meses + previsto, este reaproveitado do Painel), DRE anual
+// (por data de pagamento nesta fase — por competência fica pra Fase 3) e
+// extrato bancário (reaproveita a mesma tf_fin_conta_extrato de Contas
+// Bancárias, só que dá pra trocar de conta sem sair da tela).
+// ════════════════════════════════════════════════════════════════════════════
+const FINRL_ABAS = [['sintese','Síntese'], ['fluxo','Fluxo de Caixa'], ['dre','DRE Anual'], ['extrato','Extrato Bancário']];
+let FINRL = { aba:'sintese', sinteseIni:null, sinteseFim:null, dreAno:null, extratoContaId:null };
+
+async function pintarRelatoriosFin(){
+  visao = 'finrl';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Relatórios Financeiros</h2>'
+    + '<p>Os mesmos relatórios do SIGE, recriados no TapFlow.</p></div>'
+    + '<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">'
+    +   FINRL_ABAS.map(([k,rot]) => '<button class="btn' + (FINRL.aba === k ? ' pri' : '') + '" type="button" data-aba="' + k + '">' + rot + '</button>').join('')
+    + '</div>'
+    + '<div id="finrlCorpo"><p class="nota">Carregando…</p></div></div>';
+  board.querySelectorAll('[data-aba]').forEach(b => b.addEventListener('click', () => {
+    FINRL.aba = b.dataset.aba;
+    pintarRelatoriosFin();
+  }));
+  await finrlCarregar();
+}
+async function finrlCarregar(){
+  const el = document.getElementById('finrlCorpo'); if (!el) return;
+  if (FINRL.aba === 'sintese') return finrlSintese(el);
+  if (FINRL.aba === 'fluxo') return finrlFluxo(el);
+  if (FINRL.aba === 'dre') return finrlDre(el);
+  return finrlExtrato(el);
+}
+
+async function finrlSintese(el){
+  const hoje = isoHoje();
+  const iniPadrao = hoje.slice(0, 7) + '-01';
+  const ini = FINRL.sinteseIni || iniPadrao;
+  const fim = FINRL.sinteseFim || hoje;
+  el.innerHTML = '<div class="painel" style="padding:14px;margin-bottom:14px">'
+    + '<div class="dupla">'
+    +   '<div class="campo"><label for="rlIni">De</label><input id="rlIni" type="date" value="' + esc(ini) + '"></div>'
+    +   '<div class="campo"><label for="rlFim">Até</label><input id="rlFim" type="date" value="' + esc(fim) + '"></div>'
+    + '</div>'
+    + '<button class="btn pri" type="button" id="rlBuscar">Buscar</button>'
+    + '</div>'
+    + '<div id="rlSinteseResultado"><p class="nota">Carregando…</p></div>';
+  const buscar = async () => {
+    FINRL.sinteseIni = document.getElementById('rlIni').value || ini;
+    FINRL.sinteseFim = document.getElementById('rlFim').value || fim;
+    const alvo = document.getElementById('rlSinteseResultado');
+    alvo.innerHTML = '<p class="nota">Carregando…</p>';
+    let d;
+    try{ d = await rpc('tf_fin_relatorio_sintese', { p_inicio: FINRL.sinteseIni, p_fim: FINRL.sinteseFim }); }
+    catch(e){ alvo.innerHTML = '<p class="nota">' + esc(e.message) + '</p>'; return; }
+    const det = d.detalhe || [];
+    alvo.innerHTML = '<div class="painel" style="padding:14px">'
+      + '<div class="ccLin"><span>Receitas</span><span class="n v">' + esc(BRL(d.receita_total)) + '</span></div>'
+      + '<div class="ccLin"><span>Despesas</span><span class="n v">' + esc(BRL(d.despesa_total)) + '</span></div>'
+      + '<div class="ccLin"><span><b>Resultado</b></span><span class="n v"><b>' + esc(BRL(d.resultado)) + '</b></span></div>'
+      + '</div>'
+      + '<div class="painel" style="padding:14px;margin-top:14px">'
+      +   '<h3 style="margin-top:0">Por grupo e subcategoria</h3>'
+      +   (!det.length ? '<p class="nota" style="margin:0">Nada no período.</p>'
+          : det.map(x => '<div class="ccLin"><span>' + (x.tipo === 'r' ? 'Receita' : 'Despesa') + ' · ' + esc(x.grupo_nome || '—') + (x.subcategoria_nome ? ' / ' + esc(x.subcategoria_nome) : '') + '</span>'
+              + '<span class="n v">' + esc(BRL(x.total)) + '</span></div>').join(''))
+      + '</div>';
+  };
+  document.getElementById('rlBuscar').addEventListener('click', buscar);
+  await buscar();
+}
+
+async function finrlFluxo(el){
+  el.innerHTML = '<p class="nota">Carregando…</p>';
+  let d;
+  try{ d = await rpc('tf_fin_relatorio_fluxo_caixa', {}); }
+  catch(e){ el.innerHTML = '<p class="nota">' + esc(e.message) + '</p>'; return; }
+  const hist = d.historico || [];
+  const prev = d.previsto || [];
+  el.innerHTML = '<div class="painel" style="padding:14px;margin-bottom:14px">'
+    + '<h3 style="margin-top:0">Realizado (últimos meses)</h3>'
+    + (!hist.length ? '<p class="nota" style="margin:0">Sem movimento ainda.</p>'
+        : '<div class="ccLin cab"><span>Mês</span><span class="n">Entrou</span><span class="n">Saiu</span><span class="n">Saldo do mês</span></div>'
+          + hist.map(h => '<div class="ccLin"><span>' + esc(finpMesBR(h.mes)) + '</span>'
+              + '<span class="n v">' + esc(BRL(h.entra)) + '</span>'
+              + '<span class="n v">' + esc(BRL(h.sai)) + '</span>'
+              + '<span class="n v">' + esc(BRL(Number(h.entra) - Number(h.sai))) + '</span></div>').join('')) + '</div>'
+    + '<div class="painel" style="padding:14px">'
+    + '<h3 style="margin-top:0">Previsto (a partir de agora)</h3>'
+    + (!prev.length ? '<p class="nota" style="margin:0">Sem títulos em aberto à frente.</p>'
+        : '<div class="ccLin cab"><span>Mês</span><span class="n">Entra</span><span class="n">Sai</span><span class="n">Saldo</span></div>'
+          + prev.map(f => '<div class="ccLin"><span>' + esc(finpMesBR(f.mes)) + '</span>'
+              + '<span class="n v">' + esc(BRL(f.entra)) + '</span>'
+              + '<span class="n v">' + esc(BRL(f.sai)) + '</span>'
+              + '<span class="n v">' + esc(BRL(f.saldo_acumulado)) + '</span></div>').join('')) + '</div>';
+}
+
+async function finrlDre(el){
+  const ano = FINRL.dreAno || new Date().getFullYear();
+  el.innerHTML = '<div class="painel" style="padding:14px;margin-bottom:14px">'
+    + '<div class="campo" style="max-width:160px"><label for="rlAno">Ano</label><input id="rlAno" type="number" value="' + ano + '" step="1"></div>'
+    + '<button class="btn pri" type="button" id="rlDreBuscar">Buscar</button>'
+    + '</div>'
+    + '<div id="rlDreResultado"><p class="nota">Carregando…</p></div>';
+  const buscar = async () => {
+    const anoEsc = Number(document.getElementById('rlAno').value) || ano;
+    FINRL.dreAno = anoEsc;
+    const alvo = document.getElementById('rlDreResultado');
+    alvo.innerHTML = '<p class="nota">Carregando…</p>';
+    let d;
+    try{ d = await rpc('tf_fin_relatorio_dre', { p_ano: anoEsc }); }
+    catch(e){ alvo.innerHTML = '<p class="nota">' + esc(e.message) + '</p>'; return; }
+    const meses = d.meses || [];
+    const NOMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    alvo.innerHTML = '<div class="painel" style="padding:14px">'
+      + '<div class="ccLin cab"><span>Mês</span><span class="n">Receitas</span><span class="n">Despesas</span><span class="n">Resultado</span></div>'
+      + meses.map(m => '<div class="ccLin"><span>' + esc(NOMES[m.mes - 1]) + '</span>'
+          + '<span class="n v">' + esc(BRL(m.receitas)) + '</span>'
+          + '<span class="n v">' + esc(BRL(m.despesas)) + '</span>'
+          + '<span class="n v">' + esc(BRL(Number(m.receitas) - Number(m.despesas))) + '</span></div>').join('')
+      + '<div class="ccLin" style="border-top:2px solid var(--rule)"><span><b>Total do ano</b></span>'
+      +   '<span class="n v"><b>' + esc(BRL(d.receita_total)) + '</b></span>'
+      +   '<span class="n v"><b>' + esc(BRL(d.despesa_total)) + '</b></span>'
+      +   '<span class="n v"><b>' + esc(BRL(d.resultado_total)) + '</b></span></div>'
+      + '</div>';
+  };
+  document.getElementById('rlDreBuscar').addEventListener('click', buscar);
+  await buscar();
+}
+
+async function finrlExtrato(el){
+  el.innerHTML = '<p class="nota">Carregando…</p>';
+  let contas = [];
+  try{ contas = await rpc('tf_fin_contas_listar', {}); }
+  catch(e){ el.innerHTML = '<p class="nota">' + esc(e.message) + '</p>'; return; }
+  if (!contas.length){ el.innerHTML = '<p class="nota">Nenhuma conta cadastrada — confira Contas Bancárias.</p>'; return; }
+  if (!FINRL.extratoContaId || !contas.some(c => c.id === FINRL.extratoContaId)) FINRL.extratoContaId = contas[0].id;
+  el.innerHTML = '<div class="painel" style="padding:14px;margin-bottom:14px">'
+    + '<div class="campo"><label for="rlConta">Conta</label><select id="rlConta">'
+    +   contas.map(c => '<option value="' + esc(c.id) + '"' + (c.id === FINRL.extratoContaId ? ' selected' : '') + '>' + esc(c.nome) + (c.papel === 'reserva' ? ' (reserva)' : '') + '</option>').join('')
+    + '</select></div></div>'
+    + '<div id="rlExtratoResultado"><p class="nota">Carregando…</p></div>';
+  const carregarExtrato = async () => {
+    const alvo = document.getElementById('rlExtratoResultado');
+    alvo.innerHTML = '<p class="nota">Carregando…</p>';
+    let r;
+    try{ r = await rpc('tf_fin_conta_extrato', { p_conta_id: FINRL.extratoContaId }); }
+    catch(e){ alvo.innerHTML = '<p class="nota">' + esc(e.message) + '</p>'; return; }
+    const mv = r.movimentos || [];
+    alvo.innerHTML = '<div class="painel" style="padding:14px">'
+      + '<p class="nota" style="margin-top:0">Saldo atual: <b>' + esc(BRL(r.saldo_atual)) + '</b></p>'
+      + (mv.length
+          ? '<div class="ccLin cab"><span>Data</span><span>Descrição</span><span class="n">Valor</span></div>'
+            + mv.map(m => '<div class="ccLin' + (m.estornado ? ' riscada' : '') + '">'
+              + '<span>' + esc(dataBR(m.data)) + '</span>'
+              + '<span>' + esc(m.descricao) + (m.quem ? ' <small style="color:var(--ink-3)">· ' + esc(m.quem) + '</small>' : '') + '</span>'
+              + '<span class="n ' + (Number(m.valor) >= 0 ? 'mais' : 'menos') + '">' + esc(ccSinal(Number(m.valor))) + '</span></div>').join('')
+          : '<p class="nota">Nenhuma movimentação lançada ainda.</p>')
+      + '</div>';
+  };
+  document.getElementById('rlConta').addEventListener('change', (e) => { FINRL.extratoContaId = e.target.value; carregarExtrato(); });
+  await carregarExtrato();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PAINEL FINANCEIRO — item 13 do módulo Financeiro (Fase 1)
+// Tela inicial do módulo: o que precisa de atenção agora, previsto × realizado
+// do mês, despesas pagas por categoria, e o fluxo de caixa dos próximos meses.
+// Tudo montado numa função só no banco (tf_fin_painel) pra não fazer 6 idas e
+// voltas — a tela só desenha o que vier pronto.
+// ════════════════════════════════════════════════════════════════════════════
+const _FINP_MESES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function finpMesBR(m){
+  const s = String(m).slice(0, 7).split('-');
+  return _FINP_MESES[Number(s[1]) - 1] + '/' + s[0];
+}
+async function pintarPainelFin(){
+  visao = 'finp';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Painel Financeiro</h2>'
+    + '<p>O que precisa de atenção agora, o mês até aqui, e o que vem pela frente.</p></div>'
+    + '<div style="margin-bottom:14px"><button class="btn pri" type="button" id="finpNovaPagar">+ Conta a pagar</button> '
+    + '<button class="btn pri" type="button" id="finpNovaReceber">+ Conta a receber</button></div>'
+    + '<div id="finpCorpo"><p class="nota">Carregando…</p></div></div>';
+  document.getElementById('finpNovaPagar').addEventListener('click', () => modalTituloPagar());
+  document.getElementById('finpNovaReceber').addEventListener('click', () => modalTituloReceber());
+  await finpCarregar();
+}
+async function finpCarregar(){
+  const el = document.getElementById('finpCorpo'); if (!el) return;
+  let d;
+  try{ d = await rpc('tf_fin_painel', {}); }
+  catch(e){
+    el.innerHTML = '<div class="vazio2"><b>Não consegui abrir o painel</b><p></p>'
+      + '<button class="btn" type="button" id="finpDeNovo">Tentar de novo</button></div>';
+    el.querySelector('p').textContent = e.message;
+    document.getElementById('finpDeNovo').addEventListener('click', finpCarregar);
+    return;
+  }
+  finpDesenhar(d);
+}
+/** Anel de progresso (SVG) — "X% do previsto". Não deixa passar de 100% no
+ * desenho (satura visualmente), mas o número mostrado é o real. */
+function finpAnel(pct, cor){
+  const pctDesenho = Math.max(0, Math.min(100, pct));
+  const r = 42, c = 2 * Math.PI * r;
+  const dash = (pctDesenho / 100) * c;
+  return '<svg viewBox="0 0 100 100" style="width:112px;height:112px;flex:none">'
+    + '<circle cx="50" cy="50" r="' + r + '" fill="none" stroke="var(--rule)" stroke-width="10"></circle>'
+    + '<circle cx="50" cy="50" r="' + r + '" fill="none" stroke="' + cor + '" stroke-width="10" stroke-linecap="round" '
+    +   'stroke-dasharray="' + dash.toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 50 50)"></circle>'
+    + '<text x="50" y="46" text-anchor="middle" font-size="19" font-weight="700" fill="' + cor + '">' + Math.round(pct) + '%</text>'
+    + '<text x="50" y="61" text-anchor="middle" font-size="7.5" fill="var(--ink-3)">do previsto</text>'
+    + '</svg>';
+}
+/** Uma linha do "mês anterior × atual": duas barrinhas finas, mais a
+ * variação percentual com seta. Escala é relativa ao maior dos dois valores
+ * DESSA linha — cada categoria lê bem, independente da escala das outras. */
+function finpCompLinha(c, cor){
+  const atual = Number(c.atual) || 0, anterior = Number(c.anterior) || 0;
+  const semNada = !atual && !anterior;
+  const maxV = Math.max(atual, anterior, 1);
+  const pctAtual = Math.min(100, (atual / maxV) * 100);
+  const pctAnterior = Math.min(100, (anterior / maxV) * 100);
+  const subiu = atual >= anterior;
+  const variacao = anterior > 0 ? Math.abs((atual - anterior) / anterior * 100) : (atual > 0 ? 100 : 0);
+  const rotuloVar = semNada ? 'sem lançamento' : (variacao.toFixed(0) + '% ' + (subiu ? '↑' : '↓'));
+  return '<div style="margin-bottom:9px">'
+    + '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'
+    +   '<span>' + esc(c.rotulo) + '</span>'
+    +   '<span style="color:var(--ink-3)">' + esc(rotuloVar) + '</span>'
+    + '</div>'
+    + '<div style="height:6px;border-radius:3px;background:var(--rule-2);overflow:hidden;margin-bottom:2px">'
+    +   '<div style="width:' + pctAtual.toFixed(1) + '%;height:100%;background:' + cor + '"></div></div>'
+    + '<div style="height:6px;border-radius:3px;background:var(--rule-2);overflow:hidden">'
+    +   '<div style="width:' + pctAnterior.toFixed(1) + '%;height:100%;background:var(--ink-3);opacity:.45"></div></div>'
+    + '</div>';
+}
+/** Card "Receitas do mês" / "Despesas do mês": anel + valores + comparativo
+ * com o mês anterior, por categoria. */
+function finpCardMes(titulo, cor, realizado, previsto, comparativos){
+  const pct = previsto > 0 ? (realizado / previsto * 100) : (realizado > 0 ? 100 : 0);
+  const diferenca = previsto - realizado;
+  const estourou = titulo === 'Despesas' && diferenca < 0;
+  const corDif = estourou ? 'var(--crit)' : cor;
+  return '<div class="painel" style="padding:14px">'
+    + '<h3 style="margin-top:0">' + esc(titulo) + ' do mês</h3>'
+    + '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:6px">'
+    +   finpAnel(pct, cor)
+    +   '<div>'
+    +     '<div style="font-size:21px;font-weight:700;color:' + cor + '">' + esc(BRL(realizado)) + '</div>'
+    +     '<div style="font-size:12.5px;color:var(--ink-3);margin-top:5px">Previsto: <b style="color:var(--ink-2)">' + esc(BRL(previsto)) + '</b></div>'
+    +     '<div style="font-size:12.5px;color:var(--ink-3)">Diferença: <b style="color:' + corDif + '">' + esc(BRL(Math.abs(diferenca))) + (estourou ? ' acima' : '') + '</b></div>'
+    +   '</div>'
+    + '</div>'
+    + (!comparativos.length ? ''
+        : '<p class="nota" style="margin:10px 0 6px;font-weight:600;color:var(--ink-2)">Mês anterior × atual</p>'
+          + comparativos.map(c => finpCompLinha(c, cor)).join(''))
+    + '</div>';
+}
+/** Gráfico de fluxo de caixa: barras de recebe (acima da linha de base) e
+ * paga (abaixo), mais a linha de saldo acumulado — tudo na mesma escala em
+ * R$ (nunca dois eixos). Meses já realizados entram mais opacos que os
+ * previstos, pra diferenciar sem depender só da cor. */
+function finpGraficoFluxo(pontos){
+  if (!pontos.length) return '<p class="nota" style="margin:0">Sem dados suficientes ainda.</p>';
+  const W = 720, H = 230, padTop = 12, padBottom = 30, padSide = 6;
+  const n = pontos.length;
+  const bandW = (W - padSide * 2) / n;
+  const plotH = H - padTop - padBottom;
+  const baseline = padTop + plotH / 2;
+  const maxAbs = Math.max(1, ...pontos.map(p =>
+    Math.max(Number(p.entra) || 0, Number(p.sai) || 0, Math.abs(Number(p.saldo_acumulado) || 0))));
+  const escala = (plotH / 2) / maxAbs;
+
+  let barras = '', marcas = '', rotulos = '';
+  const pts = [];
+  pontos.forEach((p, i) => {
+    const x0 = padSide + i * bandW;
+    const entra = Number(p.entra) || 0, sai = Number(p.sai) || 0, saldo = Number(p.saldo_acumulado) || 0;
+    const op = p.realizado ? '1' : '.65';
+    const hEntra = entra * escala, hSai = sai * escala;
+    const mesTxt = esc(finpMesBR(p.mes));
+    barras += '<rect x="' + (x0 + bandW * 0.14).toFixed(1) + '" y="' + (baseline - hEntra).toFixed(1)
+      + '" width="' + (bandW * 0.32).toFixed(1) + '" height="' + hEntra.toFixed(1) + '" rx="2" fill="var(--ok)" opacity="' + op + '">'
+      + '<title>' + mesTxt + ' · Recebe ' + esc(BRL(entra)) + '</title></rect>';
+    barras += '<rect x="' + (x0 + bandW * 0.54).toFixed(1) + '" y="' + baseline.toFixed(1)
+      + '" width="' + (bandW * 0.32).toFixed(1) + '" height="' + hSai.toFixed(1) + '" rx="2" fill="var(--warn)" opacity="' + op + '">'
+      + '<title>' + mesTxt + ' · Paga ' + esc(BRL(sai)) + '</title></rect>';
+    const xMeio = x0 + bandW * 0.5, yLinha = baseline - saldo * escala;
+    pts.push(xMeio.toFixed(1) + ',' + yLinha.toFixed(1));
+    marcas += '<circle cx="' + xMeio.toFixed(1) + '" cy="' + yLinha.toFixed(1) + '" r="3" fill="var(--accent)">'
+      + '<title>' + mesTxt + ' · Saldo ' + esc(BRL(saldo)) + '</title></circle>';
+    rotulos += '<text x="' + xMeio.toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="9.5" fill="var(--ink-3)">' + mesTxt + '</text>';
+  });
+  const linha = '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--accent)" stroke-width="2"></polyline>';
+
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block">'
+    + '<line x1="' + padSide + '" y1="' + baseline.toFixed(1) + '" x2="' + (W - padSide) + '" y2="' + baseline.toFixed(1) + '" stroke="var(--rule)" stroke-width="1"></line>'
+    + barras + linha + marcas + rotulos
+    + '</svg>'
+    + '<div style="display:flex;gap:16px;justify-content:center;margin-top:8px;font-size:12px;color:var(--ink-2)">'
+    +   '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--ok);margin-right:4px;vertical-align:-1px"></span>Recebe</span>'
+    +   '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--warn);margin-right:4px;vertical-align:-1px"></span>Paga</span>'
+    +   '<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent);margin-right:4px;vertical-align:-1px"></span>Saldo acumulado</span>'
+    + '</div>';
+}
+function finpDesenhar(d){
+  const el = document.getElementById('finpCorpo'); if (!el) return;
+  const pend = d.pendencias || [];
+  const fluxoGrafico = d.fluxo_caixa_grafico || [];
+  const comp = d.comparativo_mes || [];
+  const compReceita = comp.filter(c => c.tipo === 'r');
+  const compDespesa = comp.filter(c => c.tipo === 'p');
+  const vencidos = pend.filter(p => p.vencido).length;
+  const vencendo = pend.length - vencidos;
+
+  const blocoPendencias = '<div class="painel" style="margin-bottom:14px;padding:14px">'
+    + '<h3 style="margin-top:0">Precisa de ação'
+    +   (vencidos ? ' <span class="chip" style="background:var(--crit-soft);color:var(--crit)">' + vencidos + ' vencido' + (vencidos > 1 ? 's' : '') + '</span>' : '')
+    +   (vencendo ? ' <span class="chip" style="background:var(--warn-soft);color:var(--warn)">' + vencendo + ' vencendo</span>' : '')
+    + '</h3>'
+    + (!pend.length ? '<p class="nota" style="margin:0">Nada vencido ou vencendo nos próximos 7 dias.</p>'
+        : pend.map(p => '<div class="ccLin" style="border-left:3px solid ' + (p.vencido ? 'var(--crit)' : 'var(--warn)') + ';padding-left:8px">'
+            + '<span class="ccData">' + esc(dataBR(p.vencimento)) + (p.vencido ? ' <small style="color:var(--crit)">vencido</small>' : '') + '</span>'
+            + '<span class="ccNome">' + esc(p.quem || '—') + '</span>'
+            + '<span class="ccDesc">' + esc(p.descricao) + ' <small style="color:var(--ink-3)">· ' + (p.tipo === 'p' ? 'a pagar' : 'a receber') + '</small></span>'
+            + '<span class="n v">' + esc(BRL(p.saldo)) + '</span></div>').join('')) + '</div>';
+
+  const blocoFluxo = '<div class="painel" style="margin-bottom:14px;padding:14px">'
+    + '<h3 style="margin-top:0">Fluxo de caixa</h3>'
+    + '<p class="nota" style="margin:-4px 0 10px">Últimos 5 meses realizados, o mês atual, e os 5 seguintes previstos.</p>'
+    + finpGraficoFluxo(fluxoGrafico)
+    + '</div>';
+
+  const blocoCards = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">'
+    + finpCardMes('Receitas', 'var(--ok)', d.realizado_receita, d.previsto_receita, compReceita)
+    + finpCardMes('Despesas', 'var(--warn)', d.realizado_despesa, d.previsto_despesa, compDespesa)
+    + '</div>';
+
+  el.innerHTML = blocoPendencias + blocoFluxo + blocoCards;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// FORNECEDORES — item 2 do módulo Financeiro (Fase 1)
+// Cadastro simples: Nome (obrigatório) e CNPJ ou CPF (opcional). Serve tanto
+// para uma empresa (ex.: CEMIG) quanto para uma categoria de gasto sem
+// fornecedor único (ex.: "Funcionários (folha)").
+// ════════════════════════════════════════════════════════════════════════════
+async function pintarFornecedores(){
+  visao = 'ffor';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Fornecedores</h2>'
+    + '<p>Quem recebe nas contas a pagar — inclusive categorias sem fornecedor único, como "Funcionários (folha)".</p></div>'
+    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="fforNovo">+ Novo fornecedor</button></div>'
+    + '<div class="lista" id="fforLista"><p class="nota">Carregando…</p></div></div>';
+  document.getElementById('fforNovo').addEventListener('click', () => modalFornecedor(null));
+  await fforCarregar();
+}
+async function fforCarregar(){
+  const el = document.getElementById('fforLista'); if (!el) return;
+  try{ FFOR.lista = await rpc('tf_fin_fornecedores_listar', {}); }
+  catch(e){
+    el.innerHTML = '<div class="vazio2"><b>Não consegui abrir os fornecedores</b><p></p>'
+      + '<button class="btn" type="button" id="fforDeNovo">Tentar de novo</button></div>';
+    el.querySelector('p').textContent = e.message;
+    document.getElementById('fforDeNovo').addEventListener('click', fforCarregar);
+    return;
+  }
+  fforDesenhar();
+}
+function fforDesenhar(){
+  const el = document.getElementById('fforLista'); if (!el) return;
+  const q = BUSCA.ffor || '';
+  const L = (FFOR.lista || []).filter(f => casa([f.nome, f.cnpj_cpf].join(' '), q));
+  if (!L.length){
+    el.innerHTML = '<p class="nota" style="padding:12px">Nenhum fornecedor ainda' + (q ? ' com essa busca' : '') + '.</p>';
+    return;
+  }
+  el.innerHTML = '<div class="ccLin cab"><span>Nome</span><span>CNPJ/CPF</span><span></span></div>'
+    + L.map(f => '<div class="ccLin"><span>' + esc(f.nome) + '</span>'
+      + '<span>' + esc(f.cnpj_cpf || '—') + '</span>'
+      + '<span class="a"><button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editar="'
+      + esc(f.id) + '">Editar</button></span></div>').join('');
+  el.querySelectorAll('[data-editar]').forEach(b => b.addEventListener('click', () => {
+    const f = (FFOR.lista || []).find(x => x.id === b.dataset.editar);
+    if (f) modalFornecedor(f);
+  }));
+}
+REPINTA.ffor = fforDesenhar;
+
+function modalFornecedor(f){
+  abrirModal(f ? 'Editar fornecedor' : 'Novo fornecedor',
+      '<div class="campo"><label for="ffN">Nome</label><input id="ffN" type="text" value="'
+    +   esc(f ? f.nome : '') + '" autocomplete="off"></div>'
+    + '<div class="campo"><label for="ffD">CNPJ ou CPF (opcional)</label><input id="ffD" type="text" value="'
+    +   esc(f ? f.cnpj_cpf : '') + '" autocomplete="off"></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label: f ? 'Salvar' : 'Adicionar', pri:true, onClick: async () => {
+        const v = id => (document.getElementById(id) || {}).value.trim();
+        if (!v('ffN')){ toast('O nome do fornecedor é obrigatório.', 'err'); return; }
+        try{
+          await rpc('tf_fin_fornecedor_gravar', { p_id: f ? f.id : null, p_nome: v('ffN'), p_cnpj_cpf: v('ffD') || null });
+          fecharModal(); toast('Fornecedor salvo.', 'ok'); await fforCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CONTAS BANCÁRIAS — item 3 do módulo Financeiro (Fase 1)
+// Cada conta tem papel operacional (dia a dia) ou reserva (13º, impostos,
+// rescisões). O saldo e o extrato vêm só do que foi lançado no TapFlow
+// (baixas e transferências) — não é o extrato real do banco (isso é Fase 3).
+// ════════════════════════════════════════════════════════════════════════════
+async function pintarContasBancarias(){
+  visao = 'finb';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Contas Bancárias</h2>'
+    + '<p>Saldo a partir do que for lançado aqui no TapFlow (baixas e transferências) — não é o extrato real do banco.</p></div>'
+    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="finbNovo">+ Nova conta</button></div>'
+    + '<div class="lista" id="finbLista"><p class="nota">Carregando…</p></div></div>';
+  document.getElementById('finbNovo').addEventListener('click', () => modalConta(null));
+  await finbCarregar();
+}
+async function finbCarregar(){
+  const el = document.getElementById('finbLista'); if (!el) return;
+  try{ FINB.lista = await rpc('tf_fin_contas_listar', {}); }
+  catch(e){
+    el.innerHTML = '<div class="vazio2"><b>Não consegui abrir as contas</b><p></p>'
+      + '<button class="btn" type="button" id="finbDeNovo">Tentar de novo</button></div>';
+    el.querySelector('p').textContent = e.message;
+    document.getElementById('finbDeNovo').addEventListener('click', finbCarregar);
+    return;
+  }
+  finbDesenhar();
+}
+function finbDesenhar(){
+  const el = document.getElementById('finbLista'); if (!el) return;
+  const q = BUSCA.finb || '';
+  const L = (FINB.lista || []).filter(c => casa([c.nome, c.codigo_banco].join(' '), q));
+  if (!L.length){
+    el.innerHTML = '<p class="nota" style="padding:12px">Nenhuma conta cadastrada ainda' + (q ? ' com essa busca' : '') + '.</p>';
+    return;
+  }
+  el.innerHTML = '<div class="ccLin cab"><span>Nome</span><span>Papel</span><span class="n">Saldo atual</span><span></span></div>'
+    + L.map(c => '<div class="ccLin"><span>' + esc(c.nome)
+      + (c.codigo_banco ? ' <small style="color:var(--ink-3)">(' + esc(c.codigo_banco) + ')</small>' : '') + '</span>'
+      + '<span>' + (c.papel === 'reserva' ? 'Reserva' : 'Operacional') + '</span>'
+      + '<span class="n">' + esc(BRL(c.saldo_atual)) + '</span>'
+      + '<span class="a">'
+      +   '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-extrato="' + esc(c.id) + '">Ver extrato</button> '
+      +   '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editar="' + esc(c.id) + '">Editar</button>'
+      + '</span></div>').join('');
+  el.querySelectorAll('[data-editar]').forEach(b => b.addEventListener('click', () => {
+    const c = (FINB.lista || []).find(x => x.id === b.dataset.editar);
+    if (c) modalConta(c);
+  }));
+  el.querySelectorAll('[data-extrato]').forEach(b => b.addEventListener('click', () => modalExtratoConta(b.dataset.extrato)));
+}
+REPINTA.finb = finbDesenhar;
+
+function modalConta(c){
+  abrirModal(c ? 'Editar conta' : 'Nova conta',
+      '<div class="campo"><label for="fcN">Nome</label><input id="fcN" type="text" value="'
+    +   esc(c ? c.nome : '') + '" autocomplete="off"></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="fcB">Banco (opcional)</label><input id="fcB" type="text" value="'
+    +    esc(c ? c.codigo_banco : '') + '" autocomplete="off"></div>'
+    +  '<div class="campo"><label for="fcP">Papel</label><select id="fcP">'
+    +    '<option value="operacional"' + (c && c.papel === 'operacional' ? ' selected' : '') + '>Operacional</option>'
+    +    '<option value="reserva"' + (c && c.papel === 'reserva' ? ' selected' : '') + '>Reserva</option>'
+    +  '</select></div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="fcS">Saldo inicial</label><input id="fcS" type="number" step="0.01" value="'
+    +    (c ? Number(c.saldo_inicial || 0) : 0) + '"></div>'
+    +  '<div class="campo"><label for="fcD">Data de corte</label><input id="fcD" type="date" value="'
+    +    (c && c.data_corte ? c.data_corte : '') + '"></div></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label: c ? 'Salvar' : 'Adicionar', pri:true, onClick: async () => {
+        const v = id => (document.getElementById(id) || {}).value.trim();
+        if (!v('fcN')){ toast('O nome da conta é obrigatório.', 'err'); return; }
+        if (!v('fcD')){ toast('A data de corte é obrigatória.', 'err'); return; }
+        try{
+          await rpc('tf_fin_conta_gravar', { p_id: c ? c.id : null, p_nome: v('fcN'),
+            p_papel: v('fcP'), p_saldo_inicial: Number(v('fcS')) || 0, p_data_corte: v('fcD'),
+            p_codigo_banco: v('fcB') || null });
+          fecharModal(); toast('Conta salva.', 'ok'); await finbCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+}
+
+async function modalExtratoConta(id){
+  abrirModal('Extrato', '<p class="nota">Carregando…</p>', [{ label:'Fechar', pri:true, onClick: fecharModal }]);
+  let r;
+  try{ r = await rpc('tf_fin_conta_extrato', { p_conta_id: id }); }
+  catch(e){ document.getElementById('mBody').innerHTML = '<p class="nota">' + esc(e.message) + '</p>'; return; }
+  document.getElementById('mTit').textContent = 'Extrato — ' + r.nome;
+  const mv = r.movimentos || [];
+  document.getElementById('mBody').innerHTML =
+      '<p class="nota" style="margin-top:0">Saldo atual: <b>' + esc(BRL(r.saldo_atual)) + '</b></p>'
+    + (mv.length
+        ? '<div class="ccLin cab"><span>Data</span><span>Descrição</span><span class="n">Valor</span></div>'
+          + mv.map(m => '<div class="ccLin' + (m.estornado ? ' riscada' : '') + '">'
+            + '<span>' + esc(dataBR(m.data)) + '</span>'
+            + '<span>' + esc(m.descricao) + (m.quem ? ' <small style="color:var(--ink-3)">· ' + esc(m.quem) + '</small>' : '') + '</span>'
+            + '<span class="n ' + (Number(m.valor) >= 0 ? 'mais' : 'menos') + '">' + esc(ccSinal(Number(m.valor))) + '</span></div>').join('')
+        : '<p class="nota">Nenhuma movimentação lançada ainda.</p>');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// RESERVAS (ENVELOPES) E TRANSFERÊNCIAS — item 5 do módulo Financeiro (Fase 1)
+// Os 3 envelopes são fixos (13º salário, Impostos do início do ano, Rescisões).
+// Cada um soma as transferências recebidas ("reserva") menos as resgatadas
+// ("resgate"). Os envelopes são uma divisão lógica dentro da conta "reserva"
+// (hoje Nubank) — não são contas de verdade; por isso toda transferência
+// sempre parte de/para uma conta OPERACIONAL, nunca de uma conta "reserva".
+// ════════════════════════════════════════════════════════════════════════════
+async function pintarReservas(){
+  visao = 'finrsv';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Reservas e Transferências</h2>'
+    + '<p>13º salário, impostos do início do ano e rescisões — cada envelope soma o que entrou (reserva) menos o que saiu (resgate).</p></div>'
+    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="finrsvNova">+ Nova transferência</button></div>'
+    + '<div class="lista" id="finrsvLista"><p class="nota">Carregando…</p></div></div>';
+  document.getElementById('finrsvNova').addEventListener('click', () => modalTransferencia());
+  await finrsvCarregar();
+}
+async function finrsvCarregar(){
+  const el = document.getElementById('finrsvLista'); if (!el) return;
+  try{ FINRSV.envelopes = await rpc('tf_fin_envelopes_listar', {}); }
+  catch(e){
+    el.innerHTML = '<div class="vazio2"><b>Não consegui abrir as reservas</b><p></p>'
+      + '<button class="btn" type="button" id="finrsvDeNovo">Tentar de novo</button></div>';
+    el.querySelector('p').textContent = e.message;
+    document.getElementById('finrsvDeNovo').addEventListener('click', finrsvCarregar);
+    return;
+  }
+  finrsvDesenhar();
+}
+function finrsvDesenhar(){
+  const el = document.getElementById('finrsvLista'); if (!el) return;
+  const L = FINRSV.envelopes || [];
+  if (!L.length){
+    el.innerHTML = '<p class="nota" style="padding:12px">Nenhum envelope encontrado — confira se o Passo 1 do banco foi executado.</p>';
+    return;
+  }
+  el.innerHTML = '<div class="ccLin cab"><span>Envelope</span><span class="n">Saldo atual</span><span></span></div>'
+    + L.map(e => '<div class="ccLin"><span>' + esc(e.nome) + '</span>'
+      + '<span class="n">' + esc(BRL(e.saldo_atual)) + '</span>'
+      + '<span class="a"><button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editarenv="'
+        + esc(e.id) + '">Editar</button></span></div>').join('');
+  el.querySelectorAll('[data-editarenv]').forEach(b => b.addEventListener('click', () => {
+    const env = (FINRSV.envelopes || []).find(x => x.id === b.dataset.editarenv);
+    if (env) modalEnvelope(env);
+  }));
+}
+REPINTA.finrsv = finrsvDesenhar;
+
+function modalEnvelope(env){
+  abrirModal('Editar envelope',
+      '<div class="campo"><label for="feN">Nome</label><input id="feN" type="text" value="'
+    +   esc(env.nome) + '" autocomplete="off"></div>'
+    + '<div class="campo"><label for="feS">Saldo inicial</label><input id="feS" type="number" step="0.01" value="'
+    +   (env.saldo_inicial != null ? Number(env.saldo_inicial) : 0) + '"></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Salvar', pri:true, onClick: async () => {
+        const nome = (document.getElementById('feN') || {}).value.trim();
+        if (!nome){ toast('O nome do envelope é obrigatório.', 'err'); return; }
+        const saldo = Number((document.getElementById('feS') || {}).value) || 0;
+        try{
+          await rpc('tf_fin_envelope_gravar', { p_id: env.id, p_nome: nome, p_saldo_inicial: saldo });
+          fecharModal(); toast('Envelope salvo.', 'ok'); await finrsvCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+}
+
+/** Busca as contas OPERACIONAIS na hora (não depende de ter passado pela tela
+ * de Contas Bancárias antes — finbCarregar() só roda se a lista dela estiver
+ * na tela, o que não é o caso aqui). */
+async function modalTransferencia(){
+  const envs = FINRSV.envelopes || [];
+  if (!envs.length){ toast('Abra a tela de Reservas antes de lançar uma transferência.', 'err'); return; }
+  let contas;
+  try{ contas = await rpc('tf_fin_contas_listar', {}); }
+  catch(e){ toast(e.message, 'err'); return; }
+  const contasOp = (contas || []).filter(c => c.papel === 'operacional');
+  if (!contasOp.length){ toast('Cadastre uma conta operacional em Contas Bancárias antes de lançar uma transferência.', 'err'); return; }
+  const hoje = new Date().toISOString().slice(0, 10);
+  abrirModal('Nova transferência',
+      '<div class="campo"><label for="ftT">Tipo</label><select id="ftT">'
+    +   '<option value="reserva">Reserva mensal (conta → envelope)</option>'
+    +   '<option value="resgate">Resgate (envelope → conta)</option>'
+    + '</select></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="ftC">Conta operacional</label><select id="ftC">'
+    +    contasOp.map(c => '<option value="' + esc(c.id) + '">' + esc(c.nome) + '</option>').join('')
+    +  '</select></div>'
+    +  '<div class="campo"><label for="ftE">Envelope</label><select id="ftE">'
+    +    envs.map(e => '<option value="' + esc(e.id) + '">' + esc(e.nome) + '</option>').join('')
+    +  '</select></div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="ftV">Valor</label><input id="ftV" type="number" step="0.01" value="0"></div>'
+    +  '<div class="campo"><label for="ftD">Data</label><input id="ftD" type="date" value="' + hoje + '"></div></div>'
+    + '<div class="campo"><label for="ftDesc">Descrição (opcional)</label><input id="ftDesc" type="text" autocomplete="off"></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Lançar', pri:true, onClick: async () => {
+        const v = id => (document.getElementById(id) || {}).value.trim();
+        const valor = Number(v('ftV'));
+        if (!valor || valor <= 0){ toast('Informe um valor maior que zero.', 'err'); return; }
+        if (!v('ftD')){ toast('Informe a data.', 'err'); return; }
+        try{
+          await rpc('tf_fin_transferencia_criar', { p_conta_id: v('ftC'), p_envelope_id: v('ftE'),
+            p_tipo: v('ftT'), p_valor: valor, p_data: v('ftD'), p_descricao: v('ftDesc') || null });
+          fecharModal(); toast('Transferência lançada.', 'ok'); await finrsvCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CATEGORIAS E ORÇAMENTO — item 4 do módulo Financeiro (Fase 1)
+// Os 5 grupos são fixos (vieram do Passo 1). As subcategorias começam vazias
+// — o Vinícius cria cada uma conforme for precisando. Orçamento mensal só
+// faz sentido nos grupos de despesa; substitui a tela "PROVISÕES" do SIGE.
+// ════════════════════════════════════════════════════════════════════════════
+async function pintarCategorias(){
+  visao = 'fincat';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Categorias e Orçamento</h2>'
+    + '<p>As subcategorias começam vazias — vá criando conforme for lançando contas. '
+    +   'O orçamento mensal é o previsto para comparar com o realizado.</p></div>'
+    + '<div id="catCorpo"><p class="nota">Carregando…</p></div></div>';
+  await catCarregar();
+}
+async function catCarregar(){
+  const el = document.getElementById('catCorpo'); if (!el) return;
+  try{ FINCAT.lista = await rpc('tf_fin_grupos_listar', {}); }
+  catch(e){
+    el.innerHTML = '<div class="vazio2"><b>Não consegui abrir as categorias</b><p></p>'
+      + '<button class="btn" type="button" id="catDeNovo">Tentar de novo</button></div>';
+    el.querySelector('p').textContent = e.message;
+    document.getElementById('catDeNovo').addEventListener('click', catCarregar);
+    return;
+  }
+  catDesenhar();
+}
+function catDesenhar(){
+  const el = document.getElementById('catCorpo'); if (!el) return;
+  const G = FINCAT.lista || [];
+  if (!G.length){
+    el.innerHTML = '<p class="nota" style="padding:12px">Nenhum grupo encontrado — confira se o Passo 1 do banco foi executado.</p>';
+    return;
+  }
+  el.innerHTML = G.map(g => {
+    const subs = g.subcategorias || [];
+    const despesa = g.tipo !== 'r'; // banco guarda 'p' (despesa) / 'r' (receita)
+    return '<div class="painel" style="margin-bottom:14px;padding:14px">'
+      + '<h3 style="margin-top:0">' + esc(g.nome)
+      +   ' <small style="color:var(--ink-3);font-weight:normal">(' + (despesa ? 'despesa' : 'receita') + ')</small></h3>'
+      + (subs.length
+          ? '<div class="ccLin cab"><span>Subcategoria</span><span class="n">' + (despesa ? 'Orçamento/mês' : '') + '</span><span></span></div>'
+            + subs.map(s => '<div class="ccLin"><span>' + esc(s.nome) + '</span>'
+              + '<span class="n">' + (despesa
+                  ? '<input type="number" step="0.01" class="catOrc" data-sub="' + esc(s.id)
+                    + '" value="' + (s.orcamento_mensal != null ? Number(s.orcamento_mensal) : '')
+                    + '" placeholder="—" style="width:110px;text-align:right">'
+                  : '') + '</span>'
+              + '<span class="a"><button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editarsub="'
+                + esc(s.id) + '" data-grupo="' + esc(g.id) + '">Editar</button></span></div>').join('')
+          : '<p class="nota" style="padding:6px 0">Nenhuma subcategoria ainda.</p>')
+      + '<div style="display:flex;gap:8px;margin-top:10px">'
+      +   '<input type="text" placeholder="Nova subcategoria…" class="catNovoNome" data-grupo="' + esc(g.id) + '" style="flex:1">'
+      +   '<button class="btn" type="button" data-add="' + esc(g.id) + '">Adicionar</button>'
+      + '</div></div>';
+  }).join('');
+
+  el.querySelectorAll('.catOrc').forEach(inp => inp.addEventListener('change', async () => {
+    try{
+      await rpc('tf_fin_subcategoria_gravar', { p_id: inp.dataset.sub, p_grupo_id: null, p_nome: null,
+        p_orcamento_mensal: inp.value === '' ? null : Number(inp.value) });
+      toast('Orçamento salvo.', 'ok');
+    }catch(e){ toast(e.message, 'err'); catCarregar(); }
+  }));
+
+  el.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => _semDuploEnvio_(b, async () => {
+    const inp = el.querySelector('.catNovoNome[data-grupo="' + b.dataset.add + '"]');
+    const nome = inp.value.trim();
+    if (!nome){ toast('Digite o nome da subcategoria.', 'err'); return; }
+    try{
+      await rpc('tf_fin_subcategoria_gravar', { p_id: null, p_grupo_id: b.dataset.add, p_nome: nome, p_orcamento_mensal: null });
+      toast('Subcategoria adicionada.', 'ok'); await catCarregar();
+    }catch(e){ toast(e.message, 'err'); }
+  })));
+
+  el.querySelectorAll('[data-editarsub]').forEach(b => b.addEventListener('click', () => {
+    const g = G.find(x => x.id === b.dataset.grupo);
+    const s = g && (g.subcategorias || []).find(x => x.id === b.dataset.editarsub);
+    if (s) modalSubcategoria(g, s);
+  }));
+}
+
+function modalSubcategoria(g, s){
+  const despesa = g.tipo !== 'r'; // banco guarda 'p' (despesa) / 'r' (receita)
+  abrirModal('Editar subcategoria',
+      '<div class="campo"><label for="csN">Nome</label><input id="csN" type="text" value="'
+    +   esc(s.nome) + '" autocomplete="off"></div>'
+    + (despesa
+        ? '<div class="campo"><label for="csO">Orçamento mensal</label><input id="csO" type="number" step="0.01" value="'
+          + (s.orcamento_mensal != null ? Number(s.orcamento_mensal) : '') + '" placeholder="—"></div>'
+        : ''),
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Salvar', pri:true, onClick: async () => {
+        const nome = (document.getElementById('csN') || {}).value.trim();
+        if (!nome){ toast('O nome da subcategoria é obrigatório.', 'err'); return; }
+        const oEl = document.getElementById('csO');
+        const orcamento = despesa
+          ? (oEl.value === '' ? null : Number(oEl.value))
+          : (s.orcamento_mensal != null ? Number(s.orcamento_mensal) : null);
+        try{
+          await rpc('tf_fin_subcategoria_gravar', { p_id: s.id, p_grupo_id: null, p_nome: nome, p_orcamento_mensal: orcamento });
+          fecharModal(); toast('Subcategoria salva.', 'ok'); await catCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CONTAS A RECEBER — item 6 do módulo Financeiro (Fase 1)
+// Duas etapas: "a faturar" (lançamento inicial, vencimento é só estimativa) e
+// "faturado" (depois de preparar a nota — item 7 — ou, por ora, digitando o
+// número na mão aqui mesmo). Faturar recalcula o vencimento: data da nota +
+// prazo do cliente (tf_fin_faturar_titulo já faz essa conta). Anulação (item
+// 12) adiantada nesta tela. Baixa (item 11) ainda não tem tela — vem depois,
+// junto com Contas a Pagar (mesma tabela fin_titulos, tipo='p').
+// ════════════════════════════════════════════════════════════════════════════
+let FINRE = { lista:null };
+const FORMA_PREVISTA_FIN = ['PIX', 'Boleto', 'Transferência / depósito', 'Cartão de débito', 'Cartão de crédito', 'Dinheiro'];
+
+async function pintarContasReceber(){
+  visao = 'finre';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Contas a Receber</h2>'
+    + '<p>“A faturar” é uma estimativa; ao faturar, o vencimento é recalculado pela data da nota + prazo do cliente.</p></div>'
+    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="finreNovo">+ Nova conta a receber</button></div>'
+    + '<div class="lista" id="finreLista"><p class="nota">Carregando…</p></div></div>';
+  document.getElementById('finreNovo').addEventListener('click', () => modalTituloReceber());
+  await finreCarregar();
+}
+async function finreCarregar(){
+  const el = document.getElementById('finreLista'); if (!el) return;
+  try{ FINRE.lista = await rpc('tf_fin_titulos_receber_listar', {}); }
+  catch(e){
+    el.innerHTML = '<div class="vazio2"><b>Não consegui abrir as contas a receber</b><p></p>'
+      + '<button class="btn" type="button" id="finreDeNovo">Tentar de novo</button></div>';
+    el.querySelector('p').textContent = e.message;
+    document.getElementById('finreDeNovo').addEventListener('click', finreCarregar);
+    return;
+  }
+  finreDesenhar();
+}
+function finreDesenhar(){
+  const el = document.getElementById('finreLista'); if (!el) return;
+  const q = BUSCA.finre || '';
+  const L = (FINRE.lista || []).filter(t => casa([t.cliente_nome, t.descricao, t.nf_numero, t.os_codigo].join(' '), q));
+  if (!L.length){
+    el.innerHTML = '<p class="nota" style="padding:12px">Nenhuma conta a receber ainda' + (q ? ' com essa busca' : '') + '.</p>';
+    return;
+  }
+  el.innerHTML = '<div class="ccLin cab"><span>Vencimento</span><span>Cliente</span><span>Descrição</span>'
+    + '<span class="n">Valor</span><span></span><span></span></div>'
+    + L.map(t => {
+        const etiqueta = t.anulado ? 'Anulado' : (t.etapa === 'faturado' ? 'Faturado' : 'A faturar');
+        const statusBaixa = t.anulado ? '' : (Number(t.saldo) <= 0 ? 'Recebido' : (Number(t.saldo) < Number(t.valor) ? 'Parcial' : ''));
+        return '<div class="ccLin' + (t.anulado ? ' riscada' : '') + '"><span class="ccData">' + esc(dataBR(t.vencimento)) + '</span>'
+          + '<span class="ccNome">' + esc(t.cliente_nome || '—') + '</span>'
+          + '<span class="ccDesc">' + esc(t.descricao) + (t.os_codigo ? ' <small style="color:var(--ink-3)">· ' + esc(t.os_codigo) + '</small>' : '')
+            + (t.anulado && t.anulado_motivo ? ' <small style="color:var(--ink-3)">— anulado: ' + esc(t.anulado_motivo) + '</small>' : '') + '</span>'
+          + '<span class="n v">' + esc(BRL(t.valor)) + '</span>'
+          + '<span><span class="chip">' + esc(etiqueta) + '</span>'
+            + (statusBaixa ? ' <span class="chip">' + esc(statusBaixa) + '</span>' : '')
+            + (t.nf_pdf_url ? ' <a href="' + esc(t.nf_pdf_url) + '" target="_blank" rel="noopener" style="font-size:11px">PDF</a>' : '')
+            + (t.nf_xml_url ? ' <a href="' + esc(t.nf_xml_url) + '" target="_blank" rel="noopener" style="font-size:11px">XML</a>' : '')
+            + '</span>'
+          + '<span class="a">' + (t.anulado ? '' :
+              (t.etapa === 'a_faturar'
+                ? '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-faturar="' + esc(t.id) + '">Preparar nota</button> '
+                : '')
+              + (Number(t.saldo) > 0
+                  ? '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-baixar="' + esc(t.id) + '">Baixar</button> '
+                  : '')
+              + '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-baixas="' + esc(t.id) + '">Baixas</button> '
+              + '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-anular="' + esc(t.id) + '">Anular</button>')
+            + '</span></div>';
+      }).join('');
+  el.querySelectorAll('[data-faturar]').forEach(b => b.addEventListener('click', () => {
+    const t = (FINRE.lista || []).find(x => x.id === b.dataset.faturar);
+    if (t) modalPrepararNota(t);
+  }));
+  el.querySelectorAll('[data-baixar]').forEach(b => b.addEventListener('click', () => {
+    const t = (FINRE.lista || []).find(x => x.id === b.dataset.baixar);
+    if (t) modalBaixarTitulo(t, finreCarregar);
+  }));
+  el.querySelectorAll('[data-baixas]').forEach(b => b.addEventListener('click', () => {
+    const t = (FINRE.lista || []).find(x => x.id === b.dataset.baixas);
+    if (t) modalVerBaixas(t, finreCarregar);
+  }));
+  el.querySelectorAll('[data-anular]').forEach(b => b.addEventListener('click', () => {
+    const t = (FINRE.lista || []).find(x => x.id === b.dataset.anular);
+    if (t) modalAnularTitulo(t);
+  }));
+}
+REPINTA.finre = finreDesenhar;
+
+async function modalTituloReceber(){
+  let subcats = [];
+  try{
+    const grupos = await rpc('tf_fin_grupos_listar', {});
+    const recebimentos = (grupos || []).find(g => g.tipo === 'r'); // banco guarda 'p'/'r'
+    subcats = (recebimentos && recebimentos.subcategorias) || [];
+  }catch(e){ /* segue sem subcategorias se a busca falhar — o campo é opcional */ }
+
+  abrirModal('Nova conta a receber',
+      '<div class="campo"><label for="trCliBusca">Cliente</label>'
+    +   '<input id="trCliBusca" type="text" placeholder="Buscar por nome ou CNPJ…" autocomplete="off">'
+    +   '<input id="trCliId" type="hidden">'
+    +   '<div id="trCliLista"></div></div>'
+    + (subcats.length
+        ? '<div class="campo"><label for="trSub">Subcategoria (Recebimentos, opcional)</label><select id="trSub">'
+          + '<option value="">—</option>'
+          + subcats.map(s => '<option value="' + esc(s.id) + '">' + esc(s.nome) + '</option>').join('')
+          + '</select></div>'
+        : '')
+    + '<div class="campo"><label for="trDesc">Descrição</label><input id="trDesc" type="text" autocomplete="off"></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="trValor">Valor</label><input id="trValor" type="number" step="0.01" value="0"></div>'
+    +  '<div class="campo"><label for="trForma">Forma prevista (opcional)</label><select id="trForma">'
+    +    '<option value="">—</option>'
+    +    FORMA_PREVISTA_FIN.map(f => '<option value="' + esc(f) + '">' + esc(f) + '</option>').join('')
+    +  '</select></div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="trComp">Competência (mês do serviço)</label><input id="trComp" type="month"></div>'
+    +  '<div class="campo"><label for="trVenc">Vencimento (estimativa)</label><input id="trVenc" type="date"></div></div>'
+    + '<div class="campo"><label for="trOs">OS (opcional)</label><input id="trOs" type="text" placeholder="Ex.: OS-26043" autocomplete="off"></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Lançar', pri:true, onClick: async () => {
+        // "trSub" só existe na tela quando já há subcategoria cadastrada em
+        // Recebimentos — por isso não dá para supor que todo campo existe.
+        const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+        const clienteId = v('trCliId');
+        if (!clienteId){ toast('Busque e selecione o cliente.', 'err'); return; }
+        const valor = Number(v('trValor'));
+        if (!valor || valor <= 0){ toast('Informe um valor maior que zero.', 'err'); return; }
+        const desc = v('trDesc');
+        if (!desc){ toast('A descrição é obrigatória.', 'err'); return; }
+        const comp = v('trComp');
+        if (!comp){ toast('Informe a competência.', 'err'); return; }
+        const venc = v('trVenc');
+        if (!venc){ toast('Informe o vencimento.', 'err'); return; }
+        try{
+          await rpc('tf_fin_titulo_receber_criar', {
+            p_cliente_id: clienteId, p_descricao: desc, p_valor: valor,
+            p_competencia: comp + '-01', p_vencimento: venc,
+            p_subcategoria_id: v('trSub') || null, p_forma_prevista: v('trForma') || null,
+            p_os_codigo: v('trOs') || null });
+          fecharModal(); toast('Conta a receber lançada.', 'ok'); await finreCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+
+  // Busca de cliente por nome/CNPJ, mesmo padrão já usado ao ligar negócio a
+  // cliente — evita listar todo o cadastro num select gigante.
+  const cx = document.getElementById('trCliBusca');
+  const cl = document.getElementById('trCliLista');
+  let t = null;
+  cx.addEventListener('input', () => {
+    document.getElementById('trCliId').value = '';
+    clearTimeout(t);
+    const termo = cx.value.trim();
+    if (termo.length < 2){ cl.innerHTML = ''; return; }
+    t = setTimeout(async () => {
+      try{
+        const r = await rpc('tf_buscar_cliente', { p_termo: termo, p_limite: 8 });
+        cl.innerHTML = (r || []).length
+          ? '<div class="parecidos">' + r.map(c =>
+              '<button class="btn parecidoLinha" type="button" data-cli="' + esc(c.id) + '" data-nome="' + esc(nomeCliente(c)) + '">'
+            + '<span class="pn">' + esc(nomeCliente(c)) + '</span>'
+            + '<span class="pd">' + esc(c.cnpj || 'sem CNPJ') + (c.cidade ? ' · ' + esc(c.cidade) : '') + '</span>'
+            + '</button>').join('') + '</div>'
+          : '<p class="nota">Nenhum cliente encontrado.</p>';
+        cl.querySelectorAll('[data-cli]').forEach(b => b.addEventListener('click', () => {
+          document.getElementById('trCliId').value = b.dataset.cli;
+          cx.value = b.dataset.nome;
+          cl.innerHTML = '';
+        }));
+      }catch(e){ cl.innerHTML = '<p class="nota">Não deu para buscar: ' + esc(e.message) + '</p>'; }
+    }, 200);
+  });
+}
+
+/**
+ * Item 7 — Preparar Nota (NFS-e semiautomática). Primeiro mostra os dados
+ * prontos pra copiar na emissão (cliente, descrição, valor, código de
+ * serviço fixo 14.01.01 — mesmo código pra todo tipo de serviço da Engetap).
+ * Depois de emitir no Emissor Nacional, o Vinícius volta aqui: sobe o XML
+ * (lê sozinho número/data/valor — padrão nacional da NFS-e, xmlns
+ * sped.fazenda.gov.br/nfse) e o PDF (fica guardado pra mandar pro cliente
+ * depois). Nº/Data/Valor continuam editáveis pra conferência antes de
+ * faturar, como pedido no item 7.
+ */
+function lerXmlNFSe(texto){
+  const doc = new DOMParser().parseFromString(texto, 'application/xml');
+  if (doc.querySelector('parsererror'))
+    throw new Error('Não consegui ler esse arquivo como XML — confere se é o certo.');
+  const pegar = tag => { const el = doc.getElementsByTagName(tag)[0]; return el ? el.textContent.trim() : ''; };
+  const numero = pegar('nNFSe');
+  const dhEmi = pegar('dhProc') || pegar('dhEmi');
+  const data = dhEmi ? dhEmi.slice(0, 10) : '';
+  const valorTxt = pegar('vLiq') || pegar('vServ');
+  if (!numero || !data || !valorTxt)
+    throw new Error('Não achei número, data ou valor nesse XML — confere se é o arquivo certo, ou preenche à mão.');
+  return { numero, data, valor: Number(valorTxt) };
+}
+
+/** Mesmo endpoint do Drive que o subirArquivo() usa, mas sem registrar em
+ * fin_titulos exige p_os_id na tabela `anexos` — não dá pra usar aqui. */
+async function subirArquivoDrive(dataUrl, meta){
+  if (DEMO) return { url: 'https://drive.google.com/demo', file_id: 'demo' };
+  if (!driveLigado())
+    throw Object.assign(new Error('O Google Drive ainda não foi configurado — veja o Passo 8 do guia.'),
+                        { negocio: true });
+  const r = await fetch(PARAM.drive_url, {
+    method: 'POST', redirect: 'follow', signal: sinal(true),
+    body: JSON.stringify({
+      chave: PARAM.drive_chave, token: sessao.token,
+      client_uid: meta.client_uid, cliente: meta.cliente, os_numero: meta.os_numero,
+      categoria: meta.categoria, nome: meta.nome,
+      mime: meta.mime || 'application/octet-stream', base64: dataUrl
+    })
+  });
+  const j = await r.json().catch(() => null);
+  if (!j) throw new Error('O serviço de arquivos não respondeu como esperado.');
+  if (j.status !== 'ok')
+    throw Object.assign(new Error(j.mensagem || 'Falha ao gravar no Drive'),
+                        { negocio: j.codigo === 'CHAVE' || j.codigo === 'TOKEN' });
+  return j;
+}
+
+function modalPrepararNota(t){
+  const hoje = new Date().toISOString().slice(0, 10);
+  let xmlUrl = null, pdfUrl = null;
+  abrirModal('Preparar nota — ' + t.descricao,
+      '<p class="nota" style="margin-top:0">Dados pra copiar na emissão, no Emissor Nacional da NFS-e:</p>'
+    + '<div class="campo"><label>Cliente</label><input type="text" value="' + esc(t.cliente_nome || '') + '" readonly></div>'
+    + '<div class="campo"><label>Descrição do serviço</label><input type="text" value="' + esc(t.descricao) + '" readonly></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label>Valor</label><input type="text" value="' + esc(BRL(t.valor)) + '" readonly></div>'
+    +  '<div class="campo"><label>Código de serviço (LC 116)</label><input type="text" value="14.01.01" readonly></div></div>'
+    + '<hr style="margin:14px 0;border:none;border-top:1px solid var(--linha)">'
+    + '<p class="nota">Depois de emitir, sobe aqui o XML (lê o número/data/valor sozinho) e o PDF (fica guardado pra mandar pro cliente):</p>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label class="btn" style="cursor:pointer;display:inline-block;text-align:center">Selecionar XML'
+    +     '<input type="file" id="tfXml" accept=".xml,text/xml,application/xml" hidden></label>'
+    +     '<p class="nota" id="tfXmlNome" style="margin:4px 0 0"></p></div>'
+    +  '<div class="campo"><label class="btn" style="cursor:pointer;display:inline-block;text-align:center">Selecionar PDF'
+    +     '<input type="file" id="tfPdf" accept="application/pdf" hidden></label>'
+    +     '<p class="nota" id="tfPdfNome" style="margin:4px 0 0"></p></div>'
+    + '</div>'
+    + '<div class="campo"><label for="tfNum">Nº da nota fiscal</label><input id="tfNum" type="text" autocomplete="off"></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="tfData">Data da nota</label><input id="tfData" type="date" value="' + hoje + '"></div>'
+    +  '<div class="campo"><label for="tfValor">Valor da nota (opcional)</label><input id="tfValor" type="number" step="0.01" value="' + Number(t.valor) + '"></div></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Faturar', pri:true, onClick: async () => {
+        const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+        const numero = v('tfNum');
+        if (!numero){ toast('Informe o número da nota.', 'err'); return; }
+        if (!v('tfData')){ toast('Informe a data da nota.', 'err'); return; }
+        try{
+          await rpc('tf_fin_faturar_titulo', { p_titulo_id: t.id, p_nf_numero: numero,
+            p_nf_data: v('tfData'), p_nf_valor: v('tfValor') ? Number(v('tfValor')) : null,
+            p_nf_xml_url: xmlUrl, p_nf_pdf_url: pdfUrl });
+          fecharModal(); toast('Título faturado.', 'ok'); await finreCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+
+  document.getElementById('tfXml').addEventListener('change', async ev => {
+    const f = ev.target.files[0]; if (!f) return;
+    const nomeEl = document.getElementById('tfXmlNome');
+    nomeEl.textContent = 'Lendo ' + f.name + '…';
+    try{
+      const texto = await f.text();
+      const lido = lerXmlNFSe(texto);
+      document.getElementById('tfNum').value = lido.numero;
+      document.getElementById('tfData').value = lido.data;
+      document.getElementById('tfValor').value = lido.valor;
+      nomeEl.textContent = 'Enviando ' + f.name + '…';
+      const dataUrl = await arquivoParaBase64(f);
+      const up = await subirArquivoDrive(dataUrl, {
+        client_uid: 'nfxml-' + t.id + '-' + Date.now(), cliente: t.cliente_nome || '',
+        os_numero: t.os_codigo || '', categoria: 'nfse_xml', nome: f.name, mime: 'text/xml' });
+      xmlUrl = up.url;
+      nomeEl.textContent = 'Lido e salvo: ' + f.name;
+      toast('XML lido — confira os campos antes de faturar.', 'ok');
+    }catch(e){ nomeEl.textContent = ''; toast(e.message, 'err'); }
+  });
+
+  document.getElementById('tfPdf').addEventListener('change', async ev => {
+    const f = ev.target.files[0]; if (!f) return;
+    const nomeEl = document.getElementById('tfPdfNome');
+    nomeEl.textContent = 'Enviando ' + f.name + '…';
+    try{
+      const dataUrl = await arquivoParaBase64(f);
+      const up = await subirArquivoDrive(dataUrl, {
+        client_uid: 'nfpdf-' + t.id + '-' + Date.now(), cliente: t.cliente_nome || '',
+        os_numero: t.os_codigo || '', categoria: 'nfse_pdf', nome: f.name, mime: 'application/pdf' });
+      pdfUrl = up.url;
+      nomeEl.textContent = 'Salvo: ' + f.name;
+      toast('PDF salvo.', 'ok');
+    }catch(e){ nomeEl.textContent = ''; toast(e.message, 'err'); }
+  });
+}
+
+/** Título errado se anula, nunca se edita ou apaga — fica no histórico com o
+ * motivo. Pra corrigir de verdade: anula este e lança um novo, certo. */
+function modalAnularTitulo(t){
+  abrirModal('Anular — ' + t.descricao,
+      '<p class="nota" style="margin-top:0">O título não é apagado, fica marcado como anulado com o motivo. '
+    + 'Se foi erro de valor, cliente ou qualquer outro dado, lance uma conta nova depois de anular esta.</p>'
+    + '<div class="campo"><label for="taMot">Motivo</label><input id="taMot" type="text" placeholder="Ex.: valor digitado errado" autocomplete="off"></div>',
+    [{ label:'Voltar', onClick: fecharModal },
+     { label:'Anular', onClick: async () => {
+        const motivo = (document.getElementById('taMot') || {}).value.trim();
+        if (!motivo){ toast('Informe o motivo da anulação.', 'err'); return; }
+        try{
+          await rpc('tf_fin_anular_titulo', { p_titulo_id: t.id, p_motivo: motivo });
+          fecharModal(); toast('Título anulado.', 'ok'); await finreCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CONTAS A PAGAR — item 8 do módulo Financeiro (Fase 1)
+// Mesma tabela fin_titulos (tipo='p'), sem a etapa de faturar/NFS-e do Contas
+// a Receber — o lançamento já nasce pronto. Categoria (grupo de despesa) é
+// obrigatória e escolhida na hora, diferente de Receber (que só tem o grupo
+// Recebimentos). Editar (item 12) liberado enquanto não houver baixa
+// registrada — hoje ainda não existe baixa nessa tela (item 11), então vale
+// pra qualquer título não anulado; quando a baixa for ligada, o próprio banco
+// passa a bloquear a edição de título já baixado.
+// ════════════════════════════════════════════════════════════════════════════
+let FINPG = { lista:null };
+
+async function pintarContasPagar(){
+  visao = 'finpg';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Contas a Pagar</h2>'
+    + '<p>Título errado se anula, com motivo; título ainda sem baixa pode ser editado direto.</p></div>'
+    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="finpgNovo">+ Nova conta a pagar</button></div>'
+    + '<div class="lista" id="finpgLista"><p class="nota">Carregando…</p></div></div>';
+  document.getElementById('finpgNovo').addEventListener('click', () => modalTituloPagar());
+  await finpgCarregar();
+}
+async function finpgCarregar(){
+  const el = document.getElementById('finpgLista'); if (!el) return;
+  try{ FINPG.lista = await rpc('tf_fin_titulos_pagar_listar', {}); }
+  catch(e){
+    el.innerHTML = '<div class="vazio2"><b>Não consegui abrir as contas a pagar</b><p></p>'
+      + '<button class="btn" type="button" id="finpgDeNovo">Tentar de novo</button></div>';
+    el.querySelector('p').textContent = e.message;
+    document.getElementById('finpgDeNovo').addEventListener('click', finpgCarregar);
+    return;
+  }
+  finpgDesenhar();
+}
+function finpgDesenhar(){
+  const el = document.getElementById('finpgLista'); if (!el) return;
+  const q = BUSCA.finpg || '';
+  const L = (FINPG.lista || []).filter(t => casa([t.fornecedor_nome, t.descricao, t.nf_numero, t.os_codigo, t.grupo_nome, t.subcategoria_nome].join(' '), q));
+  if (!L.length){
+    el.innerHTML = '<p class="nota" style="padding:12px">Nenhuma conta a pagar ainda' + (q ? ' com essa busca' : '') + '.</p>';
+    return;
+  }
+  el.innerHTML = '<div class="ccLin cab"><span>Vencimento</span><span>Fornecedor</span><span>Descrição</span>'
+    + '<span class="n">Valor</span><span></span><span></span></div>'
+    + L.map(t => {
+        const editavel = !t.anulado && Number(t.saldo) === Number(t.valor);
+        const statusBaixa = t.anulado ? '' : (Number(t.saldo) <= 0 ? 'Pago' : (Number(t.saldo) < Number(t.valor) ? 'Parcial' : ''));
+        return '<div class="ccLin' + (t.anulado ? ' riscada' : '') + '"><span class="ccData">' + esc(dataBR(t.vencimento)) + '</span>'
+          + '<span class="ccNome">' + esc(t.fornecedor_nome || '—') + '</span>'
+          + '<span class="ccDesc">' + esc(t.descricao) + (t.os_codigo ? ' <small style="color:var(--ink-3)">· ' + esc(t.os_codigo) + '</small>' : '')
+            + (t.anulado && t.anulado_motivo ? ' <small style="color:var(--ink-3)">— anulado: ' + esc(t.anulado_motivo) + '</small>' : '') + '</span>'
+          + '<span class="n v">' + esc(BRL(t.valor)) + '</span>'
+          + '<span>' + (t.grupo_nome ? '<span class="chip">' + esc(t.grupo_nome) + (t.subcategoria_nome ? ' / ' + esc(t.subcategoria_nome) : '') + '</span>' : '')
+            + (statusBaixa ? ' <span class="chip">' + esc(statusBaixa) + '</span>' : '') + '</span>'
+          + '<span class="a">' + (t.anulado ? '' :
+              (editavel ? '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editar="' + esc(t.id) + '">Editar</button> ' : '')
+              + (Number(t.saldo) > 0
+                  ? '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-baixar="' + esc(t.id) + '">Baixar</button> '
+                  : '')
+              + '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-baixas="' + esc(t.id) + '">Baixas</button> '
+              + '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-anular="' + esc(t.id) + '">Anular</button>')
+            + '</span></div>';
+      }).join('');
+  el.querySelectorAll('[data-editar]').forEach(b => b.addEventListener('click', () => {
+    const t = (FINPG.lista || []).find(x => x.id === b.dataset.editar);
+    if (t) modalTituloPagar(t);
+  }));
+  el.querySelectorAll('[data-baixar]').forEach(b => b.addEventListener('click', () => {
+    const t = (FINPG.lista || []).find(x => x.id === b.dataset.baixar);
+    if (t) modalBaixarTitulo(t, finpgCarregar);
+  }));
+  el.querySelectorAll('[data-baixas]').forEach(b => b.addEventListener('click', () => {
+    const t = (FINPG.lista || []).find(x => x.id === b.dataset.baixas);
+    if (t) modalVerBaixas(t, finpgCarregar);
+  }));
+  el.querySelectorAll('[data-anular]').forEach(b => b.addEventListener('click', () => {
+    const t = (FINPG.lista || []).find(x => x.id === b.dataset.anular);
+    if (t) modalAnularTituloPagar(t);
+  }));
+}
+REPINTA.finpg = finpgDesenhar;
+
+/** Sem parâmetro `t`: lançamento novo. Com `t`: edita o título existente
+ * (só chega aqui quando ainda não tem baixa — finpgDesenhar já filtra). */
+async function modalTituloPagar(t){
+  const editando = !!t;
+  let grupos = [];
+  try{ grupos = (await rpc('tf_fin_grupos_listar', {})).filter(g => g.tipo === 'p'); } // banco guarda 'p'/'r'
+  catch(e){ toast('Não consegui carregar as categorias: ' + e.message, 'err'); return; }
+  if (!grupos.length){ toast('Nenhuma categoria de despesa cadastrada — confira a tela Categorias.', 'err'); return; }
+
+  let fornecedores = [];
+  try{ fornecedores = await rpc('tf_fin_fornecedores_listar', {}); }catch(e){ /* segue vazio, aviso abaixo */ }
+
+  const grupoAtualId = editando ? t.grupo_id : '';
+
+  abrirModal(editando ? 'Editar — ' + t.descricao : 'Nova conta a pagar',
+      '<div class="campo"><label for="tpForn">Fornecedor</label><select id="tpForn">'
+    +   '<option value="">Selecione…</option>'
+    +   fornecedores.map(f => '<option value="' + esc(f.id) + '"' + (editando && f.id === t.fornecedor_id ? ' selected' : '') + '>' + esc(f.nome) + '</option>').join('')
+    + '</select>'
+    + (fornecedores.length ? '' : '<p class="nota">Nenhum fornecedor cadastrado ainda — cadastre em Fornecedores.</p>')
+    + '</div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="tpGrupo">Categoria</label><select id="tpGrupo">'
+    +    '<option value="">Selecione…</option>'
+    +    grupos.map(g => '<option value="' + esc(g.id) + '"' + (g.id === grupoAtualId ? ' selected' : '') + '>' + esc(g.nome) + '</option>').join('')
+    +  '</select></div>'
+    +  '<div class="campo"><label for="tpSub">Subcategoria (opcional)</label><select id="tpSub"><option value="">—</option></select></div>'
+    + '</div>'
+    + '<div class="campo"><label for="tpDesc">Descrição</label><input id="tpDesc" type="text" value="' + (editando ? esc(t.descricao) : '') + '" autocomplete="off"></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="tpValor">Valor</label><input id="tpValor" type="number" step="0.01" value="' + (editando ? Number(t.valor) : 0) + '"></div>'
+    +  '<div class="campo"><label for="tpForma">Forma prevista (opcional)</label><select id="tpForma">'
+    +    '<option value="">—</option>'
+    +    FORMA_PREVISTA_FIN.map(f => '<option value="' + esc(f) + '"' + (editando && t.forma_prevista === f ? ' selected' : '') + '>' + esc(f) + '</option>').join('')
+    +  '</select></div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="tpComp">Competência (mês da despesa)</label><input id="tpComp" type="month" value="' + (editando ? String(t.competencia).slice(0, 7) : '') + '"></div>'
+    +  '<div class="campo"><label for="tpVenc">Vencimento</label><input id="tpVenc" type="date" value="' + (editando ? t.vencimento : '') + '"></div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="tpNf">Nº da nota fiscal (opcional)</label><input id="tpNf" type="text" value="' + (editando ? esc(t.nf_numero || '') : '') + '" autocomplete="off"></div>'
+    +  '<div class="campo"><label for="tpOs">OS (opcional)</label><input id="tpOs" type="text" placeholder="Ex.: OS-26043" value="' + (editando ? esc(t.os_codigo || '') : '') + '" autocomplete="off"></div></div>'
+    + (editando ? '' :
+        '<div class="campo"><label style="display:flex;align-items:center;gap:6px;font-weight:normal">'
+      +   '<input id="tpRepetir" type="checkbox" style="width:auto"> Repetir todo mês (cria como conta recorrente)</label></div>'
+      + '<div id="tpRepetirCampos" style="display:none">'
+      +   '<div class="dupla">'
+      +     '<div class="campo"><label for="tpRecDia">Dia do vencimento (1 a 31)</label><input id="tpRecDia" type="number" min="1" max="31" value="5"></div>'
+      +     '<div class="campo"><label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin-top:22px">'
+      +       '<input id="tpRecVariavel" type="checkbox" style="width:auto"> O valor muda todo mês</label></div>'
+      +   '</div>'
+      +   '<p class="nota" style="margin-top:0">O título deste mês já é lançado automaticamente ao salvar; nos próximos meses o TapFlow gera sozinho.</p>'
+      + '</div>'),
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label: editando ? 'Salvar' : 'Lançar', pri:true, onClick: async () => {
+        const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+        const fornecedorId = v('tpForn');
+        if (!fornecedorId){ toast('Selecione o fornecedor.', 'err'); return; }
+        const grupoId = v('tpGrupo');
+        if (!grupoId){ toast('Selecione a categoria.', 'err'); return; }
+        const valor = Number(v('tpValor'));
+        if (!valor || valor <= 0){ toast('Informe um valor maior que zero.', 'err'); return; }
+        const desc = v('tpDesc');
+        if (!desc){ toast('A descrição é obrigatória.', 'err'); return; }
+        const comp = v('tpComp');
+        if (!comp){ toast('Informe a competência.', 'err'); return; }
+        const venc = v('tpVenc');
+        if (!venc){ toast('Informe o vencimento.', 'err'); return; }
+        const repetirEl = document.getElementById('tpRepetir');
+        const repetir = !editando && repetirEl && repetirEl.checked;
+        try{
+          if (editando){
+            const campos = {
+              p_fornecedor_id: fornecedorId, p_grupo_id: grupoId, p_descricao: desc, p_valor: valor,
+              p_competencia: comp + '-01', p_vencimento: venc,
+              p_subcategoria_id: v('tpSub') || null, p_forma_prevista: v('tpForma') || null,
+              p_os_codigo: v('tpOs') || null, p_nf_numero: v('tpNf') || null
+            };
+            await rpc('tf_fin_titulo_pagar_editar', Object.assign({ p_titulo_id: t.id }, campos));
+            fecharModal(); toast('Conta a pagar atualizada.', 'ok'); await finpgCarregar();
+          } else if (repetir){
+            const dia = Number(v('tpRecDia'));
+            if (!dia || dia < 1 || dia > 31){ toast('Informe o dia do vencimento (1 a 31).', 'err'); return; }
+            await rpc('tf_fin_recorrencia_gravar', {
+              p_id: null, p_fornecedor_id: fornecedorId, p_grupo_id: grupoId,
+              p_subcategoria_id: v('tpSub') || null, p_descricao: desc, p_valor: valor,
+              p_variavel: !!(document.getElementById('tpRecVariavel') || {}).checked,
+              p_dia_vencimento: dia, p_forma: v('tpForma') || null, p_inicio: comp + '-01'
+            });
+            fecharModal(); toast('Conta recorrente criada — o título deste mês já foi lançado.', 'ok'); await finpgCarregar();
+          } else {
+            const campos = {
+              p_fornecedor_id: fornecedorId, p_grupo_id: grupoId, p_descricao: desc, p_valor: valor,
+              p_competencia: comp + '-01', p_vencimento: venc,
+              p_subcategoria_id: v('tpSub') || null, p_forma_prevista: v('tpForma') || null,
+              p_os_codigo: v('tpOs') || null, p_nf_numero: v('tpNf') || null
+            };
+            await rpc('tf_fin_titulo_pagar_criar', campos);
+            fecharModal(); toast('Conta a pagar lançada.', 'ok'); await finpgCarregar();
+          }
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+
+  // Subcategoria depende da categoria escolhida — repopula ao trocar de grupo.
+  const selGrupo = document.getElementById('tpGrupo');
+  const selSub = document.getElementById('tpSub');
+  const repopularSub = (grupoId, subSelecionada) => {
+    const g = grupos.find(x => x.id === grupoId);
+    const subs = (g && g.subcategorias) || [];
+    selSub.innerHTML = '<option value="">—</option>' + subs.map(s =>
+      '<option value="' + esc(s.id) + '"' + (s.id === subSelecionada ? ' selected' : '') + '>' + esc(s.nome) + '</option>').join('');
+  };
+  selGrupo.addEventListener('change', () => repopularSub(selGrupo.value, null));
+  if (grupoAtualId) repopularSub(grupoAtualId, editando ? t.subcategoria_id : null);
+
+  const repetirChk = document.getElementById('tpRepetir');
+  if (repetirChk) repetirChk.addEventListener('change', () => {
+    document.getElementById('tpRepetirCampos').style.display = repetirChk.checked ? '' : 'none';
+  });
+}
+
+/** Título errado se anula, nunca se edita a ponto de mudar fornecedor/valor
+ * por cima de erro grave — pra isso, anula este e lança um novo, certo. */
+function modalAnularTituloPagar(t){
+  abrirModal('Anular — ' + t.descricao,
+      '<p class="nota" style="margin-top:0">O título não é apagado, fica marcado como anulado com o motivo. '
+    + 'Se foi erro de valor, fornecedor ou qualquer outro dado, lance uma conta nova depois de anular esta.</p>'
+    + '<div class="campo"><label for="tpaMot">Motivo</label><input id="tpaMot" type="text" placeholder="Ex.: valor digitado errado" autocomplete="off"></div>',
+    [{ label:'Voltar', onClick: fecharModal },
+     { label:'Anular', onClick: async () => {
+        const motivo = (document.getElementById('tpaMot') || {}).value.trim();
+        if (!motivo){ toast('Informe o motivo da anulação.', 'err'); return; }
+        try{
+          await rpc('tf_fin_anular_titulo', { p_titulo_id: t.id, p_motivo: motivo });
+          fecharModal(); toast('Título anulado.', 'ok'); await finpgCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// BAIXA — item 11 do módulo Financeiro (Fase 1)
+// Registro separado do título (tf_fin_baixar_titulo já existia) — permite
+// baixa parcial (o saldo em aberto é valor - soma das baixas não estornadas,
+// tf_fin_saldo_titulo já faz essa conta) e estorno (marca, nunca apaga).
+// Compartilhado entre Contas a Receber e Contas a Pagar: o `recarregar` que
+// cada tela passa (finreCarregar/finpgCarregar) é quem muda o comportamento.
+// ════════════════════════════════════════════════════════════════════════════
+async function modalBaixarTitulo(t, recarregar){
+  let contas = [];
+  try{ contas = await rpc('tf_fin_contas_listar', {}); }
+  catch(e){ toast('Não consegui carregar as contas bancárias: ' + e.message, 'err'); return; }
+  if (!contas.length){ toast('Nenhuma conta bancária cadastrada — confira a tela Contas Bancárias.', 'err'); return; }
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const saldoAberto = Number(t.saldo != null ? t.saldo : t.valor);
+  let envelopes = null; // só busca se a conta escolhida for de reserva
+
+  abrirModal('Baixar — ' + t.descricao,
+      '<div class="dupla">'
+    +  '<div class="campo"><label for="bxData">Data</label><input id="bxData" type="date" value="' + hoje + '"></div>'
+    +  '<div class="campo"><label for="bxConta">Conta bancária</label><select id="bxConta">'
+    +    '<option value="">Selecione…</option>'
+    +    contas.map(c => '<option value="' + esc(c.id) + '">' + esc(c.nome) + (c.papel === 'reserva' ? ' (reserva)' : '') + '</option>').join('')
+    +  '</select></div></div>'
+    + '<div class="campo" id="bxEnvelopeCampo" style="display:none"><label for="bxEnvelope">Sai de qual reserva?</label><select id="bxEnvelope"><option value="">Selecione…</option></select></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="bxForma">Forma de pagamento (opcional)</label><select id="bxForma">'
+    +    '<option value="">—</option>'
+    +    FORMA_PREVISTA_FIN.map(f => '<option value="' + esc(f) + '"' + (t.forma_prevista === f ? ' selected' : '') + '>' + esc(f) + '</option>').join('')
+    +  '</select></div>'
+    +  '<div class="campo"><label for="bxValor">Valor</label><input id="bxValor" type="number" step="0.01" value="' + saldoAberto.toFixed(2) + '"></div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="bxDesc">Desconto concedido (opcional)</label><input id="bxDesc" type="number" step="0.01" value="0"></div>'
+    +  '<div class="campo"><label for="bxJuros">Juros/multa (opcional)</label><input id="bxJuros" type="number" step="0.01" value="0"></div></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Registrar baixa', pri:true, onClick: async () => {
+        const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+        const contaId = v('bxConta');
+        if (!contaId){ toast('Selecione a conta bancária.', 'err'); return; }
+        if (!v('bxData')){ toast('Informe a data.', 'err'); return; }
+        const valor = Number(v('bxValor'));
+        if (!valor || valor <= 0){ toast('Informe um valor maior que zero.', 'err'); return; }
+        const contaEscolhida = contas.find(c => c.id === contaId);
+        const envelopeId = v('bxEnvelope');
+        if (contaEscolhida && contaEscolhida.papel === 'reserva' && !envelopeId){
+          toast('Selecione de qual reserva o valor sai/entra.', 'err'); return;
+        }
+        try{
+          await rpc('tf_fin_baixar_titulo', {
+            p_titulo_id: t.id, p_data: v('bxData'), p_conta_id: contaId, p_valor: valor,
+            p_forma_pagamento: v('bxForma') || null,
+            p_desconto: v('bxDesc') ? Number(v('bxDesc')) : 0,
+            p_juros_multa: v('bxJuros') ? Number(v('bxJuros')) : 0,
+            p_envelope_id: envelopeId || null
+          });
+          fecharModal(); toast('Baixa registrada.', 'ok'); await recarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+
+  document.getElementById('bxConta').addEventListener('change', async () => {
+    const contaId = document.getElementById('bxConta').value;
+    const conta = contas.find(c => c.id === contaId);
+    const campo = document.getElementById('bxEnvelopeCampo');
+    if (!conta || conta.papel !== 'reserva'){ campo.style.display = 'none'; return; }
+    campo.style.display = '';
+    if (!envelopes){
+      try{ envelopes = await rpc('tf_fin_envelopes_listar', {}); }
+      catch(e){ toast('Não consegui carregar as reservas: ' + e.message, 'err'); envelopes = []; }
+      const sel = document.getElementById('bxEnvelope');
+      sel.innerHTML = '<option value="">Selecione…</option>' + envelopes.map(en =>
+        '<option value="' + esc(en.id) + '">' + esc(en.nome) + '</option>').join('');
+    }
+  });
+}
+
+async function modalVerBaixas(t, recarregar){
+  let baixas = [];
+  try{ baixas = await rpc('tf_fin_titulo_baixas_listar', { p_titulo_id: t.id }); }
+  catch(e){ toast('Não consegui abrir as baixas: ' + e.message, 'err'); return; }
+
+  const corpo = !baixas.length
+    ? '<p class="nota" style="margin-top:0">Nenhuma baixa registrada ainda.</p>'
+    : '<div class="ccLin cab"><span>Data</span><span>Conta</span><span class="n">Valor</span><span></span></div>'
+      + baixas.map(b => '<div class="ccLin' + (b.estornado ? ' riscada' : '') + '">'
+          + '<span class="ccData">' + esc(dataBR(b.data)) + '</span>'
+          + '<span class="ccNome">' + esc(b.conta_nome || '—') + (b.envelope_nome ? ' <small style="color:var(--ink-3)">· ' + esc(b.envelope_nome) + '</small>' : '')
+            + (b.forma_pagamento ? ' <small style="color:var(--ink-3)">· ' + esc(b.forma_pagamento) + '</small>' : '')
+            + (b.estornado && b.estornado_motivo ? ' <small style="color:var(--ink-3)">— estornado: ' + esc(b.estornado_motivo) + '</small>' : '') + '</span>'
+          + '<span class="n v">' + esc(BRL(b.valor))
+            + ((Number(b.desconto) || Number(b.juros_multa))
+                ? ' <small style="color:var(--ink-3)">(' + (Number(b.desconto) ? '-' + esc(BRL(b.desconto)) : '') + (Number(b.juros_multa) ? ' +' + esc(BRL(b.juros_multa)) : '') + ')</small>'
+                : '') + '</span>'
+          + '<span class="a">' + (b.estornado ? '' : '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-estornar="' + esc(b.id) + '">Estornar</button>') + '</span>'
+        + '</div>').join('');
+
+  abrirModal('Baixas — ' + t.descricao, corpo, [{ label:'Fechar', pri:true, onClick: fecharModal }]);
+
+  document.querySelectorAll('[data-estornar]').forEach(b => b.addEventListener('click', () => {
+    const baixa = baixas.find(x => x.id === b.dataset.estornar);
+    if (baixa) modalEstornarBaixa(baixa, recarregar);
+  }));
+}
+
+function modalEstornarBaixa(baixa, recarregar){
+  abrirModal('Estornar baixa — ' + dataBR(baixa.data),
+      '<p class="nota" style="margin-top:0">A baixa não é apagada, fica marcada como estornada com o motivo.</p>'
+    + '<div class="campo"><label for="esMot">Motivo</label><input id="esMot" type="text" placeholder="Ex.: valor lançado errado" autocomplete="off"></div>',
+    [{ label:'Voltar', onClick: fecharModal },
+     { label:'Estornar', onClick: async () => {
+        const motivo = (document.getElementById('esMot') || {}).value.trim();
+        if (!motivo){ toast('Informe o motivo do estorno.', 'err'); return; }
+        try{
+          await rpc('tf_fin_estornar_baixa', { p_baixa_id: baixa.id, p_motivo: motivo });
+          fecharModal(); toast('Baixa estornada.', 'ok'); await recarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CONTAS RECORRENTES — item 9 do módulo Financeiro (Fase 1)
+// O SIGE não tem recorrência (o Vinícius repetia manual todo mês). Cadastra
+// uma vez e o TapFlow gera o título do mês sozinho: ao criar a recorrência
+// (se já começou) e, pros meses seguintes, ao clicar "Gerar títulos do mês"
+// nesta tela (chama tf_fin_gerar_titulos_recorrencia — mesma função que roda
+// na criação). Não é automático por calendário: a guarda de segurança
+// tf__fin_exigir() depende de um usuário logado, o que um job agendado não
+// tem, então preferi um botão manual a arriscar o agendamento falhar calado.
+// Pausar não apaga a recorrência nem os títulos já gerados por ela — só para
+// de gerar título novo enquanto estiver pausada.
+let FINREC = { lista:null };
+async function pintarRecorrentes(){
+  visao = 'finrec';
+  const board = document.getElementById('board');
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Contas Recorrentes</h2>'
+    + '<p>Cadastre uma vez (ex.: energia, seguro, sistemas, vale-refeição) e o TapFlow gera o título do mês sozinho.</p></div>'
+    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="finrecNova">+ Nova recorrência</button> '
+    + '<button class="btn" type="button" id="finrecGerar">Gerar títulos do mês</button></div>'
+    + '<div class="lista" id="finrecLista"><p class="nota">Carregando…</p></div></div>';
+  document.getElementById('finrecNova').addEventListener('click', () => modalRecorrencia());
+  document.getElementById('finrecGerar').addEventListener('click', async () => {
+    try{
+      const n = await rpc('tf_fin_gerar_titulos_recorrencia', {});
+      toast(n > 0 ? n + ' título(s) gerado(s) em Contas a Pagar.' : 'Nenhum título novo — já estava tudo gerado.', 'ok');
+    }catch(e){ toast(e.message, 'err'); }
+  });
+  await finrecCarregar();
+}
+async function finrecCarregar(){
+  const el = document.getElementById('finrecLista'); if (!el) return;
+  try{ FINREC.lista = await rpc('tf_fin_recorrencias_listar', {}); }
+  catch(e){
+    el.innerHTML = '<div class="vazio2"><b>Não consegui abrir as recorrências</b><p></p>'
+      + '<button class="btn" type="button" id="finrecDeNovo">Tentar de novo</button></div>';
+    el.querySelector('p').textContent = e.message;
+    document.getElementById('finrecDeNovo').addEventListener('click', finrecCarregar);
+    return;
+  }
+  finrecDesenhar();
+}
+function finrecDesenhar(){
+  const el = document.getElementById('finrecLista'); if (!el) return;
+  const q = BUSCA.finrec || '';
+  const L = (FINREC.lista || []).filter(r => casa([r.fornecedor_nome, r.descricao, r.grupo_nome, r.subcategoria_nome].join(' '), q));
+  if (!L.length){
+    el.innerHTML = '<p class="nota" style="padding:12px">Nenhuma recorrência ainda' + (q ? ' com essa busca' : '') + '.</p>';
+    return;
+  }
+  el.innerHTML = '<div class="ccLin cab"><span>Fornecedor</span><span>Descrição</span>'
+    + '<span class="n">Valor</span><span>Vencimento</span><span></span><span></span></div>'
+    + L.map(r => '<div class="ccLin' + (r.ativa ? '' : ' riscada') + '">'
+        + '<span class="ccNome">' + esc(r.fornecedor_nome || '—') + '</span>'
+        + '<span class="ccDesc">' + esc(r.descricao || '—')
+          + (r.grupo_nome ? ' <small style="color:var(--ink-3)">· ' + esc(r.grupo_nome) + (r.subcategoria_nome ? ' / ' + esc(r.subcategoria_nome) : '') + '</small>' : '') + '</span>'
+        + '<span class="n v">' + (r.variavel ? 'Variável' : esc(BRL(r.valor))) + '</span>'
+        + '<span class="ccData">Dia ' + esc(r.dia_vencimento) + '</span>'
+        + '<span>' + (r.ativa ? '<span class="chip">Ativa</span>' : '<span class="chip">Pausada</span>') + '</span>'
+        + '<span class="a">'
+          + '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editar="' + esc(r.id) + '">Editar</button> '
+          + '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-pausar="' + esc(r.id) + '">' + (r.ativa ? 'Pausar' : 'Reativar') + '</button>'
+          + '</span></div>').join('');
+  el.querySelectorAll('[data-editar]').forEach(b => b.addEventListener('click', () => {
+    const r = (FINREC.lista || []).find(x => x.id === b.dataset.editar);
+    if (r) modalRecorrencia(r);
+  }));
+  el.querySelectorAll('[data-pausar]').forEach(b => b.addEventListener('click', async () => {
+    const r = (FINREC.lista || []).find(x => x.id === b.dataset.pausar);
+    if (!r) return;
+    try{
+      await rpc('tf_fin_recorrencia_pausar', { p_id: r.id, p_ativa: !r.ativa });
+      toast(r.ativa ? 'Recorrência pausada.' : 'Recorrência reativada.', 'ok');
+      await finrecCarregar();
+    }catch(e){ toast(e.message, 'err'); }
+  }));
+}
+REPINTA.finrec = finrecDesenhar;
+
+/** Sem parâmetro `r`: nova recorrência (mesmo formulário do checkbox "Repetir
+ * todo mês" em Contas a Pagar). Com `r`: edita os dados da recorrência —
+ * não mexe nos títulos já gerados por ela. */
+async function modalRecorrencia(r){
+  const editando = !!r;
+  let grupos = [];
+  try{ grupos = (await rpc('tf_fin_grupos_listar', {})).filter(g => g.tipo === 'p'); }
+  catch(e){ toast('Não consegui carregar as categorias: ' + e.message, 'err'); return; }
+  if (!grupos.length){ toast('Nenhuma categoria de despesa cadastrada — confira a tela Categorias.', 'err'); return; }
+
+  let fornecedores = [];
+  try{ fornecedores = await rpc('tf_fin_fornecedores_listar', {}); }catch(e){ /* segue vazio, aviso abaixo */ }
+
+  const grupoAtualId = editando ? r.grupo_id : '';
+
+  abrirModal(editando ? 'Editar recorrência — ' + (r.descricao || r.fornecedor_nome) : 'Nova recorrência',
+      '<div class="campo"><label for="reForn">Fornecedor</label><select id="reForn">'
+    +   '<option value="">Selecione…</option>'
+    +   fornecedores.map(f => '<option value="' + esc(f.id) + '"' + (editando && f.id === r.fornecedor_id ? ' selected' : '') + '>' + esc(f.nome) + '</option>').join('')
+    + '</select>'
+    + (fornecedores.length ? '' : '<p class="nota">Nenhum fornecedor cadastrado ainda — cadastre em Fornecedores.</p>')
+    + '</div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="reGrupo">Categoria</label><select id="reGrupo">'
+    +    '<option value="">Selecione…</option>'
+    +    grupos.map(g => '<option value="' + esc(g.id) + '"' + (g.id === grupoAtualId ? ' selected' : '') + '>' + esc(g.nome) + '</option>').join('')
+    +  '</select></div>'
+    +  '<div class="campo"><label for="reSub">Subcategoria (opcional)</label><select id="reSub"><option value="">—</option></select></div>'
+    + '</div>'
+    + '<div class="campo"><label for="reDesc">Descrição</label><input id="reDesc" type="text" value="' + (editando ? esc(r.descricao || '') : '') + '" autocomplete="off"></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="reValor">Valor</label><input id="reValor" type="number" step="0.01" value="' + (editando ? Number(r.valor) : 0) + '"></div>'
+    +  '<div class="campo"><label for="reDia">Dia do vencimento (1 a 31)</label><input id="reDia" type="number" min="1" max="31" value="' + (editando ? r.dia_vencimento : 5) + '"></div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="reForma">Forma de pagamento (opcional)</label><select id="reForma">'
+    +    '<option value="">—</option>'
+    +    FORMA_PREVISTA_FIN.map(f => '<option value="' + esc(f) + '"' + (editando && r.forma === f ? ' selected' : '') + '>' + esc(f) + '</option>').join('')
+    +  '</select></div>'
+    +  '<div class="campo"><label for="reInicio">Mês de início</label><input id="reInicio" type="month" value="' + (editando ? String(r.inicio).slice(0, 7) : '') + '"></div></div>'
+    + '<div class="campo"><label style="display:flex;align-items:center;gap:6px;font-weight:normal">'
+    +   '<input id="reVariavel" type="checkbox" style="width:auto"' + (editando && r.variavel ? ' checked' : '') + '> O valor muda todo mês (ex.: energia elétrica)</label></div>'
+    + (editando ? '' : '<p class="nota">Se o mês de início já começou, o título deste mês é lançado automaticamente ao salvar.</p>'),
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label: editando ? 'Salvar' : 'Criar', pri:true, onClick: async () => {
+        const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+        const fornecedorId = v('reForn');
+        if (!fornecedorId){ toast('Selecione o fornecedor.', 'err'); return; }
+        const grupoId = v('reGrupo');
+        if (!grupoId){ toast('Selecione a categoria.', 'err'); return; }
+        const dia = Number(v('reDia'));
+        if (!dia || dia < 1 || dia > 31){ toast('Informe o dia do vencimento (1 a 31).', 'err'); return; }
+        const inicio = v('reInicio');
+        if (!inicio){ toast('Informe o mês de início.', 'err'); return; }
+        const campos = {
+          p_id: editando ? r.id : null,
+          p_fornecedor_id: fornecedorId, p_grupo_id: grupoId, p_subcategoria_id: v('reSub') || null,
+          p_descricao: v('reDesc') || null, p_valor: Number(v('reValor')) || 0,
+          p_variavel: !!(document.getElementById('reVariavel') || {}).checked,
+          p_dia_vencimento: dia, p_forma: v('reForma') || null,
+          p_inicio: inicio + '-01'
+        };
+        try{
+          await rpc('tf_fin_recorrencia_gravar', campos);
+          fecharModal();
+          toast(editando ? 'Recorrência atualizada.' : 'Recorrência criada — se já começou, o título deste mês já foi lançado.', 'ok');
+          await finrecCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+
+  // Subcategoria depende da categoria escolhida — repopula ao trocar de grupo.
+  const selGrupo = document.getElementById('reGrupo');
+  const selSub = document.getElementById('reSub');
+  const repopularSub = (grupoId, subSelecionada) => {
+    const g = grupos.find(x => x.id === grupoId);
+    const subs = (g && g.subcategorias) || [];
+    selSub.innerHTML = '<option value="">—</option>' + subs.map(s =>
+      '<option value="' + esc(s.id) + '"' + (s.id === subSelecionada ? ' selected' : '') + '>' + esc(s.nome) + '</option>').join('');
+  };
+  selGrupo.addEventListener('change', () => repopularSub(selGrupo.value, null));
+  if (grupoAtualId) repopularSub(grupoAtualId, editando ? r.subcategoria_id : null);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -20227,6 +21805,7 @@ async function iniciar(){
   // mundo. Foi o teste de tela que pegou — o perfil comercial via Compras.
   await carregarCC();
   await carregarRH();          // S42 · Recursos Humanos: quem vê é o banco
+  await carregarFin();         // Financeiro: quem vê é o banco (mesmo padrão)
   montarNav();
   pintarCracha();
   await carregarColunas();
