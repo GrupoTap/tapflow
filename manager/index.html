@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S46</title>
+<title>TapFlow Manager · S47</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1728,7 +1728,9 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // Relatórios, Fornecedores) e que não estava na pasta — o S45 o apagou do ar.
 // S46 (30/09): financeiro — recorrência variável com estimativa, dia do
 // vencimento puxado do Vencimento, botões em fila e anulados escondidos.
-const APP_VERSION = 'S46';
+// S47 (30/09): "Repetir todo mês" usa o vencimento digitado (o lançamento vira
+// o 1º título) — precisa do 102_ajustes_s47.sql no banco.
+const APP_VERSION = 'S47';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -18465,7 +18467,7 @@ async function modalTituloPagar(t){
       +     '<div class="campo"><label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin-top:22px">'
       +       '<input id="tpRecVariavel" type="checkbox" style="width:auto"> O valor muda todo mês</label></div>'
       +   '</div>'
-      +   '<p class="nota" style="margin-top:0">O título deste mês já é lançado automaticamente ao salvar; nos próximos meses o TapFlow gera sozinho. '
+      +   '<p class="nota" style="margin-top:0">Este lançamento vira o 1º título, com o vencimento acima. Os dos meses seguintes vencem no dia escolhido e são lançados pelo botão “Gerar títulos do mês”, em Recorrentes. '
       +   'Se o valor muda todo mês, o Valor acima vale como estimativa: cada título nasce com ele e marcado “(valor a confirmar)”.</p>'
       + '</div>'),
     [{ label:'Cancelar', onClick: fecharModal },
@@ -18502,9 +18504,16 @@ async function modalTituloPagar(t){
               p_id: null, p_fornecedor_id: fornecedorId, p_grupo_id: grupoId,
               p_subcategoria_id: v('tpSub') || null, p_descricao: desc, p_valor: valor,
               p_variavel: !!(document.getElementById('tpRecVariavel') || {}).checked,
-              p_dia_vencimento: dia, p_forma: v('tpForma') || null, p_inicio: comp + '-01'
+              p_dia_vencimento: dia, p_forma: v('tpForma') || null, p_inicio: null,
+              // S47 · o que a pessoa digitou vira o 1º título (vencimento e
+              // competência dela) e a recorrência começa no mês desse
+              // vencimento. Até o S46 o vencimento era jogado fora e o 1º título
+              // nascia no mês corrente — ou nem nascia, com competência futura.
+              p_primeiro_vencimento: venc, p_primeira_competencia: comp + '-01'
             });
-            fecharModal(); toast('Conta recorrente criada — o título deste mês já foi lançado.', 'ok'); await finpgCarregar();
+            fecharModal();
+            toast('Conta recorrente criada — este lançamento é o 1º título (vence ' + dataBR(venc) + '); os próximos vencem todo dia ' + dia + '.', 'ok');
+            await finpgCarregar();
           } else {
             const campos = {
               p_fornecedor_id: fornecedorId, p_grupo_id: grupoId, p_descricao: desc, p_valor: valor,
