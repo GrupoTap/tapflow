@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S45.1</title>
+<title>TapFlow Manager · S46</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -263,6 +263,31 @@ button{font:inherit;color:inherit;cursor:pointer}
 .ccLin .mais{color:var(--crit)} .ccLin .menos{color:var(--ok)}
 .ccLin.riscada .ccData,.ccLin.riscada .ccDesc,.ccLin.riscada .ccNome,.ccLin.riscada .n.v{text-decoration:line-through;color:var(--ink-3)}
 .ccLin .a{text-align:right}
+/* S46 · As listas de Contas a Receber, Contas a Pagar e Recorrentes têm SEIS
+   pedaços por linha (data · nome · descrição · valor · chips · botões), e o
+   .ccLin base só declara cinco colunas. O sexto — os botões — caía numa linha
+   de grade nova, sozinho na 1ª coluna (86px), e cada botão ficava numa linha:
+   visto no inspector em 29/09 (grid-template-rows 19.5px 78px). A classe é
+   própria em vez de mexer no .ccLin, porque ele serve a várias telas com 3, 4
+   e 5 colunas que hoje estão certas. Os botões são um grupo flex: quebram
+   JUNTOS se faltar espaço, nunca um por linha. */
+.ccLin.fin6{grid-template-columns:86px minmax(0,1fr) minmax(0,1.4fr) 112px minmax(0,.9fr) var(--acoes,280px)}
+/* Cada linha é uma grade própria: coluna de botões com largura "do conteúdo"
+   desalinhava a lista (linha com 4 botões empurrava a descrição para a
+   esquerda). Largura FIXA por lista, do tamanho da linha mais cheia dela. */
+#finreLista{--acoes:330px} #finpgLista{--acoes:280px} #finrecLista{--acoes:170px}
+.ccLin.fin6 .a{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;align-items:center}
+.finAnul{display:inline-flex;align-items:center;gap:6px;margin-left:12px;font-size:12.5px;color:var(--ink-2);cursor:pointer;vertical-align:middle}
+.finAnul input{width:auto;margin:0}
+/* Janela média: os botões continuam numa fila só (max-content) e são os
+   chips que descem para baixo do nome/descrição — espremer a coluna dos
+   botões trazia de volta o "um embaixo do outro" que o item 3 veio tirar. */
+@media (max-width:1100px) and (min-width:701px){
+  .ccLin.fin6{grid-template-columns:80px minmax(0,1fr) minmax(0,1.3fr) 104px var(--acoes,280px);row-gap:4px}
+  .ccLin.fin6 > span:nth-child(5){grid-column:2 / 5;grid-row:2}
+  .ccLin.fin6 .a{grid-column:5;grid-row:1 / span 2}
+  .ccLin.fin6.cab > span:nth-child(5){display:none}
+}
 .ccTipo{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:3px;
   background:var(--surface-2);color:var(--ink-2);margin-right:6px;text-transform:uppercase;letter-spacing:.3px}
 .ccTipo.abatimento{background:var(--ok-soft);color:var(--ok)}
@@ -282,6 +307,14 @@ button{font:inherit;color:inherit;cursor:pointer}
   .ccLin .s::before{content:'saldo '}
   .ccLin .a{grid-column:3}
   .ccLin.cab{display:none}
+  /* S46 · no celular a linha de seis vira quatro faixas: data · nome · valor
+     em cima; descrição; chips; e os botões em fila, de ponta a ponta. */
+  .ccLin.fin6{grid-template-columns:78px minmax(0,1fr) auto}
+  .ccLin.fin6 .n.v{grid-column:3;grid-row:1}
+  .ccLin.fin6 .ccDesc{grid-column:2 / -1}
+  .ccLin.fin6 > span:nth-child(5){grid-column:2 / -1}
+  .ccLin.fin6 .a{grid-column:1 / -1;justify-content:flex-start;margin-top:4px}
+  .finAnul{margin-left:10px}
   .ccPed{grid-template-columns:minmax(0,1fr) auto}
   .ccPed.cab{display:none}
   .ccPed .rec,.ccPed .val{display:none}
@@ -1693,7 +1726,9 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // S45.1 (29/09): o S45 com o módulo FINANCEIRO que foi ao ar direto no GitHub
 // em 28/09 (Contas a Receber/Pagar, Recorrentes, Bancos, Reservas, Categorias,
 // Relatórios, Fornecedores) e que não estava na pasta — o S45 o apagou do ar.
-const APP_VERSION = 'S45.1';
+// S46 (30/09): financeiro — recorrência variável com estimativa, dia do
+// vencimento puxado do Vencimento, botões em fila e anulados escondidos.
+const APP_VERSION = 'S46';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -17954,7 +17989,7 @@ function modalSubcategoria(g, s){
 // 12) adiantada nesta tela. Baixa (item 11) ainda não tem tela — vem depois,
 // junto com Contas a Pagar (mesma tabela fin_titulos, tipo='p').
 // ════════════════════════════════════════════════════════════════════════════
-let FINRE = { lista:null };
+let FINRE = { lista:null, mostrarAnulados:false };
 const FORMA_PREVISTA_FIN = ['PIX', 'Boleto', 'Transferência / depósito', 'Cartão de débito', 'Cartão de crédito', 'Dinheiro'];
 
 async function pintarContasReceber(){
@@ -17962,9 +17997,16 @@ async function pintarContasReceber(){
   const board = document.getElementById('board');
   board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Contas a Receber</h2>'
     + '<p>“A faturar” é uma estimativa; ao faturar, o vencimento é recalculado pela data da nota + prazo do cliente.</p></div>'
-    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="finreNovo">+ Nova conta a receber</button></div>'
+    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="finreNovo">+ Nova conta a receber</button>'
+    + '<label class="finAnul"><input type="checkbox" id="finreAnul"> Mostrar anulados <span id="finreAnulN"></span></label></div>'
     + '<div class="lista" id="finreLista"><p class="nota">Carregando…</p></div></div>';
   document.getElementById('finreNovo').addEventListener('click', () => modalTituloReceber());
+  // S46 · anulado fica fora da visão padrão; a escolha vale enquanto a tela
+  // estiver aberta e volta a "escondido" ao entrar de novo (decisão do Bruno).
+  FINRE.mostrarAnulados = false;
+  document.getElementById('finreAnul').addEventListener('change', e => {
+    FINRE.mostrarAnulados = e.target.checked; finreDesenhar();
+  });
   await finreCarregar();
 }
 async function finreCarregar(){
@@ -17982,17 +18024,19 @@ async function finreCarregar(){
 function finreDesenhar(){
   const el = document.getElementById('finreLista'); if (!el) return;
   const q = BUSCA.finre || '';
-  const L = (FINRE.lista || []).filter(t => casa([t.cliente_nome, t.descricao, t.nf_numero, t.os_codigo].join(' '), q));
+  const T = (FINRE.lista || []).filter(t => casa([t.cliente_nome, t.descricao, t.nf_numero, t.os_codigo].join(' '), q));
+  const L = finFiltrarAnulados(T, FINRE.mostrarAnulados, 'finreAnulN');
   if (!L.length){
-    el.innerHTML = '<p class="nota" style="padding:12px">Nenhuma conta a receber ainda' + (q ? ' com essa busca' : '') + '.</p>';
+    finListaVazia(el, 'Nenhuma conta a receber', T.length, q);
     return;
   }
-  el.innerHTML = '<div class="ccLin cab"><span>Vencimento</span><span>Cliente</span><span>Descrição</span>'
+  el.innerHTML = '<div class="ccLin fin6 cab"><span>Vencimento</span><span>Cliente</span><span>Descrição</span>'
     + '<span class="n">Valor</span><span></span><span></span></div>'
     + L.map(t => {
         const etiqueta = t.anulado ? 'Anulado' : (t.etapa === 'faturado' ? 'Faturado' : 'A faturar');
-        const statusBaixa = t.anulado ? '' : (Number(t.saldo) <= 0 ? 'Recebido' : (Number(t.saldo) < Number(t.valor) ? 'Parcial' : ''));
-        return '<div class="ccLin' + (t.anulado ? ' riscada' : '') + '"><span class="ccData">' + esc(dataBR(t.vencimento)) + '</span>'
+        // S46 · título de R$ 0,00 tem saldo 0 e aparecia como "Recebido".
+        const statusBaixa = (t.anulado || !(Number(t.valor) > 0)) ? '' : (Number(t.saldo) <= 0 ? 'Recebido' : (Number(t.saldo) < Number(t.valor) ? 'Parcial' : ''));
+        return '<div class="ccLin fin6' + (t.anulado ? ' riscada' : '') + '"><span class="ccData">' + esc(dataBR(t.vencimento)) + '</span>'
           + '<span class="ccNome">' + esc(t.cliente_nome || '—') + '</span>'
           + '<span class="ccDesc">' + esc(t.descricao) + (t.os_codigo ? ' <small style="color:var(--ink-3)">· ' + esc(t.os_codigo) + '</small>' : '')
             + (t.anulado && t.anulado_motivo ? ' <small style="color:var(--ink-3)">— anulado: ' + esc(t.anulado_motivo) + '</small>' : '') + '</span>'
@@ -18031,6 +18075,27 @@ function finreDesenhar(){
   }));
 }
 REPINTA.finre = finreDesenhar;
+
+/** S46 · Anulado sai da visão padrão de Contas a Pagar/Receber (Bruno, 29/09):
+ *  não tem ação nenhuma e, riscado com o motivo, ocupava mais espaço que os
+ *  títulos vivos. Não some do banco nem do histórico — "Mostrar anulados"
+ *  traz de volta, igual a antes. O contador conta os anulados QUE CASAM COM A
+ *  BUSCA, para o número bater com o que aparece ao marcar. */
+function finFiltrarAnulados(T, mostrar, idContador){
+  const n = T.filter(t => t.anulado).length;
+  const c = document.getElementById(idContador);
+  if (c) c.textContent = '(' + n + ')';
+  return mostrar ? T : T.filter(t => !t.anulado);
+}
+/** Lista vazia não pode mentir: se só sobraram anulados escondidos, diz
+ *  quantos são em vez de "nenhuma conta ainda". */
+function finListaVazia(el, rotulo, totalComAnulados, q){
+  el.innerHTML = totalComAnulados
+    ? '<p class="nota" style="padding:12px">' + esc(rotulo) + ' ativa' + (q ? ' com essa busca' : '') + '. '
+      + totalComAnulados + ' anulad' + (totalComAnulados === 1 ? 'a oculta' : 'as ocultas')
+      + ' — marque “Mostrar anulados” para ver.</p>'
+    : '<p class="nota" style="padding:12px">' + esc(rotulo) + ' ainda' + (q ? ' com essa busca' : '') + '.</p>';
+}
 
 async function modalTituloReceber(){
   let subcats = [];
@@ -18268,16 +18333,21 @@ function modalAnularTitulo(t){
 // pra qualquer título não anulado; quando a baixa for ligada, o próprio banco
 // passa a bloquear a edição de título já baixado.
 // ════════════════════════════════════════════════════════════════════════════
-let FINPG = { lista:null };
+let FINPG = { lista:null, mostrarAnulados:false };
 
 async function pintarContasPagar(){
   visao = 'finpg';
   const board = document.getElementById('board');
   board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Contas a Pagar</h2>'
     + '<p>Título errado se anula, com motivo; título ainda sem baixa pode ser editado direto.</p></div>'
-    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="finpgNovo">+ Nova conta a pagar</button></div>'
+    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="finpgNovo">+ Nova conta a pagar</button>'
+    + '<label class="finAnul"><input type="checkbox" id="finpgAnul"> Mostrar anulados <span id="finpgAnulN"></span></label></div>'
     + '<div class="lista" id="finpgLista"><p class="nota">Carregando…</p></div></div>';
   document.getElementById('finpgNovo').addEventListener('click', () => modalTituloPagar());
+  FINPG.mostrarAnulados = false;   // S46 · ver o comentário em pintarContasReceber
+  document.getElementById('finpgAnul').addEventListener('change', e => {
+    FINPG.mostrarAnulados = e.target.checked; finpgDesenhar();
+  });
   await finpgCarregar();
 }
 async function finpgCarregar(){
@@ -18295,23 +18365,28 @@ async function finpgCarregar(){
 function finpgDesenhar(){
   const el = document.getElementById('finpgLista'); if (!el) return;
   const q = BUSCA.finpg || '';
-  const L = (FINPG.lista || []).filter(t => casa([t.fornecedor_nome, t.descricao, t.nf_numero, t.os_codigo, t.grupo_nome, t.subcategoria_nome].join(' '), q));
+  const T = (FINPG.lista || []).filter(t => casa([t.fornecedor_nome, t.descricao, t.nf_numero, t.os_codigo, t.grupo_nome, t.subcategoria_nome].join(' '), q));
+  const L = finFiltrarAnulados(T, FINPG.mostrarAnulados, 'finpgAnulN');
   if (!L.length){
-    el.innerHTML = '<p class="nota" style="padding:12px">Nenhuma conta a pagar ainda' + (q ? ' com essa busca' : '') + '.</p>';
+    finListaVazia(el, 'Nenhuma conta a pagar', T.length, q);
     return;
   }
-  el.innerHTML = '<div class="ccLin cab"><span>Vencimento</span><span>Fornecedor</span><span>Descrição</span>'
+  el.innerHTML = '<div class="ccLin fin6 cab"><span>Vencimento</span><span>Fornecedor</span><span>Descrição</span>'
     + '<span class="n">Valor</span><span></span><span></span></div>'
     + L.map(t => {
         const editavel = !t.anulado && Number(t.saldo) === Number(t.valor);
-        const statusBaixa = t.anulado ? '' : (Number(t.saldo) <= 0 ? 'Pago' : (Number(t.saldo) < Number(t.valor) ? 'Parcial' : ''));
-        return '<div class="ccLin' + (t.anulado ? ' riscada' : '') + '"><span class="ccData">' + esc(dataBR(t.vencimento)) + '</span>'
+        // S46 · título de R$ 0,00 (recorrência variável sem estimativa) tem
+        // saldo 0 e aparecia como "Pago" — sem ter sido pago. Agora diz o que é.
+        const semValor = !t.anulado && !(Number(t.valor) > 0);
+        const statusBaixa = (t.anulado || semValor) ? '' : (Number(t.saldo) <= 0 ? 'Pago' : (Number(t.saldo) < Number(t.valor) ? 'Parcial' : ''));
+        return '<div class="ccLin fin6' + (t.anulado ? ' riscada' : '') + '"><span class="ccData">' + esc(dataBR(t.vencimento)) + '</span>'
           + '<span class="ccNome">' + esc(t.fornecedor_nome || '—') + '</span>'
           + '<span class="ccDesc">' + esc(t.descricao) + (t.os_codigo ? ' <small style="color:var(--ink-3)">· ' + esc(t.os_codigo) + '</small>' : '')
             + (t.anulado && t.anulado_motivo ? ' <small style="color:var(--ink-3)">— anulado: ' + esc(t.anulado_motivo) + '</small>' : '') + '</span>'
           + '<span class="n v">' + esc(BRL(t.valor)) + '</span>'
           + '<span>' + (t.grupo_nome ? '<span class="chip">' + esc(t.grupo_nome) + (t.subcategoria_nome ? ' / ' + esc(t.subcategoria_nome) : '') + '</span>' : '')
-            + (statusBaixa ? ' <span class="chip">' + esc(statusBaixa) + '</span>' : '') + '</span>'
+            + (statusBaixa ? ' <span class="chip">' + esc(statusBaixa) + '</span>' : '')
+            + (semValor ? ' <span class="chip risco" title="Edite o título com o valor real para poder pagar">Valor a confirmar</span>' : '') + '</span>'
           + '<span class="a">' + (t.anulado ? '' :
               (editavel ? '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editar="' + esc(t.id) + '">Editar</button> ' : '')
               + (Number(t.saldo) > 0
@@ -18390,7 +18465,8 @@ async function modalTituloPagar(t){
       +     '<div class="campo"><label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin-top:22px">'
       +       '<input id="tpRecVariavel" type="checkbox" style="width:auto"> O valor muda todo mês</label></div>'
       +   '</div>'
-      +   '<p class="nota" style="margin-top:0">O título deste mês já é lançado automaticamente ao salvar; nos próximos meses o TapFlow gera sozinho.</p>'
+      +   '<p class="nota" style="margin-top:0">O título deste mês já é lançado automaticamente ao salvar; nos próximos meses o TapFlow gera sozinho. '
+      +   'Se o valor muda todo mês, o Valor acima vale como estimativa: cada título nasce com ele e marcado “(valor a confirmar)”.</p>'
       + '</div>'),
     [{ label:'Cancelar', onClick: fecharModal },
      { label: editando ? 'Salvar' : 'Lançar', pri:true, onClick: async () => {
@@ -18457,7 +18533,26 @@ async function modalTituloPagar(t){
   const repetirChk = document.getElementById('tpRepetir');
   if (repetirChk) repetirChk.addEventListener('change', () => {
     document.getElementById('tpRepetirCampos').style.display = repetirChk.checked ? '' : 'none';
+    sugerirDiaRec();
   });
+
+  // S46 · o dia da recorrência vem do Vencimento já digitado (29/10/2026 →
+  // 29), em vez de nascer fixo em 5. Continua editável; depois que a pessoa
+  // digita outro dia, a sugestão para de sobrescrever — o mesmo cuidado do
+  // prazo de aviso dos documentos (S45).
+  const vencEl = document.getElementById('tpVenc');
+  const diaEl = document.getElementById('tpRecDia');
+  let diaDigitado = false;
+  function sugerirDiaRec(){
+    if (!vencEl || !diaEl || diaDigitado) return;
+    const m = /^\d{4}-\d{2}-(\d{2})$/.exec(vencEl.value || '');
+    if (m) diaEl.value = String(Number(m[1]));
+  }
+  if (diaEl) diaEl.addEventListener('input', () => { diaDigitado = true; });
+  if (vencEl && diaEl){
+    vencEl.addEventListener('change', sugerirDiaRec);
+    vencEl.addEventListener('input', sugerirDiaRec);
+  }
 }
 
 /** Título errado se anula, nunca se edita a ponto de mudar fornecedor/valor
@@ -18646,15 +18741,21 @@ function finrecDesenhar(){
     el.innerHTML = '<p class="nota" style="padding:12px">Nenhuma recorrência ainda' + (q ? ' com essa busca' : '') + '.</p>';
     return;
   }
-  el.innerHTML = '<div class="ccLin cab"><span>Fornecedor</span><span>Descrição</span>'
-    + '<span class="n">Valor</span><span>Vencimento</span><span></span><span></span></div>'
-    + L.map(r => '<div class="ccLin' + (r.ativa ? '' : ' riscada') + '">'
+  // S46 · seis pedaços, como Pagar/Receber — e na mesma ordem (o dia primeiro,
+  // no lugar do vencimento), para a grade .fin6 e o celular valerem igual.
+  // Variável mostra a ESTIMATIVA: é o valor com que cada título nasce desde o
+  // S46. Sem estimativa (R$ 0), o chip avisa — esses continuam nascendo zerados.
+  el.innerHTML = '<div class="ccLin fin6 cab"><span>Vencimento</span><span>Fornecedor</span><span>Descrição</span>'
+    + '<span class="n">Valor</span><span></span><span></span></div>'
+    + L.map(r => '<div class="ccLin fin6' + (r.ativa ? '' : ' riscada') + '">'
+        + '<span class="ccData">Dia ' + esc(r.dia_vencimento) + '</span>'
         + '<span class="ccNome">' + esc(r.fornecedor_nome || '—') + '</span>'
         + '<span class="ccDesc">' + esc(r.descricao || '—')
           + (r.grupo_nome ? ' <small style="color:var(--ink-3)">· ' + esc(r.grupo_nome) + (r.subcategoria_nome ? ' / ' + esc(r.subcategoria_nome) : '') + '</small>' : '') + '</span>'
-        + '<span class="n v">' + (r.variavel ? 'Variável' : esc(BRL(r.valor))) + '</span>'
-        + '<span class="ccData">Dia ' + esc(r.dia_vencimento) + '</span>'
-        + '<span>' + (r.ativa ? '<span class="chip">Ativa</span>' : '<span class="chip">Pausada</span>') + '</span>'
+        + '<span class="n v">' + esc(BRL(r.valor))
+          + (r.variavel ? '<small style="display:block;font-family:Inter,sans-serif;font-size:11px;color:var(--ink-3)">variável · estimativa</small>' : '') + '</span>'
+        + '<span>' + (r.ativa ? '<span class="chip">Ativa</span>' : '<span class="chip">Pausada</span>')
+          + (r.variavel && !(Number(r.valor) > 0) ? ' <span class="chip risco" title="Preencha o Valor com a média do mês: é com ele que o título nasce">Sem estimativa</span>' : '') + '</span>'
         + '<span class="a">'
           + '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editar="' + esc(r.id) + '">Editar</button> '
           + '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-pausar="' + esc(r.id) + '">' + (r.ativa ? 'Pausar' : 'Reativar') + '</button>'
@@ -18715,7 +18816,8 @@ async function modalRecorrencia(r){
     +  '</select></div>'
     +  '<div class="campo"><label for="reInicio">Mês de início</label><input id="reInicio" type="month" value="' + (editando ? String(r.inicio).slice(0, 7) : '') + '"></div></div>'
     + '<div class="campo"><label style="display:flex;align-items:center;gap:6px;font-weight:normal">'
-    +   '<input id="reVariavel" type="checkbox" style="width:auto"' + (editando && r.variavel ? ' checked' : '') + '> O valor muda todo mês (ex.: energia elétrica)</label></div>'
+    +   '<input id="reVariavel" type="checkbox" style="width:auto"' + (editando && r.variavel ? ' checked' : '') + '> O valor muda todo mês (ex.: energia elétrica)</label>'
+    +   '<p class="nota" style="margin:2px 0 0">Marcado, o Valor acima vale como estimativa (a média do mês): cada título nasce com ele e marcado “(valor a confirmar)”, e você acerta o valor real no próprio título.</p></div>'
     + (editando ? '' : '<p class="nota">Se o mês de início já começou, o título deste mês é lançado automaticamente ao salvar.</p>'),
     [{ label:'Cancelar', onClick: fecharModal },
      { label: editando ? 'Salvar' : 'Criar', pri:true, onClick: async () => {
