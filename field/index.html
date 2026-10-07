@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S19</title>
+<title>TapFlow Field · S20</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -335,6 +335,45 @@ details.termo p{font-size:12.5px;line-height:1.5;color:var(--ink-2);margin:8px 0
 .vidCx iframe,.vidCx #ytP{position:absolute;inset:0;width:100%;height:100%;border:0}
 .vidLin .btn.sm{margin-top:6px}
 details.termo.faq{margin-top:6px}
+/* ── S20 · Diárias e Documentos ─────────────────── */
+.abasTopo button{padding:10px 4px;font-size:14px}
+.diaNav{display:flex;align-items:center;gap:8px;margin:10px 0 12px}
+.diaNav .btn{width:48px;flex:0 0 auto;margin:0}
+.diaNav label{flex:1;display:flex;flex-direction:column;align-items:center;font-size:12px;font-weight:700;color:var(--ink-3);
+  text-transform:uppercase;letter-spacing:.05em}
+.diaNav input{width:100%;margin-top:3px;padding:9px;border:1px solid var(--rule);border-radius:5px;font-size:16px;text-align:center;background:var(--surface)}
+.diaTog{display:grid;gap:8px}
+.diaTog button{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:16px 14px;border:2px solid var(--rule);
+  border-radius:7px;background:var(--surface);text-align:left}
+.diaTog button b{font-size:16.5px}
+.diaTog button small{font-size:13px;color:var(--ink-3);white-space:nowrap}
+.diaTog button.on{border-color:var(--accent);background:var(--accent-soft)}
+.diaTog button.on small{color:var(--accent-ink);font-weight:700}
+.diaTog button:disabled{opacity:.55}
+.diaDica{font-size:12.5px !important;color:var(--ink-3) !important;margin:8px 0 0 !important}
+.diaFech{font-size:13.5px !important;color:var(--warn) !important;background:var(--warn-soft);padding:8px 10px;border-radius:5px}
+.diaTot{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:6px 0 8px}
+.diaTot b{font-size:24px} .diaTot small{font-size:13px;color:var(--ink-3)}
+.diaLin{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:8px;width:100%;padding:9px 2px;border:0;
+  border-top:1px solid var(--rule-2);background:none;text-align:left;font-size:14px;align-items:center}
+.diaLin small{color:var(--ink-3);font-size:12px}
+.diaLin.on{background:var(--accent-soft)}
+.painel.diaLemb{border-left:4px solid var(--accent)}
+.painel.docPend{border-left:4px solid var(--warn)}
+.painel.docPend.venc{border-left-color:var(--crit)}
+.painel.docPend h2{font-size:18px}
+.docDica{font-size:12.5px !important;color:var(--ink-3) !important;margin:6px 0 0 !important}
+.docPend .btn.danger{margin-top:10px}
+.docView{position:fixed;inset:0;z-index:95;background:#20262b;display:flex;flex-direction:column}
+.dvTopo{display:flex;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top)) 12px 10px;background:var(--accent);color:#fff}
+.dvTopo b{flex:1;font-size:15.5px;line-height:1.3}
+.dvX{background:rgba(255,255,255,.18);border:0;color:#fff;width:38px;height:38px;border-radius:5px;font-size:18px}
+.dvPag{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:10px}
+.dvPag canvas{display:block;margin:0 auto 10px;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.4)}
+.dvMsg{color:#fff;text-align:center;font-size:14px;padding:12px}
+.dvMsg a{color:#9fd3ff}
+.dvBar{display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:var(--surface)}
+.dvBar .btn{margin:0}
 .atrasadas .al.apoio{opacity:.85}
 .atrasadas .al.apoio b::after{content:' (apoio)';font-weight:400;color:var(--ink-3);font-size:12.5px}
 </style>
@@ -397,7 +436,7 @@ details.termo.faq{margin-top:6px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S19';
+const APP_VERSION = 'S20';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -853,6 +892,13 @@ async function carregar(silencioso){
       rpc('tf_rh_meu_resumo', {}).catch(() => null),
       rpc('tf_atrasadas_como_apoio', {}).catch(() => [])
     ]);
+    // S20 · documentos para assinar e as diárias de hoje. Sem o 104 no banco,
+    // as duas voltam nulas e o app segue como no S19 (sem as abas novas).
+    const [docs, diar] = await Promise.all([
+      rpc('tf_rhdoc_meus', {}).catch(() => null),
+      rpc('tf_diarias_minhas', { p_mes: null, p_dia: null }).catch(() => null) ]);
+    DOCS = docs || null;
+    if (tela !== 'dia') DIAR = diar || null;
     SEG = seg || null;
     APOIO_ATR = apo || [];
     listaOS = lst || [];
@@ -864,6 +910,7 @@ async function carregar(silencioso){
     pararRecon(); setConn('ok','conectado');
     if (tela === 'lista') pintarLista();
     else if (tela === 'seg' && !silencioso) pintarSeg();
+    else if (tela === 'docs' && !silencioso) pintarDocsF();
   }catch(e){
     // guarda O MOTIVO da falha: lista vazia por erro não pode ser desenhada
     // como "nada para fazer hoje" — foi assim que o "JWT expired" virou susto
@@ -928,7 +975,7 @@ function pintarLista(){
   // (não é OS) ou uma etapa de escritório no seu nome. Até o S12 a lista vazia
   // saía cedo com "Nada no campo agora" e escondia o roteiro do dia.
   if (!listaOS.length && !(MEU_DIA || []).length && !(ATRASADAS || []).length && !(ESCALADAS || []).length
-      && !(APOIO_ATR || []).length && !(SEG && SEG.tem_ficha)){
+      && !(APOIO_ATR || []).length && !(SEG && SEG.tem_ficha) && !nPendDocs()){
     if (falhaCarga){
       const v = document.createElement('div'); v.className = 'vazio';
       v.innerHTML = '<b>Não deu para carregar suas ordens</b><p class="mt"></p>' +
@@ -942,6 +989,8 @@ function pintarLista(){
     }
     m.innerHTML = '<div class="vazio"><b>Nada no campo agora</b>' +
       '<p>Quando o escritório abrir uma OS para você, ela aparece aqui.</p></div>';
+    try{ const pl = painelLembreteDiaria(); if (pl) m.insertBefore(pl, m.firstChild); }catch(e){}
+    abasTopo(m, 'lista');   // S20 · a aba Diárias vale para todo mundo
     return;
   }
 
@@ -971,6 +1020,9 @@ function pintarLista(){
   catch(e){ console.error('[atrasadas]', e); }
   // S16 · a entrega de EPI para confirmar vem antes de tudo (item 17)
   try{ const pe = painelEpiPendente(); if (pe) m.insertBefore(pe, m.firstChild); }catch(e){ console.error('[epi]', e); }
+  // S20 · documento para assinar e o lembrete das diárias (fim do dia, dia com serviço)
+  try{ const pd = painelDocsPendente(); if (pd) m.insertBefore(pd, m.firstChild); }catch(e){ console.error('[docs]', e); }
+  try{ const pl = painelLembreteDiaria(); if (pl) m.appendChild(pl); }catch(e){ console.error('[diarias]', e); }
   try{ pintarMeuDia(m); }
   catch(e){
     console.error('[roteiro]', e);
@@ -3022,19 +3074,7 @@ const RH_MOT_F = { primeira:'primeira entrega', entrega_inicial:'entrega inicial
   danificado:'danificado em serviço', extravio:'extravio', limite_fabricante:'limite do fabricante',
   troca_tamanho:'troca de tamanho', reposicao:'reposição' };
 
-/** As duas abas no topo da lista. Só aparece para quem tem ficha de RH. */
-function abasTopo(m, qual){
-  if (!(SEG && SEG.tem_ficha)) return;
-  const n = nPendSeg();
-  const d = document.createElement('div'); d.className = 'abasTopo';
-  d.innerHTML = (soSeg() ? '' : '<button type="button" data-t="lista" class="' + (qual === 'lista' ? 'on' : '') + '">Ordens</button>')
-    + '<button type="button" data-t="seg" class="' + (qual === 'seg' ? 'on' : '') + '">Minha Segurança'
-    + (n ? ' <span class="bolha">' + n + '</span>' : '') + '</button>';
-  d.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-    if (b.dataset.t === 'seg') pintarSeg(); else pintarLista();
-  }));
-  m.insertBefore(d, m.firstChild);
-}
+/* S20 · abasTopo foi para o bloco das Diárias/Documentos (agora são até quatro abas). */
 /** Na lista de OS, a pendência de EPI vem no topo (item 17: "pendências dele no topo"). */
 function painelEpiPendente(){
   const n = SEG && SEG.tem_ficha ? (SEG.pendentes || []).length : 0;
@@ -3071,6 +3111,7 @@ function pintarSeg(){
   }
   const temPin = SEG.pin && SEG.pin.ativo;
   const bloq = SEG.pin && SEG.pin.bloqueado_ate && new Date(SEG.pin.bloqueado_ate) > new Date();
+  try{ const pd = painelDocsPendente(); if (pd) m.appendChild(pd); }catch(e){}   // S20
 
   // 1 · PIN (sem ele não se confirma nada)
   if (!temPin){
@@ -3691,6 +3732,324 @@ async function pintarFaq(){
         : '<small>enviada em ' + esc(rhDTf(f.criada_em)) + ' — aguardando resposta</small>') + '</div>').join('') + '</div>'
     : '<p style="font-size:13px;color:var(--ink-3)">Você ainda não enviou dúvidas.</p>';
   m.appendChild(blocoEnviarDuvida(null));
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// S20 (prompt S49) · DIÁRIAS e DOCUMENTOS (espelho de ponto e recibo)
+// ----------------------------------------------------------------------------
+// Diárias: cada um lança as PRÓPRIAS refeições na rua (café, almoço, jantar),
+// do dia de hoje ou de um dia anterior, enquanto o mês estiver aberto. Tocar
+// de novo desfaz (o banco anula, não apaga). A OS é opcional e vem sugerida
+// pela agenda do dia.
+// Documentos: a folha de ponto e o recibo que o escritório liberou para você.
+// Duas ações, e só elas: Assinar (PIN) e "Não é minha folha / meu recibo".
+// Cada abertura e cada download ficam registrados (`tf_rhdoc_abrir`).
+// ════════════════════════════════════════════════════════════════════════════
+let DIAR = null;            // tf_diarias_minhas() do mês/dia na tela
+let DIAR_DIA = null;        // o dia escolhido (ISO); null = hoje
+let DOCS = null;            // tf_rhdoc_meus(); null = banco sem o 104 ou falha
+const DIA_ROT_F = { cafe:'Café da manhã', almoco:'Almoço', jantar:'Jantar' };
+const BRLf = v => (Number(v) || 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+const MES_F = iso => ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'][Number(String(iso).slice(5,7)) - 1]
+  + '/' + String(iso).slice(0,4);
+const somaDiaF = (iso, n) => { const d = new Date(String(iso).slice(0,10) + 'T12:00'); d.setDate(d.getDate() + n);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+const DIA_SEM_F = iso => ['domingo','segunda','terça','quarta','quinta','sexta','sábado'][new Date(String(iso).slice(0,10) + 'T12:00').getDay()];
+
+/** As abas do topo: Ordens · Diárias · Documentos · Segurança. Diárias é de
+ *  todo mundo que abre o Field; Documentos e Segurança, de quem tem ficha de RH. */
+function abasTopo(m, qual){
+  const temSeg = !!(SEG && SEG.tem_ficha), temDocs = !!(DOCS && DOCS.tem_ficha);
+  const abas = [];
+  if (!soSeg()) abas.push(['lista', 'Ordens', 0]);
+  if (DIAR || !DEMO) abas.push(['dia', 'Diárias', 0]);
+  if (temDocs) abas.push(['docs', 'Documentos', nPendDocs()]);
+  if (temSeg) abas.push(['seg', abas.length >= 3 ? 'Segurança' : 'Minha Segurança', nPendSeg()]);
+  if (abas.length < 2) return;
+  const d = document.createElement('div'); d.className = 'abasTopo';
+  d.innerHTML = abas.map(([k, r, n]) => '<button type="button" data-t="' + k + '" class="' + (qual === k ? 'on' : '') + '">' + r
+    + (n ? ' <span class="bolha">' + n + '</span>' : '') + '</button>').join('');
+  d.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    const t = b.dataset.t;
+    if (t === 'seg') pintarSeg(); else if (t === 'dia') pintarDiariasF(); else if (t === 'docs') pintarDocsF(); else pintarLista();
+  }));
+  m.insertBefore(d, m.firstChild);
+}
+const nPendDocs = () => DOCS && DOCS.tem_ficha ? (DOCS.docs || []).filter(d => d.situacao === 'liberado').length : 0;
+
+// ── DIÁRIAS ─────────────────────────────────────────────────────────────────
+async function carregarDiarias(dia){
+  const d = dia || DIAR_DIA || isoHojeF();
+  DIAR = await rpc('tf_diarias_minhas', { p_mes: d.slice(0,7) + '-01', p_dia: d });
+  return DIAR;
+}
+async function pintarDiariasF(){
+  tela = 'dia'; atual = null;
+  document.getElementById('btnBack').hidden = true;
+  document.getElementById('hTit').textContent = 'Diárias';
+  document.getElementById('hSub').textContent = (sessao.nome || '') + ' · refeições na rua';
+  const m = document.getElementById('main');
+  m.innerHTML = '<p style="color:var(--ink-3);font-size:14px">Carregando…</p>';
+  if (DEMO){ m.innerHTML = '<div class="vazio"><b>Diárias</b><p>Abra pelo app publicado para lançar.</p></div>'; abasTopo(m, 'dia'); return; }
+  try{ await carregarDiarias(); }
+  catch(e){
+    m.innerHTML = '<div class="vazio"><b>Não deu para carregar as diárias</b><p class="mt"></p>'
+      + '<button class="btn" id="bTentD" style="max-width:260px;margin:18px auto 0">Tentar de novo</button></div>';
+    m.querySelector('.mt').textContent = e.message;
+    document.getElementById('bTentD').addEventListener('click', pintarDiariasF);
+    abasTopo(m, 'dia'); return;
+  }
+  desenharDiariasF();
+}
+function desenharDiariasF(){
+  if (tela !== 'dia') return;
+  const m = document.getElementById('main'); m.innerHTML = '';
+  const D = DIAR, dia = D.dia.data, hoje = D.hoje || isoHojeF();
+  const fechado = !!D.dia.fechado, marc = D.dia.marcadas || {};
+  // o dia: hoje por padrão; dias anteriores enquanto o mês estiver aberto
+  const p = document.createElement('div'); p.className = 'painel diaPainel';
+  p.innerHTML = '<div class="et">Refeições na rua</div>'
+    + '<div class="diaNav"><button type="button" class="btn sm" id="dAnt" aria-label="Dia anterior">‹</button>'
+    + '<label><span>' + (dia === hoje ? 'Hoje' : esc(DIA_SEM_F(dia))) + '</span><input type="date" id="dDia" max="' + esc(hoje) + '" value="' + esc(dia) + '"></label>'
+    + '<button type="button" class="btn sm" id="dPro" aria-label="Dia seguinte"' + (dia >= hoje ? ' disabled' : '') + '>›</button></div>'
+    + (fechado ? '<p class="diaFech">O mês de ' + esc(MES_F(dia)) + ' está <b>fechado</b>. Esqueceu algo? Fale com o Bruno ou o Fernando.</p>' : '')
+    + (!D.pode_lancar ? '<p class="diaFech">Seu cadastro não está ativo para lançar diárias.</p>' : '')
+    + '<div class="diaTog">' + ['cafe','almoco','jantar'].map(k => '<button type="button" data-t="' + k + '" class="' + (marc[k] ? 'on' : '') + '"'
+        + (fechado || !D.pode_lancar ? ' disabled' : '') + ' aria-pressed="' + (marc[k] ? 'true' : 'false') + '"><b>' + DIA_ROT_F[k] + '</b><small>'
+        + (marc[k] ? '✓ ' + BRLf(marc[k].valor) + (marc[k].por_outro ? ' · lançado pelo escritório' : '') : BRLf((D.valores || {})[k]))
+        + '</small></button>').join('') + '</div>'
+    + '<div class="campo" style="margin:12px 0 0"><label for="dOs">OS do serviço (opcional)</label><select id="dOs"'
+    + (fechado ? ' disabled' : '') + '></select></div>'
+    + '<p class="diaDica">Toque no que você usou. Tocar de novo desfaz. Só você lança as suas.</p>';
+  m.appendChild(p);
+  // a OS: a que já está no dia > a agendada para você no dia > nenhuma
+  const sel = p.querySelector('#dOs');
+  const opcoes = [], vistos = new Set();
+  (D.dia.os_agendadas || []).forEach(o => { if (!vistos.has(o.os_id)){ vistos.add(o.os_id); opcoes.push([o.os_id, o.numero + ' · ' + (o.cliente || '') + ' (agendada)']); } });
+  (listaOS || []).forEach(o => { if (!vistos.has(o.os_id)){ vistos.add(o.os_id); opcoes.push([o.os_id, o.numero + ' · ' + (o.cliente || '')]); } });
+  sel.innerHTML = '<option value="">— sem OS —</option>' + opcoes.map(([v, r]) => '<option value="' + esc(v) + '">' + esc(r) + '</option>').join('');
+  const temMarca = Object.keys(marc).length > 0;
+  sel.value = D.dia.os_id || (!temMarca && (D.dia.os_agendadas || [])[0] ? D.dia.os_agendadas[0].os_id : '');
+  sel.addEventListener('change', async () => {
+    if (!temMarca) return;   // sem refeição no dia, a OS vai junto na primeira marcação
+    sel.disabled = true;
+    try{ await rpc1('tf_diarias_definir_os', { p_data: dia, p_os_id: sel.value || null }); toast('OS do dia gravada.', 'ok'); await carregarDiarias(dia); }
+    catch(e){ toast(e.message, 'err'); }
+    desenharDiariasF();
+  });
+  p.querySelectorAll('.diaTog button').forEach(b => b.addEventListener('click', async () => {
+    const k = b.dataset.t, marcar = !marc[k];
+    p.querySelectorAll('.diaTog button').forEach(x => x.disabled = true);
+    try{
+      await rpc1('tf_diarias_marcar', { p_data: dia, p_tipo: k, p_marcar: marcar, p_os_id: marcar ? (sel.value || null) : null });
+      toast(marcar ? DIA_ROT_F[k] + ' lançado.' : DIA_ROT_F[k] + ' desmarcado.', 'ok');
+      await carregarDiarias(dia);
+    }catch(e){ toast(e.message, 'err'); }
+    desenharDiariasF();
+  }));
+  const irDia = d => { DIAR_DIA = d > hoje ? hoje : d; carregarDiarias().then(desenharDiariasF).catch(e => toast(e.message, 'err')); };
+  p.querySelector('#dAnt').addEventListener('click', () => irDia(somaDiaF(dia, -1)));
+  p.querySelector('#dPro').addEventListener('click', () => irDia(somaDiaF(dia, 1)));
+  p.querySelector('#dDia').addEventListener('change', ev => { if (ev.target.value) irDia(ev.target.value); });
+  // o mês
+  const q = D.qtd || {};
+  const r = document.createElement('div'); r.className = 'painel';
+  r.innerHTML = '<div class="et">' + esc(MES_F(D.mes)) + (D.fechado ? ' · fechado' : '') + '</div>'
+    + '<div class="diaTot"><b>' + BRLf(D.total) + '</b><small>' + (q.cafe || 0) + ' café · ' + (q.almoco || 0) + ' almoço · ' + (q.jantar || 0) + ' jantar</small></div>'
+    + ((D.dias || []).length ? (D.dias || []).map(x => '<button type="button" class="diaLin' + (x.data === dia ? ' on' : '') + '" data-d="' + esc(x.data) + '">'
+        + '<span><b>' + esc(dataBR(x.data).slice(0,5)) + '</b> ' + esc(DIA_SEM_F(x.data).slice(0,3)) + '</span>'
+        + '<span>' + x.tipos.map(t => DIA_ROT_F[t].split(' ')[0]).join(' · ') + (x.os_numero ? ' <small>' + esc(x.os_numero) + '</small>' : '') + '</span>'
+        + '<span>' + BRLf(x.valor) + '</span></button>').join('')
+      : '<p style="margin:8px 0 0">Nada lançado neste mês.</p>')
+    + '<div class="linha" style="margin-top:10px"><button type="button" class="btn sm" id="dMesA">‹ ' + esc(MES_F(somaDiaF(D.mes, -1))) + '</button>'
+    + (D.mes.slice(0,7) < hoje.slice(0,7) ? '<button type="button" class="btn sm" id="dMesP">' + esc(MES_F(somaDiaF(D.mes, 32))) + ' ›</button>' : '') + '</div>';
+  m.appendChild(r);
+  r.querySelectorAll('[data-d]').forEach(b => b.addEventListener('click', () => { irDia(b.dataset.d); m.scrollTop = 0; }));
+  r.querySelector('#dMesA').addEventListener('click', () => irDia(somaDiaF(D.mes, -1)));
+  const mp = r.querySelector('#dMesP');
+  if (mp) mp.addEventListener('click', () => { const ini = somaDiaF(D.mes, 32).slice(0,7) + '-01'; irDia(ini > hoje ? hoje : ini); });
+  abasTopo(m, 'dia');
+}
+/** O lembrete do fim do dia: só em dia em que você tem serviço agendado e
+ *  ainda não lançou nada — não aparece todo dia nem para quem não saiu. */
+function painelLembreteDiaria(){
+  try{
+    if (DEMO || !DIAR || !DIAR.dia || DIAR.dia.data !== isoHojeF()) return null;
+    if (new Date().getHours() < 16) return null;
+    if (Object.keys(DIAR.dia.marcadas || {}).length || DIAR.dia.fechado || !DIAR.pode_lancar) return null;
+    const temServico = (MEU_DIA || []).some(t => t.os_id) || (DIAR.dia.os_agendadas || []).length > 0;
+    if (!temServico || LS.get('tff_dia_lemb_' + isoHojeF(), false)) return null;
+    const p = document.createElement('div'); p.className = 'painel diaLemb';
+    p.innerHTML = '<div class="et">Diárias</div><p style="margin:4px 0 10px">Você fez refeição na rua hoje?</p>'
+      + '<div class="linha"><button class="btn sm" type="button" data-n>Não</button><button class="btn pri sm" type="button" data-s>Lançar</button></div>';
+    p.querySelector('[data-s]').addEventListener('click', () => { DIAR_DIA = null; pintarDiariasF(); });
+    p.querySelector('[data-n]').addEventListener('click', () => { LS.set('tff_dia_lemb_' + isoHojeF(), true); p.remove(); });
+    return p;
+  }catch(e){ return null; }
+}
+
+// ── DOCUMENTOS (espelho de ponto e recibo) ─────────────────────────────────
+async function recarregarDocs(){ try{ DOCS = await rpc('tf_rhdoc_meus', {}); }catch(e){ toast(e.message, 'err'); } }
+/** "Folha de ponto de Gabriel, setembro/2026" / "Recibo de Gabriel, Férias …" — em destaque. */
+const tituloDocF = d => {
+  const nome = String((DOCS && DOCS.nome) || sessao.nome || '').split(' ')[0];
+  if (d.tipo === 'ponto') return 'Folha de ponto de ' + nome + ', ' + MES_F(d.competencia);
+  return 'Recibo de ' + nome + ', ' + d.rotulo.replace(/^Recibo (de pagamento )?—?\s*/i, '').replace(/^de /, '');
+};
+function painelDocsPendente(){
+  const n = nPendDocs(); if (!n) return null;
+  const venc = (DOCS.docs || []).some(d => d.situacao === 'liberado' && d.vencido);
+  const p = document.createElement('div'); p.className = 'painel epiPend';
+  p.innerHTML = '<div class="et" style="color:' + (venc ? 'var(--crit)' : 'var(--warn)') + '">Documento para assinar</div>'
+    + '<p style="margin:4px 0 10px">' + (n === 1 ? 'Um documento (folha de ponto ou recibo) espera' : n + ' documentos (folha de ponto ou recibo) esperam')
+    + ' a sua assinatura' + (venc ? ' — e o prazo já passou' : '') + '.</p><button class="btn pri sm" type="button">Abrir e assinar</button>';
+  p.querySelector('button').addEventListener('click', pintarDocsF);
+  return p;
+}
+async function pintarDocsF(){
+  tela = 'docs'; atual = null;
+  document.getElementById('btnBack').hidden = true;
+  document.getElementById('hTit').textContent = 'Documentos';
+  document.getElementById('hSub').textContent = (sessao.nome || '') + ' · folha de ponto e recibos';
+  const m = document.getElementById('main'); m.innerHTML = '';
+  if (!DOCS || !DOCS.tem_ficha){
+    m.innerHTML = '<div class="vazio"><b>Sem documentos</b><p>Quando o escritório liberar a sua folha de ponto ou o seu recibo, eles aparecem aqui.</p></div>';
+    abasTopo(m, 'docs'); return;
+  }
+  const temPin = DOCS.pin && DOCS.pin.ativo;
+  const bloq = DOCS.pin && DOCS.pin.bloqueado_ate && new Date(DOCS.pin.bloqueado_ate) > new Date();
+  const L = DOCS.docs || [];
+  const pend = L.filter(d => d.situacao === 'liberado'), outros = L.filter(d => d.situacao !== 'liberado');
+  if (!DOCS.termo_ok && pend.length) m.insertAdjacentHTML('beforeend', '<div class="painel" style="border-left:4px solid var(--warn)"><div class="et" style="color:var(--warn)">'
+    + 'Termo do ponto e do recibo pendente</div><p style="margin:6px 0 0">Para assinar pelo celular, falta assinar no papel o termo do ponto e do recibo '
+    + '(uma folha, uma vez só). Fale com o Bruno. Você já pode abrir e conferir os documentos.</p></div>');
+  if (!temPin && pend.length) m.insertAdjacentHTML('beforeend', '<div class="painel" style="border-left:4px solid var(--accent)"><div class="et">Crie o seu PIN</div>'
+    + '<p style="margin:6px 0 10px">A assinatura é com o mesmo PIN da Minha Segurança.</p><button class="btn sm" type="button" id="dcPin">Ir para a Minha Segurança</button></div>');
+  if (bloq) m.insertAdjacentHTML('beforeend', '<div class="painel" style="border-left:4px solid var(--crit)"><div class="et" style="color:var(--crit)">PIN travado</div>'
+    + '<p style="margin:6px 0 0">Cinco tentativas erradas. Tente depois de ' + esc(rhDTf(DOCS.pin.bloqueado_ate).slice(11)) + '.</p></div>');
+  pend.forEach(d => m.appendChild(painelDocF(d, temPin && !bloq && DOCS.termo_ok)));
+  if (outros.length){
+    const h = document.createElement('div'); h.className = 'sec'; h.textContent = 'Assinados e anteriores'; m.appendChild(h);
+    const cx = document.createElement('div'); cx.className = 'painel';
+    cx.innerHTML = outros.map(d => '<div class="epiLin"><b>' + esc(d.rotulo) + '</b><small>'
+      + (d.situacao === 'reaberto' ? 'Reaberto pela empresa — aguarde a versão corrigida.'
+        : 'Assinado por você em ' + esc(rhDTf(d.func_assinado_em)) + (d.tipo === 'ponto' ? (d.emp_assinado_em ? ' · empresa em ' + esc(rhDTf(d.emp_assinado_em)) : ' · aguardando a empresa') : ''))
+      + '</small><div class="linha" style="margin-top:6px"><button class="btn sm" type="button" data-ver="' + esc(d.id) + '">Ver</button>'
+      + '<button class="btn sm" type="button" data-baixar="' + esc(d.id) + '">Baixar</button></div></div>').join('');
+    m.appendChild(cx);
+  }
+  if (!L.length) m.insertAdjacentHTML('beforeend', '<div class="vazio"><b>Nada por aqui ainda</b><p>Quando o escritório liberar a sua folha de ponto ou o seu recibo, eles aparecem aqui.</p></div>');
+  m.querySelectorAll('[data-ver]').forEach(b => b.addEventListener('click', () => verDocF(L.find(d => d.id === b.dataset.ver))));
+  m.querySelectorAll('[data-baixar]').forEach(b => b.addEventListener('click', () => baixarDocF(b.dataset.baixar)));
+  const bp = document.getElementById('dcPin'); if (bp) bp.addEventListener('click', pintarSeg);
+  abasTopo(m, 'docs');
+}
+function painelDocF(d, podeAssinar){
+  const p = document.createElement('div'); p.className = 'painel docPend' + (d.vencido ? ' venc' : '');
+  const meu = d.tipo === 'ponto' ? 'minha folha' : 'meu recibo';
+  p.innerHTML = '<div class="et" style="color:var(--warn)">' + (d.tipo === 'ponto' ? 'Folha de ponto' : 'Recibo de pagamento') + ' — assinar</div>'
+    + '<h2>' + esc(tituloDocF(d)) + '</h2>'
+    + '<p style="margin:0 0 10px;font-size:13px">' + (d.prazo ? 'Assine até ' + esc(dataBR(d.prazo)) + (d.vencido ? ' — <b style="color:var(--crit)">o prazo já passou</b>' : '') + '.' : '')
+    + (d.versao > 1 ? ' Esta é a versão ' + d.versao + ' (substitui a anterior).' : '') + '</p>'
+    + '<button class="btn sm" type="button" data-abrir>Abrir ' + (d.tipo === 'ponto' ? 'a folha' : 'o recibo') + '</button>'
+    + '<p class="docDica">' + (d.tipo === 'ponto' ? 'Se tiver dúvida sobre esta folha, fale com o Bruno antes de assinar.'
+        : 'Se tiver dúvida sobre os valores, fale com o administrativo antes de assinar.') + '</p>'
+    + (podeAssinar ? '<div class="campo" style="margin-top:10px"><label>Seu PIN</label><input class="pinC" type="password" inputmode="numeric" maxlength="6" autocomplete="off" pattern="[0-9]*"></div>'
+        + '<button class="btn pri" type="button" data-ass>Assinar</button>' : '')
+    + '<button class="btn danger sm" type="button" data-nao>Não é ' + meu + '</button>';
+  p.querySelector('[data-abrir]').addEventListener('click', () => verDocF(d));
+  const ba = p.querySelector('[data-ass]');
+  if (ba) ba.addEventListener('click', async () => {
+    const pin = p.querySelector('.pinC').value;
+    if (!/^\d{6}$/.test(pin)){ toast('Digite os 6 números do seu PIN.', 'err'); return; }
+    ba.disabled = true;
+    try{
+      const r = await rpc1('tf_rhdoc_assinar', { p_id: d.id, p_pin: pin });
+      if (r.status === 'ok'){ toast('Assinado. Obrigado!', 'ok'); await recarregarDocs(); pintarDocsF(); return; }
+      if (r.status === 'pin_errado') toast('PIN errado. Restam ' + r.restantes + ' tentativa(s) antes de travar 15 minutos.', 'err');
+      else if (r.status === 'bloqueado'){ toast('PIN travado por 15 minutos.', 'err'); await recarregarDocs(); pintarDocsF(); return; }
+      else if (r.status === 'sem_pin'){ toast('Crie o seu PIN antes (Minha Segurança).', 'err'); return; }
+      p.querySelector('.pinC').value = '';
+    }catch(e){ toast(e.message, 'err'); await recarregarDocs(); pintarDocsF(); return; }
+    ba.disabled = false;
+  });
+  p.querySelector('[data-nao]').addEventListener('click', async ev => {
+    if (!confirm('"Não é ' + meu + '": o documento sai do seu celular agora e o escritório é avisado de que ele chegou à pessoa errada.\n\n'
+      + 'Use só se o nome no documento NÃO for o seu. Dúvida sobre ' + (d.tipo === 'ponto' ? 'as horas' : 'os valores') + ' se resolve conversando, não por aqui.\n\nContinuar?')) return;
+    const b = ev.currentTarget; b.disabled = true;
+    try{ await rpc1('tf_rhdoc_nao_e_meu', { p_id: d.id }); toast('Devolvido. O escritório vai conferir e mandar o certo.', 'ok'); await recarregarDocs(); pintarDocsF(); }
+    catch(e){ toast(e.message, 'err'); b.disabled = false; }
+  });
+  return p;
+}
+
+/** O leitor de PDF dentro do app (pdf.js): abre e amplia sem sair do Field —
+ *  no Android, abrir um PDF "solto" vira download e some na pasta. */
+let _pdfjsF = null;
+function carregarPdfJsF(){
+  if (_pdfjsF) return _pdfjsF;
+  _pdfjsF = new Promise((ok, err) => {
+    if (window.pdfjsLib) return ok(window.pdfjsLib);
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = () => { try{ window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; ok(window.pdfjsLib); }
+      catch(e){ err(new Error('O leitor de PDF não inicializou.')); } };
+    s.onerror = () => { _pdfjsF = null; err(new Error('Sem internet para abrir o leitor de PDF.')); };
+    document.head.appendChild(s);
+  });
+  return _pdfjsF;
+}
+async function verDocF(d){
+  const w = document.createElement('div'); w.className = 'docView';
+  w.innerHTML = '<div class="dvTopo"><b></b><button type="button" class="dvX" aria-label="Fechar">✕</button></div>'
+    + '<div class="dvPag"><p class="dvMsg">Abrindo…</p></div>'
+    + '<div class="dvBar"><button type="button" class="btn sm" data-z>Ampliar</button><button type="button" class="btn sm" data-b>Baixar</button></div>';
+  w.querySelector('.dvTopo b').textContent = tituloDocF(d);
+  document.body.appendChild(w);
+  const fecha = () => { w.remove(); document.removeEventListener('keydown', esc_); };
+  const esc_ = e => { if (e.key === 'Escape') fecha(); };
+  document.addEventListener('keydown', esc_);
+  w.querySelector('.dvX').addEventListener('click', fecha);
+  w.querySelector('[data-b]').addEventListener('click', () => baixarDocF(d.id));
+  let zoom = 1;
+  const pag = w.querySelector('.dvPag');
+  w.querySelector('[data-z]').addEventListener('click', ev => {
+    zoom = zoom === 1 ? 2.2 : 1; ev.currentTarget.textContent = zoom === 1 ? 'Ampliar' : 'Reduzir';
+    const cv = pag.querySelector('canvas'); if (cv) cv.style.width = (zoom * 100) + '%';
+  });
+  try{
+    const a = await rpc1('tf_rhdoc_abrir', { p_id: d.id, p_acao: 'ver', p_qual: 'assinado' });
+    let lib = null;
+    try{ lib = await carregarPdfJsF(); }catch(e){}
+    if (!lib){   // sem o leitor: o navegador abre do jeito dele
+      const url = URL.createObjectURL(await (await fetch(a.conteudo)).blob());
+      pag.innerHTML = '<p class="dvMsg"><a href="' + url + '" target="_blank" rel="noopener">Abrir o PDF</a></p>'; return;
+    }
+    const bin = atob(a.conteudo.split(',')[1]); const u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const doc = await lib.getDocument({ data: u8 }).promise;
+    pag.innerHTML = a.aguardando_carimbo ? '<p class="dvMsg">Sua assinatura está registrada. A cópia com a rubrica fica pronta quando o escritório processar.</p>' : '';
+    for (let n = 1; n <= doc.numPages; n++){
+      const pg = await doc.getPage(n);
+      const vp1 = pg.getViewport({ scale: 1 });
+      const vp = pg.getViewport({ scale: Math.min(4, (Math.max(window.innerWidth, 360) * 2.2) / vp1.width) });
+      const cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height; cv.style.width = '100%';
+      const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height);
+      await pg.render({ canvasContext: cx, viewport: vp }).promise;
+      pag.appendChild(cv);
+    }
+  }catch(e){ pag.innerHTML = '<p class="dvMsg" style="color:var(--crit)"></p>'; pag.firstChild.textContent = e.message; }
+}
+async function baixarDocF(id){
+  try{
+    const a = await rpc1('tf_rhdoc_abrir', { p_id: id, p_acao: 'baixar', p_qual: 'assinado' });
+    const url = URL.createObjectURL(await (await fetch(a.conteudo)).blob());
+    const l = document.createElement('a'); l.href = url; l.download = a.nome_arquivo || 'documento.pdf';
+    document.body.appendChild(l); l.click(); l.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast(a.aguardando_carimbo ? 'Baixado (a cópia com a rubrica fica pronta depois).' : 'Baixado.', 'ok');
+  }catch(e){ toast(e.message, 'err'); }
 }
 
 function iniciar(){
