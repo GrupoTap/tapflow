@@ -24,7 +24,7 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S20';
+const VERSAO = 'S21';
 const CACHE  = 'tapflow-field-' + VERSAO;
 
 const ESSENCIAIS = [

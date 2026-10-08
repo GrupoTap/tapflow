@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S49</title>
+<title>TapFlow Manager · S50</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -898,6 +898,12 @@ button.s49L{cursor:pointer} button.s49L:hover{background:var(--surface-2)} .s49L
 .s49Ref{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;margin:0 0 3px}
 .s49Ref small{flex:1 1 100%;color:var(--ink-3);font-size:11.5px}
 .s49Ref.anul .r{text-decoration:line-through;color:var(--ink-3)}
+/* S50 · item 2 — selo e caixa dos anulados nas Diárias */
+.s49Ref.grupo small b{font-weight:600;color:var(--ink-2)}
+.diaSelAnul{cursor:pointer;background:var(--surface-2);color:var(--ink-3);border:1px dashed var(--rule)}
+.diaSelAnul b{color:var(--crit);font-weight:700}
+.diaSelAnul:hover{border-color:var(--accent);color:var(--accent-ink)}
+.rhBarra .diaAnul{margin-left:4px;white-space:nowrap}
 .s49Ref .btn.mini{margin-left:0}
 .s49Alerta{border:1px solid var(--crit);background:var(--crit-soft);border-radius:5px;padding:8px 4px 4px;margin:0 0 12px}
 .s49Alerta > b{color:var(--crit);padding:0 10px;font-size:13px}
@@ -1049,6 +1055,16 @@ button.mini{padding:6px 12px;font-weight:600}
 .cardCom:hover{border-color:var(--accent)}
 .cardCom.morno{border-left:4px solid #F2B400}
 .cardCom.parado{border-left:4px solid #D0201A}
+/* S50 · item 3 (Bruno, 07/10): a barra também diz "em dia" e "lead esquecido".
+   · verde — 0 a 5 dias sem interação, a mesma faixa do selo. O selo verde é
+     fundo claro (#D9F2E1) com texto #135C2E; a 4 px o tom claro some na
+     borda do card, então a barra usa o verde do sistema (--ok), entre os dois.
+   · fúcsia — lead no alerta "Lead sem contato" (o MESMO conjunto do número do
+     menu e do filtro rápido). Distinto do vermelho #D0201A, do amarelo
+     #F2B400, do verde e do roxo da venda adicional #7A5AB8. Branco sobre
+     #B3166F: 6,1:1 (AA). */
+.cardCom.emdia{border-left:4px solid var(--ok)}
+.cardCom.leadsc{border-left:4px solid #B3166F}
 /* S41 · item 8: a observação curta do negócio, logo abaixo da logomarca.
    Uma linha, cortada com reticências — o texto inteiro vai no title e na aba
    Cliente. Menor e mais clara que o nome do cliente: complementa, não compete. */
@@ -1203,6 +1219,7 @@ button.mini{padding:6px 12px;font-weight:600}
 .mini.dsi.verde{background:#D9F2E1;color:#135C2E}
 .mini.dsi.amarelo{background:#FFD23F;color:#3A2C00}
 .mini.dsi.vermelho{background:#D0201A;color:#FFFFFF}
+.mini.dsi.fucsia{background:#B3166F;color:#FFFFFF}
 .mini.ag{background:var(--gestao-soft);color:var(--gestao)}
 .mini.ct{background:var(--accent-soft);color:var(--accent)}
 
@@ -1882,7 +1899,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S49';
+const APP_VERSION = 'S50';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -2352,7 +2369,10 @@ async function atualizarPendencias(){
   try{ PEND = await rpc('tf_pendencias_menu', {}); }
   catch(e){ PEND = null; }
   aplicarPendencias();
-  if (visao === 'com' && typeof pintarFiltrosCom === 'function') pintarFiltrosCom();
+  // S50 · item 3: os cards fúcsia vêm do PEND — se o conjunto mudou desde o
+  // último desenho, o quadro se redesenha (senão só os filtros).
+  if (visao === 'com' && typeof desenharCom === 'function' && chaveLeadSC() !== LEAD_SC_DESENHADO) desenharCom();
+  else if (visao === 'com' && typeof pintarFiltrosCom === 'function') pintarFiltrosCom();
 }
 function aplicarPendencias(){
   if (!PEND) return false;
@@ -2780,7 +2800,7 @@ async function abrirOS(c){
     tarefas = DEMO ? demoTarefas(c.os_id)
       : await get('pipeline_tarefas?select=tarefa_id,nome,tipo,fase,fase_ordem,ordem,status,opcoes,'
                   + 'perfis_responsaveis,lock_por,lock_expira,executor,usuario_designado,data_prevista,'
-                  + 'tempo_estimado_min,acao_terminal,apoios'
+                  + 'tempo_estimado_min,acao_terminal,apoios,requisitos'
                   + '&os_id=eq.' + c.os_id + '&ativo=eq.SIM&order=camada,fase_ordem,ordem');
   }catch(e){ document.getElementById('dBody').innerHTML = '<p style="color:var(--crit);font-size:13px"></p>';
              document.getElementById('dBody').querySelector('p').textContent = e.message; return; }
@@ -3514,15 +3534,85 @@ function possoConcluirParalela(t, card){
   const ps = t.perfis_responsaveis || [];
   return !ps.length || ps.includes(sessao.perfil);
 }
-function confirmarParalela(card, t){
-  const atual = (osAberta.tarefas || []).find(x => x.tarefa_id === card.tarefa_atual_id);
+/** A confirmação da tarefa paralela. Uma só, para as três portas: a gaveta da
+ *  OS (sem `fora`), a Agenda e o aviso de atrasadas (S50 · item 4, com
+ *  `fora`). Por fora da gaveta não há OS aberta: a conclusão vai por
+ *  `concluirParalelaFora`, que confere de novo contra a OS de verdade. */
+function confirmarParalela(card, t, fora){
+  const atual = fora ? (card.tarefa_atual ? { nome: card.tarefa_atual } : null)
+                     : ((osAberta && osAberta.tarefas) || []).find(x => x.tarefa_id === card.tarefa_atual_id);
   abrirModal('Concluir "' + t.nome + '"?',
-      '<p>Esta tarefa está <b>liberada em paralelo</b>' + (atual ? ' com a tarefa atual do card, <b>'
+      (fora ? '<p style="margin-top:0"><b class="mono">' + esc(card.numero || '') + '</b> · ' + esc(card.cliente || '') + '</p>' : '')
+    + '<p>Esta tarefa está <b>liberada em paralelo</b>' + (atual ? ' com a tarefa atual do card, <b>'
       + esc(atual.nome) + '</b>' : '') + '.</p>'
     + '<p class="nota">O card continua onde está: ele anda quando a tarefa atual for concluída. '
-    + 'O que depende desta (por exemplo, assinar depois do mapa) passa a esperar só o que ainda falta.</p>',
-    [{ label:'Cancelar', onClick: fecharModal },
-     { label:'Sim, foi feita', pri:true, onClick: async () => { fecharModal(); await agir('concluir', t); } }]);
+    + 'O que depende desta (por exemplo, assinar depois do mapa) passa a esperar só o que ainda falta.</p>'
+    + (fora && t.data_prevista && t.data_prevista < isoHoje()
+       ? '<p class="nota">Ela estava marcada para ' + esc(dataBR(t.data_prevista)) + '. Concluir daqui <b>não reagenda</b>: '
+         + 'fica registrada como feita agora, por você, e a data marcada continua no histórico.</p>' : ''),
+    [{ label:'Cancelar', onClick: () => { fecharModal(); if (fora && fora.voltar) fora.voltar(); } },
+     { label:'Sim, foi feita', pri:true, onClick: async () => {
+         fecharModal();
+         if (fora) await concluirParalelaFora(card, t, fora.depois);
+         else await agir('concluir', t);
+     } }]);
+}
+
+/* ── S50 · ITEM 4: CONCLUIR A PARALELA SEM ABRIR O QUADRO ──────────────────
+   Caso real: OS-26209. O mapa de espessura (T11) era do Victor (Auxiliar de
+   Inspeção), liberado em paralelo e atrasado; o card morava no quadro
+   Técnico Administrativa (Revisão II, do Túlio), que o perfil dele não vê, e
+   o "concluir" da paralela só existia dentro do card. Agora a Agenda (janela
+   da tarefa, em qualquer vista, e o aviso de atrasadas) oferece "Concluir"
+   quando a tarefa passa na MESMA regra (`possoConcluirParalela`).
+
+   ⚠ A regra precisa da OS DE VERDADE. A Agenda montava um card provisório
+   (número, cliente, os_id) quando o card não estava na memória — sem
+   `tarefa_atual_id`, a comparação "não é a tarefa atual" nunca barrava, e o
+   botão poderia aparecer para a própria tarefa atual (que, concluída, move o
+   card). Por isso: card real da memória ou de `v_os_kanban`; sem ele, sem
+   botão. E a tarefa vem inteira de `pipeline_tarefas` (a linha da agenda não
+   traz tipo, status, requisitos nem ação terminal). */
+const SEL_TAREFA_PAR = 'pipeline_tarefas?select=tarefa_id,os_id,nome,tipo,status,perfis_responsaveis,requisitos,'
+  + 'acao_terminal,data_prevista&ativo=eq.SIM';
+async function cardRealDaOS(osId, fresco){
+  const c = !fresco && (cards || []).find(x => x.os_id === osId && x.tarefa_atual_id !== undefined);
+  if (c) return c;
+  const r = await get('v_os_kanban?select=*&os_id=eq.' + osId);
+  return (r && r[0]) || null;
+}
+/** { card, t } quando a tarefa pode ser concluída por fora do card; senão null.
+ *  Qualquer falha de leitura = null (sem botão), nunca "talvez". */
+async function paralelaFora(osId, tarefaId, fresco){
+  if (DEMO || !osId || !tarefaId) return null;
+  try{
+    const [card, ts] = await Promise.all([ cardRealDaOS(osId, fresco),
+      get(SEL_TAREFA_PAR + '&os_id=eq.' + osId + '&tarefa_id=eq.' + encodeURIComponent(tarefaId)) ]);
+    const t = ts && ts[0];
+    return (card && card.tarefa_atual_id && t && possoConcluirParalela(t, card)) ? { card, t } : null;
+  }catch(e){ return null; }
+}
+async function concluirParalelaFora(card, t, depois){
+  try{
+    // confere de novo, com a OS lida AGORA: ela pode ter andado desde que a
+    // janela abriu (e a tarefa ter virado a atual)
+    const r = await get('v_os_kanban?select=*&os_id=eq.' + card.os_id);
+    const real = r && r[0];
+    if (!real){ toast('Não achei esta OS. Nada foi concluído.', 'err'); return; }
+    const ts = await get(SEL_TAREFA_PAR + '&os_id=eq.' + card.os_id + '&tarefa_id=eq.' + encodeURIComponent(t.tarefa_id));
+    if (!ts || !ts[0] || !possoConcluirParalela(ts[0], real)){
+      toast('Esta tarefa não pode mais ser concluída por aqui — a OS mudou. Nada foi concluído.', 'err');
+      if (depois) await depois();
+      return;
+    }
+    await rpc('tf_concluir_tarefa', { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id });
+    toast('"' + t.nome + '" concluída. O card continua onde está.', 'ok');
+    await carregar({ silencioso:true });
+    // a tarefa pode ter saído das atrasadas (a faixa da Agenda e o aviso)
+    await carregarAtrasadas(); await carregarReag();
+    if (visao === 'age') agFaixaAtrasadas();
+    if (depois) await depois();
+  }catch(e){ toast(e.message, 'err'); }
 }
 
 /** S38 · a MESMA conta de `tf_assumir_tarefa`: não resolvida, não é minha,
@@ -4076,7 +4166,7 @@ function modalPrazo(card){
  *  mesma. O modal continua existindo para o "marcar dia" da Agenda, que é de
  *  todo o escritório — é `tf_designar_tarefa` que recusa mexer na tarefa
  *  dos outros. */
-async function modalDesignar(card, t, aposGravar){
+async function modalDesignar(card, t, aposGravar, par){
   const souAdmin = !!sessao.admin;
   const eu = meuId();
   let pessoas = null, erro = null;
@@ -4183,6 +4273,14 @@ async function modalDesignar(card, t, aposGravar){
            if (aposGravar) await aposGravar();
          }catch(e){ toast(e.message, 'err'); }
        } }] : []),
+     // ── S50 · ITEM 4: CONCLUIR A PARALELA PELA AGENDA ──────────────────
+     // Só quando `agAbrirTarefa` conferiu a regra contra a OS de verdade.
+     // Abre a mesma confirmação da gaveta; "Cancelar" volta para esta janela.
+     ...(par ? [{ label:'Concluir', onClick: () => {
+         fecharModal();
+         confirmarParalela(par.card, par.t, { depois: aposGravar,
+           voltar: () => modalDesignar(card, t, aposGravar, par) });
+       } }] : []),
      { label:'Gravar', pri:true, onClick: async () => {
         const sel  = document.getElementById('mdU');
         const op   = sel.options[sel.selectedIndex];
@@ -4208,7 +4306,7 @@ async function modalDesignar(card, t, aposGravar){
             + 'achar botão para concluir — é exatamente o que aconteceu na OS-26038. '
             + 'Se for para ele fazer mesmo, o caminho certo é '
             + '<b>Configurações › Tarefas por perfil</b>, que muda a regra para valer.</p>',
-            [{ label:'Voltar', onClick: () => { fecharModal(); modalDesignar(card, t, aposGravar); } },
+            [{ label:'Voltar', onClick: () => { fecharModal(); modalDesignar(card, t, aposGravar, par); } },
              { label:'Designar assim mesmo', pri:true,
                onClick: () => gravarDesignacao(card, t, quem, aposGravar) }]);
           return;
@@ -7650,6 +7748,7 @@ function desenharCom(){
           compDe(n).observacao_card].join(' '), busca)
     && (!fil || fil.has(String(n.id))));
   pintarFiltrosCom();
+  LEAD_SC_DESENHADO = chaveLeadSC();   // S50 · item 3
   const total = vis.reduce((s,n) => s + Number(n.valor_propostas || n.valor_estimado || 0), 0);
   document.getElementById('cResumo').textContent =
     vis.length + (busca && vis.length !== negocios.length ? ' de ' + negocios.length : '')
@@ -8056,14 +8155,39 @@ function chipDiasSemInteracao(dias, n){
   return '<span class="mini dsi ' + f + '" title="' + esc(dica) + '">' + txt + '</span>';
 }
 
+/* S50 · item 3 — os leads do alerta "Lead sem contato". Nulo/vazio = banco
+   sem o 59 ou o alerta desligado: nenhum card ganha fúcsia. */
+function idsLeadSemContato(){
+  const m = (PEND && PEND.comercial && PEND.comercial.motivos) || {};
+  return new Set(((m.lead_sem_contato || {}).ids || []).map(String));
+}
+/** A assinatura do que o quadro desenhou de fúcsia: se o menu mudar o
+ *  conjunto (lead recebeu interação, prazo mudou), o quadro se redesenha. */
+let LEAD_SC_DESENHADO = '';
+const chaveLeadSC = () => [...idsLeadSemContato()].sort().join(',');
+function chipLeadSemContato(dias){
+  const d = Math.max(0, Number(dias || 0));
+  const m = (PEND && PEND.comercial && PEND.comercial.motivos && PEND.comercial.motivos.lead_sem_contato) || {};
+  const dica = 'Lead sem nenhum contato registrado' + (m.dias ? ' há ' + m.dias + ' dias ou mais' : '')
+    + ' (prazo em Configurações › Alertas).\nPróximo passo: fazer o primeiro contato e anotar no Histórico.';
+  return '<span class="mini dsi fucsia" title="' + esc(dica) + '">' + d + (d === 1 ? ' dia' : ' dias') + ' sem contato</span>';
+}
+
 function cardNegocio(n, comContador){
   if (comContador === undefined) comContador = colunaComContador(n.coluna);
   const d = document.createElement('button');
   d.className = 'cardCom';
   const parado = Number(n.dias_parado || 0);
   // S38: a borda acompanha a faixa do crachá (amarelo 6–7, vermelho 8+)
-  const alerta = !comContador ? '' : ({ vermelho:' parado', amarelo:' morno', verde:'' })[faixaDSI(parado)];
+  // S50 · item 3: o verde (0–5 dias) também ganha barra — antes mapeava para
+  // vazio e o card em dia não tinha borda nenhuma.
+  const alerta = !comContador ? '' : ({ vermelho:' parado', amarelo:' morno', verde:' emdia' })[faixaDSI(parado)];
   d.className += alerta;
+  // S50 · item 3: o lead do alerta "Lead sem contato" — barra e selo fúcsia.
+  // O conjunto é o de `tf_pendencias_menu`, o mesmo do número do menu e do
+  // filtro rápido: os três nunca podem divergir.
+  const leadSC = !comContador && idsLeadSemContato().has(String(n.id));
+  if (leadSC) d.className += ' leadsc';
 
   // O espaço da logo é SEMPRE desenhado — com a imagem, se já veio; com as
   // iniciais, se ainda não. É isso que impede o quadro de refluir quando as
@@ -8078,6 +8202,7 @@ function cardNegocio(n, comContador){
 
   const chips = [];
   if (comContador) chips.push(chipDiasSemInteracao(parado, n));
+  else if (leadSC) chips.push(chipLeadSemContato(parado));
   if (n.tarefas_atrasadas) chips.push('<span class="mini crit">' + n.tarefas_atrasadas + ' tarefa(s) atrasada(s)</span>');
   else if (n.tarefas_abertas) chips.push('<span class="mini">' + n.tarefas_abertas + ' tarefa(s)</span>');
   if (n.proxima_agenda) chips.push('<span class="mini ag">' + dataCurta(n.proxima_agenda) + '</span>');
@@ -15487,7 +15612,7 @@ function irPara(v){
   if (v === 'rhf') return pintarRHFuncionarios();
   if (v === 'rhs') return pintarRHSeguranca();
   if (v === 'rhd') return pintarRHBreve(v);
-  if (v === 'rhdia') return pintarDiarias();         // S49
+  if (v === 'rhdia'){ DIA.anul = false; return pintarDiarias(); }   // S49 · S50: a caixa volta desligada ao abrir
   if (v === 'rhp')   return pintarRHDocs('ponto');   // S49
   if (v === 'rhdp')  return pintarRHDocs('recibo');  // S49
   if (v === 'ffor') return pintarFornecedores();
@@ -16629,10 +16754,13 @@ async function recarregarAgenda(){
 }
 
 /** Abre o modal de designação para uma linha da agenda ou do pool. */
-function agAbrirTarefa(i, doPool){
+async function agAbrirTarefa(i, doPool){
   if (!i) return;
   if (i.origem === 'avulso') return modalCompromisso(i);
-  const card = cards.find(c => c.os_id === i.os_id)
+  // S50 · item 4: o "Concluir" da paralela só com a OS e a tarefa DE VERDADE
+  // (ver `paralelaFora`). O card provisório continua servindo para designar.
+  const par = await paralelaFora(i.os_id, i.tarefa_id);
+  const card = (par && par.card) || cards.find(c => c.os_id === i.os_id)
             || { os_id:i.os_id, numero:i.os_numero, cliente:i.cliente };
   modalDesignar(card, {
     tarefa_id:i.tarefa_id, nome:i.tarefa, executor:i.executor,
@@ -16644,7 +16772,7 @@ function agAbrirTarefa(i, doPool){
     apoios: i.apoios || [],
     data_prevista: doPool ? null : i.dia,
     tempo_estimado_min:i.tempo_estimado_min
-  }, async () => { AGENDA.chave = null; AGENDA.pool = []; await pintarAgenda(); });
+  }, async () => { AGENDA.chave = null; AGENDA.pool = []; await pintarAgenda(); }, par);
 }
 
 /** A visita, clicada na agenda: abre o negócio na aba Agenda, onde se trocam
@@ -17520,7 +17648,33 @@ function s49SeletorMes(mes, aoTrocar){
 // ════════════════════════════════════════════════════════════════════════════
 // DIÁRIAS (item 1) — o relatório do mês, o fechamento e os valores
 // ════════════════════════════════════════════════════════════════════════════
-const DIA = { mes: null, dados: null, abertos: {} };
+const DIA = { mes: null, dados: null, abertos: {}, anul: false };
+/* ── S50 · ITEM 2: OS ANULADOS SAEM DA FRENTE ─────────────────────────────
+   Cada "marca e desmarca" do funcionário no Field deixa uma linha anulada
+   (de propósito: é o rastro). Num teste de 07/10 a lista de UMA pessoa
+   chegou a 1 almoço válido e 12 riscados. Os totais, a planilha e o PDF já
+   separavam; só a TELA misturava. Agora:
+   · "Mostrar anulados (N)" na barra, desligada por padrão (o mesmo nome e o
+     mesmo contador do "Mostrar anulados" do financeiro do S46); volta a
+     desligada quando a tela é aberta de novo, e vale ao trocar de mês;
+   · selo "N anulados · K por outra pessoa" na linha da pessoa;
+   · ligada, as anulações AUTOMÁTICAS do próprio funcionário viram uma linha
+     por refeição e por dia; as feitas por outra pessoa continuam uma a uma.
+   Só exibição: nada é apagado, nada muda no banco nem nos arquivos. */
+const DIA_MOTIVO_PROPRIO = 'desmarcado pelo próprio funcionário';
+/** Anulação feita por outra pessoa (não pelo próprio funcionário). O
+ *  relatório traz quem anulou pelo NOME — é o que se compara. */
+const diaAnulOutro = (x, l) => !!x.anulado_em && String(x.anulado_por || '') !== String(l.nome || '');
+/** A desmarcação automática do Field: o próprio funcionário + o motivo que o
+ *  banco grava sozinho (104_s49, tf_diarias_marcar). Só essas se agrupam. */
+const diaAnulProprioAuto = (x, l) => !!x.anulado_em && !diaAnulOutro(x, l)
+  && String(x.anulado_motivo || '').trim() === DIA_MOTIVO_PROPRIO;
+const diaHM = t => new Date(t).toLocaleTimeString('pt-BR', { timeZone:'America/Sao_Paulo', hour:'2-digit', minute:'2-digit' });
+const diaDM = t => new Date(t).toLocaleDateString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit' });
+function diaContaAnul(l){
+  const an = (l.detalhe || []).filter(x => x.anulado_em);
+  return { n: an.length, outro: an.filter(x => diaAnulOutro(x, l)).length };
+}
 const DIA_ROT = { cafe:'Café da manhã', almoco:'Almoço', jantar:'Jantar' };
 const DIA_CURTO = { cafe:'Café', almoco:'Almoço', jantar:'Jantar' };
 
@@ -17547,6 +17701,7 @@ function diaDesenhar(){
   const linhas = (D.linhas || []).filter(l => casa(l.nome, q));
   const tot = linhas.reduce((s, l) => s + Number(l.total || 0), 0);
   const nRef = linhas.reduce((s, l) => s + l.cafe + l.almoco + l.jantar, 0);
+  const nAnul = linhas.reduce((s, l) => s + diaContaAnul(l).n, 0);   // S50 · acompanha a busca e o mês
   corpo.innerHTML = '';
   const barra = document.createElement('div'); barra.className = 'rhBarra';
   barra.appendChild(s49SeletorMes(D.mes, m => { DIA.mes = m; DIA.abertos = {}; pintarDiarias(); }));
@@ -17557,7 +17712,9 @@ function diaDesenhar(){
     + (fechado && D.admin ? '<button class="btn perigo" type="button" id="diaReabrir">Reabrir mês…</button>' : '')
     + '<button class="btn" type="button" id="diaXlsx">Planilha</button>'
     + '<button class="btn" type="button" id="diaPdf">PDF</button>'
-    + '<button class="btn" type="button" id="diaValores">Valores' + (D.admin ? '…' : '') + '</button>');
+    + '<button class="btn" type="button" id="diaValores">Valores' + (D.admin ? '…' : '') + '</button>'
+    + '<label class="finAnul diaAnul"><input type="checkbox" id="diaAnul"' + (DIA.anul ? ' checked' : '') + '> Mostrar anulados ('
+    + nAnul + ')</label>');
   corpo.appendChild(barra);
   if (fechado) corpo.insertAdjacentHTML('beforeend', '<div class="aviso ok">Fechado por <b>' + esc(D.fechado_por || '—')
     + '</b> em ' + esc(rhDT(D.fechado_em)) + '. Os números abaixo são os do fechamento.</div>');
@@ -17578,11 +17735,22 @@ function diaDesenhar(){
     const lin = document.createElement('button'); lin.type = 'button';
     lin.className = 's49L' + (ab ? ' on' : '');
     lin.setAttribute('aria-expanded', ab ? 'true' : 'false');
+    // S50 · o selo dos anulados, só com a caixa desligada (ligada, eles já
+    // estão na lista). A anulação feita por OUTRA pessoa é a que interessa
+    // na conferência — por isso vem destacada.
+    const ca = diaContaAnul(l);
+    const seloAnul = (!DIA.anul && ca.n) ? ' <span class="chip diaSelAnul" data-selo="1" title="Mostrar os anulados (o mesmo que ligar a caixa)">'
+      + ca.n + (ca.n === 1 ? ' anulado' : ' anulados')
+      + (ca.outro ? ' · <b>' + ca.outro + ' por outra pessoa</b>' : '') + '</span>' : '';
     lin.innerHTML = '<span><b>' + esc(l.nome) + '</b>' + (l.por_outro ? ' <span class="chip">' + l.por_outro + ' por outra pessoa</span>' : '')
-      + (l.ativo ? '' : ' <span class="chip">desligado</span>') + '</span>'
+      + (l.ativo ? '' : ' <span class="chip">desligado</span>') + seloAnul + '</span>'
       + '<span class="n">' + l.cafe + '</span><span class="n">' + l.almoco + '</span><span class="n">' + l.jantar + '</span>'
       + '<span class="n"><b>' + esc(BRL(l.total)) + '</b></span>';
-    lin.addEventListener('click', () => { DIA.abertos[l.usuario_id] = !ab; diaDesenhar(); });
+    lin.addEventListener('click', ev => {
+      // tocar no selo = ligar a caixa (e abrir a pessoa), o mesmo resultado
+      if (ev.target.closest('[data-selo]')){ DIA.anul = true; DIA.abertos[l.usuario_id] = true; diaDesenhar(); return; }
+      DIA.abertos[l.usuario_id] = !ab; diaDesenhar();
+    });
     tab.appendChild(lin);
     if (ab) tab.appendChild(diaDetalhe(l, fechado));
   });
@@ -17602,6 +17770,8 @@ function diaDesenhar(){
   ok('diaFechar', () => diaFecharMes());
   ok('diaReabrir', () => diaReabrirMes());
   ok('diaValores', () => diaValores());
+  const cxA = document.getElementById('diaAnul');
+  if (cxA) cxA.addEventListener('change', () => { DIA.anul = cxA.checked; diaDesenhar(); });
   ok('diaXlsx', function(){ _semDuploEnvio_(this, () => relXLSX(diaModelo()).catch(e => toast(e.message,'err'))); });
   ok('diaPdf',  function(){ _semDuploEnvio_(this, () => relPDF(diaModelo()).catch(e => toast(e.message,'err'))); });
 }
@@ -17610,9 +17780,39 @@ REPINTA.rhdia = () => { if (DIA.dados) diaDesenhar(); };
 function diaDetalhe(l, fechado){
   const box = document.createElement('div'); box.className = 's49Det';
   const porDia = {};
-  (l.detalhe || []).forEach(x => { (porDia[x.data] = porDia[x.data] || []).push(x); });
+  // S50 · item 2: desligada, só o que conta; dia sem nada válido não aparece
+  (l.detalhe || []).filter(x => DIA.anul || !x.anulado_em)
+    .forEach(x => { (porDia[x.data] = porDia[x.data] || []).push(x); });
+  if (!Object.keys(porDia).length){
+    box.innerHTML = '<p class="nota" style="margin:4px 0">Nenhum lançamento válido no mês'
+      + (diaContaAnul(l).n ? ' — só anulados. Ligue "Mostrar anulados" para ver.' : '.') + '</p>';
+    return box;
+  }
+  // Ligada: as desmarcações automáticas do próprio funcionário viram UMA linha
+  // por refeição, no lugar da primeira delas (a ordem da lista não muda).
+  const linhaGrupo = g => {
+    const ts = g.map(x => x.anulado_em).sort();
+    const a = ts[0], b = ts[ts.length - 1];
+    const quando = diaDM(a) === diaDM(b)
+      ? diaDM(a) + ', ' + diaHM(a) + (diaHM(a) !== diaHM(b) ? ' a ' + diaHM(b) : '')
+      : diaDM(a) + ' ' + diaHM(a) + ' a ' + diaDM(b) + ' ' + diaHM(b);
+    return '<div class="s49Ref anul grupo"><span class="r">' + esc(DIA_ROT[g[0].tipo]) + ' · ' + esc(BRL(g[0].valor)) + '</span>'
+      + '<small><b>' + g.length + (g.length === 1 ? ' marcação desfeita' : ' marcações desfeitas')
+      + ' pelo próprio funcionário</b> (' + esc(quando) + ')</small></div>';
+  };
+  const agrupar = arr => {
+    if (!DIA.anul) return arr;
+    const grupos = {}, out = [];
+    arr.forEach(x => {
+      if (diaAnulProprioAuto(x, l)){
+        if (!grupos[x.tipo]){ grupos[x.tipo] = []; out.push({ grupo: grupos[x.tipo] }); }
+        grupos[x.tipo].push(x);
+      } else out.push(x);
+    });
+    return out;
+  };
   box.innerHTML = Object.keys(porDia).sort().map(d => '<div class="s49Dia"><b>' + esc(dataBR(d).slice(0,5)) + ' ' + S49_DIA_SEM(d) + '</b><div>'
-    + porDia[d].map(x => '<div class="s49Ref' + (x.anulado_em ? ' anul' : '') + '"><span class="r">' + esc(DIA_ROT[x.tipo]) + ' · '
+    + agrupar(porDia[d]).map(x => x.grupo ? linhaGrupo(x.grupo) : '<div class="s49Ref' + (x.anulado_em ? ' anul' : '') + '"><span class="r">' + esc(DIA_ROT[x.tipo]) + ' · '
       + esc(BRL(x.valor)) + (x.os_numero ? ' · <span class="mono">' + esc(x.os_numero) + '</span>' : '') + '</span>'
       + '<small>lançado ' + (x.por_outro ? 'por <b>' + esc(x.lancado_por) + '</b> (' + esc(x.motivo || '') + ')' : 'pelo próprio')
       + ' em ' + esc(rhDT(x.lancado_em))
@@ -24058,12 +24258,21 @@ function marcaReag(osId, tarefaId, compId, classe){
 /* S42 · resposta S9: o APOIO também vê as atrasadas — só leitura, sem os
    botões (quem escolhe o dia é o dono, e a linha diz quem é). */
 let ATR_APOIO = [];
+/* S50 · item 4: a atrasada liberada em paralelo também se conclui do aviso
+   (sem reagendar). A conta é a de `paralelaFora`, feita na carga. */
+let ATR_PAR = new Map();     // chaveReag(os, tarefa) → { card, t }
 async function carregarAtrasadas(){
-  if (DEMO){ ATRASADAS = []; ATR_APOIO = []; return ATRASADAS; }
+  if (DEMO){ ATRASADAS = []; ATR_APOIO = []; ATR_PAR = new Map(); return ATRASADAS; }
   try{ ATRASADAS = await rpc('tf_minhas_atrasadas', {}) || []; }
   catch(e){ ATRASADAS = []; }       // banco sem o 61: sem aviso, sem erro na cara de ninguém
   try{ ATR_APOIO = await rpc('tf_atrasadas_como_apoio', {}) || []; }
   catch(e){ ATR_APOIO = []; }       // banco sem o 62: só as do dono, como no S41
+  const m = new Map();
+  await Promise.all(ATRASADAS.filter(a => a.os_id && a.tarefa_id && a.origem !== 'avulso').map(async a => {
+    const par = await paralelaFora(a.os_id, a.tarefa_id);
+    if (par) m.set(chaveReag(a.os_id, a.tarefa_id, null), par);
+  }));
+  ATR_PAR = m;
   return ATRASADAS;
 }
 /* S42 · resposta S7: ao ENTRAR, o aviso abre sozinho UMA VEZ POR DIA por
@@ -24093,6 +24302,8 @@ function modalAtrasadas(){
     + '</div>'
     + '<div class="t3"><button class="btn pri mini" type="button" data-hoje="' + k + '">Mover pra hoje</button>'
     + '<button class="btn mini" type="button" data-outro="' + k + '">Reagendar pra outro dia</button>'
+    + (ATR_PAR.has(chaveReag(a.os_id, a.tarefa_id, a.compromisso_id))
+       ? '<button class="btn mini" type="button" data-concluir="' + k + '">Concluir</button>' : '')
     + '<span class="outroDia" hidden><input type="date" min="' + hoje + '" value="' + esc(agSoma(hoje, 1)) + '" '
     + 'aria-label="Novo dia"> <button class="btn mini" type="button" data-ok="' + k + '">Gravar dia</button></span>'
     + '</div></div>';
@@ -24135,6 +24346,18 @@ function modalAtrasadas(){
   };
   body.querySelectorAll('[data-hoje]').forEach(b => b.addEventListener('click', () =>
     gravar(Number(b.dataset.hoje), isoHoje(), 'hoje', b)));
+  body.querySelectorAll('[data-concluir]').forEach(b => b.addEventListener('click', () => {
+    const a = ATRASADAS[Number(b.dataset.concluir)];
+    const par = a && ATR_PAR.get(chaveReag(a.os_id, a.tarefa_id, null));
+    if (!par) return;
+    confirmarParalela(par.card, par.t, {
+      voltar: () => modalAtrasadas(),
+      depois: async () => {
+        AGENDA.chave = null;
+        if (visao === 'age'){ await pintarAgenda(); agFaixaAtrasadas(); }
+        if (ATRASADAS.length || ATR_APOIO.length) modalAtrasadas();
+      } });
+  }));
   body.querySelectorAll('[data-outro]').forEach(b => b.addEventListener('click', () => {
     const sp = b.parentElement.querySelector('.outroDia'); sp.hidden = false;
     sp.querySelector('input').focus();

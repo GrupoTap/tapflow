@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S20</title>
+<title>TapFlow Field · S21</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -259,11 +259,25 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 }
 .resumo{font-size:13px;color:var(--ink-3);margin-bottom:9px;text-align:center}
 
-.toast{position:fixed;left:12px;right:12px;bottom:16px;background:var(--ink);color:#fff;
-  padding:13px 15px;border-radius:5px;font-size:14.5px;opacity:0;pointer-events:none;
-  transition:all .2s;transform:translateY(10px);z-index:20;line-height:1.4}
-.toast.on{opacity:1;transform:none}
+/* S21 · item 1 do S50: a mensagem mora EMBAIXO do cabeçalho (e das faixas de
+   demo/fila/instalar), DENTRO do fluxo da página — empurra a tela em vez de
+   cobrir. Até o S20 ela era `position:fixed; bottom:16px` com
+   `pointer-events:none`: ficava exatamente sobre a barra de botões das telas
+   de coleta, e o toque ATRAVESSAVA a mensagem e acionava "Enviar ao
+   comercial" escondido embaixo. Agora tocar nela só a dispensa.
+   Com o teclado aberto o cabeçalho pode sair da tela (iPhone, Chrome novo):
+   aí ela flutua no alto da parte VISÍVEL (`.flut`), e continua capturando o
+   toque — nunca deixa passar para o que está embaixo. */
+.toast{display:none;flex:0 0 auto;margin:8px 12px 0;background:var(--ink);color:#fff;
+  padding:11px 40px 11px 14px;border-radius:5px;font-size:14.5px;line-height:1.4;position:relative;
+  cursor:pointer;box-shadow:0 2px 8px rgba(15,23,25,.18)}
+.toast.on{display:block;animation:toastIn .18s ease-out}
+.toast::after{content:'✕';position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  font-size:14px;opacity:.75}
 .toast.err{background:var(--crit)}.toast.ok{background:var(--ok)}
+.toast.flut{position:fixed;left:12px;right:12px;margin:0;z-index:85}
+@keyframes toastIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.toast.on{animation:none}}
 
 /* ── conta ────────────────────────────────────── */
 .eu{background:none;border:0;color:inherit;font-size:20px;line-height:1;padding:4px 8px;
@@ -408,8 +422,8 @@ details.termo.faq{margin-top:6px}
   <span id="filaTxt"></span><button id="btnFlush">Tentar agora</button>
 </div>
 
+<div class="toast" id="toast" role="status" aria-live="polite" title="Toque para fechar"></div>
 <main id="main"></main>
-<div class="toast" id="toast"></div>
 
 <div class="login" id="login" hidden>
   <div class="box">
@@ -436,7 +450,7 @@ details.termo.faq{margin-top:6px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S20';
+const APP_VERSION = 'S21';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -904,6 +918,7 @@ async function carregar(silencioso){
     listaOS = lst || [];
     MEU_DIA = dia || [];
     ATRASADAS = atr || [];
+    await carregarAtrParalelas();   // S21 · item 4 do S50
     await carregarEscaladas();   // S15
     REAG = new Map((reag || []).map(x => [chaveReag(x.os_id, x.tarefa_id, x.compromisso_id), x]));
     falhaCarga = null;
@@ -1082,9 +1097,11 @@ function painelAtrasadas(){
   ATRASADAS.forEach(a => {
     const d = document.createElement('div');
     d.className = 'al';
+    const par = ATR_PAR.get(chaveReag(a.os_id, a.tarefa_id, a.compromisso_id));
     d.innerHTML = '<b></b><small></small>'
       + '<div class="linha"><button type="button" class="btn sm pri" data-a="hoje">Mover pra hoje</button>'
-      + '<button type="button" class="btn sm" data-a="outro">Outro dia</button></div>'
+      + '<button type="button" class="btn sm" data-a="outro">Outro dia</button>'
+      + (par ? '<button type="button" class="btn sm" data-a="concluir">Concluir</button>' : '') + '</div>'
       + '<div class="outro" hidden style="margin-top:8px"><input type="date" aria-label="Novo dia" min="' + isoHojeF() + '">'
       + '<button type="button" class="btn sm pri" data-a="ok">Gravar este dia</button></div>';
     d.querySelector('b').textContent = a.tarefa + (a.origem === 'avulso' ? ' (compromisso)' : '');
@@ -1103,6 +1120,7 @@ function painelAtrasadas(){
       }catch(e){ toast(e.message, 'err'); d.querySelectorAll('button').forEach(x => x.disabled = false); }
     };
     d.querySelector('[data-a="hoje"]').addEventListener('click', e => gravar(isoHojeF(), 'hoje', e.target));
+    if (par) d.querySelector('[data-a="concluir"]').addEventListener('click', () => concluirAtrasada(a, d));
     d.querySelector('[data-a="outro"]').addEventListener('click', () => {
       const o = d.querySelector('.outro'); o.hidden = false;
       const i = o.querySelector('input'); if (!i.value){ const t = new Date(Date.now() + 864e5);
@@ -1118,6 +1136,68 @@ function painelAtrasadas(){
     p.appendChild(d);
   });
   return p;
+}
+
+/* ── S21 · ITEM 4 DO S50: CONCLUIR A ATRASADA LIBERADA EM PARALELO ──────────
+   Caso real: OS-26209. O mapa de espessura (T11) do Victor estava atrasado e
+   liberado em paralelo, mas o card morava no quadro Técnico Administrativa
+   (Revisão II, do Túlio), que o perfil dele não vê. Pelo aviso de atrasadas
+   ele só tinha "Mover pra hoje"/"Outro dia" — para concluir, teria de
+   reagendar, deixando a marca "reagendada 1x" e apagando a data real.
+   Agora a atrasada que passa na MESMA regra do "Concluir etapa"
+   (`possoConcluirParalela`) ganha "Concluir", que não reagenda nada.
+   A regra é avaliada contra a OS DE VERDADE (v_os_kanban): sem ela não se
+   sabe qual é a tarefa atual, e sem isso o botão não aparece. */
+let ATR_PAR = new Map();   // chaveReag(os, tarefa) → { os, t }
+const SEL_PAR = 'pipeline_tarefas?select=os_id,tarefa_id,nome,tipo,status,perfis_responsaveis,requisitos,acao_terminal&ativo=eq.SIM';
+async function carregarAtrParalelas(){
+  const da = (ATRASADAS || []).filter(a => a.os_id && a.tarefa_id && a.origem !== 'avulso');
+  if (!da.length){ ATR_PAR = new Map(); return; }
+  try{
+    const ids = [...new Set(da.map(a => a.os_id))];
+    const tids = [...new Set(da.map(a => a.tarefa_id))];
+    const q = arr => '(' + arr.map(x => '"' + String(x).replace(/"/g, '') + '"').join(',') + ')';
+    const [oss, ts] = await Promise.all([
+      get('v_os_kanban?select=*&os_id=in.' + q(ids)),
+      get(SEL_PAR + '&os_id=in.' + q(ids) + '&tarefa_id=in.' + q(tids)) ]);
+    const m = new Map();
+    da.forEach(a => {
+      const os = (oss || []).find(o => o.os_id === a.os_id);
+      const t  = (ts || []).find(x => x.os_id === a.os_id && x.tarefa_id === a.tarefa_id);
+      if (os && t && possoConcluirParalela(t, os)) m.set(chaveReag(a.os_id, a.tarefa_id, null), { os, t });
+    });
+    ATR_PAR = m;
+  }catch(e){ ATR_PAR = new Map(); }   // sem resposta: sem botão (os outros dois continuam)
+}
+const semRede = e => !navigator.onLine || (e && (e.rede || /Failed to fetch|NetworkError|Load failed/i.test(e.message || '')));
+async function concluirAtrasada(a, d){
+  const par = ATR_PAR.get(chaveReag(a.os_id, a.tarefa_id, null));
+  if (!par) return;
+  if (!confirm('Concluir "' + par.t.nome + '"?\n\n' + [par.os.numero, par.os.cliente].filter(Boolean).join(' · ')
+      + '\n\nEla está liberada em paralelo com a etapa atual da OS. A OS continua na etapa em que está, '
+      + 'e a tarefa NÃO é reagendada: fica registrada como feita agora, por você.')) return;
+  const botoes = d.querySelectorAll('button');
+  botoes.forEach(x => x.disabled = true);
+  try{
+    // A conferência é refeita na hora: a OS pode ter andado desde a carga
+    // (e a tarefa ter virado a atual, que só se conclui pela tela da etapa).
+    const [oss, ts] = await Promise.all([
+      get('v_os_kanban?select=*&os_id=eq.' + a.os_id),
+      get(SEL_PAR + '&os_id=eq.' + a.os_id + '&tarefa_id=eq.' + encodeURIComponent(a.tarefa_id)) ]);
+    const os = oss && oss[0], t = ts && ts[0];
+    if (!os){ toast('Não achei esta OS. Nada foi concluído.', 'err'); botoes.forEach(x => x.disabled = false); return; }
+    if (!t || !possoConcluirParalela(t, os)){
+      toast('Esta etapa não pode mais ser concluída por aqui — a OS mudou. Nada foi concluído.', 'err');
+      await carregar(true); return;
+    }
+    await rpc('tf_concluir_tarefa', { p_os_id: a.os_id, p_tarefa_id: a.tarefa_id, p_respostas: {} });
+    await carregar(true);
+    toast('"' + t.nome + '" concluída. A OS continua onde está.', 'ok');
+  }catch(e){
+    toast(semRede(e) ? 'Sem sinal — a etapa NÃO foi concluída. Ela continua atrasada; tente de novo quando conectar.'
+                     : e.message, 'err');
+    botoes.forEach(x => x.disabled = false);
+  }
 }
 
 /* ── O ROTEIRO DE HOJE ──────────────────────────────────────────────────────
@@ -1483,8 +1563,12 @@ function painelEtapas(){
 /** S19 · S45 item 2: liberada, não é a atual, manual, sem foto/checklist
  *  obrigatório (esses têm a tela da etapa), não fecha fase nem OS, e do meu
  *  perfil — a mesma conta do Manager (`possoConcluirParalela`). */
-function possoConcluirParalela(t){
-  if (!t || !atual || t.tarefa_id === atual.os.tarefa_atual_id) return false;
+function possoConcluirParalela(t, os){
+  // S21 · item 4 do S50: a OS pode vir de fora (aviso de atrasadas, sem OS
+  // aberta). Sem OS de verdade não há como saber qual é a tarefa atual — e
+  // aí a resposta é NÃO, nunca "talvez".
+  os = os || (atual && atual.os);
+  if (!t || !os || !os.tarefa_atual_id || t.tarefa_id === os.tarefa_atual_id) return false;
   if (t.status !== 'pendente' && t.status !== 'em_andamento') return false;
   const r = t.requisitos || {};
   if (t.tipo !== 'manual' || t.acao_terminal
@@ -1515,7 +1599,7 @@ function pintarOSBase(){
   if (ehInspecao(os)) m.appendChild(painelExtras());
   // S19 · S45 item 2: o que está liberado para mim em paralelo aparece logo
   // em cima — quem veio pelo "Hoje" veio por causa dela, não da etapa atual.
-  const par = (tarefas || []).filter(possoConcluirParalela);
+  const par = (tarefas || []).filter(x => possoConcluirParalela(x));
   if (par.length){
     const pa = document.createElement('div');
     pa.className = 'painel';
@@ -2842,14 +2926,53 @@ function telaFechamento(){
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-let toastT = null;
+/* S21 · item 1 do S50 — a mensagem não cobre botão nenhum.
+   · Ela entra no FLUXO, logo abaixo do cabeçalho e das faixas (o CSS explica).
+     Para a tela não pular quando ela aparece, o `main` rola a mesma altura
+     (`toastComp`) e desrola quando ela some: o conteúdo fica parado.
+   · Tocar nela só a dispensa — e, por estar fora de cima dos botões, o toque
+     não tem para onde atravessar.
+   · Erro e recusa pedem uma ação do inspetor: ficam 8 s (ou até o toque).
+     Sucesso continua em ~4,6 s.
+   · Leitor de tela: `status` no sucesso, `alert` no erro. */
+let toastT = null, toastComp = 0;
+function toastFechar(){
+  const el = document.getElementById('toast');
+  clearTimeout(toastT); toastT = null;
+  if (!el || !el.classList.contains('on')) return;
+  const flut = el.classList.contains('flut');
+  el.className = 'toast'; el.style.top = '';
+  const m = document.getElementById('main');
+  if (m && toastComp && !flut) m.scrollTop = Math.max(0, m.scrollTop - toastComp);
+  toastComp = 0;
+}
 function toast(msg, tipo){
   const el = document.getElementById('toast');
+  if (!el) return;
+  toastFechar();
+  el.setAttribute('role', tipo === 'err' ? 'alert' : 'status');
+  el.setAttribute('aria-live', tipo === 'err' ? 'assertive' : 'polite');
   el.textContent = msg;
-  el.className = 'toast on' + (tipo ? ' '+tipo : '');
-  clearTimeout(toastT);
-  toastT = setTimeout(() => el.className = 'toast', 4600);
+  el.className = 'toast on' + (tipo ? ' ' + tipo : '');
+  // Teclado aberto: o cabeçalho pode estar fora da parte visível da tela.
+  const vv = window.visualViewport;
+  const teclado = !!vv && (vv.offsetTop > 4 || vv.height < window.innerHeight - 120);
+  if (teclado){
+    el.classList.add('flut');
+    el.style.top = Math.round(vv.offsetTop + 8) + 'px';
+  } else {
+    const m = document.getElementById('main');
+    if (m){
+      const antes = m.scrollTop;
+      if (antes > 0){
+        m.scrollTop = antes + el.offsetHeight + 8;
+        toastComp = m.scrollTop - antes;
+      }
+    }
+  }
+  toastT = setTimeout(toastFechar, tipo === 'err' ? 8000 : 4600);
 }
+document.getElementById('toast').addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); toastFechar(); });
 
 function voltarParaOS(){
   pintarOS(); tela = 'os';
