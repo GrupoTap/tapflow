@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S50</title>
+<title>TapFlow Manager · S51</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1714,6 +1714,13 @@ th.num .tfThFixo{text-align:right}
 .agT.agAv{background:var(--surface-2);border-radius:4px}
 .agAv .agTn{display:flex;align-items:center;gap:7px}
 .agAvChk{width:16px;height:16px;flex:0 0 auto}
+/* S51: a linha do apoio do compromisso não tem checkbox — o espaço fica, para alinhar */
+.agAvSem{width:16px;height:16px;flex:0 0 auto;margin:3px 3px 3px 4px;border:1px dashed var(--rule);border-radius:3px}
+.acApN{color:var(--ink-3);font-size:12px}
+.acHist{margin-top:10px;font-size:12px;color:var(--ink-2)}
+.acHist summary{cursor:pointer;color:var(--ink-3)}
+.acHist ul{margin:6px 0 0;padding-left:18px;max-height:140px;overflow-y:auto}
+.acHist li{margin:2px 0;line-height:1.4}
 .agAvB{background:none;border:0;padding:0;font:inherit;font-weight:600;text-align:left;cursor:pointer;color:inherit}
 .agAvB:hover{text-decoration:underline}
 .turnoTbl tr.turnoOff td{color:var(--ink-3)}
@@ -1899,7 +1906,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S50';
+const APP_VERSION = 'S51';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -16029,12 +16036,13 @@ function agVistaDia(cx){
     if (i.origem === 'avulso'){
       return '<div class="agT agAv agRes ' + esc(i.situacao) + '">'
         + '<span class="agTn">'
-        + (i.situacao === 'concluida'
+        + (i.situacao === 'concluida' && i.papel !== 'apoio'
             ? '<input type="checkbox" class="agAvChk" checked title="Desmarcar — volta para a agenda" '
               + 'aria-label="Feito (desmarque para devolver à agenda)" data-cc="' + esc(i.compromisso_id) + '"> '
-            : '<span class="agResX" aria-hidden="true">✕</span> ')
+            : '<span class="agResX" aria-hidden="true">' + (i.situacao === 'concluida' ? '✓' : '✕') + '</span> ')
         + '<button type="button" class="agAvB agResB" data-u="' + esc(id) + '" data-k="' + k + '"></button> '
-        + selo + '</span>'
+        + selo + (i.papel === 'apoio' ? ' <span class="chip apoio">apoio de ' + esc(i.principal || '?') + '</span>' : '')
+        + '</span>'
         + '<span class="agTs"></span>'
         + '<span class="agTm">' + (i.tempo_estimado_min ? minHora(i.tempo_estimado_min) : '') + '</span>'
         + '</div>';
@@ -16074,12 +16082,17 @@ function agVistaDia(cx){
           + '<span class="agTm">' + minHora(i.tempo_estimado_min) + '</span>'
           + '</button>'
         : i.origem === 'avulso'
-        // ITEM 9 (S28): compromisso avulso — checkbox de feito e ícone próprio
-        ? '<div class="agT agAv">'
-          + '<span class="agTn"><input type="checkbox" class="agAvChk" title="Marcar como feito" '
-          +   'aria-label="Feito" data-cc="' + esc(i.compromisso_id) + '"> '
+        // ITEM 9 (S28): compromisso avulso — checkbox de feito e ícone próprio.
+        // S51 · 1.2/1.3: na linha do APOIO não há checkbox — só o dono marca
+        // como feito. A linha diz de quem ele é apoio e abre a mesma janela.
+        ? '<div class="agT agAv' + (i.papel === 'apoio' ? ' agAvApoio' : '') + '">'
+          + '<span class="agTn">' + (i.papel === 'apoio'
+              ? '<span class="agAvSem" aria-hidden="true" title="Quem marca como feito é o dono"></span>'
+              : '<input type="checkbox" class="agAvChk" title="Marcar como feito" '
+                + 'aria-label="Feito" data-cc="' + esc(i.compromisso_id) + '"> ')
           +   '<button type="button" class="agAvB" data-u="' + esc(id) + '" data-k="' + k + '"></button>'
           +   ' <span class="chip av">compromisso</span>'
+          +   (i.papel === 'apoio' ? ' <span class="chip apoio">apoio de ' + esc(i.principal || '?') + '</span>' : '')
           +   (i.dia < isoHoje() ? ' <span class="chip atrasoDia">atrasado</span>' : '')
           +   ' ' + marcaReag(null, null, i.compromisso_id) + '</span>'
           + '<span class="agTs"></span>'
@@ -16126,7 +16139,8 @@ function agVistaDia(cx){
       ? [i.categoria || 'sem categoria',
          i.situacao === 'cancelado' ? 'motivo: ' + (i.cancelado_motivo || '—') : i.descricao,
          carimboRes(i, dia)].filter(Boolean).join(' · ')
-      : [i.categoria || 'sem categoria', i.descricao].filter(Boolean).join(' · ');
+      : [i.categoria || 'sem categoria', i.descricao,
+         i.papel !== 'apoio' && i.apoios_nomes ? 'vai junto: ' + i.apoios_nomes : ''].filter(Boolean).join(' · ');
   });
   cx.querySelectorAll('button.agT[data-res]').forEach(b => {
     const i = (resPessoa[b.dataset.u] || [])[Number(b.dataset.k)] || {};
@@ -16630,16 +16644,30 @@ async function modalQuem(t){
 
    Quem cria e designa é o escritório (a mesma regra de designar tarefa de
    OS). O "Assumir" passa a designação (item 8). Concluir é o checkbox da
-   lista do dia; lançado errado, cancela-se com motivo — não some do banco. */
+   lista do dia; lançado errado, cancela-se com motivo — não some do banco.
+
+   S51 · QUEM VAI JUNTO. O padrão do S36 (apoio na tarefa de OS), aplicado
+   ao compromisso: um dono e quantos apoios forem precisos. Cada apoio vê o
+   compromisso na própria Agenda, no mesmo dia, e ele conta na barra dele; o
+   dono continua sendo quem marca como feito (decisão do Bruno). Quem mexe na
+   lista é quem mexe no compromisso: o escritório. O banco exige dono e dia
+   para ter apoio, tira o dono da lista e troca os papéis quando um apoio
+   assume (`tf_salvar_compromisso`, gatilho `tg_comp_apoios`). */
 async function modalCompromisso(c, padrao){
   if (DEMO){ toast('Modo demonstração: compromisso não é gravado.','err'); return; }
   const pode = podeEscritorio();
-  let cats = [], d = null;
+  let cats = [], d = null, hist = [];
   try{ cats = await get('v_compromissos_categorias?select=categoria&limit=60'); }catch(e){ cats = []; }
   if (c && c.compromisso_id){
     try{ d = ((await get('compromissos_avulsos?select=*&id=eq.' + c.compromisso_id)) || [])[0] || null; }
     catch(e){ toast(e.message,'err'); return; }
     if (!d){ toast('Esse compromisso não existe mais.','err'); return; }
+    // S51 · 1.5: quem entrou, saiu, assumiu (o registro do banco). Sem o 105,
+    // a consulta volta vazia e a janela segue como no S50.
+    try{
+      hist = await get('eventos?select=id,ocorrido_em,descricao,usuario_id&tipo=eq.compromisso'
+        + '&payload->>compromisso_id=eq.' + d.id + '&order=id.asc&limit=60') || [];
+    }catch(e){ hist = []; }
   }
   const v = d || Object.assign({ usuario_designado: null, data_prevista: null }, padrao || {});
   const eu = meuId();
@@ -16647,6 +16675,33 @@ async function modalCompromisso(c, padrao){
   // só para leitura (o banco recusa editar), com o caminho de volta do feito
   const fechado = !!(d && (d.status === 'completo' || d.status === 'cancelado'));
   const dis = pode && !fechado ? '' : ' disabled';
+  const apoiosAtuais = ((d && d.apoios) || []).map(String);
+  const souApoio = !!(d && eu && apoiosAtuais.indexOf(String(eu)) >= 0 && String(d.usuario_designado) !== String(eu));
+  const nomeDe = id => NOMES[id] || 'alguém do time';
+  const nomesApoio = apoiosAtuais.map(nomeDe).join(', ');
+
+  // ── S51 · 1.1: o bloco "Quem vai junto" ───────────────────────────────────
+  // Igual ao da janela de designar tarefa: recolhido, aberto quando já há
+  // apoio, a lista inteira do time com caixa. Para quem não é do escritório
+  // (e no feito/cancelado), só a linha de leitura.
+  const caixa = u => '<label class="linhaOpc apoioOpc" data-u="' + esc(u.id) + '">'
+    + '<input type="checkbox" class="acAp" value="' + esc(u.id) + '"'
+    + (apoiosAtuais.indexOf(String(u.id)) >= 0 ? ' checked' : '') + '> '
+    + '<span>' + esc(u.nome) + (u.perfil ? ' <small style="color:var(--ink-3)">— ' + esc(u.perfil) + '</small>' : '')
+    + '</span></label>';
+  const blocoApoio = pode && !fechado
+    ? '<details class="mdApoio" id="acApBloco"' + (apoiosAtuais.length ? ' open' : '') + '><summary><b>Quem vai junto</b> '
+      + '<span class="nota" style="margin:0">(apoio — serviço em dupla)</span>'
+      + '<span class="acApN" id="acApN"></span></summary>'
+      + '<p class="nota" style="margin:6px 0">Cada pessoa marcada vê este compromisso na própria Agenda, '
+      + 'no mesmo dia, e ele ocupa o tempo dela. O dono continua sendo o de cima: é quem marca como feito.</p>'
+      + '<div id="acApLista" class="apoioLista">' + EQUIPE.map(caixa).join('') + '</div></details>'
+    : (apoiosAtuais.length ? '<p class="nota">Apoio: <b>' + esc(nomesApoio) + '</b>'
+        + (fechado ? '' : ' — quem muda é o escritório') + '</p>' : '');
+
+  const linhasHist = (hist || []).map(h => '<li><span class="mono">' + esc(dataBR(_diaDe(h.ocorrido_em)).slice(0,5))
+      + ' ' + esc(_hhmm(h.ocorrido_em)) + '</span> — ' + esc(h.descricao || '')
+      + (h.usuario_id ? ' <span style="color:var(--ink-3)">(' + esc(nomeDe(h.usuario_id)) + ')</span>' : '') + '</li>').join('');
 
   abrirModal(d ? 'Compromisso' : 'Novo compromisso na agenda',
       (d ? '' : '<p class="nota" style="margin-top:0">Para o que <b>não pertence a OS nenhuma</b> '
@@ -16654,12 +16709,17 @@ async function modalCompromisso(c, padrao){
     + (fechado
         ? '<div class="aviso">' + (d.status === 'completo'
             ? '<b>Feito</b>' + (d.concluido_em ? ' em ' + esc(dataBR(_diaDe(d.concluido_em))) + ' às ' + esc(_hhmm(d.concluido_em)) : '')
-              + (d.concluido_por ? ' por ' + esc(NOMES[d.concluido_por] || 'alguém do time') : '')
+              + (d.concluido_por ? ' por ' + esc(nomeDe(d.concluido_por)) : '')
               + '. Se foi marcado por engano, use <b>Devolver à agenda</b>.'
             : '<b>Cancelado</b>' + (d.cancelado_em ? ' em ' + esc(dataBR(_diaDe(d.cancelado_em))) : '')
-              + (d.cancelado_por ? ' por ' + esc(NOMES[d.cancelado_por] || 'alguém do time') : '')
+              + (d.cancelado_por ? ' por ' + esc(nomeDe(d.cancelado_por)) : '')
               + '.<br>Motivo: ' + esc(d.cancelado_motivo || '—'))
           + '</div>'
+        : souApoio
+          ? '<div class="aviso">Você está de <b>apoio de ' + esc(nomeDe(d.usuario_designado)) + '</b>: o compromisso '
+            + 'aparece na sua Agenda e ocupa o seu dia. Quem marca como feito é ' + esc(nomeDe(d.usuario_designado))
+            + ' — se ele(a) não puder, use <b>Assumir</b>: você vira o dono e ' + esc(nomeDe(d.usuario_designado))
+            + ' passa a apoio.</div>'
         : pode ? '' : '<div class="aviso">Só o escritório cria e muda compromissos. Você pode assumir '
         + 'e marcar como feito.</div>')
     + '<div class="campo"><label for="acT">O que é</label><input id="acT" type="text" maxlength="120"'
@@ -16681,12 +16741,15 @@ async function modalCompromisso(c, padrao){
     + '<p style="font-size:12px;color:var(--ink-3);margin:-4px 0 0;line-height:1.45">Dia sem '
     +   'pessoa não é aceito — sem dono, o compromisso não entra na barra de ninguém. Pessoa sem '
     +   'dia fica em <b>Sem dia</b>.</p>'
+    + blocoApoio
     + (d && d.lock_por && d.lock_por !== eu
-        ? '<p class="nota">Assumido por <b>' + esc(NOMES[d.lock_por] || 'outra pessoa') + '</b>.</p>' : '')
-    + '<div class="dica" id="acMsg" style="color:var(--crit)"></div>',
+        ? '<p class="nota">Assumido por <b>' + esc(nomeDe(d.lock_por)) + '</b>.</p>' : '')
+    + (linhasHist ? '<details class="acHist"><summary>Registro (' + hist.length + ')</summary>'
+        + '<ul>' + linhasHist + '</ul></details>' : '')
+    + '<div class="dica" id="acMsg" style="color:var(--crit)" role="alert"></div>',
     fechado
     ? [ { label:'Fechar', onClick: () => fecharModal() } ]
-      .concat(d.status === 'completo' && (pode || d.usuario_designado === eu || d.concluido_por === eu)
+      .concat(d.status === 'completo' && !souApoio && (pode || d.usuario_designado === eu || d.concluido_por === eu)
         ? [{ label:'Devolver à agenda', pri:true, onClick: async () => {
             try{
               await rpc('tf_concluir_compromisso', { p_id: d.id, p_feito: false });
@@ -16701,7 +16764,10 @@ async function modalCompromisso(c, padrao){
             const r = await rpc('tf_assumir_compromisso', { p_id: d.id, p_forcar: !!(d.lock_por && d.lock_por !== eu) });
             if (r && r.status !== 'ok') throw new Error(r.status === 'locked'
               ? (r.locked_nome || 'Outra pessoa') + ' assumiu agora há pouco.' : 'O servidor recusou.');
-            fecharModal(); toast('Assumido — agora é seu, na agenda de todo mundo.','ok');
+            fecharModal();
+            toast(r && r.troca
+              ? 'Assumido — agora você é o dono; ' + (r.antes_nome || 'o dono anterior') + ' passou a apoio.'
+              : 'Assumido — agora é seu, na agenda de todo mundo.', 'ok');
             await recarregarAgenda();
           }catch(e){ document.getElementById('acMsg').textContent = e.message; }
         } }] : [])
@@ -16711,14 +16777,22 @@ async function modalCompromisso(c, padrao){
           const quem = document.getElementById('acU').value || null;
           const dia = document.getElementById('acDia').value || null;
           const min = document.getElementById('acM').value;
+          const lista = document.getElementById('acApLista');
+          const apoios = lista ? [...lista.querySelectorAll('.acAp:checked')].map(x => x.value)
+                                   .filter(x => x !== quem) : null;
           if (tit.length < 3){ msg.textContent = 'Escreva o que é o compromisso.'; return; }
           if (dia && !quem){ msg.textContent = 'Escolha quem — compromisso com dia precisa de dono.'; return; }
+          if (apoios && apoios.length && (!quem || !dia)){
+            msg.textContent = 'Escolha quem e o dia antes de marcar quem vai junto.'; return; }
           try{
-            await rpc('tf_salvar_compromisso', { p_id: d ? d.id : null, p_titulo: tit,
+            const r = await rpc('tf_salvar_compromisso', { p_id: d ? d.id : null, p_titulo: tit,
               p_descricao: document.getElementById('acDs').value.trim() || null,
               p_categoria: document.getElementById('acC').value.trim() || null,
-              p_usuario: quem, p_data: dia, p_minutos: min ? Number(min) : null });
-            fecharModal(); toast(d ? 'Compromisso atualizado.' : 'Compromisso lançado na agenda.','ok');
+              p_usuario: quem, p_data: dia, p_minutos: min ? Number(min) : null,
+              p_apoios: apoios });
+            fecharModal();
+            toast((d ? 'Compromisso atualizado.' : 'Compromisso lançado na agenda.')
+              + (r && r.nomes ? ' Vai junto: ' + r.nomes + '.' : ''), 'ok');
             await recarregarAgenda();
           }catch(e){ msg.textContent = e.message; }
         } }] : []));
@@ -16729,6 +16803,38 @@ async function modalCompromisso(c, padrao){
   document.getElementById('acM').value  = v.tempo_estimado_min || '';
   document.getElementById('acU').value  = v.usuario_designado || '';
   document.getElementById('acDia').value = v.data_prevista || '';
+  acApoioLigar();
+}
+
+/** S51: o dono não aparece como apoio dele mesmo (some da lista e desmarca);
+ *  marcar apoio sem "Quem" ou sem "Em que dia" avisa — e não marca. O número
+ *  ao lado do título diz quantos vão junto mesmo com o bloco recolhido. */
+function acApoioLigar(){
+  const sel = document.getElementById('acU'), dia = document.getElementById('acDia');
+  const lista = document.getElementById('acApLista'), msg = document.getElementById('acMsg');
+  if (!sel || !lista) return;
+  const conta = () => {
+    const n = lista.querySelectorAll('.acAp:checked').length;
+    const el = document.getElementById('acApN');
+    if (el) el.textContent = n ? ' · ' + n + (n > 1 ? ' pessoas' : ' pessoa') : '';
+  };
+  const aplica = () => {
+    lista.querySelectorAll('.apoioOpc').forEach(l => {
+      const dono = l.dataset.u === sel.value;
+      l.hidden = dono;
+      if (dono){ const c = l.querySelector('input'); if (c) c.checked = false; }
+    });
+    conta();
+  };
+  sel.addEventListener('change', aplica);
+  lista.querySelectorAll('.acAp').forEach(c => c.addEventListener('change', () => {
+    if (c.checked && (!sel.value || !dia.value)){
+      c.checked = false;
+      if (msg) msg.textContent = 'Escolha quem e o dia antes de marcar quem vai junto.';
+    } else if (msg && /quem vai junto/.test(msg.textContent)) msg.textContent = '';
+    conta();
+  }));
+  aplica();
 }
 
 function cancelarCompromisso(d){
@@ -24308,10 +24414,11 @@ function modalAtrasadas(){
     + 'aria-label="Novo dia"> <button class="btn mini" type="button" data-ok="' + k + '">Gravar dia</button></span>'
     + '</div></div>';
   const linhaApoio = a => '<div class="atrLin apoio">'
-    + '<div class="t1">' + esc(a.tarefa) + '</div>'
+    + '<div class="t1">' + esc(a.tarefa) + (a.origem === 'avulso' ? ' (compromisso)' : '') + '</div>'
     + '<div class="t2">' + esc([a.os_numero, a.cliente, a.fase_rotulo].filter(Boolean).join(' · ')) + '</div>'
     + '<div class="t2"><b style="color:#9E1B14">atrasada desde ' + esc(dataBR(a.data_prevista).slice(0,5)) + '</b>'
     + ' (' + a.dias_atraso + (a.dias_atraso === 1 ? ' dia' : ' dias') + ') · responsável: <b>' + esc(a.dono_nome || '?') + '</b>'
+    + ' — quem escolhe o dia é ele(a)'
     + (a.reag_vezes ? ' · reagendada ' + a.reag_vezes + 'x — original: ' + esc(dataBR(a.reag_original).slice(0,5)) : '')
     + '</div></div>';
   const tit = ATRASADAS.length
