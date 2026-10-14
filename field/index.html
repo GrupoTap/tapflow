@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S22</title>
+<title>TapFlow Field · S23</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -169,6 +169,11 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
    ganham de uma: o chip volta aos 11px. */
 .chip.eu{font-size:11px;line-height:normal;padding:3px 8px}
 .chip.fila{background:var(--crit-soft);color:var(--crit);border-color:transparent}
+/* S23 · item B do S52: o compromisso avulso no "Hoje". A mesma cor neutra do
+   "compromisso" da Agenda da Gestão — não é OS, não é visita. */
+.chip.comp{background:var(--surface-2);color:var(--ink-2)}
+.osCard.compCard{cursor:default}
+.osCard.compCard .linha .btn{flex:0 0 auto;min-width:120px}
 .chip.outro{background:var(--warn-soft);color:var(--warn);border-color:transparent}
 
 .sec{font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
@@ -260,22 +265,27 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 .resumo{font-size:13px;color:var(--ink-3);margin-bottom:9px;text-align:center}
 
 /* S21 · item 1 do S50: a mensagem mora EMBAIXO do cabeçalho (e das faixas de
-   demo/fila/instalar), DENTRO do fluxo da página — empurra a tela em vez de
-   cobrir. Até o S20 ela era `position:fixed; bottom:16px` com
+   demo/fila/instalar). Até o S20 ela era `position:fixed; bottom:16px` com
    `pointer-events:none`: ficava exatamente sobre a barra de botões das telas
    de coleta, e o toque ATRAVESSAVA a mensagem e acionava "Enviar ao
    comercial" escondido embaixo. Agora tocar nela só a dispensa.
-   Com o teclado aberto o cabeçalho pode sair da tela (iPhone, Chrome novo):
-   aí ela flutua no alto da parte VISÍVEL (`.flut`), e continua capturando o
-   toque — nunca deixa passar para o que está embaixo. */
-.toast{display:none;flex:0 0 auto;margin:8px 12px 0;background:var(--ink);color:#fff;
-  padding:11px 40px 11px 14px;border-radius:5px;font-size:14.5px;line-height:1.4;position:relative;
-  cursor:pointer;box-shadow:0 2px 8px rgba(15,23,25,.18)}
+   S23 · item E do S52: ela FLUTUA sobre o conteúdo, logo abaixo do cabeçalho,
+   em vez de entrar no fluxo. No S21/S22 ela empurrava a tela 62 px para baixo
+   ao aparecer (com a tela no topo não havia rolagem para compensar), e o
+   botão que o inspetor ia tocar descia no instante do toque. Sobreposta ela
+   não move nada; o que fica embaixo dela não recebe toque (ela captura e
+   fecha), e a barra de botões do rodapé nunca é alcançada. Com o teclado
+   aberto o cabeçalho pode sair da tela (iPhone, Chrome novo): aí o `top` é o
+   da parte VISÍVEL (`.flut`). */
+.toast{display:none;position:fixed;left:12px;right:12px;top:64px;margin:0;z-index:85;
+  background:var(--ink);color:#fff;
+  padding:11px 40px 11px 14px;border-radius:5px;font-size:14.5px;line-height:1.4;
+  cursor:pointer;box-shadow:0 2px 8px rgba(15,23,25,.22)}
 .toast.on{display:block;animation:toastIn .18s ease-out}
 .toast::after{content:'✕';position:absolute;right:12px;top:50%;transform:translateY(-50%);
   font-size:14px;opacity:.75}
 .toast.err{background:var(--crit)}.toast.ok{background:var(--ok)}
-.toast.flut{position:fixed;left:12px;right:12px;margin:0;z-index:85}
+.toast.flut{position:fixed}
 @keyframes toastIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.toast.on{animation:none}}
 
@@ -452,7 +462,7 @@ details.termo.faq{margin-top:6px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S22';
+const APP_VERSION = 'S23';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -1103,10 +1113,15 @@ function painelAtrasadas(){
     const d = document.createElement('div');
     d.className = 'al';
     const par = ATR_PAR.get(chaveReag(a.os_id, a.tarefa_id, a.compromisso_id));
+    // S23 · item G do S52: o compromisso atrasado em que EU sou o dono (é o
+    // que `tf_minhas_atrasadas` traz) ganha "Feito" — sem reagendar. Antes
+    // o dono em campo só tinha "Mover pra hoje"/"Outro dia", ou abrir a Gestão.
+    const comp = a.origem === 'avulso' && a.compromisso_id;
     d.innerHTML = '<b></b><small></small>'
       + '<div class="linha"><button type="button" class="btn sm pri" data-a="hoje">Mover pra hoje</button>'
       + '<button type="button" class="btn sm" data-a="outro">Outro dia</button>'
-      + (par ? '<button type="button" class="btn sm" data-a="concluir">Concluir</button>' : '') + '</div>'
+      + (par ? '<button type="button" class="btn sm" data-a="concluir">Concluir</button>' : '')
+      + (comp ? '<button type="button" class="btn sm" data-a="feito">Feito</button>' : '') + '</div>'
       + '<div class="outro" hidden style="margin-top:8px"><input type="date" aria-label="Novo dia" min="' + isoHojeF() + '">'
       + '<button type="button" class="btn sm pri" data-a="ok">Gravar este dia</button></div>';
     d.querySelector('b').textContent = a.tarefa + (a.origem === 'avulso' ? ' (compromisso)' : '');
@@ -1126,6 +1141,7 @@ function painelAtrasadas(){
     };
     d.querySelector('[data-a="hoje"]').addEventListener('click', e => gravar(isoHojeF(), 'hoje', e.target));
     if (par) d.querySelector('[data-a="concluir"]').addEventListener('click', () => concluirAtrasada(a, d));
+    if (comp) d.querySelector('[data-a="feito"]').addEventListener('click', () => feitoCompromisso(a.compromisso_id, a.tarefa, d));
     d.querySelector('[data-a="outro"]').addEventListener('click', () => {
       const o = d.querySelector('.outro'); o.hidden = false;
       const i = o.querySelector('input'); if (!i.value){ const t = new Date(Date.now() + 864e5);
@@ -1260,6 +1276,12 @@ function pintarMeuDia(m){
   m.appendChild(h);
 
   itens.forEach(t => {
+    // S23 · item B do S52: o compromisso avulso (dono e apoio) entra no
+    // "Hoje" — `v_meu_dia` (106) passou a trazê-lo com `origem = 'avulso'`.
+    // Até o S22 ele só existia na Agenda da Gestão e, no Field, quando
+    // atrasava. O cartão é de leitura (detalhes na Gestão); o DONO ganha o
+    // "Feito" (item G), pelo mesmo caminho do aviso de atrasadas.
+    if (t.origem === 'avulso'){ m.appendChild(cardCompromisso(t)); return; }
     const os = listaOS.find(o => o.os_id === t.os_id);
     const b = document.createElement('button');
     b.className = 'osCard doDia' + (t.atrasada_no_roteiro ? ' atrasadaDia' : '');
@@ -1325,6 +1347,59 @@ function pintarMeuDia(m){
     }
     m.appendChild(b);
   });
+}
+
+/* ── S23 · ITENS B e G DO S52: O COMPROMISSO NO "HOJE" ───────────────────────
+   O cartão do compromisso avulso no roteiro. É um `div` (não um botão): não
+   há tela para abrir — os detalhes estão na Gestão, como na visita. Mostra a
+   categoria, o título, a descrição e, no APOIO, "apoio de <dono>". No DONO
+   (`papel = 'principal'`) ganha o botão "Feito", que chama a MESMA função da
+   Agenda da Gestão (`tf_concluir_compromisso`, que recusa o apoio — 105).
+   Atrasado, o cartão também aparece (o roteiro não se limpa à meia-noite) e
+   o aviso de atrasadas, logo acima, tem "Mover pra hoje"/"Outro dia"/"Feito". */
+function cardCompromisso(t){
+  const d = document.createElement('div');
+  d.className = 'osCard doDia compCard' + (t.atrasada_no_roteiro ? ' atrasadaDia' : '');
+  const chips = ['<span class="chip comp">compromisso</span>'];
+  if (t.atrasada_no_roteiro)
+    chips.push('<span class="chip atr">era ' + dataBR(t.data_prevista) + '</span>');
+  if (t.tempo_estimado_min)
+    chips.push('<span class="chip">' + minHora(t.tempo_estimado_min) + '</span>');
+  if (t.papel === 'apoio')
+    chips.push('<span class="chip eu">apoio de ' + esc(t.principal || '?') + '</span>');
+  const dono = t.papel !== 'apoio';
+  d.innerHTML = '<div class="n mono"></div><div class="c"></div>'
+    + '<div class="t"><span>›</span><span class="tn"></span></div>'
+    + '<div class="chips">' + chips.join('') + '</div>'
+    + '<div class="semAbrir"></div>'
+    + (dono ? '<div class="linha" style="margin-top:9px"><button type="button" class="btn sm pri" data-a="feito">Feito</button></div>' : '');
+  d.querySelector('.n').textContent  = t.cliente || 'Compromisso';   // a categoria (106)
+  d.querySelector('.c').textContent  = t.tarefa || '—';
+  d.querySelector('.tn').textContent = t.os_descricao || 'Sem detalhes';
+  d.querySelector('.semAbrir').textContent = dono
+    ? 'Compromisso da agenda — os detalhes estão na Gestão. Quando fizer, marque "Feito".'
+    : 'Você vai junto — quem marca como feito é ' + (t.principal || 'o dono') + '. Os detalhes estão na Gestão.';
+  if (dono) d.querySelector('[data-a="feito"]').addEventListener('click', () => feitoCompromisso(t.compromisso_id, t.tarefa, d));
+  return d;
+}
+
+/** "Feito" do compromisso, pelo Field (item G). Mesma confirmação nativa do
+ *  "Concluir" da atrasada (S21). Sem sinal, não finge: a mensagem diz, e o
+ *  compromisso continua onde está até dar certo. */
+async function feitoCompromisso(id, titulo, d){
+  if (!id) return;
+  if (!confirm('Marcar "' + (titulo || 'compromisso') + '" como feito?\n\nEle sai da sua agenda de hoje (e da de quem vai junto). '
+      + 'Se for engano, o escritório devolve à agenda pela Gestão.')) return;
+  const botoes = d.querySelectorAll('button');
+  botoes.forEach(x => x.disabled = true);
+  try{
+    await rpc('tf_concluir_compromisso', { p_id: id, p_feito: true });
+    toast('Feito — saiu da sua agenda.', 'ok');
+    await carregar(true);
+  }catch(e){
+    toast(semRede(e) ? 'Sem sinal — não deu para marcar. Tente de novo quando conectar.' : e.message, 'err');
+    botoes.forEach(x => x.disabled = false);
+  }
 }
 
 function cardOS(o, outro){
@@ -2931,25 +3006,22 @@ function telaFechamento(){
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-/* S21 · item 1 do S50 — a mensagem não cobre botão nenhum.
-   · Ela entra no FLUXO, logo abaixo do cabeçalho e das faixas (o CSS explica).
-     Para a tela não pular quando ela aparece, o `main` rola a mesma altura
-     (`toastComp`) e desrola quando ela some: o conteúdo fica parado.
-   · Tocar nela só a dispensa — e, por estar fora de cima dos botões, o toque
-     não tem para onde atravessar.
+/* S21 · item 1 do S50 — a mensagem não cobre botão nenhum da barra do rodapé.
+   S23 · item E do S52 — e também não EMPURRA a tela: ela flutua sobre o
+   conteúdo, logo abaixo do cabeçalho e das faixas (o CSS explica).
+   · O `top` é medido na hora: a borda de cima do `main` (= o pé do cabeçalho
+     e das faixas que estiverem visíveis) + 8 px. Com o teclado aberto o
+     cabeçalho pode sair da tela: aí vale o topo da parte VISÍVEL.
+   · Tocar nela só a dispensa — ela captura o toque, nada atravessa.
    · Erro e recusa pedem uma ação do inspetor: ficam 8 s (ou até o toque).
      Sucesso continua em ~4,6 s.
    · Leitor de tela: `status` no sucesso, `alert` no erro. */
-let toastT = null, toastComp = 0;
+let toastT = null;
 function toastFechar(){
   const el = document.getElementById('toast');
   clearTimeout(toastT); toastT = null;
   if (!el || !el.classList.contains('on')) return;
-  const flut = el.classList.contains('flut');
   el.className = 'toast'; el.style.top = '';
-  const m = document.getElementById('main');
-  if (m && toastComp && !flut) m.scrollTop = Math.max(0, m.scrollTop - toastComp);
-  toastComp = 0;
 }
 function toast(msg, tipo){
   const el = document.getElementById('toast');
@@ -2962,19 +3034,15 @@ function toast(msg, tipo){
   // Teclado aberto: o cabeçalho pode estar fora da parte visível da tela.
   const vv = window.visualViewport;
   const teclado = !!vv && (vv.offsetTop > 4 || vv.height < window.innerHeight - 120);
+  let top = 64;
   if (teclado){
     el.classList.add('flut');
-    el.style.top = Math.round(vv.offsetTop + 8) + 'px';
+    top = Math.round(vv.offsetTop + 8);
   } else {
     const m = document.getElementById('main');
-    if (m){
-      const antes = m.scrollTop;
-      if (antes > 0){
-        m.scrollTop = antes + el.offsetHeight + 8;
-        toastComp = m.scrollTop - antes;
-      }
-    }
+    if (m) top = Math.round(m.getBoundingClientRect().top + 8);
   }
+  el.style.top = top + 'px';
   toastT = setTimeout(toastFechar, tipo === 'err' ? 8000 : 4600);
 }
 document.getElementById('toast').addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); toastFechar(); });

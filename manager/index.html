@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S51</title>
+<title>TapFlow Manager · S52</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1906,7 +1906,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S51';
+const APP_VERSION = 'S52';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -16025,6 +16025,22 @@ function agVistaDia(cx){
     return;
   }
 
+  // S52 · A: a caixa "Feito" do compromisso só aparece para quem o banco
+  // aceita (`tf_concluir_compromisso`, 105): o dono, o escritório e o admin
+  // — nunca quem está de APOIO (nem sendo do escritório). Até o S51 a linha
+  // do dono mostrava a caixa para quem quer que abrisse a Agenda (ela é de
+  // todos desde o S36), e a recusa só vinha do banco, depois do clique.
+  const agPossoMarcarFeito = i => {
+    if (sessao.admin) return true;
+    const eu = String(meuId() || '');
+    const dono = String(i.dono_id || i.usuario_id || '');
+    // sem token (modo demo) não há como saber quem olha: vale a regra do escritório
+    if (!eu) return podeEscritorio();
+    if ((i.apoios || []).map(String).indexOf(eu) >= 0 && dono !== eu) return false;
+    return eu === dono || podeEscritorio();
+  };
+  const agSemCaixa = 'Quem marca como feito é o dono';
+
   const linhaRes = (i, id, k) => {
     const quando = _hhmm(i.resolvido_em), outroDia = i.resolvido_em && _diaDe(i.resolvido_em) !== dia;
     const selo = i.situacao === 'cancelado' ? '<span class="chip canc">cancelado</span>'
@@ -16036,7 +16052,7 @@ function agVistaDia(cx){
     if (i.origem === 'avulso'){
       return '<div class="agT agAv agRes ' + esc(i.situacao) + '">'
         + '<span class="agTn">'
-        + (i.situacao === 'concluida' && i.papel !== 'apoio'
+        + (i.situacao === 'concluida' && i.papel !== 'apoio' && agPossoMarcarFeito(i)
             ? '<input type="checkbox" class="agAvChk" checked title="Desmarcar — volta para a agenda" '
               + 'aria-label="Feito (desmarque para devolver à agenda)" data-cc="' + esc(i.compromisso_id) + '"> '
             : '<span class="agResX" aria-hidden="true">' + (i.situacao === 'concluida' ? '✓' : '✕') + '</span> ')
@@ -16085,9 +16101,11 @@ function agVistaDia(cx){
         // ITEM 9 (S28): compromisso avulso — checkbox de feito e ícone próprio.
         // S51 · 1.2/1.3: na linha do APOIO não há checkbox — só o dono marca
         // como feito. A linha diz de quem ele é apoio e abre a mesma janela.
+        // S52 · A: e na linha do DONO a caixa só aparece para quem pode
+        // marcar (`agPossoMarcarFeito`); para os demais fica o mesmo espaço.
         ? '<div class="agT agAv' + (i.papel === 'apoio' ? ' agAvApoio' : '') + '">'
-          + '<span class="agTn">' + (i.papel === 'apoio'
-              ? '<span class="agAvSem" aria-hidden="true" title="Quem marca como feito é o dono"></span>'
+          + '<span class="agTn">' + (i.papel === 'apoio' || !agPossoMarcarFeito(i)
+              ? '<span class="agAvSem" aria-hidden="true" title="' + agSemCaixa + '"></span>'
               : '<input type="checkbox" class="agAvChk" title="Marcar como feito" '
                 + 'aria-label="Feito" data-cc="' + esc(i.compromisso_id) + '"> ')
           +   '<button type="button" class="agAvB" data-u="' + esc(id) + '" data-k="' + k + '"></button>'
@@ -16826,12 +16844,26 @@ function acApoioLigar(){
     });
     conta();
   };
-  sel.addEventListener('change', aplica);
+  // S52 · F: limpar o "Quem" ou o "Em que dia" com apoio marcado desmarca os
+  // apoios NA HORA e diz por quê. Até o S51 a lista ficava marcada e o aviso
+  // só vinha no "Gravar", falando de "marcar quem vai junto" — uma ação que
+  // a pessoa não tinha feito.
+  const semDonoOuDia = () => {
+    if (sel.value && dia.value) return;
+    const marcados = [...lista.querySelectorAll('.acAp:checked')];
+    if (!marcados.length) return;
+    marcados.forEach(c => { c.checked = false; });
+    if (msg) msg.textContent = 'Quem vai junto foi desmarcado: apoio precisa de dono e dia. Escolha os dois e marque de novo.';
+    conta();
+  };
+  sel.addEventListener('change', () => { aplica(); semDonoOuDia(); });
+  dia.addEventListener('change', semDonoOuDia);
+  dia.addEventListener('input', semDonoOuDia);
   lista.querySelectorAll('.acAp').forEach(c => c.addEventListener('change', () => {
     if (c.checked && (!sel.value || !dia.value)){
       c.checked = false;
       if (msg) msg.textContent = 'Escolha quem e o dia antes de marcar quem vai junto.';
-    } else if (msg && /quem vai junto/.test(msg.textContent)) msg.textContent = '';
+    } else if (msg && /quem vai junto/i.test(msg.textContent)) msg.textContent = '';
     conta();
   }));
   aplica();
@@ -17768,9 +17800,15 @@ const DIA = { mes: null, dados: null, abertos: {}, anul: false };
      por refeição e por dia; as feitas por outra pessoa continuam uma a uma.
    Só exibição: nada é apagado, nada muda no banco nem nos arquivos. */
 const DIA_MOTIVO_PROPRIO = 'desmarcado pelo próprio funcionário';
-/** Anulação feita por outra pessoa (não pelo próprio funcionário). O
- *  relatório traz quem anulou pelo NOME — é o que se compara. */
-const diaAnulOutro = (x, l) => !!x.anulado_em && String(x.anulado_por || '') !== String(l.nome || '');
+/** Anulação feita por outra pessoa (não pelo próprio funcionário).
+ *  S52 · D: o relatório (106) traz `anulado_proprio` e `anulado_por_id`, e é
+ *  por ID que se decide — comparar nome com nome (S50) classificava errado
+ *  dois homônimos ou um nome corrigido depois da anulação. Sem o 106 no
+ *  banco (chaves ausentes), cai no nome, como antes. */
+const diaAnulOutro = (x, l) => !!x.anulado_em && (
+  typeof x.anulado_proprio === 'boolean' ? !x.anulado_proprio
+  : x.anulado_por_id && l.usuario_id ? String(x.anulado_por_id) !== String(l.usuario_id)
+  : String(x.anulado_por || '') !== String(l.nome || ''));
 /** A desmarcação automática do Field: o próprio funcionário + o motivo que o
  *  banco grava sozinho (104_s49, tf_diarias_marcar). Só essas se agrupam. */
 const diaAnulProprioAuto = (x, l) => !!x.anulado_em && !diaAnulOutro(x, l)
