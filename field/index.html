@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S23</title>
+<title>TapFlow Field · S24</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -173,6 +173,11 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
    "compromisso" da Agenda da Gestão — não é OS, não é visita. */
 .chip.comp{background:var(--surface-2);color:var(--ink-2)}
 .osCard.compCard{cursor:default}
+/* S24 · a minha ausência (S53): hoje fora, ou a próxima */
+.painel.ausP{border-left:4px solid var(--accent)}
+.painel.ausP.hoje{border-left-color:#1E5A33;background:#F2F8F4}
+.painel.ausP p{margin:4px 0 0;font-size:14px}
+.diaAus{margin:10px 0 0;padding:8px 10px;border-radius:8px;background:#F2F8F4;color:#1E5A33;font-size:13.5px}
 .osCard.compCard .linha .btn{flex:0 0 auto;min-width:120px}
 .chip.outro{background:var(--warn-soft);color:var(--warn);border-color:transparent}
 
@@ -462,7 +467,7 @@ details.termo.faq{margin-top:6px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S23';
+const APP_VERSION = 'S24';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -900,7 +905,7 @@ let execForm = null;  // item aberto no formulario, ou 'fim' na conferencia
 // CARREGAR
 // ════════════════════════════════════════════════════════════════════════════
 async function carregar(silencioso){
-  if (DEMO){ listaOS = demoLista(); MEU_DIA = demoMeuDia(); setConn('ok','demo');
+  if (DEMO){ listaOS = demoLista(); MEU_DIA = demoMeuDia(); MINHAS_AUS = demoMinhasAus(); setConn('ok','demo');
              if(tela==='lista') pintarLista(); return; }
   if (!silencioso) setConn('sync','carregando…');
   try{
@@ -920,9 +925,11 @@ async function carregar(silencioso){
     ]);
     // S20 · documentos para assinar e as diárias de hoje. Sem o 104 no banco,
     // as duas voltam nulas e o app segue como no S19 (sem as abas novas).
-    const [docs, diar] = await Promise.all([
+    const [docs, diar, aus] = await Promise.all([
       rpc('tf_rhdoc_meus', {}).catch(() => null),
-      rpc('tf_diarias_minhas', { p_mes: null, p_dia: null }).catch(() => null) ]);
+      rpc('tf_diarias_minhas', { p_mes: null, p_dia: null }).catch(() => null),
+      rpc('tf_ausencias_minhas', {}).catch(() => []) ]);   // S24 · S53
+    MINHAS_AUS = Array.isArray(aus) ? aus : [];
     DOCS = docs || null;
     if (tela !== 'dia') DIAR = diar || null;
     SEG = seg || null;
@@ -1050,6 +1057,7 @@ function pintarLista(){
   // S20 · documento para assinar e o lembrete das diárias (fim do dia, dia com serviço)
   try{ const pd = painelDocsPendente(); if (pd) m.insertBefore(pd, m.firstChild); }catch(e){ console.error('[docs]', e); }
   try{ const pl = painelLembreteDiaria(); if (pl) m.appendChild(pl); }catch(e){ console.error('[diarias]', e); }
+  try{ const pa = painelMinhaAusencia(); if (pa) m.appendChild(pa); }catch(e){ console.error('[ausencia]', e); }   // S24
   try{ pintarMeuDia(m); }
   catch(e){
     console.error('[roteiro]', e);
@@ -1229,6 +1237,13 @@ async function concluirAtrasada(a, d){
    A ordem: o que já foi começado primeiro (termine antes de pegar outra), depois
    o que ficou de trás, depois quem vence antes, e a prioridade só desempata. */
 let MEU_DIA = [];
+// S24 · as MINHAS ausências de hoje em diante (107_s53, `tf_ausencias_minhas`).
+// Sem o 107 no banco, lista vazia e o app segue como no S23.
+let MINHAS_AUS = [];
+const AUS_VERBO_F = { ferias:'de férias', folga:'de folga', atestado:'de atestado/licença', afastado:'afastado' };
+const AUS_ROT_F = { ferias:'Férias', folga:'Folga', atestado:'Atestado/licença', afastado:'Afastado' };
+/** A minha ausência num dia (ou null). */
+const minhaAusEm = dia => (MINHAS_AUS || []).find(a => a.inicio <= dia && a.fim >= dia) || null;
 
 /** 90 → "1h30min". A MESMA função do Manager: o mesmo número tinha duas caras
  *  ("1h30" lá, "1.5h" aqui), e é o mesmo time olhando as duas telas. */
@@ -4011,8 +4026,10 @@ function desenharDiariasF(){
     + '<button type="button" class="btn sm" id="dPro" aria-label="Dia seguinte"' + (dia >= hoje ? ' disabled' : '') + '>›</button></div>'
     + (fechado ? '<p class="diaFech">O mês de ' + esc(MES_F(dia)) + ' está <b>fechado</b>. Esqueceu algo? Fale com o Bruno ou o Fernando.</p>' : '')
     + (!D.pode_lancar ? '<p class="diaFech">Seu cadastro não está ativo para lançar diárias.</p>' : '')
+    + (minhaAusEm(dia) ? '<p class="diaAus">Neste dia você está <b>' + esc(AUS_VERBO_F[minhaAusEm(dia).tipo] || 'fora')
+        + '</b>: diária não se lança. Se trabalhou, avise o escritório para corrigir a ausência.</p>' : '')
     + '<div class="diaTog">' + ['cafe','almoco','jantar'].map(k => '<button type="button" data-t="' + k + '" class="' + (marc[k] ? 'on' : '') + '"'
-        + (fechado || !D.pode_lancar ? ' disabled' : '') + ' aria-pressed="' + (marc[k] ? 'true' : 'false') + '"><b>' + DIA_ROT_F[k] + '</b><small>'
+        + (fechado || !D.pode_lancar || (minhaAusEm(dia) && !marc[k]) ? ' disabled' : '') + ' aria-pressed="' + (marc[k] ? 'true' : 'false') + '"><b>' + DIA_ROT_F[k] + '</b><small>'
         + (marc[k] ? '✓ ' + BRLf(marc[k].valor) + (marc[k].por_outro ? ' · lançado pelo escritório' : '') : BRLf((D.valores || {})[k]))
         + '</small></button>').join('') + '</div>'
     + '<div class="campo" style="margin:12px 0 0"><label for="dOs">OS do serviço (opcional)</label><select id="dOs"'
@@ -4069,9 +4086,39 @@ function desenharDiariasF(){
 }
 /** O lembrete do fim do dia: só em dia em que você tem serviço agendado e
  *  ainda não lançou nada — não aparece todo dia nem para quem não saiu. */
+
+// ════════════════════════════════════════════════════════════════════════════
+// S24 · A MINHA AUSÊNCIA (Manager S53 / 107_s53)
+// ----------------------------------------------------------------------------
+// Férias, folga e atestado são lançados pelo escritório (RH › Ausências). Aqui
+// a pessoa vê a dela: "Hoje você está de folga" no dia, e a próxima, quando
+// houver. O pedido pelo próprio Field é a próxima versão (S54).
+// ════════════════════════════════════════════════════════════════════════════
+function painelMinhaAusencia(){
+  const hoje = isoHojeF();
+  const agora = minhaAusEm(hoje);
+  const prox = (MINHAS_AUS || []).filter(a => a.inicio > hoje).sort((a, b) => a.inicio.localeCompare(b.inicio))[0];
+  if (!agora && !prox) return null;
+  const per = a => a.inicio === a.fim ? 'em ' + dataBR(a.inicio).slice(0,5)
+                 : 'de ' + dataBR(a.inicio).slice(0,5) + ' a ' + dataBR(a.fim).slice(0,5);
+  const d = document.createElement('div');
+  d.className = 'painel ausP' + (agora ? ' hoje' : '');
+  d.setAttribute('role', 'note');
+  d.innerHTML = '<div class="et">' + (agora ? 'Sua ausência' : 'Próxima ausência') + '</div>'
+    + (agora ? '<p>Você está <b>' + esc(AUS_VERBO_F[agora.tipo] || 'fora') + '</b>'
+         + (agora.fim > hoje ? ' até ' + esc(dataBR(agora.fim).slice(0,5)) : '') + '. A equipe vê isso na Agenda.</p>' : '')
+    + (prox ? '<p>' + (agora ? 'Depois: ' : '') + '<b>' + esc(AUS_ROT_F[prox.tipo] || prox.tipo) + '</b> ' + esc(per(prox)) + '.</p>' : '');
+  return d;
+}
+function demoMinhasAus(){
+  const h = isoHojeF(), mais = n => somaDiaF(h, n);
+  return [{ id:'dm1', tipo:'folga', inicio: mais(4), fim: mais(4) }, { id:'dm2', tipo:'ferias', inicio: mais(30), fim: mais(49) }];
+}
+
 function painelLembreteDiaria(){
   try{
     if (DEMO || !DIAR || !DIAR.dia || DIAR.dia.data !== isoHojeF()) return null;
+    if (minhaAusEm(isoHojeF())) return null;   // S24 · hoje estou fora: não há refeição na rua a lembrar
     if (new Date().getHours() < 16) return null;
     if (Object.keys(DIAR.dia.marcadas || {}).length || DIAR.dia.fechado || !DIAR.pode_lancar) return null;
     const temServico = (MEU_DIA || []).some(t => t.os_id) || (DIAR.dia.os_agendadas || []).length > 0;
