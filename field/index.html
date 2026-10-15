@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S25</title>
+<title>TapFlow Field · S26</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -490,7 +490,7 @@ details.termo.faq{margin-top:6px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S25';
+const APP_VERSION = 'S26';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -4175,13 +4175,15 @@ function desenharFeriasF(){
   if (!FER_F.tipo) FER_F.tipo = F.tipo || 'folga';
   const dd = d => dataBR(d).slice(0,5), ddd = d => dataBR(d);
   // ── o saldo
-  const per = (F.periodos || []).filter(p => p.restantes > 0 || !p.completo).slice(0, 3);
+  // S26 · só até o período em formação de AGORA (o do ano que vem não serve para nada ainda)
+  const per = (F.periodos || []).filter(p => (p.restantes > 0 || !p.completo) && p.aq_ini <= hoje).slice(0, 3);
   const ps = document.createElement('div'); ps.className = 'painel';
   ps.innerHTML = '<div class="et">' + (rec ? 'Meu recesso' : 'Meu saldo de férias') + '</div>'
     + (per.length ? per.map(p => '<div class="ferPer"><div><b>' + esc(ddd(p.aq_ini)) + ' a ' + esc(ddd(p.aq_fim)) + '</b>'
-        + '<small>' + (!p.completo ? 'completa em ' + esc(ddd(p.aq_fim)) + ' — dá direito a partir do dia seguinte'
+        + '<small>' + (!p.completo
+              ? 'em formação · dá direito a partir de ' + esc(ddd(somaDiaF(p.aq_fim, 1))) + (rec ? '' : ' · limite de gozo ' + esc(ddd(p.conc_fim)))
             : rec ? 'recesso deste ano de estágio'
-            : (p.vencido ? '<span class="chip ferVenc">prazo vencido em ' + esc(ddd(p.conc_fim)) + '</span>' : 'tirar até ' + esc(ddd(p.conc_fim))))
+            : (p.vencido ? '<span class="chip ferVenc">limite de gozo vencido em ' + esc(ddd(p.conc_fim)) + '</span>' : 'limite de gozo ' + esc(ddd(p.conc_fim))))
         + (p.gozados || p.pedidos || p.vendidos ? ' · tirados ' + p.gozados + (p.pedidos ? ', pedidos ' + p.pedidos : '')
             + (p.vendidos ? ', vendidos ' + p.vendidos : '') : '') + '</small></div>'
         + '<div style="text-align:right"><b class="n">' + p.restantes + '</b><small>dias</small></div></div>').join('')
@@ -4248,7 +4250,8 @@ function desenharFeriasF(){
           + ch.map(c => '<div><b>' + esc(c.texto) + '</b></div>').join('')
           + (ch.length ? '<div>Converse com o colega e escolha outras datas.</div>' : '') + '</div>'
         : '<div class="ferConf ok">' + r.dias + (r.dias === 1 ? ' dia' : ' dias') + (Number(r.vender) ? ' + ' + r.vender + ' vendidos' : '')
-          + (p ? ' · do período ' + esc(String(p.aq_ini).slice(0,4)) + '/' + esc(String(p.aq_fim).slice(2,4)) + (r.restantes_depois != null ? ' · sobram ' + r.restantes_depois : '') : '')
+          + (p ? ' · do período ' + esc(String(p.aq_ini).slice(0,4)) + '/' + esc(String(p.aq_fim).slice(2,4)) + (r.restantes_depois != null ? ' · sobram ' + r.restantes_depois : '')
+              + (p.tipo === 'ferias' && p.conc_fim ? ' · limite de gozo ' + esc(ddd(p.conc_fim)) : '') : '')
           + ' · pode enviar.</div>')
       + (av.length ? '<div class="ferConf aviso">' + av.map(a => '<div>' + esc(a) + '</div>').join('') + '</div>' : '');
     env.disabled = !r.ok;

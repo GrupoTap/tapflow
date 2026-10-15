@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S54</title>
+<title>TapFlow Manager · S55</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1982,7 +1982,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S54';
+const APP_VERSION = 'S55';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -18408,7 +18408,9 @@ function ausSaldos(){
       : z.vencido ? '<span class="chip ausVencChip">vencido em ' + esc(dataBR(z.conc_fim)) + '</span>'
       : z.restantes > 0 && z.tipo === 'ferias' && dias <= 90 ? '<span class="chip ausAvisoChip">vence em ' + dias + ' dias</span>' : '';
     return '<div class="ausPerL"><span><b>' + esc(dataBR(z.aq_ini) + ' a ' + dataBR(z.aq_fim)) + '</b>'
-      + (z.tipo === 'ferias' ? '<small>tirar até ' + esc(dataBR(z.conc_fim)) + '</small>' : '<small>recesso do estágio</small>') + '</span>'
+      // S55 · o período em formação diz a partir de quando dá direito; os de férias, o limite de gozo
+      + '<small>' + (!z.completo ? 'dá direito a partir de ' + esc(dataBR(agSoma(z.aq_fim, 1))) + (z.tipo === 'ferias' ? ' · ' : '') : '')
+      + (z.tipo === 'ferias' ? 'limite de gozo ' + esc(dataBR(z.conc_fim)) : z.completo ? 'recesso do estágio' : '') + '</small></span>'
       + '<span class="n">' + z.direito + '</span><span class="n">' + z.gozados + '</span><span class="n">' + z.pedidos + '</span>'
       + '<span class="n">' + z.vendidos + '</span><span class="n"><b>' + z.restantes + '</b></span><span>' + st + (z.base ? ' <span class="chip">saldo inicial</span>' : '') + '</span></div>';
   };
@@ -18421,7 +18423,8 @@ function ausSaldos(){
       + ((p.periodos || []).length
           ? '<div class="ausPerL cab"><span>Período aquisitivo</span><span class="n">Direito</span><span class="n">Tirados</span>'
             + '<span class="n">Pedidos</span><span class="n">Vendidos</span><span class="n">Sobram</span><span></span></div>'
-            + p.periodos.map(z => perLin(p, z)).join('')
+            // S55 · só até o período em formação de AGORA (o do ano que vem não serve para nada ainda)
+            + p.periodos.filter(z => z.aq_ini <= hoje).map(z => perLin(p, z)).join('')
           : '<p class="nota" style="margin:6px 0 0">' + (p.vinculo === 'socio' ? 'Sócio: fora do controle de férias.'
               : !p.admissao ? 'Sem a data de admissão na ficha (Recursos Humanos › Funcionários).' : 'Sem período.') + '</p>')
       + '</div>').join('')
@@ -18590,7 +18593,7 @@ function ausModal(x){
       const per = r.periodo;
       box.innerHTML = (per ? '<p class="nota" style="margin:0 0 6px">Período ' + esc(dataBR(per.aq_ini) + ' a ' + dataBR(per.aq_fim))
           + ' · sobram ' + per.restantes + (r.restantes_depois != null ? ' → ' + r.restantes_depois + ' depois disto' : '')
-          + (per.conc_fim ? ' · tirar até ' + esc(dataBR(per.conc_fim)) : '') + '</p>' : '')
+          + (per.conc_fim && per.tipo === 'ferias' ? ' · limite de gozo ' + esc(dataBR(per.conc_fim)) : '') + '</p>' : '')
         + ((r.erros || []).length || (r.choques || []).length || (r.avisos || []).length
             ? '<div class="aviso' + ((r.erros || []).length ? ' ausAvErro' : '') + '">' + ausConfHTML(r) + '</div>' : '');
       document.getElementById('auChqC').hidden = !(r.choques || []).length;
