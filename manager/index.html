@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S57</title>
+<title>TapFlow Manager · S58</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -327,6 +327,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 .finPerBtn{display:inline-flex;align-items:center;white-space:nowrap;cursor:pointer}
 .finPerBtn:hover,.finSel select:hover{border-color:var(--accent)}
 .finFiltrosBtn{display:none}
+.finHistNota{color:var(--ink-3)}
+.finHistNota button{border:0;background:none;padding:0;font:inherit;color:var(--accent);text-decoration:underline;cursor:pointer}
 .finTags{display:none;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 8px}
 .finTags.on{display:flex}
 .finResumo{font-size:12.5px;color:var(--ink-2);margin:0 0 6px;min-height:18px}
@@ -2025,7 +2027,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S57';
+const APP_VERSION = 'S58';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -20072,6 +20074,7 @@ async function finrlExtrato(el){
     alvo.innerHTML = '<div class="painel" style="padding:14px">'
       + '<p class="nota" style="margin-top:0">Saldo atual: <b>' + esc(BRL(r.saldo_atual)) + '</b>'
       + (P ? ' · no período: entrou <b>' + esc(BRL(entrou)) + '</b>, saiu <b>' + esc(BRL(saiu)) + '</b>' : '') + '</p>'
+      + finCorteNota(r)
       + (mv.length
           ? '<div class="ccLin cab"><span>Data</span><span>Descrição</span><span class="n">Valor</span></div>'
             + mv.map(m => '<div class="ccLin' + (m.estornado ? ' riscada' : '') + '">'
@@ -20419,6 +20422,14 @@ function modalConta(c){
      }}]);
 }
 
+/** S58 · o saldo conta a partir da data de corte (110). O que veio antes
+ *  (o histórico do SIGE) só entra nos relatórios. */
+function finCorteNota(r){
+  const n = Number(r.antes_do_corte) || 0;
+  return '<p class="nota" style="margin-top:-4px">Conta desde ' + esc(dataBR(r.data_corte)) + ', com saldo inicial de ' + esc(BRL(r.saldo_inicial))
+    + (n ? '. ' + finPlural(n, 'lançamento anterior (histórico) aparece', 'lançamentos anteriores (histórico) aparecem') + ' só nos relatórios.' : '.') + '</p>';
+}
+
 async function modalExtratoConta(id){
   abrirModal('Extrato', '<p class="nota">Carregando…</p>', [{ label:'Fechar', pri:true, onClick: fecharModal }]);
   let r;
@@ -20428,6 +20439,7 @@ async function modalExtratoConta(id){
   const mv = r.movimentos || [];
   document.getElementById('mBody').innerHTML =
       '<p class="nota" style="margin-top:0">Saldo atual: <b>' + esc(BRL(r.saldo_atual)) + '</b></p>'
+    + finCorteNota(r)
     + (mv.length
         ? '<div class="ccLin cab"><span>Data</span><span>Descrição</span><span class="n">Valor</span></div>'
           + mv.map(m => '<div class="ccLin' + (m.estornado ? ' riscada' : '') + '">'
@@ -20892,7 +20904,8 @@ const finTituloRot = t => finDescOk(finSemMarcador(t.descricao)) ? finSemMarcado
 // ── o motor ─────────────────────────────────────────────────────────────────
 const FINF = {};
 function finfNovo(cfg){
-  return { sit:'todas', per:null, grupo:'', pessoa:'', tipo:'', ord: Object.assign({}, cfg.ordPadrao), aberto:false };
+  // S58 · hist: o histórico do SIGE (origem 'sige') fica escondido até pedir
+  return { sit:'todas', per:null, grupo:'', pessoa:'', tipo:'', hist:'', ord: Object.assign({}, cfg.ordPadrao), aberto:false };
 }
 const finSelHtml = (id, rot, ops, valor) =>
   '<label class="finSel"><span>' + esc(rot) + '</span><select id="' + id + '">'
@@ -20911,6 +20924,7 @@ function finBarraHtml(tela){
     +   finSelHtml(tela + 'Grupo', 'Categoria', [['', 'Todas']], '')
     +   finSelHtml(tela + 'Pessoa', cfg.pessoaRot, [['', 'Todos']], '')
     +   finSelHtml(tela + 'Ord', 'Ordenar por', finOrdOpcoes(cfg), finOrdValor(st.ord))
+    +   (cfg.hist ? finSelHtml(tela + 'Hist', 'Histórico do SIGE', [['', 'Esconder'], ['com', 'Mostrar junto'], ['so', 'Só o histórico']], st.hist) : '')
     + '</div></div>'
     + '<div class="finTags" id="' + tela + 'Tags"></div>'
     + '<p class="finResumo" id="' + tela + 'Resumo" aria-live="polite"></p>';
@@ -20935,6 +20949,7 @@ function finLigar(tela){
   $('Grupo').addEventListener('change', e => { st.grupo = e.target.value; mudou(); });
   $('Pessoa').addEventListener('change', e => { st.pessoa = e.target.value; mudou(); });
   if ($('Tipo')) $('Tipo').addEventListener('change', e => { st.tipo = e.target.value; mudou(); });
+  if ($('Hist')) $('Hist').addEventListener('change', e => { st.hist = e.target.value; mudou(); });
   $('Ord').addEventListener('change', e => {
     const [c, d] = String(e.target.value).split(':');
     st.ord = c ? { col: c, dir: Number(d) || 1 } : Object.assign({}, cfg.ordPadrao);
@@ -20983,7 +20998,7 @@ function finLigar(tela){
 }
 function finLimpar(tela){
   const st = FINF[tela];
-  st.sit = 'todas'; st.per = null; st.grupo = ''; st.pessoa = ''; st.tipo = '';
+  st.sit = 'todas'; st.per = null; st.grupo = ''; st.pessoa = ''; st.tipo = ''; st.hist = '';
   BUSCA[tela] = '';
   const tb = document.getElementById('tbBusca'); if (tb) tb.value = '';
 }
@@ -21021,6 +21036,7 @@ function finOpcoes(tela){
 }
 
 function finCasaBase(cfg, st, t, q){
+  if (cfg.hist && !finHistCasa(t, st.hist)) return false;
   if (q && !casa(cfg.busca(t), q)) return false;
   if (st.per){
     const v = st.per.campo === 'comp' ? String(t.competencia || '').slice(0, 7)
@@ -21038,6 +21054,10 @@ function finCasaBase(cfg, st, t, q){
   if (st.tipo === 'variavel' && !t.variavel) return false;
   return true;
 }
+
+/** S58 · o histórico do SIGE (fev a set/2026, já pago) entrou para os
+ *  relatórios; nas listas do dia a dia ele só aparece quando se pede. */
+const finHistCasa = (t, h) => h === 'so' ? t.origem === 'sige' : (h === 'com' || t.origem !== 'sige');
 
 function finOrdenar(cfg, L, ord){
   if (!ord || !ord.col) return L.slice();
@@ -21090,6 +21110,7 @@ function finDesenhar(tela){
   if (perBtn) perBtn.textContent = (st.per ? finPerTexto(st.per, cfg.campos).replace(/^[^:]+: /, '') : 'Todos') + ' ▾';
   const ordSel = document.getElementById(tela + 'Ord'); if (ordSel) ordSel.value = finOrdValor(st.ord);
   const sitSel = document.getElementById(tela + 'Sit'); if (sitSel) sitSel.value = st.sit;
+  const histSel = document.getElementById(tela + 'Hist'); if (histSel) histSel.value = st.hist;
 
   // etiquetas: ninguém pode achar que a lista está vazia por um filtro esquecido
   const tags = [];
@@ -21098,6 +21119,7 @@ function finDesenhar(tela){
   if (st.sit !== 'todas') tags.push(['sit', 'Situação: ' + rotSel(tela + 'Sit').replace(/\s*\(\d+\)$/, '')]);
   if (st.per) tags.push(['per', finPerTexto(st.per, cfg.campos)]);
   if (st.tipo) tags.push(['tipo', 'Valor: ' + rotSel(tela + 'Tipo')]);
+  if (st.hist) tags.push(['hist', st.hist === 'so' ? 'Só o histórico do SIGE' : 'Com o histórico do SIGE']);
   if (st.grupo) tags.push(['grupo', 'Categoria: ' + rotSel(tela + 'Grupo')]);
   if (st.pessoa) tags.push(['pessoa', cfg.pessoaRot + ': ' + rotSel(tela + 'Pessoa')]);
   const tagsEl = document.getElementById(tela + 'Tags');
@@ -21108,7 +21130,11 @@ function finDesenhar(tela){
   const fb = document.getElementById(tela + 'FiltrosBtn');
   if (fb) fb.textContent = 'Filtros' + (tags.filter(t => t[0] !== 'busca').length ? ' (' + tags.filter(t => t[0] !== 'busca').length + ')' : '') + (st.aberto ? ' ▴' : ' ▾');
 
-  document.getElementById(tela + 'Resumo').innerHTML = cfg.resumo(L, st);
+  const nHist = cfg.hist && !st.hist ? T.filter(t => t.origem === 'sige').length : 0;
+  document.getElementById(tela + 'Resumo').innerHTML = cfg.resumo(L, st)
+    + (nHist ? ' <span class="finHistNota">· ' + finPlural(nHist, 'título', 'títulos') + ' do histórico do SIGE (fev a set/2026) fora da lista — <button type="button" id="' + tela + 'HistVer">mostrar</button></span>' : '');
+  const hv = document.getElementById(tela + 'HistVer');
+  if (hv) hv.addEventListener('click', () => { st.hist = 'com'; finDesenhar(tela); });
 
   if (!L.length){
     el.innerHTML = '<div class="vazio2">' + (T.length
@@ -21271,7 +21297,7 @@ const FIN_CFG = {
   finpg: {
     elId:'finpgLista', lista: () => FINPG.lista, unidade:['conta','contas'], vazio:'Nenhuma conta a pagar ainda.',
     pessoaK:'fornecedor_id', pessoaNome:'fornecedor_nome', pessoaRot:'Fornecedor',
-    campos: FIN_CAMPOS_PAGAR, agrupa:true, desempate:['venc', 'nome'],
+    campos: FIN_CAMPOS_PAGAR, agrupa:true, desempate:['venc', 'nome'], hist:true,
     ordPadrao:{ col:'venc', dir:1 },
     colunas: finColunasTitulo('Fornecedor', 'fornecedor_nome'),
     situacoes: [['todas','Todas'], ['aberto','Em aberto'], ['vencidas','Vencidas'], ['parcial','Parcial'],
@@ -21285,7 +21311,7 @@ const FIN_CFG = {
   finre: {
     elId:'finreLista', lista: () => FINRE.lista, unidade:['conta','contas'], vazio:'Nenhuma conta a receber ainda.',
     pessoaK:'cliente_id', pessoaNome:'cliente_nome', pessoaRot:'Cliente',
-    campos: FIN_CAMPOS_RECEBER, agrupa:true, desempate:['venc', 'nome'],
+    campos: FIN_CAMPOS_RECEBER, agrupa:true, desempate:['venc', 'nome'], hist:true,
     ordPadrao:{ col:'venc', dir:1 },
     colunas: finColunasTitulo('Cliente', 'cliente_nome'),
     situacoes: [['todas','Todas'], ['aberto','Em aberto'], ['vencidas','Vencidas'], ['parcial','Parcial'],
