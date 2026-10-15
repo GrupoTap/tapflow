@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S26</title>
+<title>TapFlow Field · S27</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -193,6 +193,16 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 .ferTipo{display:flex;gap:8px;margin-bottom:12px}
 .ferTipo button{flex:1;padding:11px;border:1px solid var(--rule);border-radius:5px;background:var(--surface);font-size:15px;font-weight:600}
 .ferTipo button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+/* S27 · escolher o tipo ANTES das datas: dois botões grandes, com o que cada um é */
+.ferPerg{margin:2px 0 10px;font-size:15px;font-weight:600}
+.ferEsc{display:grid;gap:10px}
+.ferEsc button{display:block;width:100%;text-align:left;padding:14px;border:1px solid var(--rule);border-radius:6px;background:var(--surface)}
+.ferEsc button b{display:block;font-size:17px;color:var(--accent)}
+.ferEsc button small{display:block;font-size:13px;color:var(--ink-3);margin-top:2px}
+.ferEsc button:active{background:var(--surface-2)}
+.ferParte button{padding:8px;font-size:14px;font-weight:500}
+.ferSugF{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ferSugBtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .ferConf{border-radius:5px;padding:10px;font-size:13.5px;margin:0 0 12px;line-height:1.45}
 .ferConf.ok{background:#E6F2EA;color:#14532E}
 .ferConf.erro{background:#F8E1DC;color:#6E1E10}
@@ -490,7 +500,7 @@ details.termo.faq{margin-top:6px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S26';
+const APP_VERSION = 'S27';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -1269,8 +1279,13 @@ const AUS_VERBO_F = { ferias:'de férias', folga:'de folga', atestado:'de atesta
 const AUS_ROT_F = { ferias:'Férias', folga:'Folga', atestado:'Atestado/licença', afastado:'Afastado', recesso:'Recesso' };
 // S25 · o meu saldo de férias e os meus pedidos (108_s54, `tf_ferias_minhas`)
 let FER = null;
-/** A minha ausência num dia (ou null). */
-const minhaAusEm = dia => (MINHAS_AUS || []).find(a => a.inicio <= dia && a.fim >= dia) || null;
+/** A minha ausência de DIA INTEIRO num dia (ou null). S27: a de parte do dia
+ *  (folga ou atestado de algumas horas) não trava a diária — a pessoa
+ *  trabalhou a outra parte. */
+const minhaAusEm = dia => (MINHAS_AUS || []).find(a => a.inicio <= dia && a.fim >= dia && !a.hora_inicio) || null;
+/** A minha ausência de PARTE do dia num dia (ou null). */
+const minhaAusParteEm = dia => (MINHAS_AUS || []).find(a => a.inicio <= dia && a.fim >= dia && a.hora_inicio) || null;
+const horasAusF = a => a && a.hora_inicio ? 'das ' + a.hora_inicio + ' às ' + a.hora_fim : '';
 
 /** 90 → "1h30min". A MESMA função do Manager: o mesmo número tinha duas caras
  *  ("1h30" lá, "1.5h" aqui), e é o mesmo time olhando as duas telas. */
@@ -4003,7 +4018,7 @@ function abasTopo(m, qual){
   if (!soSeg()) abas.push(['lista', 'Ordens', 0]);
   if (DIAR || !DEMO) abas.push(['dia', 'Diárias', 0]);
   // S25 · Férias (ou Recesso, no estágio) — quem tem ficha com vínculo
-  if (FER && (FER.tipo === 'ferias' || FER.tipo === 'recesso')) abas.push(['fer', FER.tipo === 'recesso' ? 'Recesso' : 'Férias', 0]);
+  if (FER && (FER.tipo === 'ferias' || FER.tipo === 'recesso')) abas.push(['fer', FER.tipo === 'recesso' ? 'Folga/Recesso' : 'Folga/Férias', 0]);   // S27: a folga no nome
   if (temDocs) abas.push(['docs', 'Documentos', nPendDocs()]);
   if (temSeg) abas.push(['seg', abas.length >= 3 ? 'Segurança' : 'Minha Segurança', nPendSeg()]);
   if (abas.length < 2) return;
@@ -4057,7 +4072,9 @@ function desenharDiariasF(){
     + (fechado ? '<p class="diaFech">O mês de ' + esc(MES_F(dia)) + ' está <b>fechado</b>. Esqueceu algo? Fale com o Bruno ou o Fernando.</p>' : '')
     + (!D.pode_lancar ? '<p class="diaFech">Seu cadastro não está ativo para lançar diárias.</p>' : '')
     + (minhaAusEm(dia) ? '<p class="diaAus">Neste dia você está <b>' + esc(AUS_VERBO_F[minhaAusEm(dia).tipo] || 'fora')
-        + '</b>: diária não se lança. Se trabalhou, avise o escritório para corrigir a ausência.</p>' : '')
+        + '</b>: diária não se lança. Se trabalhou, avise o escritório para corrigir a ausência.</p>'
+      : minhaAusParteEm(dia) ? '<p class="diaAus">Neste dia você está <b>' + esc(AUS_VERBO_F[minhaAusParteEm(dia).tipo] || 'fora')
+        + ' ' + esc(horasAusF(minhaAusParteEm(dia))) + '</b>. A diária da outra parte do dia continua liberada.</p>' : '')
     + '<div class="diaTog">' + ['cafe','almoco','jantar'].map(k => '<button type="button" data-t="' + k + '" class="' + (marc[k] ? 'on' : '') + '"'
         + (fechado || !D.pode_lancar || (minhaAusEm(dia) && !marc[k]) ? ' disabled' : '') + ' aria-pressed="' + (marc[k] ? 'true' : 'false') + '"><b>' + DIA_ROT_F[k] + '</b><small>'
         + (marc[k] ? '✓ ' + BRLf(marc[k].valor) + (marc[k].por_outro ? ' · lançado pelo escritório' : '') : BRLf((D.valores || {})[k]))
@@ -4126,16 +4143,16 @@ function desenharDiariasF(){
 // ════════════════════════════════════════════════════════════════════════════
 function painelMinhaAusencia(){
   const hoje = isoHojeF();
-  const agora = minhaAusEm(hoje);
+  const agora = minhaAusEm(hoje) || minhaAusParteEm(hoje);
   const prox = (MINHAS_AUS || []).filter(a => a.inicio > hoje).sort((a, b) => a.inicio.localeCompare(b.inicio))[0];
   if (!agora && !prox) return null;
-  const per = a => a.inicio === a.fim ? 'em ' + dataBR(a.inicio).slice(0,5)
-                 : 'de ' + dataBR(a.inicio).slice(0,5) + ' a ' + dataBR(a.fim).slice(0,5);
+  const per = a => (a.inicio === a.fim ? 'em ' + dataBR(a.inicio).slice(0,5)
+                 : 'de ' + dataBR(a.inicio).slice(0,5) + ' a ' + dataBR(a.fim).slice(0,5)) + (a.hora_inicio ? ', ' + horasAusF(a) : '');
   const d = document.createElement('div');
   d.className = 'painel ausP' + (agora ? ' hoje' : '');
   d.setAttribute('role', 'note');
   d.innerHTML = '<div class="et">' + (agora ? 'Sua ausência' : 'Próxima ausência') + '</div>'
-    + (agora ? '<p>Você está <b>' + esc(AUS_VERBO_F[agora.tipo] || 'fora') + '</b>'
+    + (agora ? '<p>Você está <b>' + esc(AUS_VERBO_F[agora.tipo] || 'fora') + (agora.hora_inicio ? ' ' + esc(horasAusF(agora)) : '') + '</b>'
          + (agora.fim > hoje ? ' até ' + esc(dataBR(agora.fim).slice(0,5)) : '') + '. A equipe vê isso na Agenda.</p>' : '')
     + (prox ? '<p>' + (agora ? 'Depois: ' : '') + '<b>' + esc(AUS_ROT_F[prox.tipo] || prox.tipo) + '</b> ' + esc(per(prox)) + '.</p>' : '');
   return d;
@@ -4157,13 +4174,13 @@ function demoMinhasAus(){
 // aparece; o pedido nasce "aguardando" e já segura a data. Quem aprova é o
 // escritório (Ausências, no Manager).
 // ════════════════════════════════════════════════════════════════════════════
-let FER_F = { tipo: null, ini: '', fim: '', vender: 0, obs: '', conf: null };
+let FER_F = { tipo: null, ini: '', fim: '', vender: 0, obs: '', conf: null, parte: false, hi: '', hf: '', longaOk: false };
 async function pintarFeriasF(){
   tela = 'fer'; atual = null;
   const rec = FER && FER.tipo === 'recesso';
   document.getElementById('btnBack').hidden = true;
-  document.getElementById('hTit').textContent = rec ? 'Recesso' : 'Férias';
-  document.getElementById('hSub').textContent = (sessao.nome || '') + ' · ' + (rec ? 'recesso do estágio' : 'férias e folgas');
+  document.getElementById('hTit').textContent = rec ? 'Folga e recesso' : 'Folga e férias';
+  document.getElementById('hSub').textContent = (sessao.nome || '') + ' · ' + (rec ? 'folgas e recesso do estágio' : 'folgas e férias');
   const m = document.getElementById('main'); m.innerHTML = '';
   if (!DEMO){ try{ FER = await rpc('tf_ferias_minhas', {}); }catch(e){ toast(e.message, 'err'); } }
   if (tela !== 'fer') return;
@@ -4172,24 +4189,57 @@ async function pintarFeriasF(){
 function desenharFeriasF(){
   const m = document.getElementById('main'); m.innerHTML = '';
   const F = FER || {}, rec = F.tipo === 'recesso', hoje = F.hoje || isoHojeF();
-  if (!FER_F.tipo) FER_F.tipo = F.tipo || 'folga';
+  const tipoFer = F.tipo || 'ferias', nomeFer = rec ? 'Recesso' : 'Férias';
   const dd = d => dataBR(d).slice(0,5), ddd = d => dataBR(d);
-  // ── o saldo
-  // S26 · só até o período em formação de AGORA (o do ano que vem não serve para nada ainda)
-  const per = (F.periodos || []).filter(p => (p.restantes > 0 || !p.completo) && p.aq_ini <= hoje).slice(0, 3);
-  const ps = document.createElement('div'); ps.className = 'painel';
-  ps.innerHTML = '<div class="et">' + (rec ? 'Meu recesso' : 'Meu saldo de férias') + '</div>'
-    + (per.length ? per.map(p => '<div class="ferPer"><div><b>' + esc(ddd(p.aq_ini)) + ' a ' + esc(ddd(p.aq_fim)) + '</b>'
-        + '<small>' + (!p.completo
-              ? 'em formação · dá direito a partir de ' + esc(ddd(somaDiaF(p.aq_fim, 1))) + (rec ? '' : ' · limite de gozo ' + esc(ddd(p.conc_fim)))
-            : rec ? 'recesso deste ano de estágio'
-            : (p.vencido ? '<span class="chip ferVenc">limite de gozo vencido em ' + esc(ddd(p.conc_fim)) + '</span>' : 'limite de gozo ' + esc(ddd(p.conc_fim))))
-        + (p.gozados || p.pedidos || p.vendidos ? ' · tirados ' + p.gozados + (p.pedidos ? ', pedidos ' + p.pedidos : '')
-            + (p.vendidos ? ', vendidos ' + p.vendidos : '') : '') + '</small></div>'
-        + '<div style="text-align:right"><b class="n">' + p.restantes + '</b><small>dias</small></div></div>').join('')
-      : '<p>Sem período com saldo agora.</p>');
-  m.appendChild(ps);
-  // ── os pedidos e as ausências
+  const horas = a => a.hora_inicio ? ' · ' + a.hora_inicio + '–' + a.hora_fim : '';
+  // ── 1 · PEDIR — no alto (S27): folga é o pedido mais comum, e nenhum tipo
+  // vem marcado: a pessoa escolhe antes das datas (o Túlio pediu uma folga
+  // no tipo Férias porque ele já vinha marcado)
+  const t = FER_F.tipo, ehFer = t === 'ferias', parte = t === 'folga' && FER_F.parte;
+  const minIni = ehFer ? (F.aviso_min || somaDiaF(hoje, 30)) : hoje;
+  const HORAS = []; for (let h = 6; h <= 22; h++){ HORAS.push(String(h).padStart(2,'0') + ':00'); if (h < 22) HORAS.push(String(h).padStart(2,'0') + ':30'); }
+  const selH = (id, v, rot) => '<div class="campo"><label for="' + id + '">' + rot + '</label><select id="' + id + '"><option value="">—</option>'
+    + HORAS.map(h => '<option' + (h === v ? ' selected' : '') + '>' + h + '</option>').join('') + '</select></div>';
+  const pp = document.createElement('div'); pp.className = 'painel';
+  if (!t){
+    pp.innerHTML = '<div class="et">Pedir</div><p class="ferPerg">O que você quer pedir?</p><div class="ferEsc">'
+      + '<button type="button" data-tp="folga"><b>Folga</b><small>um dia ou algumas horas · sem antecedência</small></button>'
+      + '<button type="button" data-tp="' + esc(tipoFer) + '"><b>' + nomeFer + '</b><small>'
+      + (rec ? 'do estágio · 30 dias por ano' : 'de 5 a 30 dias · pedidas com 30 dias de antecedência') + '</small></button></div>';
+  } else {
+    pp.innerHTML = '<div class="et">Pedir</div>'
+      + '<div class="ferTipo">' + [['folga', 'Folga'], [tipoFer, nomeFer]].map(([k, r]) =>
+          '<button type="button" data-tp="' + k + '" class="' + (t === k ? 'on' : '') + '" aria-pressed="' + (t === k) + '">' + r + '</button>').join('') + '</div>'
+      + (t === 'folga' ? '<div class="ferTipo ferParte">' + [[false, 'Dia inteiro'], [true, 'Parte do dia']].map(([k, r]) =>
+          '<button type="button" data-pt="' + k + '" class="' + (!!FER_F.parte === k ? 'on' : '') + '" aria-pressed="' + (!!FER_F.parte === k) + '">' + r + '</button>').join('') + '</div>' : '')
+      + (parte
+          ? '<div class="campo"><label for="ferI">Dia</label><input id="ferI" type="date" min="' + esc(minIni) + '"></div>'
+            + '<div class="duplaF">' + selH('ferHI', FER_F.hi, 'Das') + selH('ferHF', FER_F.hf, 'Até') + '</div>'
+          : '<div class="duplaF"><div class="campo"><label for="ferI">Primeiro dia</label><input id="ferI" type="date" min="' + esc(minIni) + '"></div>'
+            + '<div class="campo"><label for="ferF">Último dia</label><input id="ferF" type="date" min="' + esc(minIni) + '"></div></div>')
+      + (ehFer ? '<div class="campo"><label for="ferV">Vender dias (0 a 10)</label><input id="ferV" type="number" inputmode="numeric" min="0" max="10"></div>' : '')
+      + '<div class="campo"><label for="ferO">Observação (opcional)</label><input id="ferO" type="text" maxlength="300" autocomplete="off"></div>'
+      + '<div id="ferConf" aria-live="polite"></div><div id="ferSug" aria-live="polite"></div>'
+      + '<button type="button" class="btn pri" id="ferEnv" disabled>Enviar pedido</button>'
+      + '<p style="font-size:12.5px;color:var(--ink-3);margin:8px 0 0">'
+      + (ehFer ? 'Férias se pedem com 30 dias de antecedência, começam de segunda a quinta (fora de feriado e das vésperas), em até 3 partes: uma com 14 dias ou mais e nenhuma com menos de 5.'
+         : t === 'recesso' ? 'Recesso do estágio: 30 dias por ano de estágio.'
+         : 'Folga do banco de horas: só marca o dia (ou as horas); o saldo de horas continua no ponto.')
+      + ' O pedido fica "aguardando" até o escritório decidir — e já segura a data.</p>';
+  }
+  m.appendChild(pp);
+  pp.querySelectorAll('[data-tp]').forEach(b => b.addEventListener('click', () => {
+    FER_F.tipo = b.dataset.tp; FER_F.conf = null; FER_F.longaOk = false;
+    if (FER_F.tipo !== 'folga') FER_F.parte = false;
+    desenharFeriasF();
+  }));
+  pp.querySelectorAll('[data-pt]').forEach(b => b.addEventListener('click', () => {
+    FER_F.parte = b.dataset.pt === 'true'; FER_F.conf = null;
+    if (FER_F.parte) FER_F.fim = FER_F.ini;
+    desenharFeriasF();
+  }));
+  if (t) ligarPedirF(pp, F, t, ehFer, parte, ddd);
+  // ── 2 · os pedidos e as ausências
   const L = (F.ausencias || []).filter(a => a.tipo !== 'atestado');
   if (L.length){
     const pl = document.createElement('div'); pl.className = 'painel';
@@ -4199,7 +4249,7 @@ function desenharFeriasF(){
       const podeDesistir = a.status === 'pedida' || (a.status === 'aprovada'
         && ((a.tipo === 'folga' && a.inicio > hoje) || (a.tipo !== 'folga' && a.inicio >= somaDiaF(hoje, 30))));
       return '<div class="ferLin"><div class="l1"><b>' + esc(AUS_ROT_F[a.tipo] || a.tipo) + '</b> '
-        + esc(a.inicio === a.fim ? dd(a.inicio) : dd(a.inicio) + ' a ' + dd(a.fim))
+        + esc((a.inicio === a.fim ? dd(a.inicio) : dd(a.inicio) + ' a ' + dd(a.fim)) + horas(a))
         + ' <span class="chip ' + st[0] + '">' + esc(st[1]) + '</span></div>'
         + '<small>' + [Number(a.dias_vendidos) ? 'vendendo ' + a.dias_vendidos + ' dia(s)' : '',
                         a.status === 'recusada' && a.recusa_motivo ? 'motivo: ' + esc(a.recusa_motivo) : '',
@@ -4218,73 +4268,113 @@ function desenharFeriasF(){
       catch(e){ toast(e.message, 'err'); b.disabled = false; }
     }));
   }
-  // ── pedir
-  const t = FER_F.tipo, ehFer = t === 'ferias', minIni = ehFer ? (F.aviso_min || somaDiaF(hoje, 30)) : hoje;
-  const pp = document.createElement('div'); pp.className = 'painel';
-  pp.innerHTML = '<div class="et">Pedir</div>'
-    + '<div class="ferTipo">' + [[F.tipo || 'ferias', rec ? 'Recesso' : 'Férias'], ['folga', 'Folga']].map(([k, r]) =>
-        '<button type="button" data-tp="' + k + '" class="' + (t === k ? 'on' : '') + '" aria-pressed="' + (t === k) + '">' + r + '</button>').join('') + '</div>'
-    + '<div class="duplaF"><div class="campo"><label for="ferI">Primeiro dia</label><input id="ferI" type="date" min="' + esc(minIni) + '"></div>'
-    + '<div class="campo"><label for="ferF">Último dia</label><input id="ferF" type="date" min="' + esc(minIni) + '"></div></div>'
-    + (ehFer ? '<div class="campo"><label for="ferV">Vender dias (0 a 10)</label><input id="ferV" type="number" inputmode="numeric" min="0" max="10"></div>' : '')
-    + '<div class="campo"><label for="ferO">Observação (opcional)</label><input id="ferO" type="text" maxlength="300" autocomplete="off"></div>'
-    + '<div id="ferConf" aria-live="polite"></div>'
-    + '<button type="button" class="btn pri" id="ferEnv" disabled>Enviar pedido</button>'
-    + '<p style="font-size:12.5px;color:var(--ink-3);margin:8px 0 0">'
-    + (ehFer ? 'Férias se pedem com 30 dias de antecedência, começam de segunda a quinta (fora de feriado e das vésperas), em até 3 partes: uma com 14 dias ou mais e nenhuma com menos de 5.'
-       : t === 'recesso' ? 'Recesso do estágio: 30 dias por ano de estágio.'
-       : 'Folga do banco de horas: só marca o dia; o saldo de horas continua no ponto.')
-    + ' O pedido fica "aguardando" até o escritório decidir — e já segura a data.</p>';
-  m.appendChild(pp);
+  // ── 3 · o saldo (depois: quem só quer uma folga não precisa passar por ele)
+  // S26 · só até o período em formação de AGORA (o do ano que vem não serve para nada ainda)
+  const per = (F.periodos || []).filter(p => (p.restantes > 0 || !p.completo) && p.aq_ini <= hoje).slice(0, 3);
+  const ps = document.createElement('div'); ps.className = 'painel';
+  ps.innerHTML = '<div class="et">' + (rec ? 'Meu recesso' : 'Meu saldo de férias') + '</div>'
+    + (per.length ? per.map(p => '<div class="ferPer"><div><b>' + esc(ddd(p.aq_ini)) + ' a ' + esc(ddd(p.aq_fim)) + '</b>'
+        + '<small>' + (!p.completo
+              ? 'em formação · dá direito a partir de ' + esc(ddd(somaDiaF(p.aq_fim, 1))) + (rec ? '' : ' · limite de gozo ' + esc(ddd(p.conc_fim)))
+            : rec ? 'recesso deste ano de estágio'
+            : (p.vencido ? '<span class="chip ferVenc">limite de gozo vencido em ' + esc(ddd(p.conc_fim)) + '</span>' : 'limite de gozo ' + esc(ddd(p.conc_fim))))
+        + (p.gozados || p.pedidos || p.vendidos ? ' · tirados ' + p.gozados + (p.pedidos ? ', pedidos ' + p.pedidos : '')
+            + (p.vendidos ? ', vendidos ' + p.vendidos : '') : '') + '</small></div>'
+        + '<div style="text-align:right"><b class="n">' + p.restantes + '</b><small>dias</small></div></div>').join('')
+      : '<p>Sem período com saldo agora.</p>');
+  m.appendChild(ps);
+  abasTopo(m, 'fer');
+}
+/** O formulário do pedido, já com o tipo escolhido: confere no banco enquanto
+ *  a pessoa escolhe, sugere "é uma folga?" nas férias curtas ou em cima da
+ *  hora, e pergunta antes de mandar uma folga com mais de 7 dias (S27). */
+function ligarPedirF(pp, F, t, ehFer, parte, ddd){
   const eI = pp.querySelector('#ferI'), eF = pp.querySelector('#ferF'), eV = pp.querySelector('#ferV'), eO = pp.querySelector('#ferO');
-  eI.value = FER_F.ini; eF.value = FER_F.fim; if (eV) eV.value = FER_F.vender || 0; eO.value = FER_F.obs;
-  pp.querySelectorAll('[data-tp]').forEach(b => b.addEventListener('click', () => { FER_F.tipo = b.dataset.tp; FER_F.conf = null; desenharFeriasF(); }));
+  const eHI = pp.querySelector('#ferHI'), eHF = pp.querySelector('#ferHF');
+  eI.value = FER_F.ini; if (eF) eF.value = FER_F.fim; if (eV) eV.value = FER_F.vender || 0; eO.value = FER_F.obs;
+  const fimDe = () => parte ? eI.value : (eF.value || eI.value);
+  const nDias = () => { const i = eI.value, f = fimDe(); return i && f >= i ? Math.round((new Date(f + 'T12:00') - new Date(i + 'T12:00')) / 864e5) + 1 : 0; };
   let tm = null, seq = 0;
+  const sug = html => { const b = pp.querySelector('#ferSug'); if (b) b.innerHTML = html || ''; };
+  const sugFolga = r => {
+    // nas férias: data perto (antecedência) ou poucos dias → "é uma folga?"
+    if (!ehFer || !r) return sug('');
+    const curto = Number(r.dias) > 0 && Number(r.dias) < 5;
+    const perto = (r.erros || []).some(e => /antecedência/.test(e));
+    if (!curto && !perto) return sug('');
+    sug('<div class="ferConf aviso ferSugF">É uma folga? <button type="button" class="btn sm" id="ferVirarF">Pedir como folga</button></div>');
+    pp.querySelector('#ferVirarF').addEventListener('click', () => {
+      FER_F.tipo = 'folga'; FER_F.parte = false; FER_F.vender = 0; FER_F.conf = null; desenharFeriasF();
+    });
+  };
   const mostra = r => {
     const box = pp.querySelector('#ferConf'), env = pp.querySelector('#ferEnv');
     if (!box) return;
-    if (!r){ box.innerHTML = ''; env.disabled = true; return; }
+    if (!r){ box.innerHTML = ''; env.disabled = true; sug(''); return; }
     const er = (r.erros || []).filter(e => !/^Choca com/.test(e)), ch = r.choques || [], av = r.avisos || [];
-    const p = r.periodo;
+    const p = r.periodo, min = Number(r.minutos) || 0;
     box.innerHTML = (er.length || ch.length ? '<div class="ferConf erro">' + er.map(e => '<div>' + esc(e) + '</div>').join('')
           + ch.map(c => '<div><b>' + esc(c.texto) + '</b></div>').join('')
           + (ch.length ? '<div>Converse com o colega e escolha outras datas.</div>' : '') + '</div>'
-        : '<div class="ferConf ok">' + r.dias + (r.dias === 1 ? ' dia' : ' dias') + (Number(r.vender) ? ' + ' + r.vender + ' vendidos' : '')
+        : '<div class="ferConf ok">' + (min ? minHora(min) + ' em ' + esc(dataBR(eI.value).slice(0,5)) + ', das ' + esc(eHI.value) + ' às ' + esc(eHF.value)
+              : r.dias + (r.dias === 1 ? ' dia' : ' dias')) + (Number(r.vender) ? ' + ' + r.vender + ' vendidos' : '')
           + (p ? ' · do período ' + esc(String(p.aq_ini).slice(0,4)) + '/' + esc(String(p.aq_fim).slice(2,4)) + (r.restantes_depois != null ? ' · sobram ' + r.restantes_depois : '')
               + (p.tipo === 'ferias' && p.conc_fim ? ' · limite de gozo ' + esc(ddd(p.conc_fim)) : '') : '')
           + ' · pode enviar.</div>')
       + (av.length ? '<div class="ferConf aviso">' + av.map(a => '<div>' + esc(a) + '</div>').join('') + '</div>' : '');
     env.disabled = !r.ok;
+    sugFolga(r);
   };
   const confere = async () => {
-    FER_F.ini = eI.value; FER_F.fim = eF.value; FER_F.vender = eV ? Number(eV.value) || 0 : 0; FER_F.obs = eO.value;
-    const i = eI.value, f = eF.value || i;
-    if (!i){ mostra(null); return; }
-    if (DEMO){ mostra(demoFerSimular(t, i, f, FER_F.vender)); return; }
+    FER_F.ini = eI.value; FER_F.fim = fimDe(); FER_F.vender = eV ? Number(eV.value) || 0 : 0; FER_F.obs = eO.value;
+    if (eHI){ FER_F.hi = eHI.value; FER_F.hf = eHF.value; }
+    FER_F.longaOk = false;
+    const i = eI.value, f = fimDe();
+    if (!i || (parte && (!eHI.value || !eHF.value))){ mostra(null); return; }
+    if (DEMO){ mostra(demoFerSimular(t, i, f, FER_F.vender, parte ? eHI.value : null, parte ? eHF.value : null)); return; }
     const meu = ++seq;
     try{
-      const r = await rpc('tf_ferias_simular', { p_tipo: t, p_inicio: i, p_fim: f, p_vender: FER_F.vender });
+      const arg = { p_tipo: t, p_inicio: i, p_fim: f, p_vender: FER_F.vender };
+      if (parte){ arg.p_hora_inicio = eHI.value; arg.p_hora_fim = eHF.value; }
+      const r = await rpc('tf_ferias_simular', arg);
       if (meu === seq && tela === 'fer') { FER_F.conf = r; mostra(r); }
-    }catch(e){ if (meu === seq) { const box = pp.querySelector('#ferConf'); if (box) box.innerHTML = '<div class="ferConf erro"></div>'; box.firstChild.textContent = e.message; } }
+    }catch(e){ if (meu === seq) { const box = pp.querySelector('#ferConf'); if (box){ box.innerHTML = '<div class="ferConf erro"></div>'; box.firstChild.textContent = e.message; } } }
   };
   const agenda = () => { clearTimeout(tm); tm = setTimeout(confere, 300); };
-  eI.addEventListener('change', () => { if (!eF.value || eF.value < eI.value) eF.value = eI.value; agenda(); });
-  eF.addEventListener('change', agenda); if (eV) eV.addEventListener('input', agenda);
+  eI.addEventListener('change', () => { if (eF && (!eF.value || eF.value < eI.value)) eF.value = eI.value; agenda(); });
+  if (eF) eF.addEventListener('change', agenda);
+  if (eV) eV.addEventListener('input', agenda);
+  if (eHI){ eHI.addEventListener('change', () => { if (eHF.value && eHF.value <= eHI.value) eHF.value = ''; agenda(); }); eHF.addEventListener('change', agenda); }
   eO.addEventListener('input', () => { FER_F.obs = eO.value; });
   if (FER_F.ini) agenda();
-  pp.querySelector('#ferEnv').addEventListener('click', async ev => {
-    const b = ev.currentTarget;
+  const envia = async b => {
     if (DEMO){ toast('Modo demonstração: nada é gravado.', 'err'); return; }
     b.disabled = true;
     try{
-      await rpc1('tf_ferias_pedir', { p_tipo: t, p_inicio: eI.value, p_fim: eF.value || eI.value,
-                                       p_vender: eV ? Number(eV.value) || 0 : 0, p_observacao: eO.value.trim() || null });
+      const arg = { p_tipo: t, p_inicio: eI.value, p_fim: fimDe(),
+                    p_vender: eV ? Number(eV.value) || 0 : 0, p_observacao: eO.value.trim() || null };
+      if (parte){ arg.p_hora_inicio = eHI.value; arg.p_hora_fim = eHF.value; }
+      await rpc1('tf_ferias_pedir', arg);
       toast('Pedido enviado. Agora é com o escritório.', 'ok');
-      FER_F = { tipo: t, ini: '', fim: '', vender: 0, obs: '', conf: null };
+      FER_F = { tipo: null, ini: '', fim: '', vender: 0, obs: '', conf: null, parte: false, hi: '', hf: '', longaOk: false };
       pintarFeriasF();
     }catch(e){ toast(e.message, 'err'); b.disabled = false; }
+  };
+  pp.querySelector('#ferEnv').addEventListener('click', ev => {
+    const b = ev.currentTarget;
+    // folga com mais de 7 dias corridos: pergunta antes (Bruno, 15/10)
+    const n = nDias();
+    if (t === 'folga' && n > 7 && !FER_F.longaOk){
+      sug('<div class="ferConf aviso"><div><b>Folga de ' + n + ' dias?</b> Pedidos longos costumam ser férias.</div>'
+        + '<div class="ferSugBtns"><button type="button" class="btn sm" id="ferLongaOk">Enviar como folga</button>'
+        + '<button type="button" class="btn sm" id="ferLongaFer">Trocar para ' + (FER && FER.tipo === 'recesso' ? 'recesso' : 'férias') + '</button></div></div>');
+      pp.querySelector('#ferLongaOk').addEventListener('click', () => { FER_F.longaOk = true; sug(''); envia(b); });
+      pp.querySelector('#ferLongaFer').addEventListener('click', () => {
+        FER_F.tipo = (FER && FER.tipo) || 'ferias'; FER_F.parte = false; FER_F.conf = null; desenharFeriasF(); });
+      return;
+    }
+    envia(b);
   });
-  abasTopo(m, 'fer');
 }
 function demoFer(){
   const h = isoHojeF(), y = Number(h.slice(0,4));
@@ -4298,12 +4388,17 @@ function demoFer(){
                 { id: 'df3', tipo: 'folga', inicio: somaDiaF(h, 20), fim: somaDiaF(h, 20), status: 'recusada', recusa_motivo: 'semana de inventário', decidido_por: 'Vinícius' }] };
 }
 /** No modo demonstração, uma conferência de mentira (a de verdade é do banco). */
-function demoFerSimular(t, i, f, v){
+function demoFerSimular(t, i, f, v, hi, hf){
   const dias = Math.round((new Date(f + 'T12:00') - new Date(i + 'T12:00')) / 864e5) + 1;
+  const mm = x => Number(x.slice(0,2)) * 60 + Number(x.slice(3,5));
   const erros = [];
   if (t === 'ferias' && dias < 5) erros.push('Cada parte das férias tem no mínimo 5 dias.');
+  if (t === 'ferias' && i < somaDiaF(isoHojeF(), 30)) erros.push('Férias se pedem com pelo menos 30 dias de antecedência (a partir de ' + dataBR(somaDiaF(isoHojeF(), 30)) + ').');
+  if (hi && hf && mm(hf) <= mm(hi)) erros.push('A hora de fim vem antes da hora de início.');
   const dow = new Date(i + 'T12:00').getDay();
   if (t === 'ferias' && (dow === 5 || dow === 6 || dow === 0)) erros.push('Férias começam de segunda a quinta (não nos 2 dias antes do descanso de domingo).');
+  if (t === 'folga') return { ok: !erros.length, erros, avisos: [], choques: [], dias, vender: 0,
+                              minutos: hi && hf && mm(hf) > mm(hi) ? mm(hf) - mm(hi) : null };
   return { ok: !erros.length, erros, avisos: [], choques: [], dias, vender: v, restantes_depois: 30 - dias - v,
            periodo: (FER.periodos || [])[0] };
 }

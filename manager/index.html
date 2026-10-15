@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S55</title>
+<title>TapFlow Manager · S56</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -227,6 +227,39 @@ button{font:inherit;color:inherit;cursor:pointer}
   cursor:not-allowed;filter:none;font-weight:500}
 .who{font-size:12.5px;color:var(--ink-3)}
 .who b{color:var(--ink);font-weight:600}
+/* S56 · fila item 3: a barra do topo numa janela de 1000–1440 px (menu lateral
+   à mostra, barra com ~780 px). Antes, "+ Nova OS" quebrava em 3 linhas, o
+   crachá vazava da barra e, logado, "Atualizar" saía da tela. Regra: nada
+   quebra linha; quem encolhe é a busca (até um mínimo) e o caminho do topo;
+   os botões ficam inteiros. Na faixa estreita sobram só o essencial:
+   o ponto da conexão (texto no balão), o primeiro nome (o resto no balão),
+   o ícone de "Trocar de app" e "+ OS". */
+.topbar>*{flex-shrink:0;white-space:nowrap}
+.topbar .crumb{flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.topbar .sp{flex:1 1 0;min-width:0}
+.crachaEu{white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.whoResto{font-weight:400}
+.tbIco{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.5;vertical-align:-2px;display:none}
+#btnHub:not([hidden]){display:inline-flex;align-items:center;gap:6px}
+@media (min-width:901px){
+  .topbar .tbBusca{flex:0 1 250px;width:250px;min-width:120px}
+}
+/* até 1439 px (inclui o celular, onde o nome já some): ícone e ponto */
+@media (max-width:1439px){
+  #connTxt{display:none}
+  .whoResto{display:none}
+  #btnHub .tbTxt{display:none}
+  #btnHub .tbIco{display:inline}
+  #btnHub{padding:6px 9px}
+}
+@media (min-width:901px) and (max-width:1439px){
+  .topbar{gap:9px;padding:0 14px}
+  #crumbGrupo,#crumbGrupo+span{display:none}
+}
+@media (min-width:901px) and (max-width:1099px){
+  .tbNova{display:none}
+  #btnNovaOS{padding:6px 10px}
+}
 /* S32 · item 3: a tela "Meu perfil". Painel único e estreito de propósito —
    são quatro linhas de leitura e um botão; espalhar isso na largura da tela
    faria a pessoa procurar onde está o conteúdo. */
@@ -1897,10 +1930,10 @@ th.num .tfThFixo{text-align:right}
     <input type="search" class="tbBusca" id="tbBusca" placeholder="Buscar nesta tela…"
            autocomplete="off" name="tf_busca_nofill" data-lpignore="true" data-1p-ignore
            readonly onfocus="this.removeAttribute('readonly')" aria-label="Buscar nesta tela">
-    <button class="btn pri" id="btnNovaOS">+ Nova OS</button>
+    <button class="btn pri" id="btnNovaOS" title="Nova OS">+ <span class="tbNova">Nova </span>OS</button>
     <div class="conn"><span class="dot" id="dot"></span><span id="connTxt">—</span></div>
     <span class="who" id="who"></span>
-    <button class="btn" id="btnHub" title="Voltar ao TapFlow e trocar de app" hidden>Trocar de app</button>
+    <button class="btn" id="btnHub" title="Voltar ao TapFlow e trocar de app" aria-label="Trocar de app" hidden><svg class="tbIco" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="5" height="5" rx="1"/><rect x="9.5" y="1.5" width="5" height="5" rx="1"/><rect x="1.5" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/></svg><span class="tbTxt">Trocar de app</span></button>
     <button class="btn" id="btnRefresh" title="Recarregar os dados">Atualizar</button>
   </header>
 
@@ -1982,7 +2015,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S55';
+const APP_VERSION = 'S56';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -2031,6 +2064,8 @@ function setConn(estado, texto){
   const d = document.getElementById('dot');
   d.className = 'dot' + (estado ? ' ' + estado : '');
   document.getElementById('connTxt').textContent = texto;
+  // S56: na barra estreita só o ponto aparece; o texto vai para o balão.
+  const cx = d.parentElement; if (cx) cx.title = texto || '';
   conectado = (estado === 'ok');
 }
 
@@ -4376,11 +4411,16 @@ async function modalDesignar(card, t, aposGravar, par){
                                  .filter(c => c.dataset.fora === '1' && c.value !== quem)
                                  .map(c => c.closest('label').textContent.split(' — ')[0].trim()) : [];
         t._apoiosNovos = apoios;
+        // S56 · o dia e o tempo digitados são lidos AGORA, enquanto o
+        // formulário existe: o aviso "Designar mesmo assim?" abre no mesmo
+        // espaço da janela e apaga os campos. Até o S55 o gravar os lia depois
+        // do aviso, achava vazio e o banco mantinha o dia antigo, calado.
+        const form = { dia: (document.getElementById('mdD') || {}).value || null,
+                       min: (document.getElementById('mdM') || {}).value || '' };
         // S53 · quem está de férias/folga/atestado no dia: avisa e deixa
         // gravar no segundo clique (a barra nunca bloqueia; quem decide é
         // quem está olhando a tela).
-        if (quem && await ausAvisarNoModal([quem].concat(apoios || []),
-                                           (document.getElementById('mdD') || {}).value || null)) return;
+        if (quem && await ausAvisarNoModal([quem].concat(apoios || []), form.dia)) return;
         // o aviso do ponto 3: explica o risco e deixa o admin decidir
         if ((quem && op && op.dataset.fora === '1') || foraAp.length){
           const lista = (t.perfis_responsaveis || []).join(', ');
@@ -4394,12 +4434,14 @@ async function modalDesignar(card, t, aposGravar, par){
             + 'achar botão para concluir — é exatamente o que aconteceu na OS-26038. '
             + 'Se for para ele fazer mesmo, o caminho certo é '
             + '<b>Configurações › Tarefas por perfil</b>, que muda a regra para valer.</p>',
-            [{ label:'Voltar', onClick: () => { fecharModal(); modalDesignar(card, t, aposGravar, par); } },
+            // S56 · "Voltar" reabre a janela com o que estava digitado, não com o gravado
+            [{ label:'Voltar', onClick: async () => { fecharModal(); await modalDesignar(card, t, aposGravar, par);
+                                                     mdRestaurar(quem, form, apoios); } },
              { label:'Designar assim mesmo', pri:true,
-               onClick: () => gravarDesignacao(card, t, quem, aposGravar) }]);
+               onClick: () => gravarDesignacao(card, t, quem, aposGravar, form) }]);
           return;
         }
-        await gravarDesignacao(card, t, quem, aposGravar);
+        await gravarDesignacao(card, t, quem, aposGravar, form);
      }}]);
   mdEsconderDonoDoApoio();
 }
@@ -4418,12 +4460,26 @@ function mdEsconderDonoDoApoio(){
   aplica();
 }
 
+/** S56 · devolve à janela reaberta pelo "Voltar" o que a pessoa tinha
+ *  escolhido (quem, dia, tempo e apoios). */
+function mdRestaurar(quem, form, apoios){
+  const sel = document.getElementById('mdU');
+  if (sel && quem != null){ sel.value = quem; sel.dispatchEvent(new Event('change')); }
+  const d = document.getElementById('mdD'), m = document.getElementById('mdM');
+  if (d && form) d.value = form.dia || '';
+  if (m && form) m.value = form.min || '';
+  const lista = document.getElementById('mdApLista');
+  if (lista && Array.isArray(apoios))
+    lista.querySelectorAll('.mdAp').forEach(c => { c.checked = apoios.indexOf(c.value) >= 0 && c.value !== quem; });
+}
+
 /** O que grava, separado do formulário porque a confirmação do aviso reentra
- *  por aqui depois de fechar o modal. */
-async function gravarDesignacao(card, t, quem, aposGravar){
+ *  por aqui depois de fechar o modal. S56: o dia e o tempo vêm em `form`,
+ *  lidos ANTES do aviso — o aviso apaga os campos da janela. */
+async function gravarDesignacao(card, t, quem, aposGravar, form){
   try{
-    const m   = (document.getElementById('mdM') || {}).value;
-    const dia = (document.getElementById('mdD') || {}).value || null;
+    const m   = form ? form.min : (document.getElementById('mdM') || {}).value;
+    const dia = form ? form.dia : ((document.getElementById('mdD') || {}).value || null);
     // ⚠ Até o S21 a tela recusava "dono sem dia" aqui, porque o banco
     //    recusava. A regra caiu no S22: dono sem dia continua na vista
     //    "Sem dia", com o nome. O que segue proibido é DIA SEM DONO —
@@ -10794,10 +10850,14 @@ function pintarCracha(){
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'crachaEu';
-  b.title = 'Meu perfil';
-  b.innerHTML = '<b></b> · ';
-  b.querySelector('b').textContent = sessao.nome;
-  b.appendChild(document.createTextNode(sessao.perfil || ''));
+  // S56: o primeiro nome fica sempre; o resto (sobrenome e perfil) some na
+  // barra estreita e continua no balão.
+  const nome = String(sessao.nome).trim(), i = nome.indexOf(' ');
+  const resto = (i > 0 ? nome.slice(i) : '') + (sessao.perfil ? ' · ' + sessao.perfil : '');
+  b.title = nome + (sessao.perfil ? ' · ' + sessao.perfil : '') + ' — Meu perfil';
+  b.innerHTML = '<b></b><span class="whoResto"></span>';
+  b.querySelector('b').textContent = i > 0 ? nome.slice(0, i) : nome;
+  b.querySelector('.whoResto').textContent = resto;
   b.addEventListener('click', () => irPara('eu'));
   cx.appendChild(b);
 }
@@ -16170,17 +16230,18 @@ function agVistaDia(cx){
     const rs  = resPessoa[id] || [];
     const min = its.reduce((s,i) => s + Number(i.tempo_estimado_min || 0), 0);
     const sem = its.filter(i => !i.tempo_estimado_min).length;
-    const oc  = cap > 0 ? min / cap : (min > 0 ? 2 : 0);
     // S53 · a pessoa está fora neste dia e ainda tem algo marcado: o selo diz
     // que é para rever (nada sai sozinho da agenda dela)
     const au  = agAusDe(id, dia);
-    return '<div class="agDia' + (au ? ' agDiaAus' : '') + '">'
+    const capP = capMenosAus(cap, au);   // S56 · parte do dia tira as horas
+    const oc  = capP > 0 ? min / capP : (min > 0 ? 2 : 0);
+    return '<div class="agDia' + (au && !au.hora_inicio ? ' agDiaAus' : '') + '">'
       + '<div class="agDiaH"><b>' + esc(nome) + '</b>'
       +   (au ? '<span class="chip aus aus-' + esc(au.tipo) + '" title="' + esc(ausPer(au))
             + (its.length ? ' — reveja o que está marcado' : '') + '">' + (its.length ? '⚠ ' : '')
-            + esc(AUS_VERBO[au.tipo] || 'fora') + '</span>' : '')
+            + esc((AUS_VERBO[au.tipo] || 'fora') + (au.hora_inicio ? ' ' + au.hora_inicio + '–' + au.hora_fim : '')) + '</span>' : '')
       +   '<span class="agH' + (oc > 1 ? ' cheio' : oc > .7 ? ' quase' : '') + '">'
-      +     minHora(min) + ' / ' + (cap > 0 ? minHora(cap) : 'fora do turno') + (oc > 1 ? ' ⚠ estourou' : '') + '</span>'
+      +     minHora(min) + ' / ' + (capP > 0 ? minHora(capP) : 'fora do turno') + (oc > 1 ? ' ⚠ estourou' : '') + '</span>'
       +   (sem ? '<span class="agSem">' + sem + ' sem estimativa</span>' : '')
       +   (rs.length ? '<span class="agResN">' + rs.length + ' resolvido' + (rs.length > 1 ? 's' : '') + '</span>' : '')
       + '</div>'
@@ -16326,15 +16387,15 @@ function agVistaSemana(cx){
       const nr = resChave[id + '|' + d] || 0;
       const min = c ? Number(c.minutos || 0) : 0;
       // S29: a capacidade é a do DIA (a view já manda a dela; a tela confere)
-      const cap = c && c.capacidade_min != null ? Number(c.capacidade_min) : agCap(d);
+      const au = agAusDe(id, d);   // S53
+      const cap = capMenosAus(c && c.capacidade_min != null ? Number(c.capacidade_min) : agCap(d), au);   // S56
       const oc = cap > 0 ? min / cap : (min > 0 ? 2 : 0);
       const clicavel = c || nr;
-      const au = agAusDe(id, d);   // S53
-      html += '<td class="agCel' + (au ? ' aus' : '') + (oc > 1 ? ' cheio' : oc > .7 ? ' quase' : '')
+      html += '<td class="agCel' + (au && !au.hora_inicio ? ' aus' : '') + (oc > 1 ? ' cheio' : oc > .7 ? ' quase' : '')
             + (clicavel ? ' temItens" data-u="' + esc(id) + '" data-d="' + esc(d)
                  + '" tabindex="0" role="button" title="Ver as tarefas deste dia' : '"') + '">'
         + (au ? '<div class="agAusC aus-' + esc(au.tipo) + '" title="' + esc(nome + ' · ' + (AUS_ROT[au.tipo] || '') + ' · ' + ausPer(au)) + '">'
-              + esc(AUS_ROT[au.tipo] || 'Fora') + (c ? ' ⚠' : '') + '</div>' : '')
+              + esc((AUS_ROT[au.tipo] || 'Fora') + (au.hora_inicio ? ' ' + au.hora_inicio + '–' + au.hora_fim : '')) + (c && !au.hora_inicio ? ' ⚠' : '') + '</div>' : '')
         + (c ? '<span class="agH">' + minHora(min) + ' / ' + (cap > 0 ? minHora(cap) : 'fora do turno') + (oc > 1 ? ' ⚠' : '') + '</span>'
              + '<div class="agBar"><i style="width:' + Math.min(100, Math.round(oc*100)) + '%"></i></div>'
              + '<div class="agN">' + c.tarefas + ' tarefa' + (c.tarefas > 1 ? 's' : '') + '</div>'
@@ -16366,10 +16427,20 @@ function agVistaMes(cx){
   const cap = TURNO.capacidade_min || 540;
   const porDia = {};
   (AGENDA.carga || []).filter(c => !AGENDA.soMinhas || agEhMinha(c)).forEach(c => {
-    const o = porDia[c.dia] = porDia[c.dia] || { min:0, tarefas:0, gente:new Set() };
+    const o = porDia[c.dia] = porDia[c.dia] || { min:0, tarefas:0, gente:new Set(), itens:new Set() };
     o.min += Number(c.minutos || 0); o.tarefas += Number(c.tarefas || 0);
     o.gente.add(String(c.usuario_id));
   });
+  // S56 · "N tarefas" conta cada tarefa/compromisso/visita UMA vez no dia,
+  // por mais gente que vá junto: até o S55 a linha de cada apoio contava de
+  // novo (14/10: "5 pessoas · 7 tarefas" para 5 compromissos). As HORAS
+  // continuam somando todo mundo — cada pessoa ocupa mesmo o tempo dela.
+  const chaveItem = i => i.origem === 'avulso' ? 'av|' + i.compromisso_id
+    : i.origem === 'visita' ? 'vis|' + (i.agendamento_id || i.tarefa) : i.os_id + '|' + i.tarefa_id;
+  (AGENDA.itens || []).filter(i => !AGENDA.soMinhas || agEhMinha(i)).forEach(i => {
+    if (porDia[i.dia]) porDia[i.dia].itens.add(chaveItem(i));
+  });
+  Object.values(porDia).forEach(o => { if (o.itens.size) o.tarefas = o.itens.size; });
   const res = agResolvidosVisiveis();
   const resDia = {};
   res.forEach(r => { resDia[r.dia] = (resDia[r.dia] || 0) + 1; });
@@ -16779,21 +16850,32 @@ async function modalQuem(t){
    lista é quem mexe no compromisso: o escritório. O banco exige dono e dia
    para ter apoio, tira o dono da lista e troca os papéis quando um apoio
    assume (`tf_salvar_compromisso`, gatilho `tg_comp_apoios`). */
+let _compCats = null;   // S56 · as categorias do compromisso, guardadas na sessão
 async function modalCompromisso(c, padrao){
   if (DEMO){ toast('Modo demonstração: compromisso não é gravado.','err'); return; }
   const pode = podeEscritorio();
   let cats = [], d = null, hist = [];
-  try{ cats = await get('v_compromissos_categorias?select=categoria&limit=60'); }catch(e){ cats = []; }
-  if (c && c.compromisso_id){
-    try{ d = ((await get('compromissos_avulsos?select=*&id=eq.' + c.compromisso_id)) || [])[0] || null; }
-    catch(e){ toast(e.message,'err'); return; }
-    if (!d){ toast('Esse compromisso não existe mais.','err'); return; }
+  // S56 · as três consultas saem JUNTAS (até o S55 eram uma depois da outra —
+  // em campo, com sinal fraco, a janela demorava o triplo) e as categorias
+  // ficam guardadas na sessão até alguém lançar um compromisso.
+  const id = c && c.compromisso_id;
+  const [rc, rd, rh] = await Promise.all([
+    _compCats ? Promise.resolve(_compCats)
+      : get('v_compromissos_categorias?select=categoria&limit=60').catch(() => null),
+    id ? get('compromissos_avulsos?select=*&id=eq.' + id).then(r => ({ ok: r }), e => ({ erro: e })) : Promise.resolve(null),
     // S51 · 1.5: quem entrou, saiu, assumiu (o registro do banco). Sem o 105,
     // a consulta volta vazia e a janela segue como no S50.
-    try{
-      hist = await get('eventos?select=id,ocorrido_em,descricao,usuario_id&tipo=eq.compromisso'
-        + '&payload->>compromisso_id=eq.' + d.id + '&order=id.asc&limit=60') || [];
-    }catch(e){ hist = []; }
+    // S56 · os 60 MAIS NOVOS (até o S55, os 60 mais antigos — passando de 60,
+    // sumiam justamente os últimos); a tela mostra do mais antigo ao mais novo.
+    id ? get('eventos?select=id,ocorrido_em,descricao,usuario_id&tipo=eq.compromisso'
+        + '&payload->>compromisso_id=eq.' + id + '&order=id.desc&limit=60').catch(() => []) : Promise.resolve([]) ]);
+  cats = rc || [];
+  if (rc) _compCats = rc;
+  if (id){
+    if (rd && rd.erro){ toast(rd.erro.message,'err'); return; }
+    d = ((rd && rd.ok) || [])[0] || null;
+    if (!d){ toast('Esse compromisso não existe mais.','err'); return; }
+    hist = (rh || []).slice().reverse();
   }
   const v = d || Object.assign({ usuario_designado: null, data_prevista: null }, padrao || {});
   const eu = meuId();
@@ -16913,6 +16995,7 @@ async function modalCompromisso(c, padrao){
           // S53 · alguém fora nesse dia: avisa; o segundo clique grava
           if (quem && await ausAvisarNoModal([quem].concat(apoios || []), dia)) return;
           try{
+            _compCats = null;   // S56 · categoria nova entra na lista da próxima vez
             const r = await rpc('tf_salvar_compromisso', { p_id: d ? d.id : null, p_titulo: tit,
               p_descricao: document.getElementById('acDs').value.trim() || null,
               p_categoria: document.getElementById('acC').value.trim() || null,
@@ -17007,7 +17090,10 @@ async function agAbrirTarefa(i, doPool){
   if (i.origem === 'avulso') return modalCompromisso(i);
   // S50 · item 4: o "Concluir" da paralela só com a OS e a tarefa DE VERDADE
   // (ver `paralelaFora`). O card provisório continua servindo para designar.
-  const par = await paralelaFora(i.os_id, i.tarefa_id);
+  // S56 · tarefa resolvida, bloqueada ou condicional nunca tem o "Concluir"
+  // da paralela (`possoConcluirParalela` exige pendente/em andamento): sem as
+  // duas consultas, a janela abre na hora.
+  const par = (i.status === 'pendente' || i.status === 'em_andamento') ? await paralelaFora(i.os_id, i.tarefa_id) : null;
   const card = (par && par.card) || cards.find(c => c.os_id === i.os_id)
             || { os_id:i.os_id, numero:i.os_numero, cliente:i.cliente };
   modalDesignar(card, {
@@ -18050,6 +18136,9 @@ REPINTA.rhdia = () => { if (DIA.dados) diaDesenhar(); };
 // caixa "Ausências" aprova ou recusa; o banco confere a CLT (saldo por
 // período, venda, partes de 14/5, começo de seg. a qui. fora de feriado,
 // 30 dias de antecedência) e a cobertura ("quem não pode estar fora junto").
+// S56 · folga e atestado de PARTE DO DIA (hora de início e de fim, de 30 em
+// 30 min): a Agenda tira as horas da capacidade do dia e não trava a diária.
+// "Quem não sai junto" passa a valer só entre férias e recesso.
 // A tela ganha quatro abas: Lista (com os pedidos no alto), Mapa do ano,
 // Saldos e Regras. A Agenda continua vendo só o APROVADO.
 // ════════════════════════════════════════════════════════════════════════════
@@ -18057,7 +18146,15 @@ const AUS_ROT   = { ferias:'Férias', folga:'Folga', atestado:'Atestado/licença
 const AUS_VERBO = { ferias:'de férias', folga:'de folga', atestado:'de atestado/licença', afastado:'afastado', recesso:'de recesso' };
 const AUS = { ano: null, dados: null, canc: false, aba: 'lista', painel: null };
 const ausNDias = (a, b) => Math.round((agData(b) - agData(a)) / 864e5) + 1;
-const ausPer   = x => x.inicio === x.fim ? dataBR(x.inicio) : dataBR(x.inicio) + ' a ' + dataBR(x.fim);
+const ausPer   = x => (x.inicio === x.fim ? dataBR(x.inicio) : dataBR(x.inicio) + ' a ' + dataBR(x.fim))
+                     + (x.hora_inicio ? ', ' + x.hora_inicio + '–' + x.hora_fim : '');
+// S56 · parte do dia (folga ou atestado de algumas horas)
+const ausMin   = x => x && x.hora_inicio ? (Number(x.hora_fim.slice(0,2)) * 60 + Number(x.hora_fim.slice(3,5)))
+                                          - (Number(x.hora_inicio.slice(0,2)) * 60 + Number(x.hora_inicio.slice(3,5))) : 0;
+const ausDur   = x => x.hora_inicio ? minHora(ausMin(x)) : (ausNDias(x.inicio, x.fim) === 1 ? '1 dia' : ausNDias(x.inicio, x.fim) + ' dias');
+/** A capacidade da pessoa no dia, menos as horas de uma ausência de parte do dia. */
+const capMenosAus = (cap, au) => au && au.hora_inicio ? Math.max(0, cap - ausMin(au)) : cap;
+const AUS_HORAS = (() => { const h = []; for (let i = 6; i <= 22; i++){ h.push(String(i).padStart(2,'0') + ':00'); if (i < 22) h.push(String(i).padStart(2,'0') + ':30'); } return h; })();
 const ausChip  = x => '<span class="chip aus aus-' + esc(x.tipo) + '">' + esc(AUS_ROT[x.tipo] || x.tipo) + '</span>';
 
 /** Agenda: a ausência viva de uma pessoa num dia (ou null). */
@@ -18075,7 +18172,7 @@ function agAusFaixa(dia){
   const fora = agAusNoDia(dia);
   if (!fora.length) return '';
   return '<div class="agAusFaixa" role="note"><b>Fora neste dia:</b>'
-    + fora.map(a => '<span>' + esc(a.usuario || '?') + ' ' + ausChip(a)
+    + fora.map(a => '<span>' + esc(a.usuario || '?') + ' ' + ausChip(a) + (a.hora_inicio ? ' <small>' + esc(a.hora_inicio + '–' + a.hora_fim) + '</small>' : '')
         + (a.fim > dia ? ' <small>até ' + esc(dataBR(a.fim).slice(0,5)) + '</small>' : '') + '</span>').join('')
     + '</div>';
 }
@@ -18105,7 +18202,7 @@ async function ausAvisarNoModal(ids, dia){
   let av = document.getElementById('ausAvisoM');
   if (!av){ av = document.createElement('div'); av.id = 'ausAvisoM'; av.className = 'aviso'; av.setAttribute('role','alert'); body.prepend(av); }
   av.textContent = fora.map(a => (a.usuario || 'Alguém') + ' está ' + (AUS_VERBO[a.tipo] || 'fora')
-      + (a.inicio === a.fim ? '' : ' (' + ausPer(a) + ')')).join('; ')
+      + (a.hora_inicio ? ' das ' + a.hora_inicio + ' às ' + a.hora_fim : a.inicio === a.fim ? '' : ' (' + ausPer(a) + ')')).join('; ')
     + ' em ' + dataBR(dia) + '. Clique em Gravar de novo para marcar assim mesmo.';
   av.scrollIntoView({ block:'nearest' });
   return true;
@@ -18118,6 +18215,7 @@ function demoAusAgenda(){
     { id:'da1', usuario_id:'u1', usuario:'Túlio', tipo:'folga', rotulo:'Folga', inicio:h, fim:h, status:'aprovada' },
     { id:'da2', usuario_id:'u4', usuario:'Inspetor 2', tipo:'ferias', rotulo:'Férias', inicio:agSoma(h, 2), fim:agSoma(h, 21), status:'aprovada' },
     { id:'da3', usuario_id:'u2', usuario:'Vinícius', tipo:'afastado', rotulo:'Afastado', inicio:agSoma(h, -3), fim:agSoma(h, -2), status:'aprovada' },
+    { id:'da7', usuario_id:'u3', usuario:'Inspetor 1', tipo:'folga', rotulo:'Folga', inicio:h, fim:h, hora_inicio:'13:00', hora_fim:'17:00', status:'aprovada' },
   ];
 }
 function demoAusLista(){
@@ -18263,7 +18361,7 @@ function ausLista(){
            : chq && !ped ? '<small class="ausErro">⚠ ' + esc(x.choques[0].texto) + '</small>' : '')
       + '</span>'
       + '<span>' + ausChip(x) + (ped ? ' <span class="chip ausPed">aguardando</span>' : '') + '</span>'
-      + '<span class="ausPer">' + esc(ausPer(x)) + '<small>' + n + (n === 1 ? ' dia' : ' dias')
+      + '<span class="ausPer">' + esc(ausPer(x)) + '<small>' + esc(ausDur(x))
       +   (Number(x.dias_vendidos) ? ' · vende ' + x.dias_vendidos : '') + '</small></span>'
       + '<span class="ausBtns">'
       +   (ped ? '<button class="btn mini pri" type="button" data-a="ap">Aprovar</button>'
@@ -18302,7 +18400,7 @@ function ausDecidir(x, aprovar){
   const chq = (c.choques || []).length > 0, err = (c.erros || []).filter(e => !/^Choca com/.test(e)).length > 0;
   const pedeMotivo = !aprovar || chq;
   abrirModal((aprovar ? 'Aprovar ' : 'Recusar ') + (AUS_ROT[x.tipo] || '').toLowerCase() + ' · ' + (x.usuario || ''),
-      '<p style="margin-top:0">' + ausChip(x) + ' ' + esc(ausPer(x)) + ' · ' + ausNDias(x.inicio, x.fim) + ' dia(s)'
+      '<p style="margin-top:0">' + ausChip(x) + ' ' + esc(ausPer(x)) + ' · ' + esc(ausDur(x))
     + (Number(x.dias_vendidos) ? ' · vende ' + x.dias_vendidos + ' dia(s)' : '') + '</p>'
     + (x.observacao ? '<p class="nota">“' + esc(x.observacao) + '”</p>' : '')
     + (aprovar && (err || chq || (c.avisos || []).length) ? '<div class="aviso">' + ausConfHTML(c) + '</div>' : '')
@@ -18384,7 +18482,7 @@ function ausMapa(){
           + '</td></tr>';
       }).join('') : '<tr><td colspan="2" class="nota" style="padding:12px">Ninguém com essa busca.</td></tr>')
     + '</tbody></table></div>'
-    + '<p class="nota">Toque numa barra para ver o registro. A conta de “não sai junto” olha tudo o que é vivo: aprovado, pedido, folga, recesso e atestado.</p>');
+    + '<p class="nota">Toque numa barra para ver o registro. A conta de “não sai junto” olha férias e recesso, aprovados e pedidos; folga e atestado ficam fora.</p>');
   corpo.querySelectorAll('.ausBar').forEach(b => b.addEventListener('click', () => {
     const x = (D.itens || []).find(i => String(i.id) === b.dataset.id);
     if (!x) return;
@@ -18485,9 +18583,9 @@ function ausRegras(){
   const P = AUS.painel || { regras: [] };
   corpo.innerHTML = '';
   ausBarra(corpo, '<button class="btn" type="button" id="ausRegraNova">+ Nova regra</button>');
-  corpo.insertAdjacentHTML('beforeend', '<p class="nota" style="margin-top:0">Vale para férias, folga e recesso: o funcionário não consegue pedir '
-    + 'se a regra quebra (e vê com quem e quando); o escritório lança ou aprova assim mesmo só com motivo. Atestado nunca é barrado, mas conta como '
-    + 'ausência para os outros. O par vale nos dois sentidos.</p>'
+  corpo.insertAdjacentHTML('beforeend', '<p class="nota" style="margin-top:0">Vale só entre férias e recesso: o funcionário não consegue pedir '
+    + 'se a regra quebra (e vê com quem e quando); o escritório lança ou aprova assim mesmo só com motivo. Folga e atestado ficam fora: '
+    + 'não são barrados e não contam como ausência para os outros. O par vale nos dois sentidos.</p>'
     + ((P.regras || []).length ? '<div class="ausLista">' + P.regras.map(r => '<div class="ausLin ausRegra" data-id="' + esc(r.id) + '">'
         + '<span>' + ausRegraTxt(r) + '</span><span class="ausBtns"><button class="btn mini" type="button" data-ed="1">Corrigir</button>'
         + '<button class="btn mini" type="button" data-ex="1">Excluir</button></span></div>').join('') + '</div>'
@@ -18532,6 +18630,11 @@ function ausRegraModal(r){
 // O banco confere enquanto a pessoa digita (`tf_ferias_simular`, com a
 // regra do escritório): o que é erro trava o "Lançar"; o choque de
 // cobertura abre o campo do motivo; o resto é aviso.
+/** A janela de ausência tem a caixa "Parte do dia" ligada (e à mostra)? */
+function ausParteLig(){
+  const c = document.getElementById('auParteC'), b = document.getElementById('auParte');
+  return !!(c && b && !c.hidden && b.checked);
+}
 function ausModal(x){
   const D = AUS.dados || {}, ed = !!x;
   const vinc = id => ((D.pessoas || []).find(p => String(p.id) === String(id)) || {}).vinculo;
@@ -18542,8 +18645,13 @@ function ausModal(x){
     + '<div class="campo"><span class="rotulo">Tipo</span><span id="auTipos">'
     + ['ferias','folga','atestado','recesso'].map(t => '<label class="chk" data-t="' + t + '"><input type="radio" name="auT" value="' + t + '"'
         + ((ed ? x.tipo : 'folga') === t ? ' checked' : '') + '> ' + AUS_ROT[t] + '</label>').join('') + '</span></div>'
-    + '<div class="dupla"><div class="campo"><label for="auI">Primeiro dia</label><input id="auI" type="date"></div>'
-    + '<div class="campo"><label for="auF">Último dia</label><input id="auF" type="date"></div></div>'
+    + '<label class="chk" id="auParteC" hidden><input type="checkbox" id="auParte"' + (ed && x.hora_inicio ? ' checked' : '') + '> Parte do dia (algumas horas)</label>'
+    + '<div class="dupla"><div class="campo"><label for="auI" id="auIRot">Primeiro dia</label><input id="auI" type="date"></div>'
+    + '<div class="campo" id="auFC"><label for="auF">Último dia</label><input id="auF" type="date"></div></div>'
+    + '<div class="dupla" id="auHC" hidden>'
+    +   ['auHI','auHF'].map((id, k) => '<div class="campo"><label for="' + id + '">' + (k ? 'Até' : 'Das') + '</label><select id="' + id + '"><option value="">—</option>'
+          + AUS_HORAS.map(h => '<option' + (ed && (k ? x.hora_fim : x.hora_inicio) === h ? ' selected' : '') + '>' + h + '</option>').join('') + '</select></div>').join('')
+    + '</div>'
     + '<div class="campo" id="auVendaC"><label for="auV">Vender dias (0 a 10, a pedido do funcionário)</label>'
     + '<input id="auV" type="number" min="0" max="10" value="' + esc(String(ed ? (x.dias_vendidos || 0) : 0)) + '"></div>'
     + '<p class="nota" id="auDias" style="margin-top:0"></p>'
@@ -18559,15 +18667,19 @@ function ausModal(x){
         const msg = document.getElementById('auMsg'); msg.textContent = '';
         const u = ed ? x.usuario_id : document.getElementById('auP').value;
         const t = (document.querySelector('#mBody input[name="auT"]:checked') || {}).value;
-        const i = document.getElementById('auI').value, f = document.getElementById('auF').value || i;
+        const pt = ausParteLig();
+        const i = document.getElementById('auI').value, f = pt ? i : (document.getElementById('auF').value || i);
+        const hi = pt ? document.getElementById('auHI').value : '', hf = pt ? document.getElementById('auHF').value : '';
         if (!u || !t || !i){ msg.textContent = 'Escolha a pessoa, o tipo e o primeiro dia.'; return; }
         if (f < i){ msg.textContent = 'O último dia vem antes do primeiro.'; return; }
+        if (pt && (!hi || !hf)){ msg.textContent = 'Parte do dia: escolha a hora de início e a de fim.'; return; }
         if (DEMO){ msg.textContent = 'Modo demonstração: nada é gravado.'; return; }
         try{
           const r = await rpc('tf_ausencia_gravar', { p_id: ed ? x.id : null, p_usuario: u, p_tipo: t,
             p_inicio: i, p_fim: f, p_observacao: document.getElementById('auO').value.trim() || null,
             p_vender: t === 'ferias' ? (Number(document.getElementById('auV').value) || 0) : 0,
-            p_choque_motivo: document.getElementById('auChq').value.trim() || null });
+            p_choque_motivo: document.getElementById('auChq').value.trim() || null,
+            p_hora_inicio: pt ? hi : null, p_hora_fim: pt ? hf : null });
           AGENDA.chave = null;
           const av = (r && r.avisos) || {};
           if (Number(av.n_agenda || 0) + Number(av.diarias || 0) > 0) ausAvisoDepois(r, i, f);
@@ -18576,19 +18688,22 @@ function ausModal(x){
         }catch(e){ msg.textContent = e.message; }
      }}]);
   const eI = document.getElementById('auI'), eF = document.getElementById('auF'), eV = document.getElementById('auV');
+  const eHI = document.getElementById('auHI'), eHF = document.getElementById('auHF');
   eI.value = ed ? x.inicio : ''; eF.value = ed ? x.fim : '';
   document.getElementById('auO').value = ed ? (x.observacao || '') : '';
   let seq = 0, tm = null;
   const confere = async () => {
     const u = ed ? x.usuario_id : (document.getElementById('auP') || {}).value;
     const t = (document.querySelector('#mBody input[name="auT"]:checked') || {}).value;
-    const i = eI.value, f = eF.value || i, box = document.getElementById('auConf');
+    const pt = ausParteLig();
+    const i = eI.value, f = pt ? i : (eF.value || i), box = document.getElementById('auConf');
     if (!box) return;
-    if (!u || !t || !i || f < i || DEMO){ box.innerHTML = ''; document.getElementById('auChqC').hidden = true; return; }
+    if (!u || !t || !i || f < i || DEMO || (pt && (!eHI.value || !eHF.value))){ box.innerHTML = ''; document.getElementById('auChqC').hidden = true; return; }
     const meu = ++seq;
     try{
       const r = await rpc('tf_ferias_simular', { p_tipo: t, p_inicio: i, p_fim: f,
-        p_vender: t === 'ferias' ? (Number(eV.value) || 0) : 0, p_usuario: u, p_excluir: ed ? x.id : null });
+        p_vender: t === 'ferias' ? (Number(eV.value) || 0) : 0, p_usuario: u, p_excluir: ed ? x.id : null,
+        p_hora_inicio: pt ? eHI.value : null, p_hora_fim: pt ? eHF.value : null });
       if (meu !== seq || !document.getElementById('auConf')) return;
       const per = r.periodo;
       box.innerHTML = (per ? '<p class="nota" style="margin:0 0 6px">Período ' + esc(dataBR(per.aq_ini) + ' a ' + dataBR(per.aq_fim))
@@ -18601,15 +18716,25 @@ function ausModal(x){
   };
   const agenda = () => { clearTimeout(tm); tm = setTimeout(confere, 250); };
   const conta = () => {
+    const t = (document.querySelector('#mBody input[name="auT"]:checked') || {}).value;
+    // S56 · parte do dia: só folga e atestado, num dia só
+    document.getElementById('auParteC').hidden = !(t === 'folga' || t === 'atestado');
+    const pt = ausParteLig();
+    document.getElementById('auHC').hidden = !pt;
+    document.getElementById('auFC').hidden = pt;
+    document.getElementById('auIRot').textContent = pt ? 'Dia' : 'Primeiro dia';
+    if (pt) eF.value = eI.value;
     const i = eI.value, f = eF.value || i;
     const d = document.getElementById('auDias');
-    d.textContent = i && f >= i ? (ausNDias(i, f) === 1 ? '1 dia: ' + dataBR(i)
+    const mm = h => Number(h.slice(0,2)) * 60 + Number(h.slice(3,5));
+    d.textContent = pt ? (i && eHI.value && eHF.value && mm(eHF.value) > mm(eHI.value)
+                            ? minHora(mm(eHF.value) - mm(eHI.value)) + ' em ' + dataBR(i) + ', das ' + eHI.value + ' às ' + eHF.value + '.' : '')
+      : i && f >= i ? (ausNDias(i, f) === 1 ? '1 dia: ' + dataBR(i)
                                    : ausNDias(i, f) + ' dias, de ' + dataBR(i) + ' a ' + dataBR(f)) + '.' : '';
-    const t = (document.querySelector('#mBody input[name="auT"]:checked') || {}).value;
     document.getElementById('auVendaC').hidden = t !== 'ferias';
     document.getElementById('auDica').textContent = t === 'folga'
-      ? 'Folga só marca o dia: o saldo do banco de horas continua no EZPoint.'
-      : t === 'atestado' ? 'Lance também no EZPoint. Quem não tem esta caixa vê só “afastado”. Atestado nunca é barrado.'
+      ? 'Folga só marca o dia (ou as horas): o saldo do banco de horas continua no EZPoint. Não entra em “quem não sai junto”.'
+      : t === 'atestado' ? 'Lance também no EZPoint. Quem não tem esta caixa vê só “afastado”. Atestado nunca é barrado e não barra ninguém.'
       : t === 'recesso' ? 'Recesso é do estagiário: 30 dias por ano de estágio, sem venda e sem partes mínimas.'
       : 'Férias: saldo do período, até 3 partes (uma ≥ 14, nenhuma < 5), começo de segunda a quinta fora de feriado e das vésperas.';
     // o tipo que a pessoa não tem fica de lado (sem esconder: o banco é quem decide)
@@ -18622,6 +18747,9 @@ function ausModal(x){
   // primeiro dia novo: o último acompanha se estava vazio ou ficou antes
   eI.addEventListener('change', () => { if (!eF.value || eF.value < eI.value) eF.value = eI.value; conta(); });
   eF.addEventListener('change', conta); eV.addEventListener('input', agenda);
+  document.getElementById('auParte').addEventListener('change', conta);
+  eHI.addEventListener('change', () => { if (eHF.value && eHF.value <= eHI.value) eHF.value = ''; conta(); });
+  eHF.addEventListener('change', conta);
   const eP = document.getElementById('auP'); if (eP) eP.addEventListener('change', conta);
   document.querySelectorAll('#mBody input[name="auT"]').forEach(r => r.addEventListener('change', conta));
   conta();
@@ -18669,7 +18797,7 @@ async function ausRegistro(x){
   if (DEMO) reg = [{ acao: x.status === 'pedida' ? 'pediu' : 'lancou', quando: x.pedido_em || x.criado_em || isoHoje() + 'T09:12:00-03:00',
                      por: x.status === 'pedida' ? x.usuario : (x.criado_por || 'Vinícius'), depois:{ tipo:x.tipo, inicio:x.inicio, fim:x.fim } }];
   else { try{ reg = await rpc('tf_ausencia_registro', { p_id: x.id }); }catch(e){ return toast(e.message, 'err'); } }
-  const per = o => o ? (AUS_ROT[o.tipo] || o.tipo || '') + ' ' + (o.inicio === o.fim ? dataBR(o.inicio).slice(0,5)
+  const per = o => o ? (AUS_ROT[o.tipo] || o.tipo || '') + ' ' + (o.hora_inicio ? dataBR(o.inicio).slice(0,5) + ' ' + o.hora_inicio + '–' + o.hora_fim : o.inicio === o.fim ? dataBR(o.inicio).slice(0,5)
                                                      : dataBR(o.inicio).slice(0,5) + ' a ' + dataBR(o.fim).slice(0,5))
                        + (Number(o.vender) ? ' (vende ' + o.vender + ')' : '') : '';
   const TXT = { lancou:'Lançou', pediu:'Pediu', aprovou:'Aprovou', recusou:'Recusou', cancelou:'Cancelou', alterou:'Corrigiu' };
