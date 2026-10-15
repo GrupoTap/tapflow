@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S24</title>
+<title>TapFlow Field · S25</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -177,6 +177,29 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 .painel.ausP{border-left:4px solid var(--accent)}
 .painel.ausP.hoje{border-left-color:#1E5A33;background:#F2F8F4}
 .painel.ausP p{margin:4px 0 0;font-size:14px}
+/* S25 · férias pelo Field */
+.ferPer{display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:9px 0;border-top:1px solid var(--rule)}
+.ferPer:first-of-type{border-top:0}
+.ferPer b.n{font-size:22px;font-variant-numeric:tabular-nums}
+.ferPer small{display:block;color:var(--ink-3);font-size:12.5px}
+.ferLin{padding:10px 0;border-top:1px solid var(--rule)}
+.ferLin:first-of-type{border-top:0}
+.ferLin .l1{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:15px}
+.ferLin small{display:block;color:var(--ink-3);font-size:12.5px;margin-top:3px}
+.chip.ferPed{background:#FFF4DC;color:#7A4E00}
+.chip.ferOk{background:#E6F2EA;color:#1E5A33}
+.chip.ferNao{background:#F6E7E3;color:#8A2A1A}
+.chip.ferVenc{background:#F6E7E3;color:#8A2A1A}
+.ferTipo{display:flex;gap:8px;margin-bottom:12px}
+.ferTipo button{flex:1;padding:11px;border:1px solid var(--rule);border-radius:5px;background:var(--surface);font-size:15px;font-weight:600}
+.ferTipo button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.ferConf{border-radius:5px;padding:10px;font-size:13.5px;margin:0 0 12px;line-height:1.45}
+.ferConf.ok{background:#E6F2EA;color:#14532E}
+.ferConf.erro{background:#F8E1DC;color:#6E1E10}
+.ferConf.aviso{background:#FFF4DC;color:#5E3C00}
+.ferConf div + div{margin-top:5px}
+.duplaF{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.duplaF input{min-width:0;width:100%;box-sizing:border-box}
 .diaAus{margin:10px 0 0;padding:8px 10px;border-radius:8px;background:#F2F8F4;color:#1E5A33;font-size:13.5px}
 .osCard.compCard .linha .btn{flex:0 0 auto;min-width:120px}
 .chip.outro{background:var(--warn-soft);color:var(--warn);border-color:transparent}
@@ -467,7 +490,7 @@ details.termo.faq{margin-top:6px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S24';
+const APP_VERSION = 'S25';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -905,7 +928,7 @@ let execForm = null;  // item aberto no formulario, ou 'fim' na conferencia
 // CARREGAR
 // ════════════════════════════════════════════════════════════════════════════
 async function carregar(silencioso){
-  if (DEMO){ listaOS = demoLista(); MEU_DIA = demoMeuDia(); MINHAS_AUS = demoMinhasAus(); setConn('ok','demo');
+  if (DEMO){ listaOS = demoLista(); MEU_DIA = demoMeuDia(); MINHAS_AUS = demoMinhasAus(); FER = demoFer(); setConn('ok','demo');
              if(tela==='lista') pintarLista(); return; }
   if (!silencioso) setConn('sync','carregando…');
   try{
@@ -925,11 +948,13 @@ async function carregar(silencioso){
     ]);
     // S20 · documentos para assinar e as diárias de hoje. Sem o 104 no banco,
     // as duas voltam nulas e o app segue como no S19 (sem as abas novas).
-    const [docs, diar, aus] = await Promise.all([
+    const [docs, diar, aus, fer] = await Promise.all([
       rpc('tf_rhdoc_meus', {}).catch(() => null),
       rpc('tf_diarias_minhas', { p_mes: null, p_dia: null }).catch(() => null),
-      rpc('tf_ausencias_minhas', {}).catch(() => []) ]);   // S24 · S53
+      rpc('tf_ausencias_minhas', {}).catch(() => []),     // S24 · S53
+      rpc('tf_ferias_minhas', {}).catch(() => null) ]);   // S25 · S54 (sem o 108, a aba não aparece)
     MINHAS_AUS = Array.isArray(aus) ? aus : [];
+    FER = fer || null;
     DOCS = docs || null;
     if (tela !== 'dia') DIAR = diar || null;
     SEG = seg || null;
@@ -1240,8 +1265,10 @@ let MEU_DIA = [];
 // S24 · as MINHAS ausências de hoje em diante (107_s53, `tf_ausencias_minhas`).
 // Sem o 107 no banco, lista vazia e o app segue como no S23.
 let MINHAS_AUS = [];
-const AUS_VERBO_F = { ferias:'de férias', folga:'de folga', atestado:'de atestado/licença', afastado:'afastado' };
-const AUS_ROT_F = { ferias:'Férias', folga:'Folga', atestado:'Atestado/licença', afastado:'Afastado' };
+const AUS_VERBO_F = { ferias:'de férias', folga:'de folga', atestado:'de atestado/licença', afastado:'afastado', recesso:'de recesso' };
+const AUS_ROT_F = { ferias:'Férias', folga:'Folga', atestado:'Atestado/licença', afastado:'Afastado', recesso:'Recesso' };
+// S25 · o meu saldo de férias e os meus pedidos (108_s54, `tf_ferias_minhas`)
+let FER = null;
 /** A minha ausência num dia (ou null). */
 const minhaAusEm = dia => (MINHAS_AUS || []).find(a => a.inicio <= dia && a.fim >= dia) || null;
 
@@ -3975,6 +4002,8 @@ function abasTopo(m, qual){
   const abas = [];
   if (!soSeg()) abas.push(['lista', 'Ordens', 0]);
   if (DIAR || !DEMO) abas.push(['dia', 'Diárias', 0]);
+  // S25 · Férias (ou Recesso, no estágio) — quem tem ficha com vínculo
+  if (FER && (FER.tipo === 'ferias' || FER.tipo === 'recesso')) abas.push(['fer', FER.tipo === 'recesso' ? 'Recesso' : 'Férias', 0]);
   if (temDocs) abas.push(['docs', 'Documentos', nPendDocs()]);
   if (temSeg) abas.push(['seg', abas.length >= 3 ? 'Segurança' : 'Minha Segurança', nPendSeg()]);
   if (abas.length < 2) return;
@@ -3983,7 +4012,8 @@ function abasTopo(m, qual){
     + (n ? ' <span class="bolha">' + n + '</span>' : '') + '</button>').join('');
   d.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
     const t = b.dataset.t;
-    if (t === 'seg') pintarSeg(); else if (t === 'dia') pintarDiariasF(); else if (t === 'docs') pintarDocsF(); else pintarLista();
+    if (t === 'seg') pintarSeg(); else if (t === 'dia') pintarDiariasF(); else if (t === 'docs') pintarDocsF();
+    else if (t === 'fer') pintarFeriasF(); else pintarLista();
   }));
   m.insertBefore(d, m.firstChild);
 }
@@ -4113,6 +4143,166 @@ function painelMinhaAusencia(){
 function demoMinhasAus(){
   const h = isoHojeF(), mais = n => somaDiaF(h, n);
   return [{ id:'dm1', tipo:'folga', inicio: mais(4), fim: mais(4) }, { id:'dm2', tipo:'ferias', inicio: mais(30), fim: mais(49) }];
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// S25 · FÉRIAS PELO FIELD (Manager S54 / 108_s54)
+// ----------------------------------------------------------------------------
+// A pessoa vê o saldo de cada período (direito, tirado, pedido, vendido, o que
+// sobra e até quando tirar), os pedidos com a situação, e pede férias (ou
+// recesso, no estágio) e folga. O banco confere ENQUANTO ela escolhe
+// (`tf_ferias_simular`): saldo, partes de 14/5, venda, começo de segunda a
+// quinta fora de feriado e das vésperas, 30 dias de antecedência e quem não
+// pode estar fora junto. Com erro, o "Enviar" fica desligado e o motivo
+// aparece; o pedido nasce "aguardando" e já segura a data. Quem aprova é o
+// escritório (Ausências, no Manager).
+// ════════════════════════════════════════════════════════════════════════════
+let FER_F = { tipo: null, ini: '', fim: '', vender: 0, obs: '', conf: null };
+async function pintarFeriasF(){
+  tela = 'fer'; atual = null;
+  const rec = FER && FER.tipo === 'recesso';
+  document.getElementById('btnBack').hidden = true;
+  document.getElementById('hTit').textContent = rec ? 'Recesso' : 'Férias';
+  document.getElementById('hSub').textContent = (sessao.nome || '') + ' · ' + (rec ? 'recesso do estágio' : 'férias e folgas');
+  const m = document.getElementById('main'); m.innerHTML = '';
+  if (!DEMO){ try{ FER = await rpc('tf_ferias_minhas', {}); }catch(e){ toast(e.message, 'err'); } }
+  if (tela !== 'fer') return;
+  desenharFeriasF();
+}
+function desenharFeriasF(){
+  const m = document.getElementById('main'); m.innerHTML = '';
+  const F = FER || {}, rec = F.tipo === 'recesso', hoje = F.hoje || isoHojeF();
+  if (!FER_F.tipo) FER_F.tipo = F.tipo || 'folga';
+  const dd = d => dataBR(d).slice(0,5), ddd = d => dataBR(d);
+  // ── o saldo
+  const per = (F.periodos || []).filter(p => p.restantes > 0 || !p.completo).slice(0, 3);
+  const ps = document.createElement('div'); ps.className = 'painel';
+  ps.innerHTML = '<div class="et">' + (rec ? 'Meu recesso' : 'Meu saldo de férias') + '</div>'
+    + (per.length ? per.map(p => '<div class="ferPer"><div><b>' + esc(ddd(p.aq_ini)) + ' a ' + esc(ddd(p.aq_fim)) + '</b>'
+        + '<small>' + (!p.completo ? 'completa em ' + esc(ddd(p.aq_fim)) + ' — dá direito a partir do dia seguinte'
+            : rec ? 'recesso deste ano de estágio'
+            : (p.vencido ? '<span class="chip ferVenc">prazo vencido em ' + esc(ddd(p.conc_fim)) + '</span>' : 'tirar até ' + esc(ddd(p.conc_fim))))
+        + (p.gozados || p.pedidos || p.vendidos ? ' · tirados ' + p.gozados + (p.pedidos ? ', pedidos ' + p.pedidos : '')
+            + (p.vendidos ? ', vendidos ' + p.vendidos : '') : '') + '</small></div>'
+        + '<div style="text-align:right"><b class="n">' + p.restantes + '</b><small>dias</small></div></div>').join('')
+      : '<p>Sem período com saldo agora.</p>');
+  m.appendChild(ps);
+  // ── os pedidos e as ausências
+  const L = (F.ausencias || []).filter(a => a.tipo !== 'atestado');
+  if (L.length){
+    const pl = document.createElement('div'); pl.className = 'painel';
+    const ST = { pedida:['ferPed','aguardando o escritório'], aprovada:['ferOk','aprovada'], recusada:['ferNao','recusada'], cancelada:['', 'cancelada'] };
+    pl.innerHTML = '<div class="et">Meus pedidos</div>' + L.map(a => {
+      const st = ST[a.status] || ['', a.status];
+      const podeDesistir = a.status === 'pedida' || (a.status === 'aprovada'
+        && ((a.tipo === 'folga' && a.inicio > hoje) || (a.tipo !== 'folga' && a.inicio >= somaDiaF(hoje, 30))));
+      return '<div class="ferLin"><div class="l1"><b>' + esc(AUS_ROT_F[a.tipo] || a.tipo) + '</b> '
+        + esc(a.inicio === a.fim ? dd(a.inicio) : dd(a.inicio) + ' a ' + dd(a.fim))
+        + ' <span class="chip ' + st[0] + '">' + esc(st[1]) + '</span></div>'
+        + '<small>' + [Number(a.dias_vendidos) ? 'vendendo ' + a.dias_vendidos + ' dia(s)' : '',
+                        a.status === 'recusada' && a.recusa_motivo ? 'motivo: ' + esc(a.recusa_motivo) : '',
+                        a.decidido_por ? (a.status === 'aprovada' ? 'aprovada' : 'decidida') + ' por ' + esc(a.decidido_por) : '']
+                        .filter(Boolean).join(' · ') + '</small>'
+        + (podeDesistir ? '<button type="button" class="btn sm" style="margin-top:8px" data-des="' + esc(a.id) + '">'
+            + (a.status === 'pedida' ? 'Desistir do pedido' : 'Cancelar') + '</button>' : '')
+        + '</div>';
+    }).join('');
+    m.appendChild(pl);
+    pl.querySelectorAll('[data-des]').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm('Confirmar? A data fica livre para os colegas.')) return;
+      if (DEMO){ toast('Modo demonstração: nada é gravado.', 'err'); return; }
+      b.disabled = true;
+      try{ await rpc1('tf_ferias_cancelar_meu', { p_id: b.dataset.des, p_motivo: null }); toast('Feito.', 'ok'); pintarFeriasF(); }
+      catch(e){ toast(e.message, 'err'); b.disabled = false; }
+    }));
+  }
+  // ── pedir
+  const t = FER_F.tipo, ehFer = t === 'ferias', minIni = ehFer ? (F.aviso_min || somaDiaF(hoje, 30)) : hoje;
+  const pp = document.createElement('div'); pp.className = 'painel';
+  pp.innerHTML = '<div class="et">Pedir</div>'
+    + '<div class="ferTipo">' + [[F.tipo || 'ferias', rec ? 'Recesso' : 'Férias'], ['folga', 'Folga']].map(([k, r]) =>
+        '<button type="button" data-tp="' + k + '" class="' + (t === k ? 'on' : '') + '" aria-pressed="' + (t === k) + '">' + r + '</button>').join('') + '</div>'
+    + '<div class="duplaF"><div class="campo"><label for="ferI">Primeiro dia</label><input id="ferI" type="date" min="' + esc(minIni) + '"></div>'
+    + '<div class="campo"><label for="ferF">Último dia</label><input id="ferF" type="date" min="' + esc(minIni) + '"></div></div>'
+    + (ehFer ? '<div class="campo"><label for="ferV">Vender dias (0 a 10)</label><input id="ferV" type="number" inputmode="numeric" min="0" max="10"></div>' : '')
+    + '<div class="campo"><label for="ferO">Observação (opcional)</label><input id="ferO" type="text" maxlength="300" autocomplete="off"></div>'
+    + '<div id="ferConf" aria-live="polite"></div>'
+    + '<button type="button" class="btn pri" id="ferEnv" disabled>Enviar pedido</button>'
+    + '<p style="font-size:12.5px;color:var(--ink-3);margin:8px 0 0">'
+    + (ehFer ? 'Férias se pedem com 30 dias de antecedência, começam de segunda a quinta (fora de feriado e das vésperas), em até 3 partes: uma com 14 dias ou mais e nenhuma com menos de 5.'
+       : t === 'recesso' ? 'Recesso do estágio: 30 dias por ano de estágio.'
+       : 'Folga do banco de horas: só marca o dia; o saldo de horas continua no ponto.')
+    + ' O pedido fica "aguardando" até o escritório decidir — e já segura a data.</p>';
+  m.appendChild(pp);
+  const eI = pp.querySelector('#ferI'), eF = pp.querySelector('#ferF'), eV = pp.querySelector('#ferV'), eO = pp.querySelector('#ferO');
+  eI.value = FER_F.ini; eF.value = FER_F.fim; if (eV) eV.value = FER_F.vender || 0; eO.value = FER_F.obs;
+  pp.querySelectorAll('[data-tp]').forEach(b => b.addEventListener('click', () => { FER_F.tipo = b.dataset.tp; FER_F.conf = null; desenharFeriasF(); }));
+  let tm = null, seq = 0;
+  const mostra = r => {
+    const box = pp.querySelector('#ferConf'), env = pp.querySelector('#ferEnv');
+    if (!box) return;
+    if (!r){ box.innerHTML = ''; env.disabled = true; return; }
+    const er = (r.erros || []).filter(e => !/^Choca com/.test(e)), ch = r.choques || [], av = r.avisos || [];
+    const p = r.periodo;
+    box.innerHTML = (er.length || ch.length ? '<div class="ferConf erro">' + er.map(e => '<div>' + esc(e) + '</div>').join('')
+          + ch.map(c => '<div><b>' + esc(c.texto) + '</b></div>').join('')
+          + (ch.length ? '<div>Converse com o colega e escolha outras datas.</div>' : '') + '</div>'
+        : '<div class="ferConf ok">' + r.dias + (r.dias === 1 ? ' dia' : ' dias') + (Number(r.vender) ? ' + ' + r.vender + ' vendidos' : '')
+          + (p ? ' · do período ' + esc(String(p.aq_ini).slice(0,4)) + '/' + esc(String(p.aq_fim).slice(2,4)) + (r.restantes_depois != null ? ' · sobram ' + r.restantes_depois : '') : '')
+          + ' · pode enviar.</div>')
+      + (av.length ? '<div class="ferConf aviso">' + av.map(a => '<div>' + esc(a) + '</div>').join('') + '</div>' : '');
+    env.disabled = !r.ok;
+  };
+  const confere = async () => {
+    FER_F.ini = eI.value; FER_F.fim = eF.value; FER_F.vender = eV ? Number(eV.value) || 0 : 0; FER_F.obs = eO.value;
+    const i = eI.value, f = eF.value || i;
+    if (!i){ mostra(null); return; }
+    if (DEMO){ mostra(demoFerSimular(t, i, f, FER_F.vender)); return; }
+    const meu = ++seq;
+    try{
+      const r = await rpc('tf_ferias_simular', { p_tipo: t, p_inicio: i, p_fim: f, p_vender: FER_F.vender });
+      if (meu === seq && tela === 'fer') { FER_F.conf = r; mostra(r); }
+    }catch(e){ if (meu === seq) { const box = pp.querySelector('#ferConf'); if (box) box.innerHTML = '<div class="ferConf erro"></div>'; box.firstChild.textContent = e.message; } }
+  };
+  const agenda = () => { clearTimeout(tm); tm = setTimeout(confere, 300); };
+  eI.addEventListener('change', () => { if (!eF.value || eF.value < eI.value) eF.value = eI.value; agenda(); });
+  eF.addEventListener('change', agenda); if (eV) eV.addEventListener('input', agenda);
+  eO.addEventListener('input', () => { FER_F.obs = eO.value; });
+  if (FER_F.ini) agenda();
+  pp.querySelector('#ferEnv').addEventListener('click', async ev => {
+    const b = ev.currentTarget;
+    if (DEMO){ toast('Modo demonstração: nada é gravado.', 'err'); return; }
+    b.disabled = true;
+    try{
+      await rpc1('tf_ferias_pedir', { p_tipo: t, p_inicio: eI.value, p_fim: eF.value || eI.value,
+                                       p_vender: eV ? Number(eV.value) || 0 : 0, p_observacao: eO.value.trim() || null });
+      toast('Pedido enviado. Agora é com o escritório.', 'ok');
+      FER_F = { tipo: t, ini: '', fim: '', vender: 0, obs: '', conf: null };
+      pintarFeriasF();
+    }catch(e){ toast(e.message, 'err'); b.disabled = false; }
+  });
+  abasTopo(m, 'fer');
+}
+function demoFer(){
+  const h = isoHojeF(), y = Number(h.slice(0,4));
+  return { hoje: h, vinculo: 'clt', tipo: 'ferias', admissao: (y - 2) + '-07-08', aviso_min: somaDiaF(h, 30),
+    periodos: [{ aq_ini: (y - 1) + '-07-08', aq_fim: y + '-07-07', conc_fim: (y + 1) + '-07-07', direito: 30, gozados: 0, pedidos: 0,
+                 vendidos: 0, partes: 0, tem14: false, restantes: 30, completo: true, vencido: false, base: false, tipo: 'ferias' },
+               { aq_ini: y + '-07-08', aq_fim: (y + 1) + '-07-07', conc_fim: (y + 2) + '-07-07', direito: 30, gozados: 0, pedidos: 0,
+                 vendidos: 0, partes: 0, tem14: false, restantes: 30, completo: false, vencido: false, base: false, tipo: 'ferias' }],
+    ausencias: [{ id: 'df1', tipo: 'folga', inicio: somaDiaF(h, 4), fim: somaDiaF(h, 4), status: 'aprovada', decidido_por: 'Vinícius' },
+                { id: 'df2', tipo: 'ferias', inicio: somaDiaF(h, 60), fim: somaDiaF(h, 79), status: 'pedida', dias_vendidos: 10 },
+                { id: 'df3', tipo: 'folga', inicio: somaDiaF(h, 20), fim: somaDiaF(h, 20), status: 'recusada', recusa_motivo: 'semana de inventário', decidido_por: 'Vinícius' }] };
+}
+/** No modo demonstração, uma conferência de mentira (a de verdade é do banco). */
+function demoFerSimular(t, i, f, v){
+  const dias = Math.round((new Date(f + 'T12:00') - new Date(i + 'T12:00')) / 864e5) + 1;
+  const erros = [];
+  if (t === 'ferias' && dias < 5) erros.push('Cada parte das férias tem no mínimo 5 dias.');
+  const dow = new Date(i + 'T12:00').getDay();
+  if (t === 'ferias' && (dow === 5 || dow === 6 || dow === 0)) erros.push('Férias começam de segunda a quinta (não nos 2 dias antes do descanso de domingo).');
+  return { ok: !erros.length, erros, avisos: [], choques: [], dias, vender: v, restantes_depois: 30 - dias - v,
+           periodo: (FER.periodos || [])[0] };
 }
 
 function painelLembreteDiaria(){
