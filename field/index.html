@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S27</title>
+<title>TapFlow Field · S28</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -201,6 +201,15 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 .ferEsc button small{display:block;font-size:13px;color:var(--ink-3);margin-top:2px}
 .ferEsc button:active{background:var(--surface-2)}
 .ferParte button{padding:8px;font-size:14px;font-weight:500}
+/* S28 · a equipe: férias publicadas e quem estará fora */
+.painel.foraSem{border-left:4px solid #7A4E00}
+.foraSem ul,.ferEq ul{list-style:none;margin:6px 0 0;padding:0}
+.foraSem li,.ferEq li{padding:4px 0;font-size:14px;border-top:1px solid var(--rule)}
+.foraSem li:first-child,.ferEq li:first-child{border-top:0}
+.ferEq li small{color:var(--ink-3);font-size:12.5px}
+.ferEq li.eu b{color:var(--accent)}
+.ferEqMes{margin:10px 0 0;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.ferEqNota{font-size:12px;color:var(--ink-3);margin:10px 0 0}
 .ferSugF{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .ferSugBtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .ferConf{border-radius:5px;padding:10px;font-size:13.5px;margin:0 0 12px;line-height:1.45}
@@ -500,7 +509,7 @@ details.termo.faq{margin-top:6px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S27';
+const APP_VERSION = 'S28';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -938,7 +947,7 @@ let execForm = null;  // item aberto no formulario, ou 'fim' na conferencia
 // CARREGAR
 // ════════════════════════════════════════════════════════════════════════════
 async function carregar(silencioso){
-  if (DEMO){ listaOS = demoLista(); MEU_DIA = demoMeuDia(); MINHAS_AUS = demoMinhasAus(); FER = demoFer(); setConn('ok','demo');
+  if (DEMO){ listaOS = demoLista(); MEU_DIA = demoMeuDia(); MINHAS_AUS = demoMinhasAus(); FER = demoFer(); EQUIPE_AUS = demoEquipeAus(); setConn('ok','demo');
              if(tela==='lista') pintarLista(); return; }
   if (!silencioso) setConn('sync','carregando…');
   try{
@@ -958,11 +967,13 @@ async function carregar(silencioso){
     ]);
     // S20 · documentos para assinar e as diárias de hoje. Sem o 104 no banco,
     // as duas voltam nulas e o app segue como no S19 (sem as abas novas).
-    const [docs, diar, aus, fer] = await Promise.all([
+    const [docs, diar, aus, fer, eqa] = await Promise.all([
       rpc('tf_rhdoc_meus', {}).catch(() => null),
       rpc('tf_diarias_minhas', { p_mes: null, p_dia: null }).catch(() => null),
       rpc('tf_ausencias_minhas', {}).catch(() => []),     // S24 · S53
-      rpc('tf_ferias_minhas', {}).catch(() => null) ]);   // S25 · S54 (sem o 108, a aba não aparece)
+      rpc('tf_ferias_minhas', {}).catch(() => null),      // S25 · S54 (sem o 108, a aba não aparece)
+      carregarEquipeAus() ]);                             // S28 · quem da equipe estará fora
+    EQUIPE_AUS = eqa;
     MINHAS_AUS = Array.isArray(aus) ? aus : [];
     FER = fer || null;
     DOCS = docs || null;
@@ -1093,6 +1104,7 @@ function pintarLista(){
   try{ const pd = painelDocsPendente(); if (pd) m.insertBefore(pd, m.firstChild); }catch(e){ console.error('[docs]', e); }
   try{ const pl = painelLembreteDiaria(); if (pl) m.appendChild(pl); }catch(e){ console.error('[diarias]', e); }
   try{ const pa = painelMinhaAusencia(); if (pa) m.appendChild(pa); }catch(e){ console.error('[ausencia]', e); }   // S24
+  try{ const pf = painelForaSemana(); if (pf) m.appendChild(pf); }catch(e){ console.error('[fora]', e); }         // S28
   try{ pintarMeuDia(m); }
   catch(e){
     console.error('[roteiro]', e);
@@ -4135,6 +4147,85 @@ function desenharDiariasF(){
  *  ainda não lançou nada — não aparece todo dia nem para quem não saiu. */
 
 // ════════════════════════════════════════════════════════════════════════════
+// S28 · A EQUIPE: FÉRIAS PUBLICADAS E QUEM ESTARÁ FORA (Bruno, 15/10)
+// ----------------------------------------------------------------------------
+// Duas coisas, separadas de propósito para nenhuma poluir a outra:
+//   · "Férias da equipe" (aba Folga/Férias): as férias e recessos APROVADOS
+//     dos próximos 12 meses, por mês — para cada um se programar;
+//   · "Fora nos próximos 7 dias" (tela inicial, só quando há alguém): toda
+//     ausência aprovada, SEM o motivo — folga e atestado não se expõem.
+// A fonte é a mesma da Agenda (`tf_ausencias_periodo`, só o aprovado; o
+// atestado de outra pessoa já chega como "afastado").
+// ════════════════════════════════════════════════════════════════════════════
+let EQUIPE_AUS = [];
+async function carregarEquipeAus(){
+  if (DEMO) return demoEquipeAus();
+  const h = isoHojeF();
+  try{ const r = await rpc('tf_ausencias_periodo', { p_de: h, p_ate: somaDiaF(h, 365) }); return Array.isArray(r) ? r : []; }
+  catch(e){ return []; }
+}
+/** "Túlio" — o primeiro nome; com dois iguais na equipe, os dois primeiros. */
+function nomeCurtoF(nome, todos){
+  const p = String(nome || '?').trim().split(/\s+/);
+  const iguais = (todos || []).filter(n => String(n || '').trim().split(/\s+/)[0] === p[0] && n !== nome).length;
+  return iguais && p[1] ? p[0] + ' ' + p[1] : p[0];
+}
+const diaRotF = (iso, hoje) => iso === hoje ? 'hoje' : iso === somaDiaF(hoje, 1) ? 'amanhã'
+  : DIA_SEM_F(iso).slice(0,3) + ' ' + dataBR(iso).slice(0,5);
+function painelForaSemana(){
+  const hoje = isoHojeF(), fim = somaDiaF(hoje, 6), eu = String(meuId() || '');
+  const L = (EQUIPE_AUS || []).filter(a => a.inicio <= fim && a.fim >= hoje && String(a.usuario_id) !== eu);
+  if (!L.length) return null;
+  const nomes = L.map(a => a.usuario);
+  const linhas = L.slice().sort((a, b) => (a.inicio < hoje ? hoje : a.inicio).localeCompare(b.inicio < hoje ? hoje : b.inicio)
+                                       || String(a.usuario).localeCompare(String(b.usuario)))
+    .map(a => {
+      const de = a.inicio < hoje ? hoje : a.inicio, ate = a.fim > fim ? fim : a.fim;
+      const quando = a.fim > fim ? (de === hoje ? 'a semana toda' : 'a partir de ' + diaRotF(de, hoje)) + ' (até ' + dataBR(a.fim).slice(0,5) + ')'
+        : de === ate ? diaRotF(de, hoje) + (a.hora_inicio ? ', ' + a.hora_inicio + '–' + a.hora_fim : '')
+        : 'de ' + diaRotF(de, hoje) + ' a ' + diaRotF(ate, hoje);
+      return '<li><b>' + esc(nomeCurtoF(a.usuario, nomes)) + '</b> · ' + esc(quando) + '</li>';
+    });
+  const d = document.createElement('div');
+  d.className = 'painel foraSem'; d.setAttribute('role', 'note');
+  d.innerHTML = '<div class="et">Fora nos próximos 7 dias</div><ul>' + linhas.join('') + '</ul>';
+  return d;
+}
+function painelFeriasEquipe(hoje){
+  const L = (EQUIPE_AUS || []).filter(a => (a.tipo === 'ferias' || a.tipo === 'recesso') && a.fim >= hoje)
+    .sort((a, b) => a.inicio.localeCompare(b.inicio) || String(a.usuario).localeCompare(String(b.usuario)));
+  const eu = String(meuId() || ''), nomes = L.map(a => a.usuario);
+  const MES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  const grupos = [];
+  L.forEach(a => {
+    const k = a.inicio <= hoje ? 'agora' : a.inicio.slice(0,7);
+    let g = grupos.find(x => x.k === k);
+    if (!g){ g = { k, tit: k === 'agora' ? 'Agora' : MES[Number(k.slice(5,7)) - 1] + (k.slice(0,4) !== hoje.slice(0,4) ? ' de ' + k.slice(0,4) : ''), itens: [] }; grupos.push(g); }
+    g.itens.push(a);
+  });
+  const d = document.createElement('div'); d.className = 'painel ferEq';
+  d.innerHTML = '<div class="et">Férias da equipe</div>'
+    + (grupos.length ? grupos.map(g => '<div class="ferEqMes">' + esc(g.tit) + '</div><ul>' + g.itens.map(a => {
+        const n = Math.round((new Date(a.fim + 'T12:00') - new Date(a.inicio + 'T12:00')) / 864e5) + 1;
+        return '<li' + (String(a.usuario_id) === eu ? ' class="eu"' : '') + '><b>' + esc(String(a.usuario_id) === eu ? 'Você' : nomeCurtoF(a.usuario, nomes)) + '</b> · '
+          + esc(dataBR(a.inicio).slice(0,5) + ' a ' + dataBR(a.fim).slice(0,5)) + ' <small>' + n + ' dias' + (a.tipo === 'recesso' ? ' · recesso' : '') + '</small></li>';
+      }).join('') + '</ul>').join('')
+      : '<p style="margin:4px 0 0">Nenhuma férias aprovada nos próximos 12 meses.</p>')
+    + '<p class="ferEqNota">As férias aprovadas aparecem para toda a equipe. Folgas e atestados não entram aqui.</p>';
+  return d;
+}
+function demoEquipeAus(){
+  const h = isoHojeF(), m = n => somaDiaF(h, n);
+  return [{ id:'de1', usuario_id:'d1', usuario:'Túlio Adriano', tipo:'folga', inicio:h, fim:h, hora_inicio:'13:00', hora_fim:'17:00', status:'aprovada' },
+          { id:'de2', usuario_id:'d2', usuario:'Nicolas Oliveira', tipo:'folga', inicio:m(2), fim:m(2), status:'aprovada' },
+          { id:'de3', usuario_id:'d3', usuario:'Gabriel Soares', tipo:'afastado', inicio:m(-1), fim:m(3), status:'aprovada' },
+          { id:'de4', usuario_id:'d4', usuario:'Filipe Couto', tipo:'ferias', inicio:m(5), fim:m(19), status:'aprovada' },
+          { id:'de5', usuario_id:'d1', usuario:'Túlio Adriano', tipo:'ferias', inicio:m(19), fim:m(33), status:'aprovada' },
+          { id:'de6', usuario_id:'d5', usuario:'Victor Rodrigues', tipo:'recesso', inicio:m(70), fim:m(84), status:'aprovada' },
+          { id:'de7', usuario_id:'d6', usuario:'Vinícius Cortez', tipo:'ferias', inicio:m(-3), fim:m(11), status:'aprovada' }];
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // S24 · A MINHA AUSÊNCIA (Manager S53 / 107_s53)
 // ----------------------------------------------------------------------------
 // Férias, folga e atestado são lançados pelo escritório (RH › Ausências). Aqui
@@ -4182,7 +4273,10 @@ async function pintarFeriasF(){
   document.getElementById('hTit').textContent = rec ? 'Folga e recesso' : 'Folga e férias';
   document.getElementById('hSub').textContent = (sessao.nome || '') + ' · ' + (rec ? 'folgas e recesso do estágio' : 'folgas e férias');
   const m = document.getElementById('main'); m.innerHTML = '';
-  if (!DEMO){ try{ FER = await rpc('tf_ferias_minhas', {}); }catch(e){ toast(e.message, 'err'); } }
+  if (!DEMO){
+    const [f, eq] = await Promise.all([rpc('tf_ferias_minhas', {}).catch(e => { toast(e.message, 'err'); return FER; }), carregarEquipeAus()]);
+    FER = f; EQUIPE_AUS = eq;
+  }
   if (tela !== 'fer') return;
   desenharFeriasF();
 }
@@ -4239,6 +4333,8 @@ function desenharFeriasF(){
     desenharFeriasF();
   }));
   if (t) ligarPedirF(pp, F, t, ehFer, parte, ddd);
+  // ── 1b · as férias da equipe (S28): para cada um se programar
+  try{ const pe = painelFeriasEquipe(hoje); if (pe) m.appendChild(pe); }catch(e){ console.error('[ferias equipe]', e); }
   // ── 2 · os pedidos e as ausências
   const L = (F.ausencias || []).filter(a => a.tipo !== 'atestado');
   if (L.length){

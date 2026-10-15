@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S56</title>
+<title>TapFlow Manager · S57</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1786,6 +1786,16 @@ th.num .tfThFixo{text-align:right}
 .ausAviso{color:var(--warn)!important}
 .aviso.ausAvErro{border-left-color:var(--crit)}
 .chk.apagado{opacity:.45}
+/* S57 · a regra `.campo label` (bloco, maiúscula, 10,5 px) e `.campo input`
+   (largura 100%) vinham DEPOIS de `.chk` e venciam: na janela de ausência os
+   botões de tipo ficavam centralizados numa linha e o texto embaixo, em
+   maiúscula. Dentro de `.campo` o `.chk` volta a ser o `.chk`. */
+.campo label.chk{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:400;letter-spacing:normal;
+  text-transform:none;color:var(--ink);margin:0 0 8px;cursor:pointer}
+.campo .chk input{width:16px;height:16px;flex:0 0 auto;padding:0;margin:0;border:0}
+.campo .chk input:focus{outline-offset:2px}
+#auTipos{display:flex;flex-wrap:wrap;gap:4px 18px;margin-top:4px}
+#auTipos .chk{margin:0}
 .ausAbas{margin-top:10px}
 .ausLeg{display:flex;flex-wrap:wrap;gap:6px 14px;margin:0 0 10px;color:var(--ink-2);font-size:12px}
 .ausLeg i{display:inline-block;width:20px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:5px}
@@ -2015,7 +2025,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S56';
+const APP_VERSION = 'S57';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -18286,6 +18296,16 @@ async function pintarAusencias(){
       DEMO ? demoAusLista() : rpc('tf_ausencias_lista', { p_ano: AUS.ano }),
       !precisaPainel ? Promise.resolve(AUS.painel) : DEMO ? demoFeriasPainel() : rpc('tf_ferias_painel', {}) ]);
     AUS.dados = d; if (p) AUS.painel = p;
+    // S57 · "Próximas" é de hoje em diante, não só do ano na tela: a folga do
+    // Nicolas em 2027 não aparecia na Lista de 2026
+    AUS.proxAno = [];
+    if (AUS.aba === 'lista' && Number(AUS.ano) === Number(String(d.hoje || isoHoje()).slice(0,4))){
+      try{
+        const d2 = DEMO ? { itens: [] } : await rpc('tf_ausencias_lista', { p_ano: AUS.ano + 1 });
+        const ja = new Set((d.itens || []).map(i => String(i.id)));
+        AUS.proxAno = (d2.itens || []).filter(i => !ja.has(String(i.id)) && i.status !== 'pedida');
+      }catch(e){}
+    }
   }catch(e){
     return rhFalha(corpo, /tf_ausencias_lista|tf_ferias_painel/.test(e.message)
       ? 'O banco ainda não tem esta versão das ausências: falta rodar o 108_s54.sql no Supabase. (' + e.message + ')' : e.message, pintarAusencias);
@@ -18330,7 +18350,7 @@ function ausLista(){
   const corpo = document.getElementById('ausCorpo'); if (!corpo) return;
   const D = AUS.dados || {}, hoje = D.hoje || isoHoje();
   const q = (BUSCA.rhaus || '').trim();
-  const todos = (D.itens || []).filter(x => casa([x.usuario, AUS_ROT[x.tipo], x.observacao].join(' '), q));
+  const todos = (D.itens || []).concat(AUS.proxAno || []).filter(x => casa([x.usuario, AUS_ROT[x.tipo], x.observacao].join(' '), q));
   const pedidos = todos.filter(x => x.status === 'pedida').sort((a, b) => a.inicio.localeCompare(b.inicio));
   const resto = todos.filter(x => x.status !== 'pedida');
   const nFora = resto.filter(x => x.status === 'cancelada' || x.status === 'recusada').length;
@@ -18377,12 +18397,12 @@ function ausLista(){
   corpo.insertAdjacentHTML('beforeend',
       (pedidos.length ? secao('Pedidos esperando decisão (' + pedidos.length + ')', pedidos, '') : '')
     + secao('Fora hoje', agora, q ? 'Ninguém com essa busca.' : 'Ninguém fora hoje.')
-    + secao('Próximas', prox, 'Nada aprovado daqui para frente' + (q ? ' com essa busca' : '') + '.')
+    + secao('Próximas' + ((AUS.proxAno || []).length ? ' (inclui ' + esc(String(Number(D.ano || AUS.ano) + 1)) + ')' : ''), prox, 'Nada aprovado daqui para frente' + (q ? ' com essa busca' : '') + '.')
     + secao('Anteriores em ' + esc(String(D.ano || AUS.ano)), ant, 'Nada antes de hoje' + (q ? ' com essa busca' : '') + '.'));
 
   document.getElementById('ausCanc').addEventListener('change', ev => { AUS.canc = ev.target.checked; ausDesenhar(); });
   corpo.querySelectorAll('.ausLin [data-a]').forEach(b => b.addEventListener('click', () => {
-    const x = (D.itens || []).find(i => String(i.id) === b.closest('.ausLin').dataset.id);
+    const x = (D.itens || []).concat(AUS.proxAno || []).find(i => String(i.id) === b.closest('.ausLin').dataset.id);
     if (!x) return;
     const a = b.dataset.a;
     if (a === 'ed') return ausModal(x);
@@ -18482,12 +18502,11 @@ function ausMapa(){
           + '</td></tr>';
       }).join('') : '<tr><td colspan="2" class="nota" style="padding:12px">Ninguém com essa busca.</td></tr>')
     + '</tbody></table></div>'
-    + '<p class="nota">Toque numa barra para ver o registro. A conta de “não sai junto” olha férias e recesso, aprovados e pedidos; folga e atestado ficam fora.</p>');
+    + '<p class="nota">Toque numa barra para ver o registro, corrigir ou cancelar. A conta de “não sai junto” olha férias e recesso, aprovados e pedidos; folga e atestado ficam fora.</p>');
   corpo.querySelectorAll('.ausBar').forEach(b => b.addEventListener('click', () => {
     const x = (D.itens || []).find(i => String(i.id) === b.dataset.id);
     if (!x) return;
-    if (x.status === 'pedida') return ausDecidir(x, true);
-    ausRegistro(x);
+    ausRegistro(x);   // S57: o registro já traz Aprovar/Recusar ou Corrigir/Cancelar
   }));
 }
 
@@ -18730,7 +18749,9 @@ function ausModal(x){
     d.textContent = pt ? (i && eHI.value && eHF.value && mm(eHF.value) > mm(eHI.value)
                             ? minHora(mm(eHF.value) - mm(eHI.value)) + ' em ' + dataBR(i) + ', das ' + eHI.value + ' às ' + eHF.value + '.' : '')
       : i && f >= i ? (ausNDias(i, f) === 1 ? '1 dia: ' + dataBR(i)
-                                   : ausNDias(i, f) + ' dias, de ' + dataBR(i) + ' a ' + dataBR(f)) + '.' : '';
+                                   : ausNDias(i, f) + ' dias, de ' + dataBR(i) + ' a ' + dataBR(f)) + '.'
+          // S57 · como no Field (S27): folga longa costuma ser engano
+          + (t === 'folga' && ausNDias(i, f) > 7 ? ' ⚠ Folga de ' + ausNDias(i, f) + ' dias? Pedidos longos costumam ser férias — confira as datas e o tipo.' : '') : '';
     document.getElementById('auVendaC').hidden = t !== 'ferias';
     document.getElementById('auDica').textContent = t === 'folga'
       ? 'Folga só marca o dia (ou as horas): o saldo do banco de horas continua no EZPoint. Não entra em “quem não sai junto”.'
@@ -18810,7 +18831,13 @@ async function ausRegistro(x){
             + (r.motivo ? (r.acao === 'lancou' || r.acao === 'pediu' || r.acao === 'alterou' ? ' — ' : '') + r.motivo : ''))
         + '<small>' + esc(rhDT(r.quando)) + ' · ' + esc(r.por || '') + '</small></span></div>').join('') + '</div>'
       : '<p class="nota">Sem registro.</p>',
-    [{ label:'Fechar', onClick: fecharModal }]);
+    // S57 · do Mapa do ano dá para corrigir, cancelar ou decidir sem ir à Lista
+    // (o Bruno abriu a folga errada do Nicolas pelo mapa e só via o registro)
+    [{ label:'Fechar', onClick: fecharModal },
+     ...(x.status === 'aprovada' ? [{ label:'Cancelar a ausência', onClick: () => { fecharModal(); ausCancelar(x); } },
+                                    { label:'Corrigir', pri:true, onClick: () => { fecharModal(); ausModal(x); } }] : []),
+     ...(x.status === 'pedida' ? [{ label:'Recusar', onClick: () => { fecharModal(); ausDecidir(x, false); } },
+                                  { label:'Aprovar', pri:true, onClick: () => { fecharModal(); ausDecidir(x, true); } }] : [])]);
 }
 
 function diaDetalhe(l, fechado){
