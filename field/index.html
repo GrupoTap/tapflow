@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S29</title>
+<title>TapFlow Field · S30</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -449,6 +449,37 @@ details.termo.faq{margin-top:6px}
 /* S22: só o TÍTULO (filho direto) leva "(apoio)" — até o S21 o nome do responsável,
    que também é <b>, saía "responsável: Fulano (apoio)", dizendo o contrário */
 .atrasadas .al.apoio > b::after{content:' (apoio)';font-weight:400;color:var(--ink-3);font-size:12.5px}
+/* ── S60 · Canhoto do cartão ─────────────────────── */
+.fabCanh{position:fixed;right:14px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:8px;
+  padding:12px 16px 12px 13px;border:0;border-radius:28px;background:var(--accent);color:#fff;font-size:15px;font-weight:700;
+  box-shadow:0 4px 16px rgba(16,36,56,.32);cursor:pointer}
+.fabCanh .ic{font-size:20px;line-height:1}
+.fabCanh .bolha{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:10px;background:var(--crit);color:#fff;
+  font-style:normal;font-size:12px;line-height:20px;text-align:center;padding:0 5px;border:2px solid #fff}
+.fabCanh:active{transform:scale(.97)}
+main{padding-bottom:84px}
+.canPainel .canPedido{background:var(--warn-soft);border-radius:5px;padding:8px 10px;margin-bottom:10px}
+.canPainel .canPedido b{display:block;font-size:13px;color:var(--warn)}
+.canPainel .canPedido small{font-size:14px}
+.canTirar{width:100%;padding:22px 12px;font-size:17px;margin:0 0 12px}
+.canFoto{position:relative;margin:0 0 12px;text-align:center;background:#20262b;border-radius:6px;overflow:auto;max-height:46vh}
+.canFoto img{max-width:100%;max-height:46vh;display:block;margin:0 auto;cursor:zoom-in}
+.canFoto img.zoom{max-width:none;max-height:none;width:220%;cursor:zoom-out}
+.canFoto .btn{position:absolute;right:8px;bottom:8px;margin:0;width:auto;opacity:.92}
+.canRot{display:block;font-size:12px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin:10px 0 4px}
+.canRot small{text-transform:none;font-weight:400;letter-spacing:0}
+.canValor{display:flex;align-items:center;gap:8px;border:2px solid var(--accent);border-radius:7px;padding:4px 12px;background:var(--surface)}
+.canValor span{font-size:20px;font-weight:700;color:var(--ink-3)}
+.canValor input{flex:1;border:0;outline:0;font-size:30px;font-weight:700;padding:8px 0;background:none;min-width:0;text-align:right;font-variant-numeric:tabular-nums}
+#canF{width:100%;padding:11px;border:1px solid var(--rule);border-radius:5px;font-size:16px;background:var(--surface)}
+.canFrases{margin-top:8px;flex-wrap:wrap}
+.canFrases .chip{cursor:pointer;font-size:13px;padding:6px 10px}
+.canData{margin:12px 0 4px;font-size:14px;color:var(--ink-2)}
+.canData input{display:block;margin-top:6px;padding:9px;border:1px solid var(--rule);border-radius:5px;font-size:16px}
+.canEnviar{width:100%;padding:16px;font-size:17px;margin-top:12px}
+.canDica{font-size:12.5px;color:var(--ink-3);margin:8px 0 0}
+.canMot{display:block;color:var(--crit);margin-top:4px}
+.epiLin.riscado b{text-decoration:line-through;color:var(--ink-3)}
 </style>
 </head>
 <body>
@@ -509,7 +540,7 @@ details.termo.faq{margin-top:6px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S29';
+const APP_VERSION = 'S30';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -3123,6 +3154,7 @@ function voltarParaOS(){
     + (atual.os.coluna_rotulo || atual.os.coluna);
 }
 document.getElementById('btnBack').addEventListener('click', () => {
+  if (tela === 'canhoto'){ canVoltar(); return; }   // S60
   if (tela === 'video' || tela === 'faq'){ pararVideo(); pintarSeg(); return; }   // S17
   if (tela === 'coleta'){ voltarParaOS(); return; }
   // na execução o voltar tem dois degraus: do formulário para a lista de itens,
@@ -4584,15 +4616,22 @@ async function meusDocsPessoaisF(m){
   try{ D = await rpc('tf_rh_meus_docs_func', {}); }catch(e){ h.remove(); cx.remove(); return; }   // banco sem o 111
   if (tela !== 'docs' || !document.body.contains(cx)) return;
   const V = D.vigentes || [];
-  if (!V.length){
-    cx.innerHTML = '<p style="margin:0;font-size:13px">Nenhum ainda. O RH anexa aqui a sua CTPS, o contrato, a ficha de registro, o RG/CNH e o comprovante de endereço.</p>';
+  // S60 · o ASO vigente também aqui (é o mesmo da Minha Segurança)
+  const a = SEG && SEG.aso;
+  const asoHtml = a ? '<div class="epiLin"><b>ASO ' + esc(RH_TIPO_ASO_F[a.tipo] || a.tipo) + ' de ' + esc(dataBR(a.data_exame)) + ' — '
+      + (a.resultado === 'inapto' ? 'INAPTO' : 'apto') + '</b><div class="chips" style="margin-top:4px">' + chipValidade(a.validade) + '</div>'
+      + (a.arquivo_id ? '<div class="linha" style="margin-top:6px"><button class="btn sm" type="button" data-aso="' + esc(a.arquivo_id) + '">Abrir</button></div>' : '<small>sem PDF anexado</small>')
+      + '</div>' : '';
+  if (!V.length && !asoHtml){
+    cx.innerHTML = '<p style="margin:0;font-size:13px">Nenhum ainda. O RH anexa aqui a sua CTPS, o contrato, a ficha de registro, o RG/CNH, o comprovante de endereço e o ASO.</p>';
     return;
   }
-  cx.innerHTML = V.map(d => '<div class="epiLin"><b>' + esc(d.rotulo) + '</b><small>'
+  cx.innerHTML = asoHtml + V.map(d => '<div class="epiLin"><b>' + esc(d.rotulo) + '</b><small>'
     + esc([d.descricao, d.validade ? (d.tipo === 'contrato' ? 'até ' : 'validade ') + dataBR(d.validade) : '',
            'anexado em ' + rhDTf(d.criado_em).slice(0, 10)].filter(Boolean).join(' · ')) + '</small>'
     + '<div class="linha" style="margin-top:6px"><button class="btn sm" type="button" data-dp="' + esc(d.id) + '">Abrir</button></div></div>').join('');
   cx.querySelectorAll('[data-dp]').forEach(b => b.addEventListener('click', () => verDocPessoalF(V.find(x => x.id === b.dataset.dp))));
+  cx.querySelectorAll('[data-aso]').forEach(b => b.addEventListener('click', () => abrirArquivoRH(b.dataset.aso)));
 }
 /** Abre no próprio app (PDF pelo pdf.js, foto como imagem), com Baixar. */
 async function verDocPessoalF(d){
@@ -4758,10 +4797,298 @@ async function baixarDocF(id){
   }catch(e){ toast(e.message, 'err'); }
 }
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// S60 · CANHOTO DO CARTÃO (item 2 da fila, Bruno 16/10)
+// ----------------------------------------------------------------------------
+// Substitui o grupo de WhatsApp das compras no cartão. Tem de ser tão rápido
+// quanto o WhatsApp: o botão flutuante 📷 (todas as telas, menos dentro do
+// levantamento e da execução — lá a câmera é do equipamento) já abre a câmera;
+// depois da foto, o valor (teclado numérico, a vírgula entra sozinha) e Enviar.
+// A frase é opcional, com as últimas da pessoa em um toque.
+// No Android há mais dois caminhos: segurar o ícone do app → "Canhoto do
+// cartão" (`shortcuts` do manifesto, abre ?canhoto=1) e "Compartilhar →
+// TapFlow" a partir da câmera ou da galeria (`share_target`: o sw.js guarda a
+// foto e abre ?canhoto=compartilhado). No iPhone, só o botão — o Safari não
+// tem nenhum dos dois.
+// Sem sinal: a foto vai para o IndexedDB (a mesma loja das fotos do
+// levantamento) e o índice para o localStorage; sobe sozinha quando voltar.
+// O id do canhoto nasce aqui: o reenvio da fila não duplica no banco (113).
+// ════════════════════════════════════════════════════════════════════════════
+const K_CANH = 'tff_canhotos';
+const CAN = { meus: null, voltar: null, foto: null, pre: null, enviando: false, demo: [] };
+const CAN_TELAS = ['lista', 'dia', 'fer', 'docs', 'seg', 'os'];
+const canFila = () => LS.get(K_CANH, []);
+const canFilaSet = L => LS.set(K_CANH, L);
+const canValTxt = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const canBRL = v => 'R$ ' + canValTxt(v);
+function canUid(){
+  try{ const p = String(sessao.token || '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+       return JSON.parse(decodeURIComponent(escape(atob(p)))).sub || null; }catch(e){ return null; }
+}
+const canNovoId = () => (crypto.randomUUID && crypto.randomUUID())
+  || ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+const canHoje = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+
+// ── o botão flutuante ───────────────────────────────────────────────────────
+function canFab(){
+  let b = document.getElementById('fabCanh');
+  if (b) return b;
+  b = document.createElement('button');
+  b.type = 'button'; b.id = 'fabCanh'; b.className = 'fabCanh'; b.hidden = true;
+  b.setAttribute('aria-label', 'Canhoto do cartão: tirar a foto e enviar');
+  b.innerHTML = '<span class="ic" aria-hidden="true">📷</span><span class="tx">Canhoto do cartão</span><i class="bolha" hidden></i>';
+  b.addEventListener('click', () => canNovo());
+  document.body.appendChild(b);
+  return b;
+}
+function canAtualizarFab(){
+  const b = canFab();
+  const lg = document.getElementById('login');
+  const logado = DEMO || !!sessao.token;
+  b.hidden = !(logado && (!lg || lg.hidden) && CAN_TELAS.indexOf(tela) >= 0 && !document.querySelector('.docView')
+    && !document.querySelector('#main .barra'));   // a barra de botões da OS fica livre
+  const n = canFila().length + ((CAN.meus && CAN.meus.comprovantes) || []).filter(c => c.situacao === 'devolvido').length
+          + ((CAN.meus && CAN.meus.pedidos) || []).length;
+  const bo = b.querySelector('.bolha'); bo.hidden = !n; bo.textContent = n;
+  b.title = n ? n + (n === 1 ? ' item pede atenção' : ' itens pedem atenção') + ' — veja em Meus canhotos' : '';
+}
+// toda tela nova passa por #main: é ali que o botão decide se aparece
+try{ new MutationObserver(() => canAtualizarFab()).observe(document.getElementById('main'), { childList: true, subtree: true }); }catch(e){}
+
+/** Abre a câmera; com a foto, o formulário. Sem foto (cancelou), o formulário
+ *  com "Tirar foto" e a lista dos meus canhotos — é o caminho para ela. */
+function canNovo(pre){
+  CAN.pre = pre || null;
+  if (tela !== 'canhoto') CAN.voltar = canVoltarPara();
+  const i = document.createElement('input');
+  i.type = 'file'; i.accept = 'image/*'; i.setAttribute('capture', 'environment'); i.style.display = 'none';
+  let respondeu = false;
+  i.addEventListener('change', async () => {
+    respondeu = true;
+    const f = i.files && i.files[0]; i.remove();
+    if (!f){ canFormulario(); return; }
+    try{ CAN.foto = await reduzirFoto(f, 1600, 0.72); }catch(e){ toast(e.message, 'err'); CAN.foto = null; }
+    canFormulario();
+  });
+  // o "cancelar" da câmera não dispara change em todo aparelho: ao voltar o foco, abre o formulário
+  window.addEventListener('focus', function vf(){ window.removeEventListener('focus', vf);
+    setTimeout(() => { if (!respondeu && tela !== 'canhoto'){ i.remove(); canFormulario(); } }, 900); });
+  document.body.appendChild(i); i.click();
+}
+function canVoltarPara(){
+  const t = tela, a = atual;
+  if (t === 'dia') return pintarDiariasF;
+  if (t === 'fer') return pintarFeriasF;
+  if (t === 'docs') return pintarDocsF;
+  if (t === 'seg') return pintarSeg;
+  if (t === 'os' && a) return () => { atual = a; pintarOS(); };
+  return pintarLista;
+}
+function canVoltar(){ CAN.foto = null; CAN.pre = null; const f = CAN.voltar || pintarLista; CAN.voltar = null; f(); }
+
+function canFormulario(){
+  tela = 'canhoto';
+  document.getElementById('btnBack').hidden = false;
+  document.getElementById('hTit').textContent = 'Canhoto do cartão';
+  document.getElementById('hSub').textContent = (sessao.nome || '') + ' · compra no cartão da empresa';
+  const m = document.getElementById('main'); m.innerHTML = '';
+  const pre = CAN.pre || {};
+  const frases = ((CAN.meus && CAN.meus.frases) || []).slice(0, 5);
+  const p = document.createElement('div'); p.className = 'painel canPainel';
+  p.innerHTML = (pre.linha_id ? '<div class="canPedido"><b>Pedido do escritório</b><small>' + esc(pre.estabelecimento || '') + ' · ' + esc(canBRL(pre.valor))
+        + ' · ' + esc(dataBR(pre.data)) + '</small></div>' : '')
+    + (CAN.foto ? '<div class="canFoto"><img alt="Foto do canhoto" src="' + CAN.foto + '"><button type="button" class="btn sm" id="canOutra">Tirar outra</button></div>'
+       : '<button type="button" class="btn pri canTirar" id="canTirar"><span aria-hidden="true">📷</span> Tirar foto do canhoto</button>')
+    + '<label class="canRot" for="canV">Valor do canhoto</label>'
+    + '<div class="canValor"><span>R$</span><input id="canV" type="text" inputmode="numeric" autocomplete="off" placeholder="0,00" value="'
+      + (pre.valor ? esc(canValTxt(pre.valor)) : '') + '"></div>'
+    + '<label class="canRot" for="canF">O que foi <small>(opcional)</small></label>'
+    + '<input id="canF" type="text" maxlength="140" autocomplete="off" placeholder="ex.: Abastecimento Saveiro 02" value="' + esc(pre.frase || '') + '">'
+    + (frases.length ? '<div class="chips canFrases">' + frases.map(f => '<button type="button" class="chip" data-fr="' + esc(f) + '">' + esc(f) + '</button>').join('') + '</div>' : '')
+    + '<div class="canData"><span id="canDTxt"></span> <button type="button" class="lnk" id="canDBtn">foi outro dia?</button>'
+      + '<input id="canD" type="date" hidden max="' + canHoje() + '" value="' + esc(pre.data || canHoje()) + '"></div>'
+    + '<button type="button" class="btn pri canEnviar" id="canEnv">Enviar</button>'
+    + '<p class="canDica">Só compras no cartão da empresa. Alimentação é da diária — não entra aqui.</p>';
+  m.appendChild(p);
+  // ── a lista: fila do aparelho, pedidos do escritório, os enviados ──
+  const h = document.createElement('div'); h.className = 'sec'; h.textContent = 'Meus canhotos'; m.appendChild(h);
+  const lista = document.createElement('div'); lista.className = 'painel'; lista.id = 'canLista'; m.appendChild(lista);
+  canDesenharLista();
+  canAtualizar().then(canDesenharLista).catch(() => {});
+  // ── comportamento ──
+  const v = document.getElementById('canV');
+  v.addEventListener('input', () => {
+    const d = v.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(0, 8);
+    v.value = d ? canValTxt(Number(d) / 100) : '';
+  });
+  const dTxt = () => { const d = document.getElementById('canD').value;
+    document.getElementById('canDTxt').textContent = d === canHoje() ? 'Compra de hoje' : 'Compra de ' + dataBR(d); };
+  dTxt();
+  document.getElementById('canD').addEventListener('change', dTxt);
+  document.getElementById('canDBtn').addEventListener('click', () => { const d = document.getElementById('canD'); d.hidden = false; d.focus();
+    try{ d.showPicker && d.showPicker(); }catch(e){} });
+  p.querySelectorAll('[data-fr]').forEach(b => b.addEventListener('click', () => { document.getElementById('canF').value = b.dataset.fr; }));
+  const tirar = () => canNovo(Object.assign({}, CAN.pre || {}, { valor: carNumF(v.value) || (CAN.pre && CAN.pre.valor), frase: document.getElementById('canF').value }));
+  const bt = document.getElementById('canTirar'); if (bt) bt.addEventListener('click', tirar);
+  const bo = document.getElementById('canOutra'); if (bo) bo.addEventListener('click', tirar);
+  const im = p.querySelector('.canFoto img'); if (im) im.addEventListener('click', () => im.classList.toggle('zoom'));
+  document.getElementById('canEnv').addEventListener('click', canEnviar);
+  if (CAN.foto && !pre.valor) setTimeout(() => v.focus(), 80);
+}
+const carNumF = t => { const s = String(t || '').replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, ''); const n = Number(s); return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0; };
+
+async function canEnviar(){
+  if (CAN.enviando) return;
+  const valor = carNumF(document.getElementById('canV').value);
+  const frase = document.getElementById('canF').value.trim();
+  const data = document.getElementById('canD').value || canHoje();
+  if (!CAN.foto){ toast('Tire a foto do canhoto primeiro.', 'err'); return; }
+  if (!(valor > 0)){ toast('Digite o valor do canhoto.', 'err'); document.getElementById('canV').focus(); return; }
+  if (valor > 2000 && !confirm('R$ ' + canValTxt(valor) + ' — é isso mesmo?')) return;
+  // o mesmo canhoto duas vezes é o erro mais comum do grupo: avisa
+  const igual = canFila().concat(((CAN.meus && CAN.meus.comprovantes) || []).filter(c => c.situacao !== 'cancelado'))
+    .find(c => Math.abs(Number(c.valor) - valor) < 0.005 && (c.data || c.data_compra) === data);
+  if (igual && !confirm('Você já mandou um canhoto de R$ ' + canValTxt(valor) + ' ' + (data === canHoje() ? 'hoje' : 'nesse dia') + '. Enviar mesmo assim?')) return;
+  CAN.enviando = true;
+  const id = canNovoId();
+  try{
+    await IDB.put('canhoto:' + id, CAN.foto);
+    const L = canFila(); L.push({ id, valor, frase, data, linha_id: (CAN.pre && CAN.pre.linha_id) || null, criado: new Date().toISOString() }); canFilaSet(L);
+  }catch(e){ CAN.enviando = false; toast('Não consegui guardar a foto no aparelho: ' + e.message, 'err'); return; }
+  CAN.enviando = false;
+  const r = await canFlush();
+  if (r.enviados.indexOf(id) >= 0) toast('Enviado · ' + canBRL(valor) + (frase ? ' · ' + frase : ''), 'ok');
+  else if (r.recusados.indexOf(id) < 0) toast('Guardado no aparelho · sobe sozinho quando tiver sinal.', 'ok');
+  canVoltar();
+}
+
+/** Sobe o que está na fila, um por um. Rede caiu: para e tenta depois. */
+let _canFlushando = null;
+function canFlush(){
+  if (_canFlushando) return _canFlushando;
+  _canFlushando = (async () => {
+    const out = { enviados: [], recusados: [] };
+    const uid = canUid();
+    for (const it of canFila()){
+      if (DEMO){ CAN.demo.unshift({ id: it.id, valor: it.valor, frase: it.frase, data_compra: it.data, situacao: 'enviado', enviado_em: new Date().toISOString() });
+        out.enviados.push(it.id); canFilaSet(canFila().filter(x => x.id !== it.id)); IDB.del('canhoto:' + it.id).catch(() => {}); continue; }
+      if (!uid || navigator.onLine === false) break;
+      const foto = await IDB.get('canhoto:' + it.id).catch(() => null);
+      if (!foto){ canFilaSet(canFila().filter(x => x.id !== it.id)); out.recusados.push(it.id);
+        toast('O canhoto de ' + canBRL(it.valor) + ' perdeu a foto no aparelho. Tire de novo.', 'err'); continue; }
+      const path = 'comprovantes/' + uid + '/' + it.id + '.jpg';
+      try{
+        const blob = await (await fetch(foto)).blob();
+        const url = SUPABASE_URL + '/storage/v1/object/cartoes/' + path.split('/').map(encodeURIComponent).join('/');
+        const vai = () => fetch(url, { method: 'POST', body: blob, headers: Object.assign({ apikey: SUPABASE_ANON_KEY, 'Content-Type': 'image/jpeg' },
+          sessao.token ? { Authorization: 'Bearer ' + sessao.token } : {}) });
+        let r = await vai();
+        if ((r.status === 401 || r.status === 403) && sessao.refresh && await renovarToken()) r = await vai();
+        // 400/409 "já existe": é o reenvio de uma foto que subiu antes da queda — segue
+        if (!r.ok){
+          const j = await r.json().catch(() => ({}));
+          if (!(r.status === 409 || /exist|duplicate/i.test(String(j.message || j.error || '')))) throw Object.assign(new Error('O armazenamento recusou a foto (HTTP ' + r.status + ').'), { rede: r.status >= 500 });
+        }
+        await rpc('tf_cartao_comprovante_enviar', { p_id: it.id, p_valor: it.valor, p_frase: it.frase || null, p_data: it.data,
+          p_foto_path: path, p_foto_bytes: blob.size, p_linha_id: it.linha_id || null });
+        canFilaSet(canFila().filter(x => x.id !== it.id)); IDB.del('canhoto:' + it.id).catch(() => {});
+        out.enviados.push(it.id);
+      }catch(e){
+        if (e.rede || /Failed to fetch|NetworkError|Load failed|não respondeu/i.test(e.message || '')) break;
+        if (e.sessaoMorta) break;
+        // recusa de negócio (pedido já atendido, data, valor): não adianta insistir
+        canFilaSet(canFila().filter(x => x.id !== it.id)); IDB.del('canhoto:' + it.id).catch(() => {});
+        out.recusados.push(it.id);
+        toast('O canhoto de ' + canBRL(it.valor) + ' não foi aceito: ' + e.message, 'err');
+      }
+    }
+    if (out.enviados.length) canAtualizar().catch(() => {});
+    canAtualizarFab();
+    return out;
+  })().finally(() => { _canFlushando = null; });
+  return _canFlushando;
+}
+async function canAtualizar(){
+  if (DEMO){ CAN.meus = { comprovantes: CAN.demo, frases: ['Abastecimento Saveiro 02', 'Hotel', 'Pedágio'], pedidos: [] }; canAtualizarFab(); return CAN.meus; }
+  if (!sessao.token) return null;
+  try{ CAN.meus = await rpc('tf_cartao_meus_comprovantes', {}); }catch(e){ return CAN.meus; }   // banco sem o 113: silencioso
+  canAtualizarFab();
+  return CAN.meus;
+}
+const CAN_SIT = { enviado: ['', 'enviado — o escritório vai lançar'], lancado: ['ok', 'lançado'], devolvido: ['atr', 'devolvido'], cancelado: ['', 'cancelado'] };
+function canDesenharLista(){
+  const el = document.getElementById('canLista'); if (!el) return;
+  const F = canFila(), M = (CAN.meus && CAN.meus.comprovantes) || [], P = (CAN.meus && CAN.meus.pedidos) || [];
+  el.innerHTML = (P.length ? '<div class="grupoTit">O escritório pediu o canhoto</div>' + P.map(x => '<div class="epiLin"><b>' + esc(x.estabelecimento) + ' · ' + esc(canBRL(x.valor)) + '</b>'
+        + '<small>' + esc(dataBR(x.data) + (x.cartao ? ' · cartão ' + x.cartao : '')) + '</small><div class="linha" style="margin-top:6px">'
+        + '<button class="btn sm pri" type="button" data-ped="' + esc(x.linha_id) + '">Enviar este</button></div></div>').join('') : '')
+    + (F.length ? '<div class="grupoTit">No aparelho, esperando sinal</div>' + F.map(x => '<div class="epiLin"><b>' + esc(canBRL(x.valor)) + (x.frase ? ' · ' + esc(x.frase) : '') + '</b>'
+        + '<small>' + esc(dataBR(x.data)) + ' · sobe sozinho quando tiver sinal</small></div>').join('') : '')
+    + (M.length ? M.slice(0, 40).map(c => { const [cls, rot] = CAN_SIT[c.situacao] || ['', c.situacao];
+        return '<div class="epiLin' + (c.situacao === 'cancelado' ? ' riscado' : '') + '"><b>' + esc(canBRL(c.valor)) + (c.frase ? ' · ' + esc(c.frase) : '') + '</b>'
+          + '<small>' + esc(dataBR(c.data_compra)) + '</small><div class="chips" style="margin-top:4px"><span class="chip ' + cls + '">'
+          + esc(c.na_fatura && c.situacao === 'lancado' ? 'conferido na fatura' : rot) + '</span></div>'
+          + (c.situacao === 'devolvido' && c.devolvido_motivo ? '<small class="canMot">Motivo: ' + esc(c.devolvido_motivo) + '</small>' : '')
+          + '<div class="linha" style="margin-top:6px">' + (c.foto_path ? '<button class="btn sm" type="button" data-verf="' + esc(c.foto_path) + '">Ver foto</button>' : '')
+          + (c.situacao === 'devolvido' ? '<button class="btn sm pri" type="button" data-denovo="' + esc(c.id) + '">Mandar de novo</button>' : '')
+          + (c.situacao === 'enviado' ? '<button class="btn sm" type="button" data-canc="' + esc(c.id) + '">Cancelar</button>' : '') + '</div></div>'; }).join('')
+      : (F.length || P.length ? '' : '<p style="margin:0;font-size:13.5px">Nenhum canhoto ainda. Os que você mandar aparecem aqui, com o que o escritório fez com cada um.</p>'));
+  el.querySelectorAll('[data-ped]').forEach(b => b.addEventListener('click', () => {
+    const x = P.find(y => y.linha_id === b.dataset.ped);
+    canNovo({ linha_id: x.linha_id, valor: Number(x.valor), data: x.data, estabelecimento: x.estabelecimento });
+  }));
+  el.querySelectorAll('[data-denovo]').forEach(b => b.addEventListener('click', () => {
+    const c = M.find(y => y.id === b.dataset.denovo); canNovo({ valor: Number(c.valor), frase: c.frase || '', data: c.data_compra });
+  }));
+  el.querySelectorAll('[data-canc]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Cancelar este canhoto? O escritório deixa de vê-lo.')) return;
+    try{ await rpc('tf_cartao_comprovante_cancelar', { p_id: b.dataset.canc }); toast('Cancelado.', 'ok'); await canAtualizar(); canDesenharLista(); }
+    catch(e){ toast(e.message, 'err'); }
+  }));
+  el.querySelectorAll('[data-verf]').forEach(b => b.addEventListener('click', () => canVerFoto(b.dataset.verf)));
+}
+async function canVerFoto(path){
+  const w = document.createElement('div'); w.className = 'docView';
+  w.innerHTML = '<div class="dvTopo"><b>Canhoto</b><button type="button" class="dvX" aria-label="Fechar">✕</button></div><div class="dvPag"><p class="dvMsg">Abrindo…</p></div>';
+  document.body.appendChild(w); canAtualizarFab();
+  w.querySelector('.dvX').addEventListener('click', () => { w.remove(); canAtualizarFab(); });
+  try{
+    const url = SUPABASE_URL + '/storage/v1/object/cartoes/' + String(path).split('/').map(encodeURIComponent).join('/');
+    const vai = () => fetch(url, { headers: Object.assign({ apikey: SUPABASE_ANON_KEY }, sessao.token ? { Authorization: 'Bearer ' + sessao.token } : {}) });
+    let r = await vai(); if ((r.status === 401 || r.status === 403) && sessao.refresh && await renovarToken()) r = await vai();
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const u = URL.createObjectURL(await r.blob());
+    const pag = w.querySelector('.dvPag'); pag.innerHTML = ''; const im = document.createElement('img'); im.src = u; im.alt = 'Canhoto'; im.style.width = '100%'; pag.appendChild(im);
+  }catch(e){ w.querySelector('.dvMsg').textContent = 'Não consegui abrir a foto (' + e.message + '). Tente com internet.'; }
+}
+
+/** Atalho do ícone (?canhoto=1) e "Compartilhar → TapFlow" (?canhoto=compartilhado). */
+async function canDoEndereco(){
+  let q; try{ q = new URLSearchParams(location.search).get('canhoto'); }catch(e){ return; }
+  if (!q) return;
+  try{ history.replaceState(null, '', location.pathname); }catch(e){}
+  CAN.voltar = pintarLista;
+  if (q === 'compartilhado'){
+    try{
+      const c = await caches.open('tapflow-compartilhado');
+      const r = await c.match('foto');
+      if (r){ const b = await r.blob(); await c.delete('foto');
+        CAN.foto = await reduzirFoto(new File([b], 'canhoto.jpg', { type: b.type || 'image/jpeg' }), 1600, 0.72); }
+    }catch(e){ toast('Não consegui pegar a foto compartilhada: ' + e.message, 'err'); }
+  }
+  canFormulario();
+}
+window.addEventListener('online', () => { canFlush().catch(() => {}); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') canFlush().catch(() => {}); });
+setInterval(() => { if (canFila().length) canFlush().catch(() => {}); }, 60000);
+
 function iniciar(){
   pintarFila();
   carregarParametros().finally(() => {
-    carregar().then(pintarLista).catch(()=>pintarLista());
+    // S60 · depois da lista: o atalho/compartilhar do canhoto, a fila dele e "Meus canhotos"
+    carregar().then(pintarLista).catch(()=>pintarLista())
+      .finally(() => { canDoEndereco().catch(() => {}); canAtualizar().catch(() => {}); canFlush().catch(() => {}); });
     flushFila().catch(()=>{});
     // o catálogo vem por último: se falhar, o app funciona igual, só sem a lista
     sincronizarCatalogo().catch(()=>{});

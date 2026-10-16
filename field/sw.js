@@ -24,7 +24,7 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S29';
+const VERSAO = 'S30';
 const CACHE  = 'tapflow-field-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -68,6 +68,26 @@ function comPrazo(req, ms) {
 
 self.addEventListener('fetch', ev => {
   const req = ev.request;
+  // S60 · "Compartilhar → TapFlow" a partir da câmera ou da galeria (o
+  // `share_target` do manifesto; só Android). A foto fica num cache próprio,
+  // que a página lê e apaga ao abrir ?canhoto=compartilhado.
+  if (req.method === 'POST') {
+    let u; try { u = new URL(req.url); } catch (e) { return; }
+    if (u.origin === self.location.origin && /\/compartilhar$/.test(u.pathname)) {
+      ev.respondWith((async () => {
+        try {
+          const fd = await req.formData();
+          const f = fd.get('foto');
+          if (f && f.size) {
+            const c = await caches.open('tapflow-compartilhado');
+            await c.put('foto', new Response(f, { headers: { 'Content-Type': f.type || 'image/jpeg' } }));
+          }
+        } catch (e) {}
+        return Response.redirect('./?canhoto=compartilhado', 303);
+      })());
+    }
+    return;
+  }
   if (req.method !== 'GET') return;
 
   let url;
