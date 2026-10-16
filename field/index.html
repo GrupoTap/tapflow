@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S28</title>
+<title>TapFlow Field · S29</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -509,7 +509,7 @@ details.termo.faq{margin-top:6px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S28';
+const APP_VERSION = 'S29';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -4538,7 +4538,7 @@ async function pintarDocsF(){
   tela = 'docs'; atual = null;
   document.getElementById('btnBack').hidden = true;
   document.getElementById('hTit').textContent = 'Documentos';
-  document.getElementById('hSub').textContent = (sessao.nome || '') + ' · folha de ponto e recibos';
+  document.getElementById('hSub').textContent = (sessao.nome || '') + ' · ponto, recibos e documentos';
   const m = document.getElementById('main'); m.innerHTML = '';
   if (!DOCS || !DOCS.tem_ficha){
     m.innerHTML = '<div class="vazio"><b>Sem documentos</b><p>Quando o escritório liberar a sua folha de ponto ou o seu recibo, eles aparecem aqui.</p></div>';
@@ -4571,6 +4571,85 @@ async function pintarDocsF(){
   m.querySelectorAll('[data-baixar]').forEach(b => b.addEventListener('click', () => baixarDocF(b.dataset.baixar)));
   const bp = document.getElementById('dcPin'); if (bp) bp.addEventListener('click', pintarSeg);
   abasTopo(m, 'docs');
+  meusDocsPessoaisF(m);   // S59
+}
+
+// ── S59 · Documentos do Funcionário: CTPS, contrato, ficha de registro,
+// RG/CNH e comprovante de endereço que o RH anexou. Só ver e baixar.
+async function meusDocsPessoaisF(m){
+  const h = document.createElement('div'); h.className = 'sec'; h.textContent = 'Meus documentos pessoais';
+  const cx = document.createElement('div'); cx.className = 'painel'; cx.innerHTML = '<p style="margin:0;font-size:13px">Carregando…</p>';
+  m.appendChild(h); m.appendChild(cx);
+  let D;
+  try{ D = await rpc('tf_rh_meus_docs_func', {}); }catch(e){ h.remove(); cx.remove(); return; }   // banco sem o 111
+  if (tela !== 'docs' || !document.body.contains(cx)) return;
+  const V = D.vigentes || [];
+  if (!V.length){
+    cx.innerHTML = '<p style="margin:0;font-size:13px">Nenhum ainda. O RH anexa aqui a sua CTPS, o contrato, a ficha de registro, o RG/CNH e o comprovante de endereço.</p>';
+    return;
+  }
+  cx.innerHTML = V.map(d => '<div class="epiLin"><b>' + esc(d.rotulo) + '</b><small>'
+    + esc([d.descricao, d.validade ? (d.tipo === 'contrato' ? 'até ' : 'validade ') + dataBR(d.validade) : '',
+           'anexado em ' + rhDTf(d.criado_em).slice(0, 10)].filter(Boolean).join(' · ')) + '</small>'
+    + '<div class="linha" style="margin-top:6px"><button class="btn sm" type="button" data-dp="' + esc(d.id) + '">Abrir</button></div></div>').join('');
+  cx.querySelectorAll('[data-dp]').forEach(b => b.addEventListener('click', () => verDocPessoalF(V.find(x => x.id === b.dataset.dp))));
+}
+/** Abre no próprio app (PDF pelo pdf.js, foto como imagem), com Baixar. */
+async function verDocPessoalF(d){
+  const w = document.createElement('div'); w.className = 'docView';
+  w.innerHTML = '<div class="dvTopo"><b></b><button type="button" class="dvX" aria-label="Fechar">✕</button></div>'
+    + '<div class="dvPag"><p class="dvMsg">Abrindo…</p></div>'
+    + '<div class="dvBar"><button type="button" class="btn sm" data-z>Ampliar</button><button type="button" class="btn sm" data-b disabled>Baixar</button></div>';
+  w.querySelector('.dvTopo b').textContent = d.rotulo + (d.descricao ? ' — ' + d.descricao : '');
+  document.body.appendChild(w);
+  const urls = [];
+  const fecha = () => { w.remove(); urls.forEach(u => URL.revokeObjectURL(u)); document.removeEventListener('keydown', esc_); };
+  const esc_ = e => { if (e.key === 'Escape') fecha(); };
+  document.addEventListener('keydown', esc_);
+  w.querySelector('.dvX').addEventListener('click', fecha);
+  const pag = w.querySelector('.dvPag');
+  let zoom = 1;
+  w.querySelector('[data-z]').addEventListener('click', ev => {
+    zoom = zoom === 1 ? 2.2 : 1; ev.currentTarget.textContent = zoom === 1 ? 'Ampliar' : 'Reduzir';
+    pag.querySelectorAll('canvas,img').forEach(x => { x.style.width = (zoom * 100) + '%'; });
+  });
+  try{
+    const a = await rpc1('tf_rh_doc_func_abrir', { p_id: d.id });
+    let blob;
+    if (a.conteudo) blob = await (await fetch(a.conteudo)).blob();
+    else {
+      const url = SUPABASE_URL + '/storage/v1/object/rh-docs/' + String(a.storage_path).split('/').map(encodeURIComponent).join('/');
+      const vai = () => fetch(url, { headers: Object.assign({ apikey: SUPABASE_ANON_KEY }, sessao.token ? { Authorization: 'Bearer ' + sessao.token } : {}) });
+      let r = await vai();
+      if ((r.status === 401 || r.status === 403) && sessao.refresh && await renovarToken()) r = await vai();
+      if (!r.ok) throw new Error('Não consegui abrir o arquivo (HTTP ' + r.status + '). Tente de novo com internet.');
+      blob = await r.blob();
+    }
+    blob = new Blob([blob], { type: a.mime || blob.type });
+    const obj = URL.createObjectURL(blob); urls.push(obj);
+    const bb = w.querySelector('[data-b]'); bb.disabled = false;
+    bb.addEventListener('click', () => {
+      const l = document.createElement('a'); l.href = obj; l.download = a.nome || (d.rotulo + (a.mime === 'application/pdf' ? '.pdf' : '.jpg'));
+      document.body.appendChild(l); l.click(); l.remove();
+    });
+    if (a.mime !== 'application/pdf'){
+      pag.innerHTML = ''; const im = document.createElement('img'); im.src = obj; im.alt = d.rotulo; im.style.width = '100%'; pag.appendChild(im); return;
+    }
+    let lib = null;
+    try{ lib = await carregarPdfJsF(); }catch(e){}
+    if (!lib){ pag.innerHTML = '<p class="dvMsg"><a href="' + obj + '" target="_blank" rel="noopener">Abrir o PDF</a></p>'; return; }
+    const doc = await lib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+    pag.innerHTML = '';
+    for (let n = 1; n <= doc.numPages; n++){
+      const pg = await doc.getPage(n);
+      const vp1 = pg.getViewport({ scale: 1 });
+      const vp = pg.getViewport({ scale: Math.min(4, (Math.max(window.innerWidth, 360) * 2.2) / vp1.width) });
+      const cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height; cv.style.width = '100%';
+      const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height);
+      await pg.render({ canvasContext: cx, viewport: vp }).promise;
+      pag.appendChild(cv);
+    }
+  }catch(e){ pag.innerHTML = '<p class="dvMsg" style="color:var(--crit)"></p>'; pag.firstChild.textContent = e.message; }
 }
 function painelDocF(d, podeAssinar){
   const p = document.createElement('div'); p.className = 'painel docPend' + (d.vencido ? ' venc' : '');
