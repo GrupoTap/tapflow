@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S30</title>
+<title>TapFlow Field · S31</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -480,6 +480,29 @@ main{padding-bottom:84px}
 .canDica{font-size:12.5px;color:var(--ink-3);margin:8px 0 0}
 .canMot{display:block;color:var(--crit);margin-top:4px}
 .epiLin.riscado b{text-decoration:line-through;color:var(--ink-3)}
+/* ── S31 · Agendar e concluir (o "Agendar serviço") ─────────────────────── */
+.agSheet{position:fixed;inset:0;z-index:80;background:rgba(16,24,32,.45);display:flex;align-items:flex-end;justify-content:center}
+.agSheetC{background:var(--bg,#F5F7F8);width:100%;max-width:560px;max-height:94vh;overflow:auto;border-radius:10px 10px 0 0;
+  padding:14px 16px calc(18px + env(safe-area-inset-bottom))}
+.agSheetH{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:17px}
+.agX{border:0;background:none;font-size:20px;padding:6px 8px;color:var(--ink-2)}
+.agNota{font-size:13px;color:var(--ink-2);line-height:1.45;margin:0 0 12px}
+.agDupla{display:grid;grid-template-columns:1.25fr 1fr;gap:10px}
+.agT{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.agT input{width:84px!important;text-align:right}
+.agT span{font-size:14px;color:var(--ink-2)}
+.agTot{font-size:12.5px!important;color:var(--ink-3)!important}
+.agPrev{font-size:13.5px;line-height:1.5;color:var(--ink-2);background:var(--surface);border:1px solid var(--rule);border-radius:5px;
+  padding:9px 11px;margin:0 0 12px;min-height:22px}
+.agPrev ul{list-style:none;padding:0;margin:5px 0 0}
+.agPrev li{display:flex;gap:8px;align-items:baseline;padding:2px 0}
+.agPrev li b{min-width:78px;color:var(--ink)}
+.agPrev li span{margin-left:auto;font-weight:600;color:var(--ink)}
+.agPrev li.pul{color:var(--ink-3);text-decoration:line-through}
+.agAp{margin:0 0 12px}
+.agAp summary{font-size:14px;font-weight:600;padding:8px 0;cursor:pointer}
+.agMsg{color:var(--crit);font-size:13.5px;font-weight:600;margin:0 0 8px;min-height:1px}
+.agSheetC .btn{margin-top:8px}
 </style>
 </head>
 <body>
@@ -540,7 +563,7 @@ main{padding-bottom:84px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S30';
+const APP_VERSION = 'S31';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -1390,7 +1413,9 @@ function pintarMeuDia(m){
     const chips = [];
     if (t.ja_comecou) chips.push('<span class="chip eu">você começou</span>');
     if (t.atrasada_no_roteiro)
-      chips.push('<span class="chip atr">era ' + dataBR(t.data_prevista) + '</span>');
+      chips.push('<span class="chip atr">era ' + dataBR(t.data_prevista)
+        + (t.fim_dia && t.fim_dia !== t.data_prevista ? ' a ' + dataBR(t.fim_dia) : '') + '</span>');
+    chips.push(...chipsQuando(t));   // S31
     if (t.origem !== 'visita') { const cr = chipReag(t.os_id, t.tarefa_id, null); if (cr) chips.push(cr); }   // S15
     if (Number(t.prioridade_rank) >= 3) chips.push('<span class="chip urg">🔴 urgente</span>');
     if (t.dias_restantes != null){
@@ -1406,7 +1431,7 @@ function pintarMeuDia(m){
     if (t.papel === 'apoio')
       chips.push('<span class="chip eu">apoio de ' + esc(t.principal || '?') + '</span>');
     if (t.origem === 'visita')
-      chips.push('<span class="chip eu">visita' + (t.hora ? ' · ' + esc(t.hora) : '') + '</span>'
+      chips.push('<span class="chip eu">visita' + (t.hora ? ' · ' + esc(t.hora) + (t.hora_fim ? '–' + esc(t.hora_fim) : '') : '') + '</span>'
         + (t.principal ? '<span class="chip">com ' + esc(t.principal) + '</span>' : ''));
 
     b.innerHTML = '<div class="n mono"></div><div class="c"></div>' +
@@ -1465,6 +1490,7 @@ function cardCompromisso(t){
     chips.push('<span class="chip atr">era ' + dataBR(t.data_prevista) + '</span>');
   if (t.tempo_estimado_min)
     chips.push('<span class="chip">' + minHora(t.tempo_estimado_min) + '</span>');
+  chips.push(...chipsQuando(t));   // S31
   if (t.papel === 'apoio')
     chips.push('<span class="chip eu">apoio de ' + esc(t.principal || '?') + '</span>');
   const dono = t.papel !== 'apoio';
@@ -1551,7 +1577,7 @@ async function abrirOS(o){
       ? [demoTarefas(o.os_id), demoEquip(), demoColeta(o.os_id)]
       : await Promise.all([
           get('pipeline_tarefas?select=tarefa_id,nome,descricao,tipo,fase,status,perfis_responsaveis,lock_por,requisitos,'
-              + 'lock_expira,usuario_designado,apoios,data_prevista,acao_terminal'
+              + 'lock_expira,usuario_designado,apoios,data_prevista,acao_terminal,tempo_estimado_min,hora_inicio,usa_fds'
               + '&os_id=eq.' + o.os_id + '&ativo=eq.SIM&order=camada,fase_ordem,ordem'),
           get('equipamentos?select=id,tag,tipo,localizacao&cliente_id=eq.' + o.cliente_id + '&ativo=eq.true&order=tag'),
           get('v_os_coleta?select=inspetor,total_itens,enviado_em,fase&os_id=eq.' + o.os_id + '&order=enviado_em')
@@ -1571,6 +1597,137 @@ async function abrirOS(o){
     m.innerHTML = '<div class="vazio"><b>Não deu para abrir</b><p></p></div>';
     m.querySelector('p').textContent = e.message;
   }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════════════════════
+// S31 · (Manager S61) CONCLUIR O "AGENDAR SERVIÇO" PELO CELULAR
+// ----------------------------------------------------------------------------
+// A etapa com `requisitos.agenda` (a T03 da inspeção) só conclui com a
+// execução agendada: quem executa, o dia, a hora e o tempo (em horas e
+// minutos), com a prévia dos dias que ela ocupa — a conta é do banco
+// (`tf_agenda_distribuir`), a mesma do Manager. Grava e conclui de uma vez
+// (`tf_concluir_agendamento`). Sem sinal, NÃO grava (e diz).
+// ════════════════════════════════════════════════════════════════════════════
+const pedeAgenda = t => !!(t && t.requisitos && t.requisitos.agenda && t.requisitos.agenda.tarefa);
+const AG_SEM = ['dom','seg','ter','qua','qui','sex','sáb'];
+const agDiaTxt = iso => { const d = new Date(iso + 'T12:00'); return AG_SEM[d.getDay()] + ' ' + dataBR(iso).slice(0, 5); };
+
+async function telaAgendar(t){
+  const { os, tarefas } = atual;
+  const spec = t.requisitos.agenda;
+  const a = (tarefas || []).find(x => x.tarefa_id === spec.tarefa) || {};
+  let pessoas = [];
+  if (!DEMO){
+    try{ pessoas = await rpc('tf_pessoas_para_tarefa', { p_os_id: os.os_id, p_tarefa_id: spec.tarefa }) || []; }
+    catch(e){ toast(semRede(e) ? 'Sem sinal — o agendamento precisa de internet.' : e.message, 'err'); return; }
+  }
+  await carregarNomes();
+  const min = Number(a.tempo_estimado_min || 0);
+  const ov = document.createElement('div');
+  ov.className = 'agSheet';
+  ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+  ov.innerHTML = '<div class="agSheetC">'
+    + '<div class="agSheetH"><b>Agendar e concluir</b><button type="button" class="agX" aria-label="Voltar">✕</button></div>'
+    + '<p class="agNota">Marque <b>' + esc(spec.rotulo || a.nome || 'a execução') + '</b> na agenda de quem vai: '
+    +   'dia, hora e quanto tempo. A ART e o TapDoc saem com essa data.</p>'
+    + '<div class="campo"><label for="agU">Quem executa</label><select id="agU"><option value="">— escolha —</option>'
+    +   pessoas.map(u => '<option value="' + esc(u.usuario_id) + '"'
+          + (String(u.usuario_id) === String(a.usuario_designado || meuId() || '') ? ' selected' : '') + '>'
+          + esc(u.nome) + '</option>').join('') + '</select></div>'
+    + '<div class="agDupla"><div class="campo"><label for="agD">Dia de início</label><input id="agD" type="date" value="' + esc(a.data_prevista || '') + '"></div>'
+    +   '<div class="campo"><label for="agH">Hora</label><input id="agH" type="time" step="300" value="' + esc(String(a.hora_inicio || '').slice(0, 5)) + '"></div></div>'
+    + '<div class="campo"><label for="agTh">Tempo</label><div class="agT">'
+    +   '<input id="agTh" type="number" min="0" max="1000" inputmode="numeric" aria-label="horas" value="' + (min ? Math.floor(min / 60) : '') + '"><span>h</span>'
+    +   '<input id="agTm" type="number" min="0" step="5" inputmode="numeric" aria-label="minutos" value="' + (min ? min % 60 : '') + '"><span>min</span>'
+    +   '<span class="agTot" id="agTt"></span></div></div>'
+    + '<label class="check"><input type="checkbox" id="agF"' + (a.usa_fds ? ' checked' : '') + '> usar fim de semana e feriado</label>'
+    + '<div class="agPrev" id="agP" aria-live="polite"></div>'
+    + '<details class="agAp"><summary>Quem vai junto <small>(opcional)</small></summary>'
+    +   Object.keys(NOMES).sort((x, y) => NOMES[x].localeCompare(NOMES[y])).map(id => '<label class="check" data-u="' + esc(id) + '">'
+          + '<input type="checkbox" class="agApC" value="' + esc(id) + '"' + ((a.apoios || []).map(String).indexOf(String(id)) >= 0 ? ' checked' : '') + '> '
+          + esc(NOMES[id]) + '</label>').join('') + '</details>'
+    + '<div class="campo"><label for="agO">Observação <small>(opcional)</small></label><textarea id="agO" rows="2"></textarea></div>'
+    + '<div class="agMsg" id="agMsg" role="alert"></div>'
+    + '<button type="button" class="btn pri" id="agOk">Agendar e concluir</button>'
+    + '<button type="button" class="btn" id="agVolta">Voltar</button>'
+    + '</div>';
+  document.body.appendChild(ov);
+  const $ = id => ov.querySelector('#' + id);
+  const fechar = () => ov.remove();
+  ov.querySelector('.agX').addEventListener('click', fechar);
+  $('agVolta').addEventListener('click', fechar);
+  const ler = () => {
+    const tot = Math.round(Number($('agTh').value || 0) * 60 + Number($('agTm').value || 0));
+    return { quem: $('agU').value || null, dia: $('agD').value || null, hora: $('agH').value || null,
+             minutos: tot > 0 ? tot : null, fds: $('agF').checked };
+  };
+  let seq = 0, tmr = null;
+  const prev = async () => {
+    const v = ler(), box = $('agP');
+    $('agTt').textContent = v.minutos ? '= ' + v.minutos.toLocaleString('pt-BR') + ' min' : '';
+    const n = ++seq;
+    if (!v.dia || !v.minutos){ box.innerHTML = '<span class="agNota">Escolha o dia e o tempo para ver os dias que ocupa.</span>'; return; }
+    if (DEMO){ box.innerHTML = '<span class="agNota">Modo demonstração: os dias vêm do banco.</span>'; return; }
+    try{
+      const r = await rpc('tf_agenda_distribuir', { p_dia: v.dia, p_hora: v.hora, p_minutos: v.minutos, p_fds: v.fds });
+      if (n !== seq) return;
+      const ds = (r && r.dias) || [], pul = (r && r.pulados) || [];
+      const ls = ds.map(d => ({ dia: d.dia, h: '<li><b>' + esc(agDiaTxt(d.dia)) + '</b>'
+          + (v.hora ? ' ' + esc(d.hora_ini) + '–' + esc(d.hora_fim) : '') + '<span>' + esc(minHora(d.minutos)) + '</span></li>' }))
+        .concat(pul.map(x => ({ dia: x.dia, h: '<li class="pul">' + esc(agDiaTxt(x.dia)) + ' — ' + esc(x.motivo) + '</li>' })))
+        .sort((p, q) => p.dia < q.dia ? -1 : 1);
+      box.innerHTML = '<div>' + (ds.length > 1 ? 'Ocupa <b>' + ds.length + ' dias</b> · termina <b>' + esc(agDiaTxt(r.fim_dia))
+          + (v.hora ? ' às ' + esc(r.fim_hora) : '') + '</b>' : '<b>Um dia</b>' + (v.hora ? ' · termina às <b>' + esc(r.fim_hora) + '</b>' : '')) + '</div>'
+        + '<ul>' + ls.map(x => x.h).join('') + '</ul>';
+    }catch(e){ if (n === seq) box.textContent = semRede(e) ? 'Sem sinal — a prévia volta quando conectar.' : e.message; }
+  };
+  ['agD','agH','agTh','agTm','agF'].forEach(id => ['input','change'].forEach(ev =>
+    $(id).addEventListener(ev, () => { $('agMsg').textContent = ''; clearTimeout(tmr); tmr = setTimeout(prev, 300); })));
+  $('agU').addEventListener('change', () => { $('agMsg').textContent = ''; });
+  $('agTm').addEventListener('blur', () => {
+    const m = Number($('agTm').value || 0);
+    if (m >= 60){ $('agTh').value = Number($('agTh').value || 0) + Math.floor(m / 60); $('agTm').value = m % 60; prev(); }
+  });
+  const esconde = () => ov.querySelectorAll('.agAp label').forEach(l => {
+    const dono = l.dataset.u === $('agU').value; l.hidden = dono;
+    if (dono) l.querySelector('input').checked = false;
+  });
+  $('agU').addEventListener('change', esconde); esconde();
+  prev();
+  $('agOk').addEventListener('click', async () => {
+    const v = ler(), msg = $('agMsg');
+    const falta = [!v.quem && 'quem executa', !v.dia && 'o dia', !v.hora && 'a hora', !v.minutos && 'o tempo'].filter(Boolean);
+    if (falta.length){ msg.textContent = 'Falta ' + falta.join(', ') + '.'; return; }
+    const apoios = [...ov.querySelectorAll('.agApC:checked')].map(c => c.value).filter(x => x !== v.quem);
+    $('agOk').disabled = true;
+    try{
+      if (DEMO){ fechar(); demoAgir(os.os_id, t.tarefa_id, 'concluir'); toast('Modo demonstração: agendamento não é gravado.', 'ok'); abrirOS(os); return; }
+      const r = await rpc('tf_concluir_agendamento', { p_os_id: os.os_id, p_tarefa_id: t.tarefa_id,
+        p_dia: v.dia, p_hora: v.hora, p_minutos: v.minutos, p_usuario: v.quem, p_apoios: apoios, p_fds: v.fds,
+        p_observacao: ($('agO').value || '').trim() || null });
+      fechar();
+      const ag = (r && r.agenda) || {};
+      await carregar(true);
+      toast('Agendado: ' + agDiaTxt(v.dia) + ' às ' + v.hora + (ag.ate && ag.ate !== v.dia ? ' até ' + agDiaTxt(ag.ate) : '')
+        + ' com ' + (ag.usuario || 'o inspetor') + '.', 'ok');
+      const novo = listaOS.find(x => x.os_id === os.os_id);
+      if (novo) abrirOS(novo); else pintarLista();
+    }catch(e){
+      msg.textContent = semRede(e) ? 'Sem sinal — o agendamento NÃO foi gravado. Tente de novo quando conectar.' : e.message;
+      $('agOk').disabled = false;
+    }
+  });
+  setTimeout(() => $('agU').focus(), 50);
+}
+
+/** As marcas do "Hoje": a hora (quando a tarefa tem hora) e "dia N de M". */
+function chipsQuando(t){
+  const c = [];
+  if (t.hora && t.origem !== 'visita') c.push('<span class="chip">' + esc(t.hora) + (t.hora_fim ? '–' + esc(t.hora_fim) : '') + '</span>');
+  if (Number(t.dias_total) > 1) c.push('<span class="chip eu">dia ' + Number(t.dia_n) + ' de ' + Number(t.dias_total) + '</span>');
+  return c;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1714,7 +1871,7 @@ function painelEtapas(){
     d.innerHTML = '<b></b><small></small>';
     d.querySelector('b').textContent = t.nome;
     d.querySelector('small').textContent = est + ' · ' + quem
-      + (t.data_prevista ? ' · ' + dataBR(t.data_prevista) : '');
+      + (t.data_prevista ? ' · ' + dataBR(t.data_prevista) + (t.hora_inicio ? ' ' + String(t.hora_inicio).slice(0, 5) : '') : '');
     if (possoAssumir(t)){
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'btn sm';
@@ -1752,7 +1909,8 @@ function possoConcluirParalela(t, os){
   if (t.status !== 'pendente' && t.status !== 'em_andamento') return false;
   const r = t.requisitos || {};
   if (t.tipo !== 'manual' || t.acao_terminal
-      || (r.fotos || []).some(f => (f.min || 0) > 0) || (r.checklist || []).some(q => q.obrigatoria)) return false;
+      || (r.fotos || []).some(f => (f.min || 0) > 0) || (r.checklist || []).some(q => q.obrigatoria)
+      || r.agenda) return false;   // S31 · o "Agendar serviço" tem a tela dele
   if (sessao.admin) return true;
   const ps = t.perfis_responsaveis || [];
   return !ps.length || ps.includes(sessao.perfil);
@@ -2016,8 +2174,8 @@ function pintarOSBase(){
   const c = document.createElement('button');
   // S15: com a etapa nas mãos de OUTRA pessoa, o botão cheio é o de assumir
   c.className = 'btn' + (t.status === 'em_andamento' && !lockDeOutro ? ' pri' : '');
-  c.textContent = 'Concluir etapa';
-  c.addEventListener('click', () => agir('concluir', t));
+  c.textContent = pedeAgenda(t) ? 'Agendar e concluir' : 'Concluir etapa';   // S31
+  c.addEventListener('click', () => pedeAgenda(t) ? telaAgendar(t) : agir('concluir', t));
   p.appendChild(c);
 }
 

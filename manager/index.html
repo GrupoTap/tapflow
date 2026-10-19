@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S60</title>
+<title>TapFlow Manager · S61</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2110,6 +2110,31 @@ th.num .tfThFixo{text-align:right}
 .finExtFat[open]>summary span:nth-child(2){font-weight:600}
 .finExtFat .ccLin.sub{font-size:12px;color:var(--ink-2);background:var(--paper)}
 .ccLin.finExt{grid-template-columns:86px minmax(0,1fr) 130px}
+/* ── S61 · QUANDO E QUANTO TEMPO ─────────────────────────────────────────── */
+.qd{border:1px solid var(--rule);border-radius:4px;padding:10px 12px 8px;margin:10px 0;background:var(--surface)}
+.qd .campo{margin-bottom:8px}
+.qdL{display:grid;grid-template-columns:1.3fr 1fr;gap:10px}
+.qdT{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.qdT input{width:78px;text-align:right;font-family:'JetBrains Mono',monospace}
+.qdT span{font-size:12.5px;color:var(--ink-2)}
+.qdT .qdTot{color:var(--ink-3);font-size:12px;margin-right:auto}
+.qdT .btn.mini{margin-left:0}
+.qdF{padding:4px 0 6px}
+.qdPrev{font-size:12.5px;line-height:1.5;color:var(--ink-2);border-top:1px dashed var(--rule);padding-top:8px;min-height:22px}
+.qdPrev.carregando{opacity:.55}
+.qdPrev.erro{color:var(--crit)}
+.qdPrev ul{list-style:none;padding:0;margin:4px 0 2px}
+.qdPrev li{display:flex;gap:8px;align-items:baseline;padding:1px 0}
+.qdPrev li b{min-width:74px;font-weight:600;color:var(--ink)}
+.qdPrev li .qdM{margin-left:auto;font-family:'JetBrains Mono',monospace;color:var(--ink)}
+.qdPrev li.pul{color:var(--ink-3);text-decoration:line-through;text-decoration-color:var(--rule-strong,#C9D0D4)}
+.qdPrev .nota{display:block;margin:2px 0 0}
+.chip.hr{background:var(--paper);color:var(--ink-2);font-family:'JetBrains Mono',monospace}
+.chip.dN{background:var(--accent-soft);color:var(--accent-ink);border-color:transparent}
+@media (max-width:520px){
+  .qdL{grid-template-columns:1fr 1fr}
+  .qdT input{width:64px}
+}
 </style>
 </head>
 <body>
@@ -2216,7 +2241,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S60';
+const APP_VERSION = 'S61';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -3119,12 +3144,13 @@ async function abrirOS(c){
     tarefas = DEMO ? demoTarefas(c.os_id)
       : await get('pipeline_tarefas?select=tarefa_id,nome,tipo,fase,fase_ordem,ordem,status,opcoes,'
                   + 'perfis_responsaveis,lock_por,lock_expira,executor,usuario_designado,data_prevista,'
-                  + 'tempo_estimado_min,acao_terminal,apoios,requisitos'
+                  + 'tempo_estimado_min,acao_terminal,apoios,requisitos,id,hora_inicio,usa_fds'
                   + '&os_id=eq.' + c.os_id + '&ativo=eq.SIM&order=camada,fase_ordem,ordem');
   }catch(e){ document.getElementById('dBody').innerHTML = '<p style="color:var(--crit);font-size:13px"></p>';
              document.getElementById('dBody').querySelector('p').textContent = e.message; return; }
 
   osAberta = { card:c, tarefas };
+  await qdCarregarAte(tarefas);   // S61 · até quando vai cada tarefa
   await carregarReag();   // S41 · item 7: a marca de reagendada nas tarefas
   pintarDrawer();
 }
@@ -3218,10 +3244,11 @@ function pintarDrawer(){
       const apoio = (t.apoios || []).map(id => NOMES[id] || '?').join(', ');
       d.innerHTML = '<span>' + (quem
           ? esc(quem) + (apoio ? ' <span class="chip apoio">+ ' + esc(apoio) + '</span>' : '')
-            + (t.data_prevista ? ' · ' + dataBR(t.data_prevista) : ' · sem dia')
+            + (t.data_prevista ? ' · ' + dataBR(t.data_prevista) + (t.hora_inicio ? ' ' + qdHora(t.hora_inicio) : '') : ' · sem dia')
             + (t.tempo_estimado_min ? ' · ' + minHora(t.tempo_estimado_min) : '')
-            // S41 · item 7
-            + (t.data_prevista && t.data_prevista < isoHoje() ? ' <span class="chip atrasoDia">atrasada</span>' : '')
+            + (t._dias > 1 ? ' · até ' + dataBR(t._ate).slice(0, 5) + ' (' + t._dias + ' dias)' : '')   // S61
+            // S41 · item 7 (S61: atrasada depois do ÚLTIMO dia)
+            + (t.data_prevista && (t._ate || t.data_prevista) < isoHoje() ? ' <span class="chip atrasoDia">atrasada</span>' : '')
           : '<i>ninguém designado</i>') + ' ' + marcaReag(card.os_id, t.tarefa_id, null) + '</span>'
         + (podeTrocar ? '<button class="btn mini" type="button">' + (quem ? 'trocar' : 'designar') + '</button>' : '');
       if (podeTrocar) d.querySelector('button').addEventListener('click', ev => {
@@ -3820,7 +3847,9 @@ function pintarAcoes_(){
   // feito no banco. Então o cuidado vem antes: um clique a mais onde o erro
   // custa caro, e nenhum onde não custa.
   const fecha = t.acao_terminal || '';
+  if (pedeAgenda(t)) bc.textContent = 'Agendar e concluir';   // S61
   bc.addEventListener('click', () => {
+    if (pedeAgenda(t)) return modalConcluirAgendamento(card, t);   // S61
     if (!fecha) return agir('concluir', t);
     abrirModal('Confirmar conclusão',
         '<p>Confirma que <b>' + esc(t.nome) + '</b> foi realmente feito?</p>'
@@ -3838,12 +3867,272 @@ function pintarAcoes_(){
     : 'Concluir esta tarefa move o card — a próxima coluna é consequência, não escolha.';
 }
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// S61 · QUANDO E QUANTO TEMPO — o campo de início + hora + tempo com o
+// "tradutor de calendário" (Bruno, 19/10: D1 início e tempo, o TapFlow
+// distribui; tempo em horas e minutos; D2 "usar fim de semana e feriado";
+// D3 hora obrigatória só no "Agendar serviço").
+// ----------------------------------------------------------------------------
+// A conta dos dias é do BANCO (`tf_agenda_distribuir`): é a mesma que o
+// gatilho grava em `agenda_dias`. A tela não refaz a conta — uma segunda conta
+// na tela é a segunda regra que diverge da primeira.
+// Ids: <p>Dia, <p>Hora, <p>Th, <p>Tm, <p>Tt, <p>Tdi, <p>Fds, <p>Prev.
+// ════════════════════════════════════════════════════════════════════════════
+const QD = {};
+const QD_SEM = ['dom','seg','ter','qua','qui','sex','sáb'];
+const qdDiaTxt = iso => { const d = new Date(iso + 'T12:00'); return QD_SEM[d.getDay()] + ' ' + dataBR(iso).slice(0, 5); };
+const qdHora = h => h ? String(h).slice(0, 5) : '';
+
+function campoQuando(p, o){
+  o = o || {};
+  const dis = o.dis ? ' disabled' : '';
+  const min = Number(o.min || 0);
+  return '<div class="qd" id="' + p + 'Qd">'
+    + '<div class="qdL"><div class="campo"><label for="' + p + 'Dia">' + esc(o.rotuloDia || 'Início') + '</label>'
+    +   '<input id="' + p + 'Dia" type="date" value="' + esc(o.dia || '') + '"' + dis + '></div>'
+    + '<div class="campo"><label for="' + p + 'Hora">Hora' + (o.horaObrig ? '' : ' <small>(opcional)</small>') + '</label>'
+    +   '<input id="' + p + 'Hora" type="time" step="300" value="' + esc(qdHora(o.hora)) + '"' + dis + '></div></div>'
+    + '<div class="campo"><label for="' + p + 'Th">Tempo' + (o.tempoObrig ? '' : ' <small>(opcional)</small>') + '</label>'
+    +   '<div class="qdT"><input id="' + p + 'Th" type="number" min="0" max="1000" step="1" inputmode="numeric"'
+    +     ' aria-label="horas" value="' + (min ? Math.floor(min / 60) : '') + '"' + dis + '><span>h</span>'
+    +   '<input id="' + p + 'Tm" type="number" min="0" step="5" inputmode="numeric" aria-label="minutos"'
+    +     ' value="' + (min ? min % 60 : '') + '"' + dis + '><span>min</span>'
+    +   '<span class="qdTot" id="' + p + 'Tt"></span>'
+    +   (o.dis ? '' : '<button type="button" class="btn mini" id="' + p + 'Tdi" title="O tempo que sobra do turno no dia escolhido">Dia inteiro</button>')
+    + '</div></div>'
+    + '<label class="linhaOpc qdF"><input type="checkbox" id="' + p + 'Fds"' + (o.fds ? ' checked' : '') + dis + '> '
+    +   'usar fim de semana e feriado</label>'
+    + '<div class="qdPrev" id="' + p + 'Prev" aria-live="polite"></div>'
+    + '</div>';
+}
+
+/** O que está nos campos: {dia, hora, minutos, fds, dias}. `dias` = os dias
+ *  que a última prévia mostrou (para o aviso de férias/folga). */
+function lerQuando(p){
+  const v = id => (document.getElementById(p + id) || {}).value || '';
+  const h = Number(v('Th') || 0), m = Number(v('Tm') || 0);
+  const tot = Math.round(h * 60 + m);
+  const fds = !!(document.getElementById(p + 'Fds') || {}).checked;
+  const st = QD[p] || {};
+  return { dia: v('Dia') || null, hora: v('Hora') || null, minutos: tot > 0 ? tot : null, fds,
+           dias: (st.dias && st.dias.length ? st.dias : (v('Dia') ? [v('Dia')] : [])) };
+}
+function setQuando(p, o){
+  if (!o) return;
+  const el = id => document.getElementById(p + id);
+  if (el('Dia')) el('Dia').value = o.dia || '';
+  if (el('Hora')) el('Hora').value = qdHora(o.hora);
+  const min = Number(o.minutos != null ? o.minutos : o.min || 0);
+  if (el('Th')) el('Th').value = min ? Math.floor(min / 60) : '';
+  if (el('Tm')) el('Tm').value = min ? min % 60 : '';
+  if (el('Fds')) el('Fds').checked = !!o.fds;
+  qdAtualizar(p);
+}
+
+/** O que sobra do turno no dia, a partir da hora (sem hora: o dia todo).
+ *  Fim de semana/feriado usa o dia útil mais comum — a mesma regra do banco. */
+function qdDiaInteiro(dia, hora){
+  if (!dia) return 0;
+  const dow = (d => d === 0 ? 7 : d)(new Date(dia + 'T12:00').getDay());
+  const t = (TURNO.porDia && TURNO.dias && TURNO.dias[dow] && TURNO.dias[dow].ativo) ? TURNO.dias[dow] : null;
+  const tip = Object.values((TURNO.dias || {})).find(d => d.ativo && d.cap === TURNO.capacidade_min) || null;
+  const j = t || tip;
+  if (!j) return TURNO.capacidade_min || 480;
+  const ini = _minDe(j.inicio), fim = _minDe(j.fim), alm = Number(j.intervalo_min) || 0;
+  let s = hora ? _minDe(hora) : ini;
+  if (s >= fim) return 0;
+  const l0 = 720, l1 = 720 + alm;
+  if (s >= l0 && s < l1) s = l1;
+  return Math.max(0, (fim - s) - (s < l0 && fim > l0 ? Math.min(fim, l1) - l0 : 0));
+}
+
+function iniciarQuando(p, o){
+  o = o || {};
+  QD[p] = { seq: 0, dias: [], tmr: null, aoMudar: o.aoMudar || null };
+  const el = id => document.getElementById(p + id);
+  const agenda = () => { clearTimeout(QD[p].tmr); QD[p].tmr = setTimeout(() => qdAtualizar(p), 250); };
+  ['Dia','Hora','Th','Tm','Fds'].forEach(id => {
+    const e = el(id); if (!e) return;
+    e.addEventListener('input', agenda); e.addEventListener('change', agenda);
+  });
+  // "1200" no campo de minutos vira 20 h 0 min — quem pensa em minutos não erra
+  const tm = el('Tm');
+  if (tm) tm.addEventListener('blur', () => {
+    const m = Number(tm.value || 0);
+    if (m >= 60){ el('Th').value = Number(el('Th').value || 0) + Math.floor(m / 60); tm.value = m % 60; agenda(); }
+  });
+  const di = el('Tdi');
+  if (di) di.addEventListener('click', () => {
+    const v = lerQuando(p);
+    if (!v.dia){ el('Dia').focus(); return; }
+    const m = qdDiaInteiro(v.dia, v.hora);
+    el('Th').value = Math.floor(m / 60); el('Tm').value = m % 60;
+    qdAtualizar(p);
+  });
+  qdAtualizar(p);
+}
+
+async function qdAtualizar(p){
+  const st = QD[p]; if (!st) return;
+  const box = document.getElementById(p + 'Prev'), tt = document.getElementById(p + 'Tt');
+  if (!box) return;
+  const v = lerQuando(p);
+  if (tt) tt.textContent = v.minutos ? '= ' + v.minutos.toLocaleString('pt-BR') + ' min' : '';
+  const seq = ++st.seq;
+  st.dias = v.dia ? [v.dia] : [];
+  if (!v.dia){ box.className = 'qdPrev'; box.innerHTML = '<span class="nota">Sem dia: a tarefa fica em <b>Sem dia</b>.</span>'; return; }
+  if (!v.minutos){
+    box.className = 'qdPrev';
+    box.innerHTML = '<span class="nota"><b>' + esc(qdDiaTxt(v.dia)) + '</b>' + (v.hora ? ' às ' + esc(v.hora) : '')
+      + ' · sem tempo: entra no dia, mas não conta na barra de carga.</span>';
+    return;
+  }
+  if (DEMO){ box.className = 'qdPrev'; box.innerHTML = '<span class="nota">Modo demonstração: a distribuição pelos dias vem do banco.</span>'; return; }
+  box.classList.add('carregando');
+  let r;
+  try{
+    r = await rpc('tf_agenda_distribuir', { p_dia: v.dia, p_hora: v.hora, p_minutos: v.minutos, p_fds: v.fds });
+  }catch(e){
+    if (seq !== st.seq) return;
+    box.className = 'qdPrev erro'; box.textContent = e.message; return;
+  }
+  if (seq !== st.seq) return;
+  const dias = (r && r.dias) || [], pul = (r && r.pulados) || [];
+  st.dias = dias.map(d => d.dia);
+  const comHora = !!v.hora;
+  const linha = d => '<li><b>' + esc(qdDiaTxt(d.dia)) + '</b>'
+    + (comHora ? ' <span class="mono">' + esc(d.hora_ini) + '–' + esc(d.hora_fim) + '</span>' : '')
+    + ' <span class="qdM">' + esc(minHora(d.minutos)) + '</span></li>';
+  const todas = dias.map(d => ({ dia: d.dia, html: linha(d) }))
+    .concat(pul.map(x => ({ dia: x.dia, html: '<li class="pul">' + esc(qdDiaTxt(x.dia)) + ' — ' + esc(x.motivo) + '</li>' })))
+    .sort((a, b) => a.dia < b.dia ? -1 : 1);
+  box.className = 'qdPrev ok';
+  box.innerHTML = (dias.length > 1
+      ? '<div>Ocupa <b>' + dias.length + ' dias</b> · termina <b>' + esc(qdDiaTxt(r.fim_dia))
+        + (comHora ? ' às ' + esc(r.fim_hora) : '') + '</b></div>'
+      : '<div><b>Um dia</b>' + (comHora ? ' · termina às <b>' + esc(r.fim_hora) + '</b>' : '') + '</div>')
+    + '<ul>' + todas.map(x => x.html).join('') + '</ul>'
+    + (comHora ? '' : '<span class="nota">Sem hora, começa no início do turno e a agenda não mostra hora.</span>');
+  if (st.aoMudar) st.aoMudar(v, r);
+}
+
+/** As marcas da linha da agenda: a hora (quando a tarefa tem hora) e "dia N de M". */
+function agQdChips(i){
+  if (!i) return '';
+  return (i.hora && i.origem !== 'visita' ? ' <span class="chip hr">' + esc(i.hora) + (i.hora_fim ? '–' + esc(i.hora_fim) : '') + '</span>' : '')
+    + (Number(i.dias_total) > 1 ? ' <span class="chip dN" title="De ' + esc(dataBR(i.inicio_dia || i.dia)) + ' a '
+        + esc(dataBR(i.fim_dia || i.dia)) + '">dia ' + Number(i.dia_n) + ' de ' + Number(i.dias_total) + '</span>' : '');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// S61 · CONCLUIR O "AGENDAR SERVIÇO" — a janela que agenda a execução
+// ----------------------------------------------------------------------------
+// A tarefa com `requisitos.agenda` (a T03 da inspeção) só conclui com a
+// tarefa-alvo (T06) agendada: dia, hora, tempo e quem executa. O banco recusa
+// sem isso (`tf_concluir_tarefa`); esta janela grava tudo e conclui de uma vez
+// (`tf_concluir_agendamento`). Quem agenda escolhe o inspetor — a exceção à
+// regra do S31 é só aqui.
+// ════════════════════════════════════════════════════════════════════════════
+const pedeAgenda = t => !!(t && t.requisitos && t.requisitos.agenda && t.requisitos.agenda.tarefa);
+
+async function modalConcluirAgendamento(card, t){
+  const spec = t.requisitos.agenda;
+  const tarefas = (osAberta && osAberta.tarefas) || [];
+  const a = tarefas.find(x => x.tarefa_id === spec.tarefa) || {};
+  const rot = spec.rotulo || a.nome || 'a execução';
+  let pessoas = null, erro = null;
+  if (!DEMO){
+    try{ pessoas = await rpc('tf_pessoas_para_tarefa', { p_os_id: card.os_id, p_tarefa_id: spec.tarefa }); }
+    catch(e){ erro = e.message; }
+  }
+  if (!pessoas) pessoas = EQUIPE.map(u => ({ usuario_id: u.id, nome: u.nome, perfil: u.perfil }));
+  const apoiosAt = (a.apoios || []).map(String);
+  abrirModal('Agendar e concluir · ' + t.nome,
+      '<p class="nota" style="margin-top:0">Concluir o agendamento marca <b>' + esc(rot)
+    + (a.nome && a.nome !== rot ? ' (' + esc(a.nome) + ')' : '') + '</b> na Agenda de quem vai fazer: '
+    + 'dia, hora de início e quanto tempo. A ART e o TapDoc saem com essa data.</p>'
+    + '<div class="campo"><label for="agU">Quem executa</label><select id="agU"><option value="">— escolha —</option>'
+    +   pessoas.map(u => '<option value="' + esc(u.usuario_id) + '"' + (String(u.usuario_id) === String(a.usuario_designado || '') ? ' selected' : '')
+        + '>' + esc(u.nome) + (u.perfil ? ' — ' + esc(u.perfil) : '') + '</option>').join('')
+    + '</select>' + (erro ? '<small style="color:var(--crit)">Não consegui carregar quem pode executar — ' + esc(erro) + '</small>' : '') + '</div>'
+    + campoQuando('ag', { dia: a.data_prevista || '', hora: a.hora_inicio, min: a.tempo_estimado_min, fds: a.usa_fds,
+                          horaObrig: true, tempoObrig: true, rotuloDia: 'Dia de início' })
+    + '<details class="mdApoio"' + (apoiosAt.length ? ' open' : '') + '><summary><b>Quem vai junto</b> '
+    +   '<span class="nota" style="margin:0">(apoio, opcional)</span></summary>'
+    +   '<div id="agApLista" class="apoioLista">' + EQUIPE.map(u => '<label class="linhaOpc apoioOpc" data-u="' + esc(u.id) + '">'
+        + '<input type="checkbox" class="agAp" value="' + esc(u.id) + '"' + (apoiosAt.indexOf(String(u.id)) >= 0 ? ' checked' : '') + '> '
+        + '<span>' + esc(u.nome) + '</span></label>').join('') + '</div></details>'
+    + '<div class="campo"><label for="agObs">Observação <small>(opcional)</small></label>'
+    +   '<textarea id="agObs" rows="2" placeholder="ex.: combinado com o Sr. José, portaria 2"></textarea></div>'
+    + '<div class="dica" id="agMsg" style="color:var(--crit)" role="alert"></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Agendar e concluir', pri:true, onClick: async () => {
+        const msg = document.getElementById('agMsg');
+        const quem = document.getElementById('agU').value || null;
+        const v = lerQuando('ag');
+        const apoios = [...document.querySelectorAll('#agApLista .agAp:checked')].map(c => c.value).filter(x => x !== quem);
+        const falta = [!quem && 'quem executa', !v.dia && 'o dia', !v.hora && 'a hora', !v.minutos && 'o tempo'].filter(Boolean);
+        if (falta.length){ msg.textContent = 'Falta ' + falta.join(', ') + '.'; return; }
+        if (await ausAvisarNoModal([quem].concat(apoios), v.dias)) return;
+        if (DEMO){
+          Object.assign(a, { usuario_designado: quem, data_prevista: v.dia, hora_inicio: v.hora, tempo_estimado_min: v.minutos, usa_fds: v.fds, apoios });
+          fecharModal(); await agir('concluir', t); return;
+        }
+        try{
+          const r = await rpc('tf_concluir_agendamento', { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id,
+            p_dia: v.dia, p_hora: v.hora, p_minutos: v.minutos, p_usuario: quem, p_apoios: apoios, p_fds: v.fds,
+            p_observacao: (document.getElementById('agObs').value || '').trim() || null });
+          fecharModal();
+          const ag = (r && r.agenda) || {};
+          await posConcluir(card, 'Agendado: ' + qdDiaTxt(v.dia) + ' às ' + v.hora
+            + (ag.ate && ag.ate !== v.dia ? ' até ' + qdDiaTxt(ag.ate) : '') + ' com ' + (ag.usuario || 'o inspetor') + '.');
+        }catch(e){ msg.textContent = e.message; }
+     }}]);
+  iniciarQuando('ag');
+  const sel = document.getElementById('agU'), lista = document.getElementById('agApLista');
+  const limpa = () => { const m = document.getElementById('agMsg'); if (m) m.textContent = ''; };
+  document.getElementById('agQd').addEventListener('input', limpa); sel.addEventListener('change', limpa);
+  const esconde = () => lista.querySelectorAll('.apoioOpc').forEach(l => {
+    const dono = l.dataset.u === sel.value; l.hidden = dono;
+    if (dono){ const c = l.querySelector('input'); if (c) c.checked = false; }
+  });
+  sel.addEventListener('change', esconde); esconde();
+}
+
+/** O que o `agir('concluir')` faz depois de gravar: recarrega o quadro e
+ *  reabre a OS (ou fecha a gaveta se ela saiu do quadro). */
+async function posConcluir(card, msg){
+  try{
+    await carregarAtrasadas(); await carregarReag();
+    if (visao === 'age') agFaixaAtrasadas();
+  }catch(e){}
+  await carregar({silencioso:true});
+  const novo = cards.find(x => x.os_id === card.os_id);
+  if (!novo || !novo.coluna){ fecharDrawer(); toast((msg ? msg + ' ' : '') + 'A OS saiu do quadro.', 'ok'); return; }
+  toast((msg || 'Concluída.') + (novo.coluna !== card.coluna ? ' O card foi para "' + rotuloCol(novo) + '".' : ''), 'ok');
+  await abrirOS(novo);
+}
+
+/** S61 · o último dia de cada tarefa da OS (a que passa de um dia mostra
+ *  "até DD/MM" e só fica atrasada depois dele). */
+async function qdCarregarAte(ts){
+  if (DEMO || !ts) return;
+  const ids = ts.filter(t => t.id && t.data_prevista).map(t => t.id);
+  if (!ids.length) return;
+  const r = await get('agenda_dias?select=tarefa_uid,total,ultimo_dia&ordem=eq.1&tarefa_uid=in.(' + ids.join(',') + ')').catch(() => []);
+  (r || []).forEach(x => { const t = ts.find(y => y.id === x.tarefa_uid); if (t){ t._ate = x.ultimo_dia; t._dias = x.total; } });
+}
+/** S60.1 · a recorrência da fatura com descrição sem 3 letras (as "." do S48)
+ *  aparece como "Fatura de Cartão". */
+const carRecNome = r => ((r && String(r.descricao || '').match(/[A-Za-zÀ-ÿ]/g)) || []).length >= 3 ? r.descricao : 'Fatura de Cartão';
 /** S45 · item 2: a tarefa LIBERADA que não é a atual do card e que eu posso
  *  concluir daqui — manual, sem foto/checklist obrigatório (esses pedem a
  *  tela da tarefa), sem fechar fase nem OS, e do meu perfil (ou sou admin). */
 function temRequisitosObrigatorios(t){
   const r = t.requisitos || {};
-  return (r.fotos || []).some(f => (f.min || 0) > 0) || (r.checklist || []).some(q => q.obrigatoria);
+  return (r.fotos || []).some(f => (f.min || 0) > 0) || (r.checklist || []).some(q => q.obrigatoria)
+      || !!r.agenda;   // S61 · o "Agendar serviço" pede a janela de agendamento
 }
 function possoConcluirParalela(t, card){
   if (!t || !card || t.tarefa_id === card.tarefa_atual_id) return false;
@@ -4106,10 +4395,12 @@ function demoSeed(){
     // de resposta e só custava um clique.
     T('T01','Anexar pedido de compra','manual','Administrativo inicial',10,3,'condicional',['compras','tecnico_adm'],null,['adm']),
     T('T02','Lançar na planilha de controle','manual','Administrativo inicial',10,4,'bloqueado',['admin','tecnico_adm'],null,['adm']),
-    // S60 · a ordem do 112 (S59.1): ART e TapDoc ANTES do agendamento
-    T('T04','Emitir ART','manual','Documentação pré-inspeção',20,1,'bloqueado',['tecnico_adm'],null,['adm']),
-    T('T05','Lançar no TapDoc','manual','Documentação pré-inspeção',20,2,'bloqueado',['tecnico_adm'],null,['adm']),
-    T('T03','Agendar serviço (data e hora)','manual','Agendamento',30,1,'bloqueado',['comercial','tecnico_adm','inspetor'],null,['campo']),
+    // S61 · a ordem do 114 (19/10): o agendamento ANTES da ART e do TapDoc
+    // (a ART precisa da data do serviço); a T03 pede a execução agendada
+    Object.assign(T('T03','Agendar serviço (data e hora)','manual','Agendamento',20,1,'bloqueado',['comercial','tecnico_adm','inspetor'],null,['campo']),
+                  { requisitos: { agenda: { tarefa:'T06', hora:true, rotulo:'a inspeção' } } }),
+    T('T04','Emitir ART','manual','Documentação pré-inspeção',30,1,'bloqueado',['tecnico_adm'],null,['adm']),
+    T('T05','Lançar no TapDoc','manual','Documentação pré-inspeção',30,2,'bloqueado',['tecnico_adm'],null,['adm']),
     T('T06','Executar a inspeção','manual','Inspeção em campo',40,1,'bloqueado',['inspetor','auxiliar'],null,['campo']),
     T('T07','Extrair e tratar o CSV','manual','Processamento e revisão',50,1,'bloqueado',['inspetor','auxiliar'],null,['campo']),
     T('T08','Gerar documentações no TapDoc Web','manual','Processamento e revisão',50,2,'bloqueado',['inspetor','auxiliar'],null,['campo']),
@@ -4536,7 +4827,7 @@ async function modalDesignar(card, t, aposGravar, par){
 
   // S41 · item 7: mudar o dia de uma tarefa que JÁ atrasou conta como
   // reagendamento (o gatilho do 61 registra) — melhor dizer antes.
-  const avisoAtraso = (t.data_prevista && t.data_prevista < isoHoje())
+  const avisoAtraso = (t.data_prevista && (t._ate || t.fim_dia || t.data_prevista) < isoHoje())
     ? '<div class="aviso">Esta tarefa está <b>atrasada desde ' + esc(dataBR(t.data_prevista).slice(0,5))
       + '</b>. Mudar o dia conta como <b>reagendamento</b> e fica marcado no card.</div>' : '';
   abrirModal('Designar · ' + t.nome,
@@ -4560,18 +4851,12 @@ async function modalDesignar(card, t, aposGravar, par){
         ? ' — ou usa <b>Assumir</b>, aqui embaixo, para pegar a tarefa de <b>'
           + esc(NOMES[t.usuario_designado] || 'quem está com ela') + '</b> (ela sai da tarefa; a troca fica no histórico da OS).'
         : ' — ou usa <b>Assumir</b>, na OS, para pegar a tarefa para você.') + '</p>') +
-    '<div class="campo"><label for="mdD">Em que dia</label>' +
-      '<input id="mdD" type="date" value="' + esc(t.data_prevista || isoHoje()) + '"></div>' +
+    // S61 · início, hora (opcional), tempo em horas e minutos e a prévia dos dias
+    campoQuando('md', { dia: t.data_prevista || isoHoje(), hora: t.hora_inicio, min: t.tempo_estimado_min, fds: t.usa_fds }) +
     '<p style="font-size:12px;color:var(--ink-3);margin:-4px 0 0;line-height:1.45">' +
       'Escolher <b>— ninguém —</b> devolve a tarefa para "Sem dia marcado", com dia e tudo. ' +
-      'Deixar o dia vazio guarda só o responsável — a tarefa continua em "Sem dia", com o nome dele.</p>' +
-    '<div class="campo"><label for="mdM">Quanto tempo (minutos)</label>' +
-      '<input id="mdM" type="number" min="5" max="1440" step="5" value="' +
-      esc(t.tempo_estimado_min || '') + '" placeholder="deixe vazio para usar a estimativa do template"></div>' +
-    '<p style="font-size:12.5px;color:var(--ink-3);margin:0;line-height:1.5">' +
-      'O dia é o que põe esta tarefa no roteiro de alguém. Os minutos são o que ' +
-      'monta a barra de carga na Agenda — tarefa sem minuto não some, mas também ' +
-      'não entra na conta.</p>' + blocoApoio,
+      'Deixar o dia vazio guarda só o responsável — a tarefa continua em "Sem dia", com o nome dele. ' +
+      'O tempo que passa do dia continua nos dias de turno seguintes; tarefa sem tempo não entra na barra.</p>' + blocoApoio,
     [{ label:'Cancelar', onClick: fecharModal },
      // ── ITEM 1 (S38): ASSUMIR PELA AGENDA ────────────────────────────────
      // A Agenda é de todos (S36) e é onde o inspetor VÊ a tarefa do colega. A
@@ -4617,12 +4902,11 @@ async function modalDesignar(card, t, aposGravar, par){
         // formulário existe: o aviso "Designar mesmo assim?" abre no mesmo
         // espaço da janela e apaga os campos. Até o S55 o gravar os lia depois
         // do aviso, achava vazio e o banco mantinha o dia antigo, calado.
-        const form = { dia: (document.getElementById('mdD') || {}).value || null,
-                       min: (document.getElementById('mdM') || {}).value || '' };
+        const form = lerQuando('md');   // S61 · {dia, hora, minutos, fds, dias}
         // S53 · quem está de férias/folga/atestado no dia: avisa e deixa
         // gravar no segundo clique (a barra nunca bloqueia; quem decide é
         // quem está olhando a tela).
-        if (quem && await ausAvisarNoModal([quem].concat(apoios || []), form.dia)) return;
+        if (quem && await ausAvisarNoModal([quem].concat(apoios || []), form.dias)) return;
         // o aviso do ponto 3: explica o risco e deixa o admin decidir
         if ((quem && op && op.dataset.fora === '1') || foraAp.length){
           const lista = (t.perfis_responsaveis || []).join(', ');
@@ -4646,6 +4930,7 @@ async function modalDesignar(card, t, aposGravar, par){
         await gravarDesignacao(card, t, quem, aposGravar, form);
      }}]);
   mdEsconderDonoDoApoio();
+  iniciarQuando('md');   // S61
 }
 
 /** S36: o dono não aparece na lista de apoio — ele não é apoio de si mesmo.
@@ -4667,9 +4952,7 @@ function mdEsconderDonoDoApoio(){
 function mdRestaurar(quem, form, apoios){
   const sel = document.getElementById('mdU');
   if (sel && quem != null){ sel.value = quem; sel.dispatchEvent(new Event('change')); }
-  const d = document.getElementById('mdD'), m = document.getElementById('mdM');
-  if (d && form) d.value = form.dia || '';
-  if (m && form) m.value = form.min || '';
+  if (form) setQuando('md', form);   // S61
   const lista = document.getElementById('mdApLista');
   if (lista && Array.isArray(apoios))
     lista.querySelectorAll('.mdAp').forEach(c => { c.checked = apoios.indexOf(c.value) >= 0 && c.value !== quem; });
@@ -4680,8 +4963,8 @@ function mdRestaurar(quem, form, apoios){
  *  lidos ANTES do aviso — o aviso apaga os campos da janela. */
 async function gravarDesignacao(card, t, quem, aposGravar, form){
   try{
-    const m   = form ? form.min : (document.getElementById('mdM') || {}).value;
-    const dia = form ? form.dia : ((document.getElementById('mdD') || {}).value || null);
+    const f   = form || lerQuando('md');   // S61
+    const m   = f.minutos, dia = f.dia;
     // ⚠ Até o S21 a tela recusava "dono sem dia" aqui, porque o banco
     //    recusava. A regra caiu no S22: dono sem dia continua na vista
     //    "Sem dia", com o nome. O que segue proibido é DIA SEM DONO —
@@ -4689,7 +4972,8 @@ async function gravarDesignacao(card, t, quem, aposGravar, form){
     if (DEMO) throw new Error('Modo demonstração: designação não é gravada.');
     await rpc('tf_designar_tarefa', {
       p_os_id: card.os_id, p_tarefa_id: t.tarefa_id,
-      p_usuario: quem, p_data: dia, p_minutos: m ? Number(m) : null });
+      p_usuario: quem, p_data: dia, p_minutos: m ? Number(m) : null,
+      p_hora: dia ? f.hora : null, p_fds: !!f.fds, p_mexer_hora: true });   // S61
     // S36 · item 7: os apoios vêm DEPOIS do dono (o banco recusa apoio sem
     // dono). Sem dono, o próprio banco já limpou os apoios — nada a mandar.
     let msgAp = '';
@@ -5128,8 +5412,10 @@ async function pintarItens(){
       try{
         osAberta.tarefas = await get('pipeline_tarefas?select=tarefa_id,nome,tipo,fase,'
           + 'fase_ordem,ordem,status,opcoes,perfis_responsaveis,lock_por,executor,'
-          + 'usuario_designado,data_prevista,tempo_estimado_min,acao_terminal,apoios'
+          + 'usuario_designado,data_prevista,tempo_estimado_min,acao_terminal,apoios,'
+          + 'requisitos,id,hora_inicio,usa_fds'
           + '&os_id=eq.' + card.os_id + '&ativo=eq.SIM&order=camada,fase_ordem,ordem');
+        await qdCarregarAte(osAberta.tarefas);
       }catch(e){}
     }
   };
@@ -12788,9 +13074,9 @@ const demoPendentes = () => _demoPend.slice();
 const _demoTpl = [
   ['INSPECAO_NR13','Inspeção NR-13','T01','Anexar pedido de compra','Administrativo inicial',['compras','tecnico_adm'],'adm',2],
   ['INSPECAO_NR13','Inspeção NR-13','T02','Lançar na planilha de controle','Administrativo inicial',['admin','tecnico_adm'],'adm',1],
+  ['INSPECAO_NR13','Inspeção NR-13','T03','Agendar serviço (data e hora)','Agendamento',['comercial','tecnico_adm','inspetor'],'ambos',1],
   ['INSPECAO_NR13','Inspeção NR-13','T04','Emitir ART','Documentação pré-inspeção',['tecnico_adm'],'adm',3],
   ['INSPECAO_NR13','Inspeção NR-13','T05','Lançar no TapDoc','Documentação pré-inspeção',['tecnico_adm'],'adm',3],
-  ['INSPECAO_NR13','Inspeção NR-13','T03','Agendar serviço (data e hora)','Agendamento',['comercial','tecnico_adm','inspetor'],'ambos',1],
   ['INSPECAO_NR13','Inspeção NR-13','T06','Executar a inspeção','Inspeção em campo',['inspetor','auxiliar'],'campo',2],
   ['ACESSORIOS_NR13','Fornecimento de Acessórios','T01','Aceitar OS e deslocar','Aberta',['inspetor','auxiliar'],'campo',1],
   ['ACESSORIOS_NR13','Fornecimento de Acessórios','T04','Conferir levantamento','Orçamento',['tecnico_adm','compras','comercial'],'adm',2],
@@ -16481,7 +16767,8 @@ function agVistaDia(cx){
         // Não tem "feito": é um compromisso com hora, e passa com o dia.
         ? '<button class="agT agVis" type="button" data-vis="1" data-u="' + esc(id) + '" data-k="' + k + '">'
           + '<span class="agTn">' + esc(i.tarefa || 'Visita')
-          +   ' <span class="chip vis">visita' + (i.hora ? ' · ' + esc(i.hora) : '') + '</span></span>'
+          +   ' <span class="chip vis">visita' + (i.hora ? ' · ' + esc(i.hora) + (i.hora_fim ? '–' + esc(i.hora_fim) : '') : '') + '</span>'
+          +   agQdChips(i) + '</span>'
           + '<span class="agTs">' + esc([i.negocio_numero || i.os_numero, i.cliente, i.descricao,
                                          i.apoios_nomes ? 'com ' + i.apoios_nomes : ''].filter(Boolean).join(' · ')) + '</span>'
           + '<span class="agTm">' + minHora(i.tempo_estimado_min) + '</span>'
@@ -16500,7 +16787,8 @@ function agVistaDia(cx){
           +   '<button type="button" class="agAvB" data-u="' + esc(id) + '" data-k="' + k + '"></button>'
           +   ' <span class="chip av">compromisso</span>'
           +   (i.papel === 'apoio' ? ' <span class="chip apoio">apoio de ' + esc(i.principal || '?') + '</span>' : '')
-          +   (i.dia < isoHoje() ? ' <span class="chip atrasoDia">atrasado</span>' : '')
+          +   agQdChips(i)
+          +   ((i.fim_dia || i.dia) < isoHoje() ? ' <span class="chip atrasoDia">atrasado</span>' : '')
           +   ' ' + marcaReag(null, null, i.compromisso_id) + '</span>'
           + '<span class="agTs"></span>'
           + '<span class="agTm">' + (i.tempo_estimado_min ? minHora(i.tempo_estimado_min) : 'sem estimativa') + '</span>'
@@ -16511,7 +16799,8 @@ function agVistaDia(cx){
         // ITEM 7 (S36): quem é dono e quem vai junto, dito na linha
         + (i.papel === 'apoio' ? ' <span class="chip apoio">apoio de ' + esc(i.principal || '?') + '</span>' : '')
         // S41 · item 7: dia que já passou e a tarefa ainda aberta; e a marca de reagendada
-        + (i.dia < isoHoje() ? ' <span class="chip atrasoDia">atrasada</span>' : '')
+        + agQdChips(i)
+        + ((i.fim_dia || i.dia) < isoHoje() ? ' <span class="chip atrasoDia">atrasada</span>' : '')
         + ' ' + marcaReag(i.os_id, i.tarefa_id, null)
         + '</span>'
         + '<span class="agTs">' + esc([i.os_numero, i.cliente, i.fase_rotulo || i.fase,
@@ -17167,13 +17456,12 @@ async function modalCompromisso(c, padrao){
     +   ' placeholder="ex.: Veículos, Laboratório, EPI"' + dis + '>'
     +   '<datalist id="acCats">' + (cats || []).map(x => '<option value="' + esc(x.categoria) + '">').join('')
     +   '</datalist><small style="color:var(--ink-3)">Escreva ou escolha uma já usada.</small></div>'
-    + '<div class="campo"><label for="acM">Quanto tempo (minutos)</label>'
-    +   '<input id="acM" type="number" min="5" max="1440" step="5" placeholder="ex.: 60"' + dis + '></div></div>'
-    + '<div class="dupla"><div class="campo"><label for="acU">Quem</label><select id="acU"' + dis + '>'
+    + '<div class="campo"><label for="acU">Quem</label><select id="acU"' + dis + '>'
     +   '<option value="">— ninguém ainda —</option>'
     +   EQUIPE.map(u => '<option value="' + esc(u.id) + '">' + esc(u.nome) + '</option>').join('')
-    + '</select></div>'
-    + '<div class="campo"><label for="acDia">Em que dia</label><input id="acDia" type="date"' + dis + '></div></div>'
+    + '</select></div></div>'
+    // S61 · início, hora, tempo em horas e minutos e a prévia dos dias
+    + campoQuando('ac', { dis: !!dis })
     + '<p style="font-size:12px;color:var(--ink-3);margin:-4px 0 0;line-height:1.45">Dia sem '
     +   'pessoa não é aceito — sem dono, o compromisso não entra na barra de ninguém. Pessoa sem '
     +   'dia fica em <b>Sem dia</b>.</p>'
@@ -17211,8 +17499,8 @@ async function modalCompromisso(c, padrao){
           const msg = document.getElementById('acMsg');
           const tit = document.getElementById('acT').value.trim();
           const quem = document.getElementById('acU').value || null;
-          const dia = document.getElementById('acDia').value || null;
-          const min = document.getElementById('acM').value;
+          const qd = lerQuando('ac');   // S61
+          const dia = qd.dia, min = qd.minutos;
           const lista = document.getElementById('acApLista');
           const apoios = lista ? [...lista.querySelectorAll('.acAp:checked')].map(x => x.value)
                                    .filter(x => x !== quem) : null;
@@ -17221,14 +17509,14 @@ async function modalCompromisso(c, padrao){
           if (apoios && apoios.length && (!quem || !dia)){
             msg.textContent = 'Escolha quem e o dia antes de marcar quem vai junto.'; return; }
           // S53 · alguém fora nesse dia: avisa; o segundo clique grava
-          if (quem && await ausAvisarNoModal([quem].concat(apoios || []), dia)) return;
+          if (quem && await ausAvisarNoModal([quem].concat(apoios || []), qd.dias)) return;
           try{
             _compCats = null;   // S56 · categoria nova entra na lista da próxima vez
             const r = await rpc('tf_salvar_compromisso', { p_id: d ? d.id : null, p_titulo: tit,
               p_descricao: document.getElementById('acDs').value.trim() || null,
               p_categoria: document.getElementById('acC').value.trim() || null,
               p_usuario: quem, p_data: dia, p_minutos: min ? Number(min) : null,
-              p_apoios: apoios });
+              p_apoios: apoios, p_hora: dia ? qd.hora : null, p_fds: qd.fds });   // S61
             fecharModal();
             toast((d ? 'Compromisso atualizado.' : 'Compromisso lançado na agenda.')
               + (r && r.nomes ? ' Vai junto: ' + r.nomes + '.' : ''), 'ok');
@@ -17239,9 +17527,9 @@ async function modalCompromisso(c, padrao){
   document.getElementById('acT').value  = v.titulo || '';
   document.getElementById('acDs').value = v.descricao || '';
   document.getElementById('acC').value  = v.categoria || '';
-  document.getElementById('acM').value  = v.tempo_estimado_min || '';
   document.getElementById('acU').value  = v.usuario_designado || '';
-  document.getElementById('acDia').value = v.data_prevista || '';
+  setQuando('ac', { dia: v.data_prevista || '', hora: v.hora_inicio, minutos: v.tempo_estimado_min, fds: v.usa_fds });
+  iniciarQuando('ac');   // S61
   acApoioLigar();
 }
 
@@ -17332,8 +17620,10 @@ async function agAbrirTarefa(i, doPool){
     // S36: a linha de APOIO está no nome do apoio — o dono vem em `dono_id`
     usuario_designado:i.dono_id || i.usuario_designado || i.usuario_id || null,
     apoios: i.apoios || [],
-    data_prevista: doPool ? null : i.dia,
-    tempo_estimado_min:i.tempo_estimado_min
+    data_prevista: doPool ? null : (i.inicio_dia || i.dia),            // S61 · o início, não o dia clicado
+    tempo_estimado_min: i.minutos_total != null ? i.minutos_total : i.tempo_estimado_min,
+    hora_inicio: doPool ? null : i.hora_inicio, usa_fds: !!i.usa_fds,
+    fim_dia: i.fim_dia
   }, async () => { AGENDA.chave = null; AGENDA.pool = []; await pintarAgenda(); }, par);
 }
 
@@ -18679,10 +18969,13 @@ async function ausForaEm(ids, dia){
  *  agora). O segundo clique com as MESMAS pessoas e o MESMO dia grava. */
 async function ausAvisarNoModal(ids, dia){
   const body = document.getElementById('mBody');
-  if (!body || !dia) return false;
-  const chave = [...new Set((ids || []).filter(Boolean).map(String))].sort().join(',') + '|' + dia;
+  // S61 · `dia` pode ser a lista dos dias que a tarefa ocupa: o aviso diz o primeiro com alguém fora
+  const lista = (Array.isArray(dia) ? dia : [dia]).filter(Boolean);
+  if (!body || !lista.length) return false;
+  const chave = [...new Set((ids || []).filter(Boolean).map(String))].sort().join(',') + '|' + lista.join(',');
   if (body.dataset.ausOk === chave) return false;
-  const fora = await ausForaEm(ids, dia);
+  let fora = [];
+  for (const d of lista){ fora = await ausForaEm(ids, d); if (fora.length){ dia = d; break; } }
   if (!fora.length) return false;
   body.dataset.ausOk = chave;
   let av = document.getElementById('ausAvisoM');
@@ -22704,7 +22997,7 @@ function carCanhotos(el){
 function carPendenciasCartao(){
   const C = (CAR.painel.cartoes || []).filter(c => c.ativo && !c.conciliacao_desde && c.recorrencia && c.recorrencia.ativa);
   if (!C.length) return '';
-  return '<div class="aviso">' + C.map(c => '<b>' + esc(c.nome) + '</b> ainda é pago pela recorrência «' + esc(c.recorrencia.descricao || 'Fatura de Cartão') + '» ('
+  return '<div class="aviso">' + C.map(c => '<b>' + esc(c.nome) + '</b> ainda é pago pela recorrência «' + esc(carRecNome(c.recorrencia)) + '» ('
     + esc(BRL(c.recorrencia.valor)) + ' todo dia ' + esc(c.recorrencia.dia) + ').').join(' ')
     + ' Na primeira fatura que você importar aqui, o TapFlow anula os títulos dela ainda não pagos e a desliga — as compras passam a entrar uma a uma, '
     + 'pelos canhotos. A fatura que já foi paga como conta única não se importa.</div>';
@@ -23275,7 +23568,7 @@ async function carAjustes(el){
   el.innerHTML = '<div class="carSec2"><div class="secTit">Cartões</div><div class="ccLista">'
       + (P.cartoes || []).map(c => '<div class="rhLin"><span class="t"><b>' + esc(c.nome) + '</b>' + (c.ativo ? '' : ' <span class="chip">inativo</span>')
         + '<small>' + esc(['corte ' + (c.dia_corte ? 'dia ' + c.dia_corte : 'a confirmar (estima 30)'), 'vence dia ' + c.dia_vencimento, c.fornecedor_nome,
-            c.conciliacao_desde ? 'conciliado desde ' + dataBR(c.conciliacao_desde) : (c.recorrencia ? 'ainda pela recorrência «' + (c.recorrencia.descricao || 'Fatura de Cartão') + '»' : 'sem recorrência ligada')].filter(Boolean).join(' · ')) + '</small></span>'
+            c.conciliacao_desde ? 'conciliado desde ' + dataBR(c.conciliacao_desde) : (c.recorrencia ? 'ainda pela recorrência «' + carRecNome(c.recorrencia) + '»' : 'sem recorrência ligada')].filter(Boolean).join(' · ')) + '</small></span>'
         + '<span class="a"><button class="btn mini" type="button" data-cart="' + esc(c.id) + '">Editar</button></span></div>').join('')
       + '</div><div class="linhaBtns"><button class="btn" type="button" id="carNovoCart">+ Novo cartão</button></div></div>'
     + '<div class="carSec2"><div class="secTit">Finais e quem carrega</div><p class="nota" style="margin-top:0">Os finais aparecem sozinhos quando a fatura é importada. '
