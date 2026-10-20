@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S61</title>
+<title>TapFlow Manager · S62</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2135,6 +2135,21 @@ th.num .tfThFixo{text-align:right}
   .qdL{grid-template-columns:1fr 1fr}
   .qdT input{width:64px}
 }
+
+/* S62 · aviso das automáticas sem dono, Configurações › Responsáveis automáticos */
+.sdFaixa{background:#FFF4E0;border-color:#F0D29A}
+.sdFaixa b{color:#7A4B00}
+.sdLista{display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto}
+.sdLinha{display:flex;gap:10px;align-items:center;justify-content:space-between;border:1px solid var(--rule);border-radius:3px;padding:7px 9px}
+.sdLinha small{color:var(--ink-3)}
+.adRegra{border:1px solid var(--rule);border-radius:4px;padding:12px 14px;margin:12px 0}
+.adRegra h4{margin:0 0 4px;font-size:15px}
+.adCampos{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end}
+.adCampos .campo{min-width:180px;flex:1 1 180px;margin:0}
+.adCampos .adM{max-width:110px}
+.adPe{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:10px;flex-wrap:wrap}
+.chip.fechada{background:#EEF0F3;color:var(--ink-3)}
+.chip.autoAv{background:#FFF4E0;color:#7A4B00}
 </style>
 </head>
 <body>
@@ -2241,7 +2256,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S61';
+const APP_VERSION = 'S62';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -3249,7 +3264,9 @@ function pintarDrawer(){
             + (t._dias > 1 ? ' · até ' + dataBR(t._ate).slice(0, 5) + ' (' + t._dias + ' dias)' : '')   // S61
             // S41 · item 7 (S61: atrasada depois do ÚLTIMO dia)
             + (t.data_prevista && (t._ate || t.data_prevista) < isoHoje() ? ' <span class="chip atrasoDia">atrasada</span>' : '')
-          : '<i>ninguém designado</i>') + ' ' + marcaReag(card.os_id, t.tarefa_id, null) + '</span>'
+          : '<i>ninguém designado</i>') + ' ' + marcaReag(card.os_id, t.tarefa_id, null)
+        + (tarefaFechada(t, tarefas) ? ' <span class="chip fechada" title="Ninguém assume antes de a inspeção ser agendada (o admin designa).">abre depois do agendamento</span>' : '')
+        + '</span>'
         + (podeTrocar ? '<button class="btn mini" type="button">' + (quem ? 'trocar' : 'designar') + '</button>' : '');
       if (podeTrocar) d.querySelector('button').addEventListener('click', ev => {
         ev.stopPropagation(); modalDesignar(card, t);
@@ -3827,9 +3844,7 @@ function pintarAcoes_(){
     const dono = t.usuario_designado && t.usuario_designado !== eu
       ? (NOMES[t.usuario_designado] || 'outra pessoa') : null;
     if (dono) b.title = 'Está designada a ' + dono + '. Assumir passa a tarefa para você.';
-    b.addEventListener('click', () => dono
-      ? confirmarAssumir(t, dono, false)
-      : agir('assumir', t));
+    b.addEventListener('click', () => confirmarAssumir(t, dono, false));   // S62 · sempre com dia e tempo
     row.appendChild(b);
   } else if (lockVivo && t.lock_por !== eu && (t.status === 'pendente' || t.status === 'em_andamento')){
     const quem = NOMES[t.lock_por] || 'outra pessoa';
@@ -4086,7 +4101,8 @@ async function modalConcluirAgendamento(card, t){
           fecharModal();
           const ag = (r && r.agenda) || {};
           await posConcluir(card, 'Agendado: ' + qdDiaTxt(v.dia) + ' às ' + v.hora
-            + (ag.ate && ag.ate !== v.dia ? ' até ' + qdDiaTxt(ag.ate) : '') + ' com ' + (ag.usuario || 'o inspetor') + '.');
+            + (ag.ate && ag.ate !== v.dia ? ' até ' + qdDiaTxt(ag.ate) : '') + ' com ' + (ag.usuario || 'o inspetor') + '.'
+            + autoTxt(r && r.auto));   // S62 · ART e TapDoc automáticos
         }catch(e){ msg.textContent = e.message; }
      }}]);
   iniciarQuando('ag');
@@ -4231,6 +4247,7 @@ function possoAssumir(t){
   if (t.status === 'completo' || t.status === 'dispensado') return false;
   if (t.usuario_designado && String(t.usuario_designado) === String(meuId())) return false;
   if (sessao.admin) return true;
+  if (tarefaFechada(t)) return false;   // S62 · abre depois do agendamento
   const ps = t.perfis_responsaveis || [];
   return !ps.length || ps.includes(sessao.perfil);
 }
@@ -4249,13 +4266,27 @@ function confirmarAssumir(t, quem, forcar){
     + (quem ? (souApoio
         ? ', e <b>' + esc(quem) + ' passa a ser o apoio</b> (vocês trocam de papel)'
         : ' — <b>' + esc(quem) + ' sai da tarefa</b>') : '')
-    + '. O dia marcado continua o mesmo. A troca fica no histórico da OS.'
+    + '. A troca fica no histórico da OS.'
     + (outros.length && !souApoio ? '<br>O apoio (' + esc(outros.join(', ')) + ') continua.' : '')
     + (bloqueada ? '<br><b>A tarefa continua bloqueada</b> até a etapa anterior fechar — '
         + 'assumir agora só deixa o seu nome nela.' : '')
-    + '</div>',
+    + '</div>'
+    // S62 · sem dia (e sem tempo) não pega: o dia e o tempo vêm junto
+    + '<p class="nota" style="margin:10px 0 4px"><b>Em que dia você vai fazer, e quanto tempo leva?</b> '
+    + 'Sem isso, a tarefa não pode ser pega.</p>'
+    + campoQuando('as', { dia: t.data_prevista || isoHoje(), hora: t.hora_inicio, min: t.tempo_estimado_min,
+                          fds: t.usa_fds, tempoObrig: true, rotuloDia: 'Dia' })
+    + '<div class="dica" id="asMsg" style="color:var(--crit)" role="alert"></div>',
     [{ label:'Cancelar', onClick: () => fecharModal() },
-     { label:'Assumir', pri:true, onClick: async () => { fecharModal(); await agir('assumir', t, null, forcar); } }]);
+     { label:'Assumir', pri:true, onClick: async () => {
+        const v = lerQuando('as'), msg = document.getElementById('asMsg');
+        const falta = pgFalta(v);
+        if (falta){ msg.textContent = falta; return; }
+        if (await ausAvisarNoModal([meuId()], v.dias)) return;
+        fecharModal(); await agir('assumir', t, v, forcar);
+     } }]);
+  iniciarQuando('as');
+  document.getElementById('asQd').addEventListener('input', () => { document.getElementById('asMsg').textContent = ''; });
 }
 
 /** ITEM 9 · o formulário do desfazer. O motivo é OBRIGATÓRIO e vai para o
@@ -4297,8 +4328,12 @@ async function agir(acao, t, valor, forcar){
       // retorno e dizia "OS assumida" de qualquer jeito — inclusive quando o
       // servidor tinha acabado de negar. É o verde mentindo, que é o defeito
       // que este projeto persegue desde o parecer do TapControl.
+      const q = valor || {};   // S62 · {dia, hora, minutos, fds} do confirmarAssumir
       const r = await rpc('tf_assumir_tarefa', { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id,
-                                                  p_forcar: !!forcar });
+                                                  p_forcar: !!forcar, p_dia: q.dia || null,
+                                                  p_minutos: q.minutos || null, p_hora: q.dia ? (q.hora || null) : null,
+                                                  p_fds: q.dia ? !!q.fds : null });
+      valor = r;
       if (r && r.status === 'recusado'){
         throw new Error(r.motivo === 'perfil_nao_autorizado'
           ? 'Esta tarefa é de ' + ((r.perfis||[]).join(' ou ') || 'outro perfil')
@@ -4313,9 +4348,11 @@ async function agir(acao, t, valor, forcar){
     }
     else if (acao === 'concluir') await rpc('tf_concluir_tarefa', { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id });
     else if (acao === 'decisao')  await rpc('tf_resolver_decisao',{ p_os_id: card.os_id, p_tarefa_id: t.tarefa_id, p_valor: valor });
-    if (acao === 'assumir') toast(t.status === 'pendente' || t.status === 'em_andamento'
-      ? 'Assumida — agora a tarefa é sua em todas as telas.'
-      : 'Assumida — o seu nome já está nela; ela continua bloqueada até a etapa anterior fechar.', 'ok');
+    if (acao === 'assumir') toast((t.status === 'pendente' || t.status === 'em_andamento'
+      ? 'Assumida — agora a tarefa é sua em todas as telas'
+      : 'Assumida — o seu nome já está nela; ela continua bloqueada até a etapa anterior fechar')
+      + (valor && valor.data ? ', marcada para ' + pgDiaTxt(valor.data) + (valor.hora ? ' às ' + valor.hora : '')
+         + (valor.minutos ? ' (' + minHora(valor.minutos) + ')' : '') : '') + '.', 'ok');
 
     await carregar({silencioso:true});
     const novo = cards.find(x => x.os_id === card.os_id);
@@ -4855,7 +4892,8 @@ async function modalDesignar(card, t, aposGravar, par){
     campoQuando('md', { dia: t.data_prevista || isoHoje(), hora: t.hora_inicio, min: t.tempo_estimado_min, fds: t.usa_fds }) +
     '<p style="font-size:12px;color:var(--ink-3);margin:-4px 0 0;line-height:1.45">' +
       'Escolher <b>— ninguém —</b> devolve a tarefa para "Sem dia marcado", com dia e tudo. ' +
-      'Deixar o dia vazio guarda só o responsável — a tarefa continua em "Sem dia", com o nome dele. ' +
+      (souAdmin ? 'Deixar o dia vazio guarda só o responsável — a tarefa continua em "Sem dia", com o nome dele. '
+                : 'Para pegar a tarefa, o <b>dia</b> e o <b>tempo</b> são obrigatórios. ') +
       'O tempo que passa do dia continua nos dias de turno seguintes; tarefa sem tempo não entra na barra.</p>' + blocoApoio,
     [{ label:'Cancelar', onClick: fecharModal },
      // ── ITEM 1 (S38): ASSUMIR PELA AGENDA ────────────────────────────────
@@ -4866,9 +4904,12 @@ async function modalDesignar(card, t, aposGravar, par){
      // não é admin, quando a tarefa é de OUTRA pessoa e o perfil bate.
      ...(!souAdmin && !DEMO && t.usuario_designado && possoAssumir(t) ? [{
        label:'Assumir (passar para mim)', onClick: async () => {
+         const q = lerQuando('md');   // S62 · com o dia e o tempo da janela
+         if (pgFalta(q)){ toast(pgFalta(q), 'err'); return; }
          fecharModal();
          try{
-           const r = await rpc('tf_assumir_tarefa', { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id, p_forcar: true });
+           const r = await rpc('tf_assumir_tarefa', { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id, p_forcar: true,
+             p_dia: q.dia, p_minutos: q.minutos, p_hora: q.hora || null, p_fds: !!q.fds });
            if (r && r.status === 'recusado') throw new Error(r.motivo === 'perfil_nao_autorizado'
              ? 'Esta tarefa é de ' + ((r.perfis || []).join(' ou ') || 'outro perfil') + '. O seu perfil não a assume.'
              : 'O servidor recusou: ' + (r.motivo || '?') + (r.status_atual ? ' (a tarefa está ' + r.status_atual + ')' : '') + '.');
@@ -4906,6 +4947,8 @@ async function modalDesignar(card, t, aposGravar, par){
         // S53 · quem está de férias/folga/atestado no dia: avisa e deixa
         // gravar no segundo clique (a barra nunca bloqueia; quem decide é
         // quem está olhando a tela).
+        // S62 · sem dia (e sem tempo) não pega — para quem se designa
+        if (quem && !souAdmin && pgFalta(form)){ toast(pgFalta(form), 'err'); return; }
         if (quem && await ausAvisarNoModal([quem].concat(apoios || []), form.dias)) return;
         // o aviso do ponto 3: explica o risco e deixa o admin decidir
         if ((quem && op && op.dataset.fora === '1') || foraAp.length){
@@ -11739,6 +11782,7 @@ async function pintarConfig(){
   // aparece na tela" decide por onde a pessoa navega; esta decide, tarefa por
   // tarefa, quem pode executá-la.
   const abas = [['usuarios','Usuários'],['perfis','Perfis'],['tarefas','Tarefas por perfil'],
+                ['auto','Responsáveis automáticos'],
                 ['turno','Turno'],['planos','Planos'],['alertas','Alertas do menu'],
                 ['servneg','Serviços do negócio'],['feriados','Feriados'],
                 ['docs','Documentos'],['param','Google Drive'],['exc','Exclusões']];
@@ -11755,6 +11799,7 @@ async function pintarConfig(){
   if (abaCfg === 'usuarios') return cfgUsuarios();
   if (abaCfg === 'perfis')   return cfgPerfis();
   if (abaCfg === 'tarefas')  return cfgTarefasPerfil();
+  if (abaCfg === 'auto')     return cfgAutoDesig();   // S62
   if (abaCfg === 'docs')     return cfgDocumentos();
   if (abaCfg === 'turno')    return cfgTurno();
   if (abaCfg === 'planos')   return cfgPlanos();
@@ -16451,6 +16496,7 @@ async function pintarAgenda(){
   montarNavAgenda();
   await agCarregar();
   agPintar();
+  await carregarSemDono();   // S62
   agFaixaAtrasadas();   // S41 · item 7
 }
 
@@ -17070,7 +17116,7 @@ function agPorQueNao(t){
  *
  *  `tf_assumir_tarefa` não levanta exceção quando recusa: devolve
  *  {status:'recusado'}. Ignorar o retorno era o verde mentindo do S18. */
-async function agAssumirLote(itens){
+async function agAssumirLoteGravar(itens, q){   // S62 · q = {dia, hora, minutos, fds}
   if (!itens || !itens.length) return;
   if (DEMO){ toast('Modo demonstração: nada é assumido de verdade.','err'); return; }
   const falhas = [];
@@ -17083,7 +17129,9 @@ async function agAssumirLote(itens){
         continue;
       }
       const r = await rpc('tf_assumir_tarefa',
-        { p_os_id: t.os_id, p_tarefa_id: t.tarefa_id, p_forcar: false });
+        { p_os_id: t.os_id, p_tarefa_id: t.tarefa_id, p_forcar: false,
+          p_dia: q ? q.dia : null, p_minutos: q ? q.minutos : null,
+          p_hora: q && q.dia ? (q.hora || null) : null, p_fds: q && q.dia ? !!q.fds : null });
       if (r && r.status === 'recusado'){
         falhas.push({ t, motivo: r.motivo === 'perfil_nao_autorizado'
           ? 'é de ' + ((r.perfis || []).join(' ou ') || 'outro perfil')
@@ -17098,12 +17146,12 @@ async function agAssumirLote(itens){
   await pintarAgenda();
 
   if (!falhas.length){
-    toast(ok + ' tarefa(s) assumida(s) — agora são suas, ainda sem dia marcado.', 'ok');
+    toast(ok + ' tarefa(s) assumida(s) — agora são suas' + (q && q.dia ? ', marcadas para ' + pgDiaTxt(q.dia) : '') + '.', 'ok');
     return;
   }
   abrirModal(ok ? ok + ' assumida(s), ' + falhas.length + ' não' : 'Nenhuma foi assumida',
-      (ok ? '<p class="nota" style="margin-top:0">As que deram certo já estão com você, em '
-            + '<b>Sem dia</b>. Use <b>marcar dia</b> para pôr na semana.</p>' : '')
+      (ok ? '<p class="nota" style="margin-top:0">As que deram certo já estão com você'
+            + (q && q.dia ? ', marcadas para <b>' + esc(pgDiaTxt(q.dia)) + '</b>.' : '.') + '</p>' : '')
     + '<div class="aviso"><b>Estas ficaram de fora:</b><ul style="margin:6px 0 0;padding-left:18px">'
     + falhas.map(f => '<li>' + esc(f.t.os_numero || '') + ' · ' + esc(f.t.tarefa || '')
         + ' — ' + esc(f.motivo) + '</li>').join('')
@@ -17217,7 +17265,8 @@ function agVistaPool(cx){
               + ' aria-label="Assumir ' + esc(t.tarefa || '') + '"></span>'
             : '<span class="agCk agCkVazio" title="' + esc(agPorQueNao(t)) + '"></span>')
         + '<span class="agLt">' + esc(t.tarefa || '')
-        + (t.apoios_nomes ? ' <span class="chip apoio">apoio: ' + esc(t.apoios_nomes) + '</span>' : '') + '</span>'
+        + (t.apoios_nomes ? ' <span class="chip apoio">apoio: ' + esc(t.apoios_nomes) + '</span>' : '')
+        + (t.auto_aviso && !t.usuario_designado ? ' <span class="chip autoAv" title="' + esc(t.auto_aviso) + '">sem responsável automático</span>' : '') + '</span>'
         + '<span class="agLe">' + esc(t.fase || '') + '</span>'
         + '<button class="btn mini agLq" type="button" data-quem="'
         + esc(chaveAg(t)) + '">'
@@ -17331,14 +17380,22 @@ async function modalQuem(t){
             + 'em Configurações › Tarefas por perfil.</div>'))
     + (sessao.admin ? '' : '<p class="nota" style="margin:8px 0 0">Escolher <b>outra '
        + 'pessoa</b> é do administrador. Aqui você pega a tarefa para você.</p>')
-    + '<p style="font-size:12px;color:var(--ink-3);margin:10px 0 0;line-height:1.45">'
-    + 'A tarefa continua em <b>Sem dia</b>, agora com dono. Para pôr num dia, '
-    + 'use <b>marcar dia</b>.</p>',
+    + (sessao.admin
+       ? '<p style="font-size:12px;color:var(--ink-3);margin:10px 0 0;line-height:1.45">'
+         + 'A tarefa continua em <b>Sem dia</b>, agora com dono. Para pôr num dia, '
+         + 'use <b>marcar dia</b>.</p>'
+       // S62 · sem dia (e sem tempo) não pega
+       : '<p class="nota" style="margin:10px 0 4px"><b>Em que dia você vai fazer, e quanto tempo leva?</b></p>'
+         + campoQuando('qm', { dia: isoHoje(), min: t.tempo_estimado_min, tempoObrig: true, rotuloDia: 'Dia' })),
     [ { label:'Cancelar', onClick: fecharModal },
       { label:'Gravar', pri:true, onClick: async () => {
           try{
             const sel = document.querySelector('input[name="qmU"]:checked');
-            await rpc('tf_designar_tarefa', {
+            const q = sessao.admin ? null : lerQuando('qm');   // S62
+            if (q && sel && sel.value && pgFalta(q)) throw new Error(pgFalta(q));
+            await rpc('tf_designar_tarefa', q && sel && sel.value ? {
+              p_os_id: t.os_id, p_tarefa_id: t.tarefa_id, p_usuario: sel.value,
+              p_data: q.dia, p_minutos: q.minutos, p_hora: q.hora || null, p_fds: !!q.fds, p_mexer_hora: true } : {
               p_os_id: t.os_id, p_tarefa_id: t.tarefa_id,
               p_usuario: (sel && sel.value) || null,
               p_data: t.dia || null, p_minutos: null });
@@ -17348,6 +17405,7 @@ async function modalQuem(t){
             await pintarAgenda();
           }catch(e){ toast(e.message,'err'); }
       } } ]);
+  if (!sessao.admin && document.getElementById('qmQd')) iniciarQuando('qm');   // S62
 }
 
 
@@ -27583,8 +27641,178 @@ function modalAtrasadas(){
     gravar(Number(b.dataset.ok), v, 'outro_dia', b);
   }));
 }
+// ════════════════════════════════════════════════════════════════════════════
+// S62 · ENTRADA E DOCUMENTAÇÃO AUTOMÁTICAS · CARD FECHADO ATÉ O AGENDAMENTO ·
+// "SEM DIA (E SEM TEMPO) NÃO PEGA" (Bruno, 19/10/2026)
+// ----------------------------------------------------------------------------
+// A trava de verdade é do banco (117_s62.sql): `tf_assumir_tarefa` pede dia e
+// tempo e recusa a tarefa de card fechado; `tf_designar_tarefa` idem para
+// quem se designa. Aqui a tela só não oferece o que o banco vai recusar, e
+// pede o dia e o tempo NA HORA de pegar.
+// ════════════════════════════════════════════════════════════════════════════
+
+/** A mesma conta de `tf__tarefa_fechada`: a OS tem uma tarefa que pede
+ *  agendamento ainda aberta, e esta tarefa está numa fase depois da dela.
+ *  Só responde pelas tarefas da OS aberta na gaveta (as outras, o banco). */
+function tarefaFechada(t, ts){
+  if (!t || t.fase_ordem == null) return false;
+  if (!ts){
+    if (!osAberta || !osAberta.card) return false;
+    if (t.os_id && String(t.os_id) !== String(osAberta.card.os_id)) return false;
+    ts = osAberta.tarefas || [];
+  }
+  return ts.some(a => a.requisitos && a.requisitos.agenda
+    && a.status !== 'completo' && a.status !== 'dispensado'
+    && Number(t.fase_ordem) > Number(a.fase_ordem));
+}
+
+/** O que faltou para pegar, ou null. */
+const pgFalta = v => {
+  const f = [!(v && v.dia) && 'o dia', !(v && v.minutos) && 'o tempo'].filter(Boolean);
+  return f.length ? 'Para pegar a tarefa, marque ' + f.join(' e ') + '.' : null;
+};
+const PG_SEM = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+const pgDiaTxt = iso => iso === isoHoje() ? 'hoje'
+  : PG_SEM[new Date(iso + 'T12:00').getDay()] + ' ' + dataBR(iso).slice(0, 5);
+
+/** O retorno de `tf_concluir_agendamento` → a frase do toast: para quem
+ *  foram a ART e o TapDoc, e o aviso quando a inspeção está em cima. */
+function autoTxt(a){
+  if (!a) return '';
+  const ts = a.tarefas || [];
+  let s = '';
+  if (ts.length){
+    const por = new Map();
+    ts.forEach(x => {
+      const k = x.usuario ? x.usuario + ' (' + pgDiaTxt(x.dia) + ')' : 'ninguém — ficou em "Sem dia"';
+      if (!por.has(k)) por.set(k, []);
+      por.get(k).push(x.nome);
+    });
+    s = ' ' + [...por.entries()].map(([k, ns]) => ns.join(' e ') + ': ' + k).join('; ') + '.';
+  }
+  if (a.aviso) s += ' ⚠ ' + a.aviso;
+  return s;
+}
+
+// ── A FAIXA DO ADMIN: automáticas que ficaram sem dono ──────────────────────
+let SEM_DONO = [];
+async function carregarSemDono(){
+  if (DEMO || !sessao.admin){ SEM_DONO = []; return SEM_DONO; }
+  try{ SEM_DONO = await rpc('tf_auto_sem_dono', {}) || []; }
+  catch(e){ SEM_DONO = []; }   // banco sem o 117: sem faixa, sem erro
+  return SEM_DONO;
+}
+function agFaixaSemDono(){
+  const cab = document.querySelector('.telaCab');
+  let f = document.getElementById('agSdFaixa');
+  if (!cab || !SEM_DONO.length){ if (f) f.remove(); return; }
+  if (!f){ f = document.createElement('div'); f.id = 'agSdFaixa'; f.className = 'atrFaixa sdFaixa';
+           cab.insertBefore(f, cab.firstChild.nextSibling); }
+  f.innerHTML = '<span>⚠ <b>' + SEM_DONO.length + (SEM_DONO.length === 1 ? ' tarefa automática ficou' : ' tarefas automáticas ficaram')
+    + ' sem responsável</b> — o responsável e o substituto estão fora. Estão em "Sem dia".</span>'
+    + '<button class="btn mini pri" type="button">Ver</button>';
+  f.querySelector('button').addEventListener('click', () => modalSemDono());
+}
+function modalSemDono(){
+  abrirModal('Automáticas sem responsável',
+      '<p class="nota" style="margin-top:0">O TapFlow não achou quem fizesse: o responsável e o substituto '
+    + '(Configurações › Responsáveis automáticos) estão fora o dia inteiro. Designe alguém ou espere alguém pegar.</p>'
+    + '<div class="sdLista">' + SEM_DONO.map((x, i) => '<div class="sdLinha"><div><b class="mono">' + esc(x.os_numero || '')
+        + '</b> · ' + esc(x.tarefa || '') + '<br><small>' + esc(x.cliente || '') + ' — ' + esc(x.motivo || '') + '</small></div>'
+        + '<button class="btn mini" type="button" data-i="' + i + '">Abrir a OS</button></div>').join('') + '</div>',
+    [{ label:'Fechar', pri:true, onClick: fecharModal }]);
+  document.querySelectorAll('.sdLista button[data-i]').forEach(b => b.addEventListener('click', async () => {
+    const x = SEM_DONO[Number(b.dataset.i)];
+    fecharModal();
+    if (x) await abrirOSPorId(x.os_id);
+  }));
+}
+
+// ── O LOTE DE "SEM DIA" PEDE O DIA E O TEMPO ────────────────────────────────
+function agAssumirLote(itens){
+  if (!itens || !itens.length) return;
+  if (DEMO){ toast('Modo demonstração: nada é assumido de verdade.','err'); return; }
+  const deOS = itens.filter(t => t.origem !== 'avulso');
+  if (!deOS.length) return agAssumirLoteGravar(itens, null);
+  abrirModal('Assumir ' + itens.length + (itens.length > 1 ? ' tarefas' : ' tarefa'),
+      '<p class="nota" style="margin-top:0">Sem dia (e sem tempo), não se pega tarefa. Marque <b>em que dia</b> '
+    + 'você vai fazer e <b>quanto tempo cada uma</b> leva — vale para ' + (deOS.length > 1 ? 'as ' + deOS.length : 'a tarefa')
+    + '. Depois dá para mudar cada uma pela Agenda.</p>'
+    + campoQuando('lt', { dia: isoHoje(), tempoObrig: true, rotuloDia: 'Em que dia' })
+    + '<div class="dica" id="ltMsg" style="color:var(--crit)" role="alert"></div>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Assumir', pri:true, onClick: async () => {
+        const v = lerQuando('lt'), msg = document.getElementById('ltMsg');
+        const falta = pgFalta(v);
+        if (falta){ msg.textContent = falta; return; }
+        if (await ausAvisarNoModal([meuId()], v.dias)) return;
+        fecharModal();
+        await agAssumirLoteGravar(itens, v);
+     }}]);
+  iniciarQuando('lt');
+  document.getElementById('ltQd').addEventListener('input', () => { document.getElementById('ltMsg').textContent = ''; });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// S62 · CONFIGURAÇÕES › RESPONSÁVEIS AUTOMÁTICOS
+// ════════════════════════════════════════════════════════════════════════════
+async function cfgAutoDesig(){
+  const c = document.getElementById('cfgCorpo');
+  c.innerHTML = '<p class="nota">Carregando…</p>';
+  let regras;
+  try{
+    regras = DEMO ? [] : await rpc('tf_auto_designacao_lista', {});
+  }catch(e){
+    c.innerHTML = '<div class="painel"><h3>Responsáveis automáticos</h3><div class="aviso"></div></div>';
+    c.querySelector('.aviso').textContent = 'Não deu para ler as regras: ' + e.message
+      + (/auto_designacao/.test(e.message) ? ' — falta rodar o 117_s62.sql no Supabase.' : '');
+    return;
+  }
+  const pessoas = EQUIPE.slice().sort((a, b) => a.nome.localeCompare(b.nome));
+  const opts = (sel, vazio) => '<option value="">' + vazio + '</option>' + pessoas.map(u =>
+    '<option value="' + esc(u.id) + '"' + (String(u.id) === String(sel || '') ? ' selected' : '') + '>' + esc(u.nome)
+    + (u.perfil ? ' — ' + esc(u.perfil) : '') + '</option>').join('');
+  const quando = r => r.gatilho === 'criacao'
+    ? 'Na <b>criação da OS</b>, com o <b>dia útil seguinte</b>. A da compra (se a OS tem pedido) entra quando a pergunta é respondida "sim".'
+    : 'Na <b>conclusão do agendamento</b>, com o <b>dia em que o agendamento foi feito</b> (não o dia da inspeção). '
+      + 'Se a inspeção é para hoje ou amanhã, quem agenda é avisado.';
+  c.innerHTML = '<div class="painel"><h3>Responsáveis automáticos</h3>'
+    + '<p class="nota">Quem recebe sozinho as tarefas da Entrada e da Documentação da inspeção, já com dia e tempo. '
+    + 'Se o responsável estiver fora <b>o dia inteiro</b> (férias, folga, atestado ou recesso aprovados), vai para o '
+    + '<b>substituto</b>. Os dois fora: a tarefa fica livre em "Sem dia" e a Agenda avisa você. Férias aprovadas '
+    + 'depois passam as tarefas automáticas daquele período para o outro.</p>'
+    + (regras.length ? regras.map(r => '<div class="adRegra" data-id="' + esc(r.id) + '">'
+        + '<h4>' + esc(r.nome) + '</h4>'
+        + '<p class="nota">' + esc((r.tarefas_nomes || []).join(' · ')) + '<br>' + quando(r) + '</p>'
+        + '<div class="adCampos">'
+        + '<div class="campo"><label>Responsável</label><select class="adT">' + opts(r.titular, '— ninguém —') + '</select></div>'
+        + '<div class="campo"><label>Substituto</label><select class="adS">' + opts(r.substituto, '— nenhum —') + '</select></div>'
+        + '<div class="campo"><label>Tempo de cada tarefa (min)</label><input class="adM" type="number" min="1" max="600" step="5" value="' + Number(r.minutos || 20) + '"></div>'
+        + '<label class="linhaOpc"><input type="checkbox" class="adA"' + (r.ativo ? ' checked' : '') + '> ligada</label>'
+        + '</div>'
+        + '<div class="adPe"><span class="nota">' + (r.alterado_em ? 'Mudada por ' + esc(r.alterado_por_nome || '?') + ' em '
+            + esc(dataBR(String(r.alterado_em).slice(0, 10))) : 'Como veio no 117') + '</span>'
+        + '<button class="btn pri" type="button">Gravar</button></div>'
+        + '<div class="dica adMsg" style="color:var(--crit)" role="alert"></div>'
+        + '</div>').join('')
+      : '<div class="aviso">Nenhuma regra. O 117_s62.sql cria as duas da inspeção.</div>')
+    + '</div>';
+  c.querySelectorAll('.adRegra').forEach(box => box.querySelector('.adPe button').addEventListener('click', async ev => {
+    const q = cl => box.querySelector(cl);
+    q('.adMsg').textContent = '';
+    try{
+      ev.target.disabled = true;
+      await rpc('tf_auto_designacao_gravar', { p_id: box.dataset.id, p_titular: q('.adT').value || null,
+        p_substituto: q('.adS').value || null, p_minutos: Number(q('.adM').value || 0), p_ativo: q('.adA').checked });
+      toast('Gravado: ' + box.querySelector('h4').textContent + '.', 'ok');
+      cfgAutoDesig();
+    }catch(e){ q('.adMsg').textContent = e.message; ev.target.disabled = false; }
+  }));
+}
+
 /** A faixa vermelha no topo da Agenda, enquanto houver atrasada no meu nome. */
 function agFaixaAtrasadas(){
+  agFaixaSemDono();   // S62 · a do admin (automáticas sem dono)
   const cab = document.querySelector('.telaCab');
   if (!cab) return;
   let f = document.getElementById('agAtrFaixa');

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S31</title>
+<title>TapFlow Field · S32</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -563,7 +563,7 @@ main{padding-bottom:84px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S31';
+const APP_VERSION = 'S32';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -1576,7 +1576,7 @@ async function abrirOS(o){
     const [tarefas, equipamentos, coletas] = DEMO
       ? [demoTarefas(o.os_id), demoEquip(), demoColeta(o.os_id)]
       : await Promise.all([
-          get('pipeline_tarefas?select=tarefa_id,nome,descricao,tipo,fase,status,perfis_responsaveis,lock_por,requisitos,'
+          get('pipeline_tarefas?select=tarefa_id,nome,descricao,tipo,fase,fase_ordem,status,perfis_responsaveis,lock_por,requisitos,'
               + 'lock_expira,usuario_designado,apoios,data_prevista,acao_terminal,tempo_estimado_min,hora_inicio,usa_fds'
               + '&os_id=eq.' + o.os_id + '&ativo=eq.SIM&order=camada,fase_ordem,ordem'),
           get('equipamentos?select=id,tag,tipo,localizacao&cliente_id=eq.' + o.cliente_id + '&ativo=eq.true&order=tag'),
@@ -1711,7 +1711,7 @@ async function telaAgendar(t){
       const ag = (r && r.agenda) || {};
       await carregar(true);
       toast('Agendado: ' + agDiaTxt(v.dia) + ' às ' + v.hora + (ag.ate && ag.ate !== v.dia ? ' até ' + agDiaTxt(ag.ate) : '')
-        + ' com ' + (ag.usuario || 'o inspetor') + '.', 'ok');
+        + ' com ' + (ag.usuario || 'o inspetor') + '.' + autoTxtF(r && r.auto), 'ok');   // S32
       const novo = listaOS.find(x => x.os_id === os.os_id);
       if (novo) abrirOS(novo); else pintarLista();
     }catch(e){
@@ -1720,6 +1720,92 @@ async function telaAgendar(t){
     }
   });
   setTimeout(() => $('agU').focus(), 50);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// S32 · (Manager S62) "SEM DIA (E SEM TEMPO) NÃO PEGA" E O CARD FECHADO
+// ----------------------------------------------------------------------------
+// Assumir pede, na hora, em que dia a pessoa vai fazer e quanto tempo leva
+// (o banco recusa sem isso — 117_s62.sql). E a etapa de uma fase depois do
+// "Agendar serviço" ainda aberto não se assume: abre quando a inspeção for
+// agendada. Sem sinal, NÃO grava (e diz).
+// ════════════════════════════════════════════════════════════════════════════
+/** A mesma conta de `tf__tarefa_fechada`, com as etapas da OS aberta. */
+function tarefaFechada(t){
+  const ts = (atual && atual.tarefas) || [];
+  if (!t || t.fase_ordem == null || !ts.length) return false;
+  return ts.some(a => a.requisitos && a.requisitos.agenda
+    && a.status !== 'completo' && a.status !== 'dispensado'
+    && Number(t.fase_ordem) > Number(a.fase_ordem));
+}
+const PG_SEM = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+const pgDiaF = iso => iso === isoHojeF() ? 'hoje'
+  : PG_SEM[new Date(iso + 'T12:00').getDay()] + ' ' + dataBR(iso).slice(0, 5);
+
+/** A frase do toast depois do agendamento: para quem foram a ART e o TapDoc. */
+function autoTxtF(a){
+  if (!a) return '';
+  const ts = a.tarefas || [];
+  let s = '';
+  if (ts.length){
+    const por = new Map();
+    ts.forEach(x => {
+      const k = x.usuario ? x.usuario + ' (' + pgDiaF(x.dia) + ')' : 'ninguém';
+      if (!por.has(k)) por.set(k, []);
+      por.get(k).push(x.nome);
+    });
+    s = ' ' + [...por.entries()].map(([k, ns]) => ns.join(' e ') + ': ' + k).join('; ') + '.';
+  }
+  if (a.aviso) s += ' ⚠ ' + a.aviso;
+  return s;
+}
+
+/** A folha de "Assumir": o texto de antes (quem sai, quem vira apoio) mais o
+ *  dia, a hora (opcional) e o tempo. Devolve {dia, hora, minutos, fds} ou null. */
+function telaPegar(t, txt){
+  return new Promise(ok => {
+    const min = Number(t.tempo_estimado_min || 0);
+    const ov = document.createElement('div');
+    ov.className = 'agSheet';
+    ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+    ov.innerHTML = '<div class="agSheetC">'
+      + '<div class="agSheetH"><b>Assumir</b><button type="button" class="agX" aria-label="Voltar">✕</button></div>'
+      + '<p class="agNota">' + esc(txt).replace(/\n\n/g, '<br><br>') + '</p>'
+      + '<p class="agNota"><b>Em que dia você vai fazer, e quanto tempo leva?</b> Sem isso, a tarefa não pode ser pega.</p>'
+      + '<div class="agDupla"><div class="campo"><label for="pgD">Dia</label><input id="pgD" type="date" value="' + esc(t.data_prevista || isoHojeF()) + '"></div>'
+      +   '<div class="campo"><label for="pgH">Hora <small>(opcional)</small></label><input id="pgH" type="time" step="300" value="' + esc(String(t.hora_inicio || '').slice(0, 5)) + '"></div></div>'
+      + '<div class="campo"><label for="pgTh">Tempo</label><div class="agT">'
+      +   '<input id="pgTh" type="number" min="0" max="1000" inputmode="numeric" aria-label="horas" value="' + (min ? Math.floor(min / 60) : '') + '"><span>h</span>'
+      +   '<input id="pgTm" type="number" min="0" step="5" inputmode="numeric" aria-label="minutos" value="' + (min ? min % 60 : '') + '"><span>min</span>'
+      +   '<span class="agTot" id="pgTt"></span></div></div>'
+      + '<div class="agMsg" id="pgMsg" role="alert"></div>'
+      + '<button type="button" class="btn pri" id="pgOk">Assumir</button>'
+      + '<button type="button" class="btn" id="pgVolta">Voltar</button>'
+      + '</div>';
+    document.body.appendChild(ov);
+    const $ = id => ov.querySelector('#' + id);
+    const sair = v => { ov.remove(); ok(v); };
+    ov.querySelector('.agX').addEventListener('click', () => sair(null));
+    $('pgVolta').addEventListener('click', () => sair(null));
+    const ler = () => {
+      const tot = Math.round(Number($('pgTh').value || 0) * 60 + Number($('pgTm').value || 0));
+      return { dia: $('pgD').value || null, hora: $('pgH').value || null, minutos: tot > 0 ? tot : null, fds: false };
+    };
+    const tot = () => { const v = ler(); $('pgTt').textContent = v.minutos ? '= ' + v.minutos.toLocaleString('pt-BR') + ' min' : ''; };
+    ['pgD','pgH','pgTh','pgTm'].forEach(id => $(id).addEventListener('input', () => { $('pgMsg').textContent = ''; tot(); }));
+    $('pgTm').addEventListener('blur', () => {
+      const m = Number($('pgTm').value || 0);
+      if (m >= 60){ $('pgTh').value = Number($('pgTh').value || 0) + Math.floor(m / 60); $('pgTm').value = m % 60; tot(); }
+    });
+    tot();
+    $('pgOk').addEventListener('click', () => {
+      const v = ler();
+      const falta = [!v.dia && 'o dia', !v.minutos && 'o tempo'].filter(Boolean);
+      if (falta.length){ $('pgMsg').textContent = 'Para pegar a tarefa, marque ' + falta.join(' e ') + '.'; return; }
+      sair(v);
+    });
+    setTimeout(() => $('pgD').focus(), 50);
+  });
 }
 
 /** As marcas do "Hoje": a hora (quando a tarefa tem hora) e "dia N de M". */
@@ -1763,6 +1849,7 @@ function possoAssumir(t){
   if (t.status === 'completo' || t.status === 'dispensado') return false;
   if (t.usuario_designado && String(t.usuario_designado) === String(meuId())) return false;
   if (sessao.admin) return true;
+  if (tarefaFechada(t)) return false;   // S32 · abre depois do agendamento
   const ps = t.perfis_responsaveis || [];
   return !ps.length || ps.includes(sessao.perfil);
 }
@@ -1779,22 +1866,27 @@ async function assumirNoCampo(t, botao, osId){
                     : 'Assumir "' + t.nome + '"?')
     + (bloq ? '\n\nEla continua bloqueada até a etapa anterior fechar — só o seu nome entra nela.' : '')
     + '\n\nA troca fica no histórico da OS.';
-  if (!confirm(txt)) return;
+  const q = await telaPegar(t, txt);   // S32 · sem dia (e sem tempo) não pega
+  if (!q) return;
   if (botao) botao.disabled = true;
   try{
-    const r = await rpc('tf_assumir_tarefa', { p_os_id: osId, p_tarefa_id: t.tarefa_id, p_forcar: true });
+    const r = await rpc('tf_assumir_tarefa', { p_os_id: osId, p_tarefa_id: t.tarefa_id, p_forcar: true,
+      p_dia: q.dia, p_minutos: q.minutos, p_hora: q.hora, p_fds: false });
     if (r && r.status === 'recusado')
       throw new Error(r.motivo === 'perfil_nao_autorizado'
         ? 'Esta etapa é de ' + ((r.perfis||[]).join(' ou ') || 'outro perfil') + '.'
         : 'O servidor recusou (' + (r.motivo || '?') + (r.status_atual ? ', a tarefa está ' + r.status_atual : '') + ').');
-    toast(r && r.so_designacao ? 'Assumida — o seu nome já está nela; ela abre quando a etapa anterior fechar.'
-                               : 'Assumida — agora a tarefa é sua.', 'ok');
+    if (r && r.status === 'locked') throw new Error((r.locked_nome || 'Outra pessoa') + ' assumiu agora há pouco.');
+    toast((r && r.so_designacao ? 'Assumida — o seu nome já está nela; ela abre quando a etapa anterior fechar'
+                                : 'Assumida — agora a tarefa é sua')
+      + ', para ' + pgDiaF(q.dia) + (q.hora ? ' às ' + q.hora : '') + ' (' + minHora(q.minutos) + ').', 'ok');
     await carregar(true);
     if (tela === 'os' && atual && atual.os){
       const novo = listaOS.find(x => x.os_id === atual.os.os_id) || atual.os;
       abrirOS(novo);
     }
-  }catch(e){ toast(e.message, 'err'); if (botao) botao.disabled = false; }
+  }catch(e){ toast(semRede(e) ? 'Sem sinal — NÃO foi assumida. Tente de novo quando conectar.' : e.message, 'err');
+             if (botao) botao.disabled = false; }
 }
 
 /* S15 · as tarefas do MEU perfil que o escritório escalou para um COLEGA,
@@ -2024,7 +2116,8 @@ function pintarOSBase(){
   if (t.status === 'bloqueado' || t.status === 'condicional'){
     const a = document.createElement('p');
     a.style.cssText = 'font-size:14px;color:var(--ink-3)';
-    a.textContent = 'Ainda não liberada — abre sozinha quando a etapa anterior fechar.'
+    a.textContent = (tarefaFechada(t) ? 'Abre depois do agendamento da inspeção — até lá, ninguém assume.'
+                                      : 'Ainda não liberada — abre sozinha quando a etapa anterior fechar.')
       + (t.usuario_designado ? ' Está com ' + (String(t.usuario_designado) === String(meuId()) ? 'você' : nomeDe(t.usuario_designado)) + '.' : '');
     p.appendChild(a);
     // S15 · item 1 do S41: assumir também a bloqueada (só o nome muda)
@@ -2168,7 +2261,7 @@ function pintarOSBase(){
   } else if (t.status === 'pendente' && !t.lock_por){
     const b = document.createElement('button');
     b.className = 'btn pri'; b.textContent = 'Assumir esta OS';
-    b.addEventListener('click', () => agir('assumir', t));
+    b.addEventListener('click', () => assumirNoCampo(t, b));   // S32 · com dia e tempo
     p.appendChild(b);
   }
   const c = document.createElement('button');
