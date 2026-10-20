@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S32</title>
+<title>TapFlow Field · S33</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -23,7 +23,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="TapFlow">
+<meta name="apple-mobile-web-app-title" content="TapHub">
 <meta name="mobile-web-app-capable" content="yes">
 <!-- ═══════════════════════════════════════════════════════════════════════════
      TAPFLOW FIELD — TFF_S5
@@ -504,6 +504,10 @@ main{padding-bottom:84px}
 .agMsg{color:var(--crit);font-size:13.5px;font-weight:600;margin:0 0 8px;min-height:1px}
 .agSheetC .btn{margin-top:8px}
 </style>
+<!-- S33 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N1">
+<script src="../nucleo/config.js?v=N1"></script>
+<script src="../nucleo/nucleo.js?v=N1"></script>
 </head>
 <body>
 
@@ -563,7 +567,7 @@ main{padding-bottom:84px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S32';
+const APP_VERSION = 'S33';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -5418,7 +5422,21 @@ document.getElementById('euSair').addEventListener('click', () => {
   document.getElementById('barDemo').hidden = !DEMO;
   try{ document.getElementById('btnEu').hidden = false; }catch(e){}
   if (DEMO){ sessao = { token:null, nome:'Inspetor (demo)', perfil:'inspetor', admin:false }; iniciar(); return; }
-  if (sessao.token){ iniciar(); return; }
+  if (sessao.token){
+    // S33 · N1a: a trava de PIN. O porteiro vem ANTES do iniciar() e, se precisar travar,
+    // COBRE a tela com o PIN — nunca troca de página (foto, canhoto e levantamento em curso ficam).
+    // Sem o núcleo (sem sinal e fora do cache) o Field ABRE do mesmo jeito (é o app que mais
+    // precisa funcionar sem sinal) e só avisa. Aberto do disco (file://) segue como antes.
+    let g = 'livre', semNucleo = false;
+    if (NO_SERVIDOR){
+      if (window.Nucleo) g = Nucleo.porteiro({ app:'field', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
+      else semNucleo = true;
+    }
+    if (g === 'hub'){ irParaHub(Nucleo.recado); return; }
+    iniciar();
+    if (semNucleo) setTimeout(() => toast('Trava de PIN indisponível agora. O app segue aberto.'), 700);
+    return;
+  }
   // Sem sessão: quem loga é o hub. O formulário daqui fica como rede de
   // segurança para o arquivo aberto do disco com as chaves preenchidas.
   if (NO_SERVIDOR){ irParaHub(''); return; }

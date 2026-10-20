@@ -29,7 +29,7 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H5-S62';
+const VERSAO = 'H6-S63';
 const CACHE  = 'tapflow-hub-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -39,7 +39,12 @@ const ESSENCIAIS = [
   './field/icons/icon-192.png',
   './field/icons/icon-512.png',
   './field/icons/icon-maskable-512.png',
-  './field/icons/apple-touch-icon.png'
+  './field/icons/apple-touch-icon.png',
+  // N1a (H6): o núcleo comum. O endereço tem que ser IDÊNTICO ao do <script>, com o ?v=
+  // (o cache compara a consulta inteira). Trocou o ?v= nas páginas? Troque aqui também.
+  './nucleo/nucleo.js?v=N1',
+  './nucleo/nucleo.css?v=N1',
+  './nucleo/config.js?v=N1'
 ];
 
 self.addEventListener('install', ev => {
@@ -103,6 +108,23 @@ self.addEventListener('fetch', ev => {
             + '<body style="font:15px system-ui;padding:24px;color:#14181B"><h1 style="font-size:20px">Sem sinal</h1>'
             + '<p>O TapFlow ainda não tinha sido aberto neste aparelho com internet. Abra de novo quando tiver conexão.</p>',
             { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 503 });
+      }
+    })());
+    return;
+  }
+
+  // ── o núcleo (N1a) ──
+  // Rede primeiro com 4 s e o cache como reserva: sem isto o Manager (que era um arquivo
+  // só e abria sem sinal) abriria SEM o núcleo e quebraria — o .js/.css não era guardado.
+  if (resto.startsWith('nucleo/')) {
+    ev.respondWith((async () => {
+      const c = await caches.open(CACHE);
+      try {
+        const r = await comPrazo(req, 4000);
+        if (r && r.ok && r.type === 'basic') c.put(req, r.clone()).catch(() => {});
+        return r;
+      } catch (e) {
+        return (await c.match(req)) || new Response('', { status: 504 });
       }
     })());
     return;

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>TapFlow · H5</title>
+<title>TapFlow · H6</title>
 <meta name="theme-color" content="#102438">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -34,9 +34,13 @@
      ganha é o Field, como deve ser.
 -->
 <link rel="manifest" href="manifest.webmanifest">
+<!-- H6 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
+<link rel="stylesheet" href="nucleo/nucleo.css?v=N1">
+<script src="nucleo/config.js?v=N1"></script>
+<script src="nucleo/nucleo.js?v=N1"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="TapFlow">
+<meta name="apple-mobile-web-app-title" content="TapHub">
 <!-- ════════════════════════════════════════════════════════════════════════
      TAPFLOW · HUB — a porta única.
      ------------------------------------------------------------------------
@@ -150,6 +154,15 @@ input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--a
   .topo{padding:10px 14px}
   .topo .dir{width:100%;margin-left:0;order:3}
 }
+
+/* H6 · N1b: um botão por módulo, cada um na sua cor, com o número que pede atenção. */
+.card{border-left-color:var(--cor,var(--accent));position:relative}
+.card .ic{color:var(--cor,var(--accent))}
+.card .pend{display:inline-block;margin-top:10px;font-size:12px;font-weight:600;color:#fff;
+  background:var(--cor,var(--accent));border-radius:11px;padding:2px 10px}
+.card.breve{opacity:.55;cursor:default;box-shadow:none;border-style:dashed;border-left-style:dashed}
+.card.breve:hover{transform:none;box-shadow:none}
+.card .em{display:inline-block;margin-top:10px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
 </style>
 </head>
 <body>
@@ -165,7 +178,7 @@ input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--a
 
 <main id="corpo" hidden>
   <h1 id="ola">Bem-vindo</h1>
-  <p class="sub" id="subtitulo">Escolha por onde entrar. Você já está autenticado nos dois.</p>
+  <p class="sub" id="subtitulo">Escolha por onde entrar. Você já está autenticado.</p>
   <div class="cards" id="cards"></div>
   <div id="semNada" hidden>
     <div class="aviso">
@@ -213,7 +226,7 @@ input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--a
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';
 
-const APP_VERSION = 'H5';
+const APP_VERSION = 'H6';
 try{ document.getElementById('selo').textContent = 'HUB · ' + APP_VERSION; }catch(e){}
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
@@ -227,7 +240,7 @@ const K_ANTIGAS  = ['tapflow_sessao', 'tff_sessao'];
 
 const VAZIA = { token:null, refresh:null, nome:null, email:null, perfil:null,
                 perfil_nome:null, admin:false, modulos:[], executa_em:null,
-                usa_gestao:false, usa_campo:false, rh_ficha:false };
+                usa_gestao:false, usa_campo:false, rh_ficha:false, portas:null };
 let sessao = Object.assign({}, VAZIA);
 
 function gravar(){ try{ localStorage.setItem(K_SESSAO, JSON.stringify(sessao)); }catch(e){} }
@@ -249,7 +262,7 @@ function ler(){
 }
 function limpar(){
   sessao = Object.assign({}, VAZIA);
-  try{ localStorage.removeItem(K_SESSAO); K_ANTIGAS.forEach(k => localStorage.removeItem(k)); }catch(e){}
+  try{ localStorage.removeItem(K_SESSAO); localStorage.removeItem('tf_travado'); K_ANTIGAS.forEach(k => localStorage.removeItem(k)); }catch(e){}
 }
 
 /* ── rede ─────────────────────────────────────────────────────────────────
@@ -303,6 +316,10 @@ async function meuAcesso(){
   if (!sessao.usa_campo){
     try{ sessao.rh_ficha = !!(await api('/rest/v1/rpc/tf_rh_tenho_ficha', { method:'POST', body:{} })); }catch(e){}
   }
+  // H6 · N1a: as portas vêm do SERVIDOR (tf_hub_modulos): a regra mora num lugar só e o
+  // hub só desenha. Banco sem o 200 → null, e o hub decide pelos três campos de antes.
+  try{ sessao.portas = await api('/rest/v1/rpc/tf_hub_modulos', { method:'POST', body:{} }); }
+  catch(e){ if (e.status === 401) throw e; sessao.portas = null; }
   gravar();
   return a;
 }
@@ -315,35 +332,102 @@ const IC_CAMPO  = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="curre
 
 const IC_SEG = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17a8 8 0 0 1 16 0z"/><path d="M2.5 17h19M12 9V5.5M9 6.5V11M15 6.5V11"/></svg>';
 
+const IC_MOD = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>';
+
+/* `ir` = a tela do Manager onde o botão cai (o Manager valida e, se a pessoa não
+   puder ver, abre a primeira que ela pode). `legado` = regra de antes do servidor
+   mandar as portas (banco sem o 200). Os módulos novos só existem com `portas`. */
 const PORTAS = [
-  { chave:'manager', href:'manager/', titulo:'Gestão', icone:IC_GESTAO,
+  { chave:'tapflow', href:'manager/?ir=age', titulo:'TapFlow', icone:IC_GESTAO, cor:'#1B6FA9',
+    texto:'Ordens de serviço, agenda e compromissos.' },
+  { chave:'tapcrm', href:'manager/?ir=com', titulo:'TapCRM', icone:IC_MOD, cor:'#7A4FB5',
+    texto:'Negócios, propostas e relacionamento com clientes.' },
+  { chave:'tapfin', href:'manager/?ir=finp', titulo:'TapFin', icone:IC_MOD, cor:'#2E7D4F',
+    texto:'Contas a pagar e a receber, bancos e caixa.' },
+  { chave:'taprh', href:'manager/?ir=rhf', titulo:'TapRH', icone:IC_MOD, cor:'#B5651D',
+    texto:'Fichas, férias, ausências, ponto e diárias.' },
+  { chave:'tapseg', href:'manager/?ir=rhs', titulo:'TapSeg', icone:IC_SEG, cor:'#C0392B',
+    texto:'EPIs, treinamentos e exames.' },
+  { chave:'cadastros', href:'manager/?ir=cad', titulo:'Cadastros', icone:IC_MOD, cor:'#516A7B',
+    texto:'Clientes, equipamentos, fornecedores e catálogos.' },
+  { chave:'gestao', href:'manager/', titulo:'Gestão', icone:IC_GESTAO, cor:'#1B6FA9',
     texto:'Quadros de OS, comercial, compras, propostas, documentos e relatórios.',
-    liberado:s => s.usa_gestao },
-  { chave:'field', href:'field/', titulo:'Campo', icone:IC_CAMPO,
+    legado:s => s.usa_gestao },
+  { chave:'campo', href:'field/', titulo:'Campo', icone:IC_CAMPO, cor:'#0087CC',
     texto:'Levantamento e execução no cliente. Funciona sem sinal e envia depois.',
-    liberado:s => s.usa_campo },
+    legado:s => s.usa_campo },
   // H4 · S42: só para quem NÃO trabalha em campo — quem trabalha já tem a
   // Minha Segurança dentro do Campo. S49: a mesma porta leva aos Documentos
   // (ponto e demonstrativo) e às Diárias, que moram no Field.
-  { chave:'seg', href:'field/', titulo:'Minha Segurança', icone:IC_SEG,
+  { chave:'seg', href:'field/', titulo:'Minha Segurança', icone:IC_SEG, cor:'#C0392B',
     texto:'Confirmar as entregas de EPI, assinar folha de ponto e demonstrativo de pagamento, lançar diárias.',
-    liberado:s => !s.usa_campo && s.rh_ficha },
+    legado:s => !s.usa_campo && s.rh_ficha },
+];
+const EM_BREVE = [
+  { titulo:'TapDoc', texto:'Inspeções e laudos (NR-13).' },
+  { titulo:'TapWeb', texto:'Site e portal do cliente.' },
 ];
 
+function liberada(p, s){
+  return s.portas ? s.portas.includes(p.chave) : (p.legado ? !!p.legado(s) : false);
+}
+
 let autoIndo = null;
+let resumo = {};
+let timerResumo = null;
+
+/* O número de cada botão vem de UMA chamada (tf_hub_resumo). Sem sinal ou sem o 201
+   no banco: mostra o último valor guardado (ou nada) e o botão continua funcionando. */
+function pintarResumo(){
+  document.querySelectorAll('#cards .card[data-chave]').forEach(a => {
+    const r = resumo[a.dataset.chave];
+    let el = a.querySelector('.pend');
+    if (r && r.n > 0 && r.texto){
+      if (!el){ el = document.createElement('span'); el.className = 'pend'; a.appendChild(el); }
+      el.textContent = r.texto;
+    } else if (el){ el.remove(); }
+  });
+}
+async function carregarResumo(){
+  if (DEMO || !sessao.token || !sessao.portas) return;
+  try{
+    const r = await api('/rest/v1/rpc/tf_hub_resumo', { method:'POST', body:{} });
+    if (r && typeof r === 'object'){
+      resumo = r;
+      try{ localStorage.setItem('tf_hub_resumo', JSON.stringify({ e:sessao.email, r:r })); }catch(e){}
+      pintarResumo();
+    }
+  }catch(e){ /* sem sinal ou banco sem o 201: fica o que já está na tela */ }
+}
+function resumoGuardado(){
+  try{
+    const g = JSON.parse(localStorage.getItem('tf_hub_resumo') || 'null');
+    if (g && g.e === sessao.email && g.r) resumo = g.r;
+  }catch(e){}
+}
 
 function montar(){
-  const abertas = PORTAS.filter(p => p.liberado(sessao));
+  const abertas = PORTAS.filter(p => liberada(p, sessao));
   const cx = document.getElementById('cards');
   cx.innerHTML = '';
   abertas.forEach(p => {
     const a = document.createElement('a');
-    a.className = 'card'; a.href = p.href;
+    a.className = 'card'; a.href = p.href; a.dataset.chave = p.chave;
+    a.style.setProperty('--cor', p.cor);
     a.innerHTML = p.icone + '<b>' + p.titulo + '</b><p>' + p.texto + '</p>'
                 + '<span class="quem">' + (sessao.perfil_nome || sessao.perfil || '') + '</span>';
     a.addEventListener('click', () => { if (autoIndo){ clearTimeout(autoIndo); autoIndo = null; } });
     cx.appendChild(a);
   });
+  // Quem administra vê o que vem aí (só vitrine, não clica).
+  if (sessao.admin && sessao.portas){
+    EM_BREVE.forEach(p => {
+      const d = document.createElement('div');
+      d.className = 'card breve'; d.setAttribute('aria-disabled', 'true');
+      d.innerHTML = IC_MOD + '<b>' + p.titulo + '</b><p>' + p.texto + '</p><span class="em">em breve</span>';
+      cx.appendChild(d);
+    });
+  }
 
   document.getElementById('semNada').hidden = abertas.length > 0;
   document.getElementById('perfilCru').textContent = sessao.perfil || '(sem perfil)';
@@ -355,14 +439,21 @@ function montar(){
 
   const mods = (sessao.modulos || []).join(', ');
   document.getElementById('nota').innerHTML = abertas.length
-    ? 'Seu perfil abre <b>' + abertas.map(p => p.titulo).join(' e ') + '</b>'
+    ? 'Seu perfil abre <b>' + abertas.map(p => p.titulo).join(', ') + '</b>'
       + (mods ? ', com os módulos <code>' + mods + '</code>' : '') + '. '
       + 'Quem muda isso é o perfil na tabela <code>perfis</code> — não uma versão nova do app.'
     : '';
 
   // Uma porta só: não faz sentido obrigar a clicar. Vai, e deixa cancelar.
+  // `?para=manager` (vindo do botão "Início" do Manager) significa "volte para o hub", não "entre".
   const p = new URLSearchParams(location.search).get('para');
-  const direto = p ? abertas.find(x => x.chave === p) : (abertas.length === 1 ? abertas[0] : null);
+  // Nomes antigos continuam valendo: `manager` = Gestão (ou, sem ela, o primeiro módulo do Manager); `field` = Campo.
+  const ALIAS = { manager:['gestao','tapflow','tapcrm','tapfin','taprh','tapseg','cadastros'], field:['campo','seg'] };
+  let direto = null;
+  if (p){
+    const quais = ALIAS[p] || [p];
+    for (const k of quais){ direto = abertas.find(x => x.chave === k); if (direto) break; }
+  } else if (abertas.length === 1) direto = abertas[0];
   if (direto){
     const aviso = document.createElement('p');
     aviso.className = 'indo';
@@ -377,6 +468,10 @@ function montar(){
   document.getElementById('corpo').hidden = false;
   document.getElementById('login').hidden = true;
   pintarConvite();
+
+  resumoGuardado(); pintarResumo(); carregarResumo();
+  if (timerResumo) clearInterval(timerResumo);
+  timerResumo = setInterval(() => { if (!document.hidden) carregarResumo(); }, 60000);
 }
 
 function telaLogin(recado){
@@ -434,6 +529,7 @@ document.getElementById('frm').addEventListener('submit', async ev => {
     const j = await api('/auth/v1/token?grant_type=password', { method:'POST', body:{ email, password: senha } });
     sessao.token = j.access_token; sessao.refresh = j.refresh_token || null;
     await meuAcesso();
+    await entrada();
     montar();
   }catch(e){
     limpar();
@@ -492,6 +588,14 @@ document.getElementById('instNao').addEventListener('click', () => {
   document.getElementById('inst').hidden = true;
 });
 
+/* ── H6 · N1a: depois da senha, o PIN ─────────────────────────────────────
+   Cria o PIN se a pessoa não tem e pergunta se lembra este aparelho. Falha de
+   sinal aqui NUNCA impede de entrar (o PIN é uma trava, não um segundo login). */
+async function entrada(){
+  if (DEMO || !window.Nucleo) return;
+  try{ await Nucleo.fluxoEntrada(); }catch(e){ if (e && e.status === 401) throw e; }
+}
+
 /* ── entrada ──────────────────────────────────────────────────────────── */
 (async function iniciar(){
   if (DEMO){
@@ -504,13 +608,20 @@ document.getElementById('instNao').addEventListener('click', () => {
     return;
   }
   if (!ler() || !sessao.token){ telaLogin(''); return; }
+  // H6 · N1a: o porteiro do núcleo. Se precisar travar, COBRE a tela com o PIN.
+  let g = 'livre';
+  try{ if (window.Nucleo) g = Nucleo.porteiro({ app:'hub', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY }); }catch(e){}
+  if (!ler() || !sessao.token){ telaLogin((window.Nucleo && Nucleo.recado) || ''); return; }   // o porteiro pode ter encerrado a sessão
   try{
     await meuAcesso();
+    if (g === 'entrada') await entrada();
     montar();
   }catch(e){
     if (e.status === 401 && await renovar()){
-      try{ await meuAcesso(); montar(); return; }catch(e2){}
+      try{ await meuAcesso(); if (g === 'entrada') await entrada(); montar(); return; }catch(e2){}
     }
+    // H6: sem sinal (erro sem status) NÃO derruba a sessão: abre com o que já estava guardado.
+    if (!e.status && sessao.perfil){ montar(); return; }
     limpar();
     telaLogin(e.status === 401 ? 'Sua sessão expirou. Entre de novo.' : (e.message || ''));
   }

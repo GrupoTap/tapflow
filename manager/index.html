@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S62</title>
+<title>TapFlow Manager · S63</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -32,7 +32,7 @@
 <link rel="apple-touch-icon" href="../field/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="TapFlow">
+<meta name="apple-mobile-web-app-title" content="TapHub">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
@@ -2151,6 +2151,10 @@ th.num .tfThFixo{text-align:right}
 .chip.fechada{background:#EEF0F3;color:var(--ink-3)}
 .chip.autoAv{background:#FFF4E0;color:#7A4B00}
 </style>
+<!-- S63 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N1">
+<script src="../nucleo/config.js?v=N1"></script>
+<script src="../nucleo/nucleo.js?v=N1"></script>
 </head>
 <body>
 
@@ -2256,7 +2260,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S62';
+const APP_VERSION = 'S63';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -27480,6 +27484,15 @@ async function iniciar(){
   await carregarColunas();
   await carregarParametros();
   await carregarEquipe();
+  // N1b: o botão do hub leva a uma tela daqui (`?ir=`). Só vale se a tela existir no
+  // menu; se a pessoa não puder vê-la, o irPara abre a primeira que ela pode.
+  try{
+    const ir = new URLSearchParams(location.search).get('ir');
+    if (ir){
+      if (NAV.some(g => (g.itens || []).some(i => i.v === ir))) visao = ir;
+      history.replaceState(null, '', location.pathname);
+    }
+  }catch(e){}
   carregar().catch(()=>{}).finally(() => {
     irPara(visao);
     // S41 · item 7: ao ENTRAR, as minhas tarefas atrasadas. S42 (resposta S7
@@ -27826,6 +27839,21 @@ function agFaixaAtrasadas(){
   f.querySelector('button').addEventListener('click', () => modalAtrasadas());
 }
 
+function nucleoIndisponivel(){
+  const d = document.createElement('div');
+  d.id = 'nucOff'; d.setAttribute('role', 'alert');
+  d.style.cssText = 'position:fixed;top:0;right:0;bottom:0;left:0;z-index:2147483000;background:#0E1621;color:#E8EEF5;'
+    + 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;'
+    + 'font:16px system-ui,sans-serif';
+  d.innerHTML = '<b style="font-size:20px">Não foi possível abrir o acesso seguro</b>'
+    + '<span style="max-width:380px;color:#C9D4E0">O arquivo da trava de PIN não carregou (sinal fraco ou conexão caída). '
+    + 'Recarregue a página quando tiver internet.</span>'
+    + '<button type="button" id="nucRec" style="min-height:48px;padding:0 28px;border-radius:12px;border:0;background:#1B6FA9;'
+    + 'color:#fff;font:inherit;font-weight:700;cursor:pointer">Recarregar</button>';
+  document.body.appendChild(d);
+  document.getElementById('nucRec').addEventListener('click', () => location.reload());
+}
+
 (function boot(){
   // ITEM 12 (S36): conectado, o aviso de demonstração SAI do documento — não
   // basta esconder. Com `hidden` ele já não era lido por leitor de tela, mas
@@ -27839,7 +27867,18 @@ function agFaixaAtrasadas(){
     return;
   }
   lerSessao();
-  if (sessao.token){ iniciar(); return; }
+  if (sessao.token){
+    // S63 · N1a: a trava de PIN. O porteiro vem ANTES do iniciar() e, se precisar travar,
+    // COBRE a tela com o PIN — nunca troca de página (o que está digitado fica).
+    // Sem o núcleo (sem sinal e fora do cache) o Manager não abre: pede para recarregar.
+    // Aberto do disco (file://) não há núcleo nem hub: segue como antes.
+    if (NO_SERVIDOR){
+      if (!window.Nucleo){ nucleoIndisponivel(); return; }
+      const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
+      if (g === 'hub'){ irParaHub(Nucleo.recado); return; }
+    }
+    iniciar(); return;
+  }
   // Sem sessão: o login mora no hub. O formulário daqui fica como rede de
   // segurança para quem abrir este arquivo direto do disco com as chaves
   // preenchidas — aí não há hub para onde ir.

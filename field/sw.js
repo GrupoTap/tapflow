@@ -24,7 +24,7 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S32';
+const VERSAO = 'S33';
 const CACHE  = 'tapflow-field-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -35,7 +35,13 @@ const ESSENCIAIS = [
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
   './icons/apple-touch-icon.png',
-  './icons/favicon-32.png'
+  './icons/favicon-32.png',
+  // N1a (S33): o núcleo comum, que mora FORA desta pasta (../nucleo/). O endereço tem que ser
+  // IDÊNTICO ao do <script> do index.html, com o ?v= (c.match compara a consulta inteira).
+  // Sem isto o Field sem sinal abriria sem o núcleo. Trocou o ?v= no index.html? Troque aqui também.
+  '../nucleo/nucleo.js?v=N1',
+  '../nucleo/nucleo.css?v=N1',
+  '../nucleo/config.js?v=N1'
 ];
 
 self.addEventListener('install', ev => {
