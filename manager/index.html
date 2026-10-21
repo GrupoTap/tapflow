@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S63</title>
+<title>TapFlow Manager · S65</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2260,7 +2260,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S63';
+const APP_VERSION = 'S65';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -20966,6 +20966,13 @@ async function finpCarregar(){
 // Tudo pelo CAIXA (data da baixa), como os relatórios. O mês escolhido com
 // ◀ ▶ muda os blocos A a M; "Precisa de ação", N e O são do mês corrente.
 // Prévia aprovada pelo Bruno em 16/10 (`_em_preparo/S59/painel_financeiro_previa.html`).
+// S65 · CICLO DA RESERVA (Bruno, 20/10/2026): na Engetap o dinheiro que entra num
+// mês é todo reservado (Nubank) e paga as contas do MÊS SEGUINTE; no dia 1º o
+// Vinícius retira da reserva exatamente o que vai pagar. Por isso o painel lê
+// assim: o que entrou em M-1 (a reserva) paga o que saiu em M; o que entra em M
+// vira a reserva de M+1. Sobra vira colchão; falta vem das provisões (13º,
+// impostos do início do ano, rescisões). Só leitura: nenhum dado novo do banco.
+// Prévia aprovada em 20/10 (`previa-painel-ciclo-reserva.html`).
 const FINPM = { d: null, pm: null, meses: [], mes: null, abertos: new Set() };
 const FPM_FOLHA = ['Pro Labore', 'FGTS', 'GPS', 'Previdência', 'Vale Refeição', 'Plano de Saúde'];
 const FPM_COR = { entrou: '#1E7A42', saiu: '#D08A2E', res: '#1B6FA9' };
@@ -21027,12 +21034,12 @@ function finpDesenhar(){
     +   '<b aria-live="polite">' + esc(fpmRot(k).replace(/^./, c => c.toUpperCase())) + (atual ? '<small>até ' + esc(dataBR(FINPM.pm.hoje).slice(0, 5)) + '</small>' : '') + '</b>'
     +   '<button type="button" class="btn" id="fpmProx" aria-label="Próximo mês"' + (i >= FINPM.meses.length - 1 ? ' disabled' : '') + '>▶</button>'
     + '</div>'
-    + (atual ? '<p class="fpmAviso">O mês ainda está correndo: os recebimentos entram até o fim dele, e a folha e as contas fixas saem no começo — por isso o resultado parcial costuma aparecer negativo.</p>' : '')
+    + (atual ? '<p class="fpmAviso">O mês ainda está correndo: o que entra neste mês vai para a reserva do mês seguinte, e as contas deste mês saem da reserva do mês anterior — por isso “Entrou” e a sobra do ciclo são parciais até o fim do mês.</p>' : '')
     + '<div class="fpmG4">' + fpmTiles(k) + '</div>'
-    + (atual ? '<div class="fpmG2">' + fpmFechamento(k) + fpmProximos(k) + '</div>' : '')
-    + '<div class="painel fpmCard"><h3>Entrou × saiu, mês a mês</h3><p class="fpmPq">A empresa está gerando ou queimando caixa? Clique numa coluna para ir ao mês.</p>'
+    + (atual ? '<div class="fpmG2">' + fpmReserva(k) + fpmProximos(k) + '</div>' : '')
+    + '<div class="painel fpmCard"><h3>Reserva × saiu, mês a mês</h3><p class="fpmPq">A reserva do mês anterior (o que entrou) cobriu as contas do mês? Clique numa coluna para ir ao mês.</p>'
     +   '<div id="fpmGraf"></div>'
-    +   '<div class="fpmLeg"><span><i style="background:' + FPM_COR.entrou + '"></i>Entrou</span><span><i style="background:' + FPM_COR.saiu + '"></i>Saiu</span><span><i class="ln" style="background:' + FPM_COR.res + '"></i>Resultado (entrou − saiu)</span>'
+    +   '<div class="fpmLeg"><span><i style="background:' + FPM_COR.entrou + '"></i>Reserva (entrou no mês anterior)</span><span><i style="background:' + FPM_COR.saiu + '"></i>Saiu</span><span><i class="ln" style="background:' + FPM_COR.res + '"></i>Sobra do ciclo (reserva − saiu)</span>'
     +   '<button class="fpmLk" type="button" id="fpmVerTab">ver tabela</button></div><div id="fpmTab" hidden></div></div>'
     + '<div class="fpmG2">' + fpmDespesas(k) + fpmClientes(k) + '</div>'
     + '<div class="fpmG2">' + fpmReceber() + fpmPagar() + '</div>'
@@ -21041,7 +21048,7 @@ function finpDesenhar(){
         + finpCardMes('Receitas', 'var(--ok)', d.realizado_receita, Number(FINPM.pm.previsto_receita) || 0, (d.comparativo_mes || []).filter(c => c.tipo === 'r'))
         + finpCardMes('Despesas', 'var(--warn)', d.realizado_despesa, d.previsto_despesa, (d.comparativo_mes || []).filter(c => c.tipo === 'p'))
         + '</div><p class="fpmPq" style="margin-top:6px">Previsto das receitas = o que vence no mês (recebido ou não). Previsto das despesas = soma dos orçamentos das subcategorias (Categorias).</p>' : '')
-    + '<div class="fpmNota">Tudo pelo <b>caixa</b> (data em que o dinheiro entrou ou saiu). Março a setembro/2026 vêm do histórico do SIGE; o que passou pelo Sicoob antes de outubro está na data de vencimento. O saldo das contas só existe a partir da data de corte.</div>';
+    + '<div class="fpmNota">Leitura pelo <b>ciclo da reserva</b>: o dinheiro que entra num mês é reservado e paga as contas do mês seguinte; a sobra vira colchão e a falta vem das provisões. Tudo pelo <b>caixa</b> (data em que o dinheiro entrou ou saiu). Março a setembro/2026 vêm do histórico do SIGE; o que passou pelo Sicoob antes de outubro está na data de vencimento. O saldo das contas só existe a partir da data de corte.</div>';
   fpmGrafico(k);
   const go = j => { if (j >= 0 && j < FINPM.meses.length){ FINPM.mes = FINPM.meses[j]; finpDesenhar(); } };
   document.getElementById('fpmAnt').addEventListener('click', () => go(i - 1));
@@ -21082,23 +21089,41 @@ function fpmPendencias(d){
 
 function fpmTiles(k){
   const x = fpmMes(k), ant = fpmAnteriores(k, 3), atual = k === FINPM.pm.mes_atual;
+  const nomeDe = m => FPM_NOMES[+m.slice(5, 7) - 1];
+  const pk = fpmSoma(k, -1), nk = fpmSoma(k, 1);
   const cmp = (v, mm, inverso) => {
     if (mm === null) return '<span class="fpmCmp">sem meses anteriores para comparar</span>';
     const dif = v - mm, bom = inverso ? dif <= 0 : dif >= 0;
     return '<span class="fpmCmp">média dos 3 meses antes: <b>' + esc(fpmK(mm)) + '</b>'
       + (atual ? '' : ' · <span class="' + (bom ? 'fpmPos' : 'fpmNeg') + '">' + (dif >= 0 ? '+' : '') + esc(fpmK(dif)) + '</span>') + '</span>';
   };
-  const res = x.entrou - x.saiu;
+  const c = fpmCiclo(k);
   const t = (cor, rot, val, cls, extra) => '<div class="painel fpmTile"><div class="fpmRot">' + (cor ? '<span class="fpmDot" style="background:' + cor + '"></span>' : '') + rot + '</div>'
     + '<div class="fpmVal ' + (cls || '') + '">' + val + '</div>' + extra + '</div>';
   const contas = (FINPM.pm.contas || []).filter(c => c.papel === 'operacional');
-  return t(FPM_COR.entrou, 'Entrou', esc(BRL(x.entrou)), '', cmp(x.entrou, fpmMedia(ant, m => m.entrou)))
-    + t(FPM_COR.saiu, 'Saiu', esc(BRL(x.saiu)), '', cmp(x.saiu, fpmMedia(ant, m => m.saiu), true))
-    + t(FPM_COR.res, 'Resultado', esc(fpmBRL(res)), res < 0 ? 'fpmNeg' : 'fpmPos', cmp(res, fpmMedia(ant, m => m.entrou - m.saiu)))
+  const falta = c.sobra !== null && c.sobra < 0;
+  return t(FPM_COR.entrou, 'Entrou', esc(BRL(x.entrou)), '',
+        '<span class="fpmCmp">vira a <b>reserva de ' + esc(nomeDe(nk)) + '</b></span><br>' + cmp(x.entrou, fpmMedia(ant, m => m.entrou)))
+    + t(FPM_COR.saiu, 'Saiu', esc(BRL(x.saiu)), '',
+        '<span class="fpmCmp">pago com a <b>reserva de ' + esc(nomeDe(pk)) + '</b></span><br>' + cmp(x.saiu, fpmMedia(ant, m => m.saiu), true))
+    + t(FPM_COR.res, falta ? 'Falta do ciclo' : 'Sobra do ciclo', c.sobra === null ? '—' : esc(fpmBRL(c.sobra)), falta ? 'fpmNeg' : 'fpmPos',
+        '<span class="fpmCmp">' + (c.sobra === null
+          ? 'sem o mês anterior para formar o ciclo'
+          : 'entrou em ' + esc(nomeDe(pk)) + ' − saiu em ' + esc(nomeDe(k)) + (atual ? ' (até hoje)' : '')
+            + '. ' + (falta ? 'A falta vem das provisões.' : 'A sobra vira colchão.')) + '</span>')
     + t('', 'Saldo nas contas', atual ? esc(BRL(fpmSaldoOp())) : '—', '',
         atual ? '<span class="fpmCmp">hoje · ' + contas.map(c => esc(c.nome.replace(/^Banco /, '')) + ' ' + esc(fpmK(Number(c.saldo) || 0))
                   + (Number(c.saldo_inicial) ? '' : ' (sem saldo inicial)')).join(' · ') + '</span>'
               : '<span class="fpmCmp">o saldo só existe a partir da data de corte</span>');
+}
+
+/** O ciclo de um mês: a reserva (o que entrou no mês anterior) × o que saiu neste.
+ *  `res` e `sobra` são null quando o mês anterior não está no painel. */
+function fpmCiclo(m){
+  const pk = fpmSoma(m, -1), x = fpmMes(m);
+  const tem = FINPM.meses.includes(pk);
+  const res = tem ? fpmMes(pk).entrou : null;
+  return { res, saiu: x.saiu, sobra: tem ? res - x.saiu : null };
 }
 
 function fpmGrafico(k){
@@ -21106,12 +21131,12 @@ function fpmGrafico(k){
   const M = FINPM.meses;
   const W = Math.max(300, el.clientWidth || 700), H = 250, pl = 54, pr = 10, pt = 14, pb = 30;
   const iw = W - pl - pr, ih = H - pt - pb;
-  const vals = M.flatMap(m => { const x = fpmMes(m); return [x.entrou, x.saiu, x.entrou - x.saiu]; });
+  const vals = M.flatMap(m => { const c = fpmCiclo(m); return [c.res || 0, c.saiu, c.sobra === null ? 0 : c.sobra]; });
   const passo = 25000;
   const max = Math.ceil(Math.max(passo, ...vals) / passo) * passo, min = Math.floor(Math.min(0, ...vals) / passo) * passo;
   const y = v => pt + ih * (max - v) / (max - min);
   const bw = iw / M.length, barW = Math.min(26, bw * 0.3), gap = 2;
-  let s = '<svg width="' + W + '" height="' + H + '" role="img" aria-label="Entrou, saiu e resultado por mês" style="display:block">';
+  let s = '<svg width="' + W + '" height="' + H + '" role="img" aria-label="Reserva do mês anterior, saiu e sobra do ciclo, por mês" style="display:block">';
   for (let v = min; v <= max; v += passo){
     s += '<line x1="' + pl + '" x2="' + (W - pr) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="' + (v === 0 ? '#9AA4AA' : '#EBEFF1') + '"/>'
       + '<text x="' + (pl - 8) + '" y="' + (y(v) + 4) + '" text-anchor="end" font-size="11" fill="#78838A">' + (v / 1000).toLocaleString('pt-BR') + ' mil</text>';
@@ -21120,31 +21145,33 @@ function fpmGrafico(k){
   const bar = (x0, v, cor, op) => { const y0 = y(0), y1 = y(v), h = Math.max(1, Math.abs(y0 - y1)), top = Math.min(y0, y1), r = Math.min(4, h);
     return '<path d="M' + x0 + ',' + (top + h) + 'V' + (top + r) + 'Q' + x0 + ',' + top + ' ' + (x0 + r) + ',' + top + 'H' + (x0 + barW - r) + 'Q' + (x0 + barW) + ',' + top + ' ' + (x0 + barW) + ',' + (top + r) + 'V' + (top + h) + 'Z" fill="' + cor + '" opacity="' + op + '"/>'; };
   M.forEach((m, i) => {
-    const x = fpmMes(m), cx = pl + bw * i + bw / 2, sel = m === k, op = sel ? 1 : 0.42;
-    s += bar(cx - barW - gap / 2, x.entrou, FPM_COR.entrou, op) + bar(cx + gap / 2, x.saiu, FPM_COR.saiu, op);
+    const x = fpmMes(m), c = fpmCiclo(m), cx = pl + bw * i + bw / 2, sel = m === k, op = sel ? 1 : 0.42;
+    s += (c.res === null ? '' : bar(cx - barW - gap / 2, c.res, FPM_COR.entrou, op)) + bar(cx + gap / 2, x.saiu, FPM_COR.saiu, op);
     s += '<text x="' + cx + '" y="' + (H - 10) + '" text-anchor="middle" font-size="11.5" fill="' + (sel ? '#14181B' : '#78838A') + '" font-weight="' + (sel ? 700 : 400) + '">'
       + (bw < 60 ? _FINP_MESES[+m.slice(5, 7) - 1] : fpmCurto(m)) + (m === FINPM.pm.mes_atual ? '*' : '') + '</text>';
-    pts.push([cx, y(x.entrou - x.saiu), m]);
+    if (c.sobra !== null) pts.push([cx, y(c.sobra), m]);
   });
   s += '<polyline fill="none" stroke="' + FPM_COR.res + '" stroke-width="2" points="' + pts.map(p => p[0] + ',' + p[1]).join(' ') + '"/>';
   pts.forEach(p => { s += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (p[2] === k ? 5 : 4) + '" fill="' + FPM_COR.res + '" stroke="#fff" stroke-width="2"/>'; });
-  const sp = pts.find(p => p[2] === k), sx = fpmMes(k), rv = sx.entrou - sx.saiu;
+  const sp = pts.find(p => p[2] === k), sc = fpmCiclo(k), rv = sc.sobra;
   if (sp){
-    const topo = Math.min(sp[1], y(sx.entrou), y(sx.saiu)), nearR = sp[0] > W - 50;
+    const topo = Math.min(sp[1], y(sc.res || 0), y(sc.saiu)), nearR = sp[0] > W - 50;
     s += '<text x="' + (nearR ? W - 2 : sp[0]) + '" y="' + (rv < 0 ? sp[1] + 18 : topo - 8) + '" text-anchor="' + (nearR ? 'end' : 'middle') + '" font-size="11.5" font-weight="700" fill="#14181B">' + esc(fpmK(rv)) + '</text>';
   }
   M.forEach((m, i) => { s += '<rect class="fpmHit" data-m="' + m + '" x="' + (pl + bw * i) + '" y="' + pt + '" width="' + bw + '" height="' + (ih + pb - 4) + '" fill="transparent" style="cursor:pointer"/>'; });
   s += '</svg><div class="fpmPq" style="margin:2px 0 0">* mês corrente, até hoje</div>';
   el.innerHTML = s;
   el.querySelectorAll('.fpmHit').forEach(r => {
-    const m = r.dataset.m, x = fpmMes(m);
-    r.addEventListener('mousemove', e => fpmTip(e, '<b>' + esc(fpmRot(m)) + '</b><div class="l"><span>Entrou</span><span>' + esc(BRL(x.entrou)) + '</span></div>'
-      + '<div class="l"><span>Saiu</span><span>' + esc(BRL(x.saiu)) + '</span></div><div class="l"><span>Resultado</span><span>' + esc(fpmBRL(x.entrou - x.saiu)) + '</span></div>'));
+    const m = r.dataset.m, x = fpmMes(m), c = fpmCiclo(m), pk = fpmSoma(m, -1);
+    r.addEventListener('mousemove', e => fpmTip(e, '<b>' + esc(fpmRot(m)) + '</b>'
+      + '<div class="l"><span>Reserva (entrou em ' + esc(FPM_NOMES[+pk.slice(5, 7) - 1]) + ')</span><span>' + (c.res === null ? '—' : esc(BRL(c.res))) + '</span></div>'
+      + '<div class="l"><span>Saiu</span><span>' + esc(BRL(x.saiu)) + '</span></div>'
+      + '<div class="l"><span>' + (c.sobra !== null && c.sobra < 0 ? 'Falta do ciclo' : 'Sobra do ciclo') + '</span><span>' + (c.sobra === null ? '—' : esc(fpmBRL(c.sobra))) + '</span></div>'));
     r.addEventListener('mouseleave', fpmTipSai);
     r.addEventListener('click', () => { fpmTipSai(); FINPM.mes = m; finpDesenhar(); });
   });
-  document.getElementById('fpmTab').innerHTML = '<table class="fpmTabela"><tr><th>Mês</th><th>Entrou</th><th>Saiu</th><th>Resultado</th></tr>'
-    + M.map(m => { const x = fpmMes(m), r = x.entrou - x.saiu; return '<tr class="' + (m === k ? 'sel' : '') + '"><td>' + esc(fpmRot(m)) + '</td><td>' + esc(BRL(x.entrou)) + '</td><td>' + esc(BRL(x.saiu)) + '</td><td class="' + (r < 0 ? 'fpmNeg' : '') + '">' + esc(fpmBRL(r)) + '</td></tr>'; }).join('') + '</table>';
+  document.getElementById('fpmTab').innerHTML = '<table class="fpmTabela"><tr><th>Mês</th><th>Reserva (entrou no mês anterior)</th><th>Saiu</th><th>Sobra do ciclo</th></tr>'
+    + M.map(m => { const c = fpmCiclo(m); return '<tr class="' + (m === k ? 'sel' : '') + '"><td>' + esc(fpmRot(m)) + '</td><td>' + (c.res === null ? '—' : esc(BRL(c.res))) + '</td><td>' + esc(BRL(c.saiu)) + '</td><td class="' + (c.sobra !== null && c.sobra < 0 ? 'fpmNeg' : '') + '">' + (c.sobra === null ? '—' : esc(fpmBRL(c.sobra))) + '</td></tr>'; }).join('') + '</table>';
 }
 
 function fpmBarra(nome, v, max, cor, n, med, cls){
@@ -21211,16 +21238,15 @@ function fpmReceber(){
 }
 
 function fpmPagar(){
-  const ab = FINPM.pm.abertos || [];
-  const P = ab.filter(a => a.t === 'p' && !a.provisao && fpmDias(a.d) <= 30).map(a => ({ ...a, v: Number(a.v) || 0 }));
+  const ab = FINPM.pm.abertos || [], k = FINPM.pm.mes_atual, fim = fpmFimMes(k), nk = fpmSoma(k, 1);
+  const P = ab.filter(a => a.t === 'p' && !a.provisao && a.d <= fim).map(a => ({ ...a, v: Number(a.v) || 0 }));
   const tp = P.reduce((s, a) => s + a.v, 0);
-  const rec30 = ab.filter(a => a.t === 'r' && fpmDias(a.d) >= 0 && fpmDias(a.d) <= 30).reduce((s, a) => s + (Number(a.v) || 0), 0);
-  const saldo = fpmSaldoOp(), fim = saldo + rec30 - tp, max = Math.max(1, saldo, tp, rec30);
-  return '<div class="painel fpmCard"><h3>A pagar nos próximos 30 dias <small class="fpmHoje">· posição de hoje</small></h3><p class="fpmPq">O que já está lançado para sair, contra o dinheiro em conta.</p>'
+  const saldo = fpmSaldoOp(), sobra = saldo - tp, max = Math.max(1, saldo, tp);
+  return '<div class="painel fpmCard"><h3>A pagar até o fim do mês <small class="fpmHoje">· posição de hoje</small></h3>'
+    + '<p class="fpmPq">O que já está lançado para sair neste mês, contra a verba que está nas contas. O que entra neste mês <b>não paga</b> estas contas: vai para a reserva de ' + esc(FPM_NOMES[+nk.slice(5, 7) - 1]) + '.</p>'
     + fpmBarra('Saldo nas contas hoje', saldo, max, FPM_COR.res, esc(fpmK(saldo)))
-    + fpmBarra('+ A receber em 30 dias', rec30, max, FPM_COR.entrou, '+' + esc(fpmK(rec30)))
-    + fpmBarra('− A pagar em 30 dias', tp, max, FPM_COR.saiu, '−' + esc(fpmK(tp)))
-    + '<div style="font-size:13px;margin-top:8px">Se tudo entrar e sair como lançado: <b class="' + (fim < 0 ? 'fpmNeg' : 'fpmPos') + '">' + esc(fpmBRL(fim)) + '</b> daqui a 30 dias.</div>'
+    + fpmBarra('− A pagar até o fim do mês', tp, max, FPM_COR.saiu, '−' + esc(fpmK(tp)))
+    + '<div style="font-size:13px;margin-top:8px">Se tudo sair como lançado, ' + (sobra < 0 ? 'faltam' : 'sobram') + ' <b class="' + (sobra < 0 ? 'fpmNeg' : 'fpmPos') + '">' + esc(BRL(Math.abs(sobra))) + '</b> da verba no fim do mês.</div>'
     + '<p class="fpmPq" style="margin:6px 0 0">Só conta o que já está lançado (sem a provisão mensal, que é reserva). Folha, pró-labore e cartão que ainda não viraram título não entram.'
     + (P.length ? ' Maiores: ' + P.slice().sort((a, b) => b.v - a.v).slice(0, 4).map(a => esc(a.q) + ' ' + esc(fpmK(a.v))).join(' · ') + '.' : '') + '</p></div>';
 }
@@ -21245,71 +21271,91 @@ function fpmIndicadores(k){
     + card('Concentração', fpmPct(conc), 'Os 2 maiores clientes (' + per + '): ' + (top[0] ? esc(top[0][0]) : '—') + (top[1] ? ' e ' + esc(top[1][0]) : '') + '. Perder um deles pesa no caixa.', conc > 0.4 ? 'fpmNeg' : '');
 }
 
-/** N · como o mês corrente deve fechar: já entrou + vai entrar (lançado) ×
- *  já saiu + vai sair (lançado) + o que costuma sair e não foi lançado
- *  (média dos 3 meses anteriores, por subcategoria, menos o que já saiu ou
- *  está lançado nela). A provisão mensal é reserva: não entra. */
-function fpmFechamento(k){
-  const x = fpmMes(k), ab = FINPM.pm.abertos || [], fim = fpmFimMes(k), ini = k + '-01';
-  const vaiE = ab.filter(a => a.t === 'r' && a.d >= ini && a.d <= fim).map(a => [a.q, Number(a.v) || 0]);
-  const vaiS = ab.filter(a => a.t === 'p' && !a.provisao && a.d <= fim);
-  const ja = {}; Object.entries(x.grupos || {}).forEach(([g, subs]) => Object.entries(subs).forEach(([s, v]) => { ja[g + '|' + s] = (ja[g + '|' + s] || 0) + (Number(v) || 0); }));
-  vaiS.forEach(a => { ja[a.g + '|' + a.s] = (ja[a.g + '|' + a.s] || 0) + (Number(a.v) || 0); });
+/** As contas do MÊS SEGUINTE a k: o que já está lançado com vencimento nele
+ *  + o que costuma sair e ainda não foi lançado (média dos 3 meses anteriores a
+ *  k, por subcategoria, menos o que já está lançado nela). A provisão mensal é
+ *  reserva e não entra. */
+function fpmContasDoProximo(k){
+  const ab = FINPM.pm.abertos || [], nk = fpmSoma(k, 1), nIni = nk + '-01', nFim = fpmFimMes(nk);
+  const vaiS = ab.filter(a => a.t === 'p' && !a.provisao && a.d >= nIni && a.d <= nFim);
+  const ja = {}; vaiS.forEach(a => { const c = a.g + '|' + a.s; ja[c] = (ja[c] || 0) + (Number(a.v) || 0); });
   const ant = fpmAnteriores(k, 3), med = {};
   ant.forEach(m => Object.entries(fpmMes(m).grupos || {}).forEach(([g, subs]) => Object.entries(subs).forEach(([s, v]) => { med[g + '|' + s] = (med[g + '|' + s] || 0) + (Number(v) || 0) / ant.length; })));
   const est = Object.entries(med).map(([c, v]) => [c.split('|')[1] || c.split('|')[0], v - (ja[c] || 0)]).filter(e => e[1] > 50).sort((a, b) => b[1] - a[1]);
-  const sE = vaiE.reduce((s, a) => s + a[1], 0), sS = vaiS.reduce((s, a) => s + (Number(a.v) || 0), 0), sEst = est.reduce((s, a) => s + a[1], 0);
-  const totE = x.entrou + sE, totS = x.saiu + sS + sEst, proj = totE - totS, max = Math.max(1, totE, totS);
-  const nm = FPM_NOMES[+k.slice(5, 7) - 1];
+  const sS = vaiS.reduce((s, a) => s + (Number(a.v) || 0), 0), sEst = est.reduce((s, a) => s + a[1], 0);
+  return { vaiS, est, sS, sEst, tot: sS + sEst };
+}
+
+/** N · reserva para o mês seguinte: o que entra no mês corrente (já entrou +
+ *  lançado para entrar) × as contas do mês seguinte. É a conta que o Vinícius
+ *  faz no dia 1º. Sobra vira colchão; falta vem das provisões. */
+function fpmReserva(k){
+  const x = fpmMes(k), ab = FINPM.pm.abertos || [], fim = fpmFimMes(k), ini = k + '-01';
+  const nk = fpmSoma(k, 1), nm = FPM_NOMES[+k.slice(5, 7) - 1], nn = FPM_NOMES[+nk.slice(5, 7) - 1];
+  const vaiE = ab.filter(a => a.t === 'r' && a.d >= ini && a.d <= fim).map(a => [a.q, Number(a.v) || 0]);
+  const C = fpmContasDoProximo(k);
+  const sE = vaiE.reduce((s, a) => s + a[1], 0);
+  const totE = x.entrou + sE, totS = C.tot, proj = totE - totS, max = Math.max(1, totE, totS);
   const seg = (v, cor, cls, rot) => '<span class="' + (cls || '') + '" data-tip="' + esc(rot + ': ' + BRL(v)) + '" style="width:' + (100 * v / max) + '%;background-color:' + cor + '"></span>';
   const lista = (L, n) => L.slice(0, n).map(a => esc(a[0]) + ' ' + esc(fpmK(a[1]))).join(' · ') + (L.length > n ? ' · +' + (L.length - n) : '');
   const grandes = vaiE.slice().sort((a, b) => b[1] - a[1]).slice(0, 3);
-  return '<div class="painel fpmCard"><h3>Como ' + esc(nm) + ' deve fechar</h3>'
-    + '<p class="fpmPq">O que já entrou e saiu, o que está lançado para os próximos dias e o que costuma sair e ainda não foi lançado (média dos 3 meses anteriores).</p>'
-    + '<div class="fpmFechL"><span>Entradas</span><div class="fpmSeg">' + seg(x.entrou, FPM_COR.entrou, '', 'Já entrou') + seg(sE, '#6FB08A', '', 'Vai entrar (lançado)') + '</div><span class="fpmN">' + esc(fpmK(totE)) + '</span></div>'
-    + '<div class="fpmFechL"><span>Saídas</span><div class="fpmSeg">' + seg(x.saiu, FPM_COR.saiu, '', 'Já saiu') + seg(sS, '#E6B877', '', 'Vai sair (lançado)') + seg(sEst, '#E6B877', 'fpmHach', 'Costuma sair e não foi lançado') + '</div><span class="fpmN">' + esc(fpmK(totS)) + '</span></div>'
-    + '<div class="fpmLeg" style="margin:0 0 4px"><span><i style="background:' + FPM_COR.entrou + '"></i>já entrou</span><span><i style="background:#6FB08A"></i>vai entrar</span><span><i style="background:' + FPM_COR.saiu + '"></i>já saiu</span><span><i style="background:#E6B877"></i>vai sair</span><span><i class="fpmHach" style="background-color:#E6B877"></i>estimado</span></div>'
+  return '<div class="painel fpmCard"><h3>Reserva para ' + esc(nn) + '</h3>'
+    + '<p class="fpmPq">O que entra em ' + esc(nm) + ' vai para a reserva e paga as contas de ' + esc(nn) + '. No dia 1º o Vinícius retira exatamente o necessário.</p>'
+    + '<div class="fpmFechL"><span>Entra em ' + esc(nm) + '</span><div class="fpmSeg">' + seg(x.entrou, FPM_COR.entrou, '', 'Já entrou') + seg(sE, '#6FB08A', '', 'Vai entrar (lançado)') + '</div><span class="fpmN">' + esc(fpmK(totE)) + '</span></div>'
+    + '<div class="fpmFechL"><span>Contas de ' + esc(nn) + '</span><div class="fpmSeg">' + seg(C.sS, '#E6B877', '', 'Já lançado para ' + nn) + seg(C.sEst, '#E6B877', 'fpmHach', 'Costuma sair e não foi lançado') + '</div><span class="fpmN">' + esc(fpmK(totS)) + '</span></div>'
+    + '<div class="fpmLeg" style="margin:0 0 4px"><span><i style="background:' + FPM_COR.entrou + '"></i>já entrou</span><span><i style="background:#6FB08A"></i>vai entrar (lançado)</span><span><i style="background:#E6B877"></i>contas já lançadas</span><span><i class="fpmHach" style="background-color:#E6B877"></i>costuma sair e não foi lançado</span></div>'
     + '<div class="fpmGrande ' + (proj < 0 ? 'fpmNeg' : 'fpmPos') + '">' + (proj < 0 ? 'Faltam ' + esc(BRL(-proj)) : 'Sobram ' + esc(BRL(proj))) + '</div>'
-    + '<div style="font-size:13px">' + (proj < 0 ? 'para ' + esc(nm) + ' fechar no zero, além do que já está lançado para entrar.' : 'se tudo o que está lançado entrar até o fim do mês.') + '</div>'
+    + '<div style="font-size:13px">' + (proj < 0
+        ? 'para pagar ' + esc(nn) + ', além do que já está lançado para entrar. A falta vem das provisões (13º, impostos, rescisões).'
+        : 'para o colchão, se tudo o que está lançado entrar até o fim de ' + esc(nm) + '.') + '</div>'
     + (vaiE.length ? '<p class="fpmPq" style="margin:6px 0 0"><b>Vai entrar:</b> ' + lista(vaiE, 5) + '.</p>' : '')
-    + (est.length ? '<p class="fpmPq" style="margin:4px 0 0"><b>Costuma sair e ainda não foi lançado:</b> ' + lista(est, 4) + '.</p>' : '')
-    + (grandes.length ? '<p class="fpmPq" style="margin:4px 0 0">Depende de os clientes pagarem em dia: só ' + grandes.map(a => esc(a[0])).join(', ') + ' somam ' + esc(fpmK(grandes.reduce((s, a) => s + a[1], 0))) + '. A provisão mensal (reserva) não entra como saída.</p>' : '')
+    + (C.est.length ? '<p class="fpmPq" style="margin:4px 0 0"><b>Costuma sair em ' + esc(nn) + ' e ainda não foi lançado:</b> ' + lista(C.est, 4) + '.</p>' : '')
+    + (grandes.length ? '<p class="fpmPq" style="margin:4px 0 0">Depende de os clientes pagarem em dia: só ' + [...new Set(grandes.map(a => esc(a[0])))].join(', ') + ' somam ' + esc(fpmK(grandes.reduce((s, a) => s + a[1], 0))) + '. A provisão mensal (reserva) não entra como saída.</p>' : '')
     + '</div>';
 }
 
-/** O · os próximos 3 meses já estão pagos? A receber com vencimento em cada
- *  mês × a saída média por mês. Em destaque, o primeiro mês ainda não coberto
- *  (é o que precisa ser faturado agora); os outros em cinza, sem alarme. */
+/** O · os próximos meses já estão pagos? Pelo ciclo da reserva: o que entra em
+ *  um mês paga as contas do mês SEGUINTE. A linha do mês corrente usa o que já
+ *  entrou + o lançado a receber; as outras, o a receber com vencimento no mês.
+ *  Em destaque, o primeiro mês ainda não coberto (é o que precisa ser faturado
+ *  agora); os outros em cinza, sem alarme. */
 function fpmProximos(k){
-  const ab = FINPM.pm.abertos || [], ant = fpmAnteriores(k, 3);
+  const ab = FINPM.pm.abertos || [], ant = fpmAnteriores(k, 3), x = fpmMes(k);
   const desp = ant.length ? ant.reduce((s, m) => s + fpmMes(m).saiu, 0) / ant.length : 0;
-  const ms = [1, 2, 3].map(n => fpmSoma(k, n));
-  const linhas = ms.map(m => {
+  const C = fpmContasDoProximo(k), needAtual = C.tot > 0 ? C.tot : desp;
+  const nome = m => FPM_NOMES[+m.slice(5, 7) - 1];
+  const cap = s => s.replace(/^./, c => c.toUpperCase());
+  const ms = [0, 1, 2].map(n => fpmSoma(k, n));
+  const linhas = ms.map((m, n) => {
     const L = ab.filter(a => a.t === 'r' && a.d.slice(0, 7) === m).map(a => [a.q, Number(a.v) || 0]);
-    const v = L.reduce((s, a) => s + a[1], 0);
-    return { m, L, v, p: desp ? v / desp : 0 };
+    const lanc = L.reduce((s, a) => s + a[1], 0);
+    const v = n === 0 ? x.entrou + lanc : lanc, need = n === 0 ? needAtual : desp;
+    return { m, n, L, v, need, p: need ? v / need : 0 };
   });
-  const foco = linhas.find(l => l.v < desp);
+  const foco = linhas.find(l => l.v < l.need);
   let h = '';
   linhas.forEach(l => {
-    const ok = l.v >= desp, f = l === foco;
-    h += '<div class="fpmProx' + (f ? ' foco' : '') + '"><div class="fpmProxCab"><b>' + esc(fpmRot(l.m).replace(/^./, c => c.toUpperCase())) + '</b>'
+    const ok = l.v >= l.need, f = l === foco, paga = nome(fpmSoma(l.m, 1));
+    h += '<div class="fpmProx' + (f ? ' foco' : '') + '"><div class="fpmProxCab"><b>' + esc(cap(nome(l.m))) + ' → paga ' + esc(paga) + '</b>'
       + '<span>' + (ok ? '✓ coberto' : fpmPct(l.p) + ' coberto') + '</span></div>'
-      + '<div class="fpmProg' + (f ? '' : ' cinza') + '" title="' + esc(BRL(l.v)) + ' de ' + esc(BRL(desp)) + '"><span style="width:' + Math.min(100, 100 * l.p) + '%"></span></div>';
-    if (f){
-      const nmAnt = FPM_NOMES[+fpmSoma(l.m, -1).slice(5, 7) - 1];
-      h += '<div class="fpmGrande fpmNeg" style="font-size:19px">Falta faturar ' + esc(BRL(desp - l.v)) + '</div>'
-        + '<div style="font-size:12.5px">com vencimento em ' + esc(FPM_NOMES[+l.m.slice(5, 7) - 1]) + '. Para cliente de 30 dias, a nota precisa sair até o fim de ' + esc(nmAnt) + '.</div>'
+      + '<div class="fpmProg' + (f ? '' : ' cinza') + '" title="' + esc(BRL(l.v)) + ' de ' + esc(BRL(l.need)) + '"><span style="width:' + Math.min(100, 100 * l.p) + '%"></span></div>';
+    if (f && l.n === 0){
+      h += '<div class="fpmGrande fpmNeg" style="font-size:19px">Faltam ' + esc(BRL(l.need - l.v)) + '</div>'
+        + '<div style="font-size:12.5px">entrar em ' + esc(nome(l.m)) + ' para cobrir ' + esc(paga) + ', além do que já está lançado a receber.</div>';
+    } else if (f){
+      const nmAnt = nome(fpmSoma(l.m, -1));
+      h += '<div class="fpmGrande fpmNeg" style="font-size:19px">Falta faturar ' + esc(BRL(l.need - l.v)) + '</div>'
+        + '<div style="font-size:12.5px">com vencimento em ' + esc(nome(l.m)) + ', para pagar ' + esc(paga) + '. Para cliente de 30 dias, a nota precisa sair até o fim de ' + esc(nmAnt) + '.</div>'
         + (l.L.length ? '<p class="fpmPq" style="margin:4px 0 0"><b>Já lançado:</b> ' + l.L.slice(0, 6).map(a => esc(a[0]) + ' ' + esc(fpmK(a[1]))).join(' · ') + (l.L.length > 6 ? ' · +' + (l.L.length - 6) : '') + '.</p>' : '');
     } else if (ok){
-      h += '<div class="fpmPq" style="margin:2px 0 0">Folga de ' + esc(BRL(l.v - desp)) + ' — dá para reforçar a reserva (13º, impostos, rescisões).</div>';
+      h += '<div class="fpmPq" style="margin:2px 0 0">' + (l.n === 0 ? esc(BRL(l.v)) + ' entrando em ' + esc(nome(l.m)) + '. ' : '') + 'Folga de ' + esc(BRL(l.v - l.need)) + ' — vira colchão.</div>';
     } else {
       h += '<div class="fpmPq" style="margin:2px 0 0">' + esc(BRL(l.v)) + ' já lançados. Normal estar baixo: o faturamento desse mês ainda vai acontecer.</div>';
     }
     h += '</div>';
   });
   return '<div class="painel fpmCard"><h3>Os próximos meses já estão pagos?</h3>'
-    + '<p class="fpmPq">O serviço de um mês vira dinheiro no seguinte. A receber com vencimento em cada mês × o que costuma sair por mês (' + esc(BRL(desp)) + ', média dos 3 meses anteriores).</p>'
+    + '<p class="fpmPq">O dinheiro que entra em um mês paga as contas do mês seguinte. Recebimentos de cada mês × o que sai no mês seguinte (' + esc(nome(ms[1])) + ': as contas lançadas e o que costuma sair, ' + esc(BRL(needAtual)) + '; os demais: ' + esc(BRL(desp)) + ', média dos 3 meses anteriores).</p>'
     + h + '<p class="fpmPq" style="margin:6px 0 0">Gerdau e Tansan pagam em 60 dias. Só conta o serviço já lançado como "a faturar" — por isso vale lançar cada serviço logo que é feito.</p></div>';
 }
 
