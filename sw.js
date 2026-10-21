@@ -29,7 +29,7 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H7-S71';
+const VERSAO = 'H7-S72';
 const CACHE  = 'tapflow-hub-' + VERSAO;
 
 const ESSENCIAIS = [
