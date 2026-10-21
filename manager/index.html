@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S66</title>
+<title>TapFlow Manager · S67</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1583,6 +1583,14 @@ button.mini{padding:6px 12px;font-weight:600}
 .fpmProjTab td:nth-child(7){white-space:normal;min-width:200px}
 .fpmProjTab td:nth-child(2),.fpmProjTab th:nth-child(2),.fpmProjTab td:nth-child(7),.fpmProjTab th:nth-child(7){text-align:left}
 .fpmProjLin .fpmNome{font-weight:600}
+.fpmChamada{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:12px 0 0;padding:10px 12px;border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:8px;font-size:13px;background:var(--surface-2)}
+.fcrTit{font-size:13.5px;font-weight:700;margin:4px 0 0}.fcrTit+.fcrFluxo{margin-top:8px}.fcrFluxo+.fcrTit{margin-top:16px}
+.fcrFluxo{display:grid;grid-template-columns:1fr 26px 1fr 26px 1fr;gap:8px;align-items:stretch}
+.fcrBox{background:var(--surface-2);border-radius:8px;padding:10px 12px;min-width:0}
+.fcrBox .r{font-size:11.5px;color:var(--ink-2);font-weight:600}.fcrBox .v{font-size:20px;font-weight:700;margin:2px 0;font-variant-numeric:tabular-nums;color:var(--ink)}.fcrBox .e{font-size:11.5px;color:var(--ink-3);line-height:1.35}
+.fcrBox.res{background:var(--ok-soft)}.fcrBox.res .v{color:var(--ok)}.fcrBox.res.neg{background:var(--crit-soft)}.fcrBox.res.neg .v{color:var(--crit)}
+.fcrSeta{display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-size:20px}
+@media (max-width:700px){.fcrFluxo{grid-template-columns:1fr;gap:4px}.fcrSeta{height:18px;transform:rotate(90deg)}}
 .lista{max-height:calc(100vh - 210px);overflow-y:auto;margin:-4px -6px;padding:4px 6px}
 .linhaCli{width:100%;text-align:left;background:var(--surface);border:1px solid var(--rule);
   border-radius:3px;padding:10px 12px;margin-bottom:6px;display:block}
@@ -2272,7 +2280,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S66';
+const APP_VERSION = 'S67';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -16145,7 +16153,7 @@ const NAV = [
   // as duas tabelas têm RLS force e cada função confere `tf_cc_autorizado()`.
   { id:'financeiro', rot:'FINANCEIRO', itens:[
     { v:'finp',  rot:'Painel',                ico:'grafico', fin:true },
-    { v:'fincr', rot:'Ciclo da reserva',      ico:'ciclo',   fin:true },   // S66 · TapFin
+    { v:'fincr', rot:'Ciclo da reserva',      ico:'ciclo',   fin:true },   // S66/S67 · TapFin
     { v:'finre', rot:'Contas a Receber',      ico:'moeda',   fin:true },
     { v:'finpg', rot:'Contas a Pagar',        ico:'moeda',   fin:true },
     { v:'fincar',rot:'Cartões',               ico:'cartao',  fin:true, cont:'nCar' },   // S60
@@ -20954,10 +20962,12 @@ async function pintarPainelFin(){
   board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Painel Financeiro</h2>'
     + '<p>O que precisa de atenção agora, o mês até aqui, e o que vem pela frente.</p></div>'
     + '<div style="margin-bottom:14px"><button class="btn pri" type="button" id="finpNovaPagar">+ Conta a pagar</button> '
-    + '<button class="btn pri" type="button" id="finpNovaReceber">+ Conta a receber</button></div>'
+    + '<button class="btn pri" type="button" id="finpNovaReceber">+ Conta a receber</button> '
+    + '<button class="btn" type="button" id="finpIrCiclo" title="O que entra num mês paga as contas do mês seguinte">Ciclo da reserva →</button></div>'
     + '<div id="finpCorpo"><p class="nota">Carregando…</p></div></div>';
   document.getElementById('finpNovaPagar').addEventListener('click', () => modalTituloPagar());
   document.getElementById('finpNovaReceber').addEventListener('click', () => modalTituloReceber());
+  document.getElementById('finpIrCiclo').addEventListener('click', () => irPara('fincr'));   // S67
   await finpCarregar();
 }
 async function finpCarregar(){
@@ -21321,11 +21331,12 @@ function fpmFechamento(k){
     + '</div>';
 }
 
-/** S66 · o atalho para a tela do ciclo, com a resposta dela em uma linha. */
+/** S67 · a chamada para a tela do ciclo: a outra leitura do mesmo mês, com botão. */
 function fpmLinkCiclo(k){
-  const r = fcrConta(k);
-  return '<p style="margin:10px 0 0"><button type="button" class="fpmLk" data-ir="fincr">Ver pelo ciclo da reserva: '
-    + (r.sobra < 0 ? 'faltam ' + esc(fpmK(-r.sobra)) : 'sobram ' + esc(fpmK(r.sobra))) + ' para ' + esc(r.nn) + ' →</button></p>';
+  const r = fcrConta(k), nm = FPM_NOMES[+k.slice(5, 7) - 1];
+  return '<div class="fpmChamada"><div><b>Pelo ciclo da reserva:</b> o que entra em ' + esc(nm) + ' paga ' + esc(r.nn) + ' — '
+    + '<b class="' + (r.sobra < 0 ? 'fpmNeg' : 'fpmPos') + '">' + (r.sobra < 0 ? 'faltam ' + esc(BRL(-r.sobra)) : 'sobram ' + esc(BRL(r.sobra))) + '</b>.</div>'
+    + '<button type="button" class="btn" data-ir="fincr">Abrir o ciclo →</button></div>';
 }
 
 /** O · os próximos 3 meses já estão pagos? A receber com vencimento em cada
@@ -21430,8 +21441,10 @@ async function pintarCicloReserva(){
   visao = 'fincr';
   const board = document.getElementById('board');
   board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Ciclo da reserva</h2>'
-    + '<p>O dinheiro que entra num mês fica na reserva (Nubank) e paga as contas do mês seguinte. Sobra vira colchão; falta vem das provisões.</p></div>'
+    + '<p>O que entra num mês fica na reserva (Nubank) e paga as contas do mês seguinte. Sobra vira colchão; falta vem das provisões.</p></div>'
+    + '<div style="margin-bottom:14px"><button class="btn" type="button" data-ir="finp">← Painel Financeiro</button></div>'
     + '<div id="finpCorpo"><p class="nota">Carregando…</p></div></div>';
+  board.querySelector('[data-ir]').addEventListener('click', () => irPara('finp'));
   await finpCarregar();
 }
 
@@ -21446,21 +21459,93 @@ function fcrDesenhar(){
     +   '<b aria-live="polite">' + esc(fpmRot(k).replace(/^./, c => c.toUpperCase())) + (atual ? '<small>até ' + esc(dataBR(FINPM.pm.hoje).slice(0, 5)) + '</small>' : '') + '</b>'
     +   '<button type="button" class="btn" id="fpmProx" aria-label="Próximo mês"' + (i >= FINPM.meses.length - 1 ? ' disabled' : '') + '>▶</button>'
     + '</div>'
-    + (atual ? '<p class="fpmAviso">O mês ainda está correndo: o que entra neste mês vai para a reserva do mês seguinte, e as contas deste mês saem da reserva do mês anterior — por isso a sobra do ciclo é parcial até o fim do mês.</p>' : '')
-    + '<div class="fpmG4">' + fcrTiles(k) + '</div>'
-    + (atual ? '<div class="fpmG2">' + fpmReserva(k) + fcrProximos(k) + '</div>'
+    + fcrFluxo(k)
+    + (atual ? '<div class="fpmG2">' + fcrEntra(k) + fcrContas(k) + '</div>' + fcrProximos(k)
         + '<div class="painel fpmCard"><h3>Projeção · OS em execução</h3>'
-        + '<p class="fpmPq">OS abertas com proposta aprovada. A projeção é o aprovado menos o que já está no Contas a Receber com o número da OS; o mês é o prazo da OS (ou a tarefa marcada, ou a meta do tipo) mais o prazo de recebimento do cliente. É estimativa: por isso aparece hachurada.</p>'
+        + '<p class="fpmPq">OS abertas com proposta aprovada, ainda não lançadas no Contas a Receber. Projeção = aprovado − o que já está lançado com o número da OS. O mês é o prazo da OS (ou a tarefa marcada, ou a meta do tipo) + o prazo de recebimento do cliente. É estimativa, por isso aparece hachurada e separada do lançado.</p>'
         + fpmProjTabela() + fpmProjAvisos() + '</div>' : '')
     + '<div class="painel fpmCard"><h3>Reserva × saiu, mês a mês</h3><p class="fpmPq">A reserva do mês anterior (o que entrou) cobriu as contas do mês? Clique numa coluna para ir ao mês.</p>'
     +   '<div id="fpmGraf"></div>'
     +   '<div class="fpmLeg"><span><i style="background:' + FPM_COR.entrou + '"></i>Reserva (entrou no mês anterior)</span><span><i style="background:' + FPM_COR.saiu + '"></i>Saiu</span><span><i class="ln" style="background:' + FPM_COR.res + '"></i>Sobra do ciclo (reserva − saiu)</span>'
     +   '<button class="fpmLk" type="button" id="fpmVerTab">ver tabela</button></div><div id="fpmTab" hidden></div></div>'
     + '<div class="fpmNota"><b>Colchão no Nubank:</b> a ligar — depende de registrar no Contas Bancárias a entrada do dinheiro na reserva e a retirada do dia 1º. '
-    +   'Tudo pelo <b>caixa</b> (data em que o dinheiro entrou ou saiu). Março a setembro/2026 vêm do histórico do SIGE. '
-    +   '<button class="fpmLk" type="button" data-ir="finp">Voltar ao Painel Financeiro</button></div>';
+    +   'Tudo pelo <b>caixa</b> (data em que o dinheiro entrou ou saiu). Março a setembro/2026 vêm do histórico do SIGE.</div>';
   fcrGrafico(k);
   fpmLigar(el, i);
+}
+
+/** O coração da tela: dois ciclos, cada um em três caixas ligadas por setas.
+ *  1) o ciclo DESTE mês: a reserva que veio do mês anterior × as contas deste mês;
+ *  2) o PRÓXIMO: o que entra neste mês × as contas do mês seguinte.
+ *  Num mês fechado os dois são números reais; no mês corrente o segundo é a
+ *  conta do dia 1º (lançado + o que costuma sair). */
+function fcrFluxo(k){
+  const atual = k === FINPM.pm.mes_atual, nome = m => FPM_NOMES[+m.slice(5, 7) - 1];
+  const pk = fpmSoma(k, -1), nk = fpmSoma(k, 1), x = fpmMes(k), c = fpmCiclo(k);
+  const r = fcrConta(k), temProx = FINPM.meses.includes(nk);
+  const box = (rot, val, exp, cls) => '<div class="fcrBox ' + (cls || '') + '"><div class="r">' + rot + '</div><div class="v">' + val + '</div><div class="e">' + exp + '</div></div>';
+  const seta = '<div class="fcrSeta" aria-hidden="true">→</div>';
+  const res = (v, parcial) => v === null ? box('Sobra do ciclo', '—', 'sem o mês anterior no painel')
+    : v < 0 ? box('Falta', esc(BRL(-v)), 'vem das provisões (13º, impostos, rescisões)' + (parcial ? ' · parcial até o fim do mês' : ''), 'res neg')
+            : box('Sobra', '+' + esc(BRL(v)), 'vira colchão' + (parcial ? ' · parcial até o fim do mês' : ''), 'res');
+  // ciclo 1
+  const l1 = '<div class="fcrTit">Ciclo de ' + esc(nome(k)) + ': a reserva de ' + esc(nome(pk)) + ' pagou ' + esc(nome(k)) + '?</div><div class="fcrFluxo">'
+    + box('Reserva de ' + esc(nome(pk)), c.res === null ? '—' : esc(BRL(c.res)), 'o que entrou em ' + esc(nome(pk)))
+    + seta + box('Contas de ' + esc(nome(k)), esc(BRL(x.saiu)), atual ? 'pagas até hoje' : 'pagas no mês')
+    + seta + res(c.sobra, atual) + '</div>';
+  // ciclo 2
+  let entra, entraExp, contas, contasExp, sobra2, parcial2 = false;
+  if (temProx){
+    entra = x.entrou; entraExp = 'o que entrou em ' + esc(nome(k));
+    contas = fpmMes(nk).saiu; contasExp = 'pagas em ' + esc(nome(nk)) + (nk === FINPM.pm.mes_atual ? ' até hoje' : '');
+    sobra2 = entra - contas; parcial2 = nk === FINPM.pm.mes_atual;
+  } else {
+    entra = r.totE; entraExp = 'já entrou ' + esc(fpmK(x.entrou)) + ' · lançado para entrar ' + esc(fpmK(r.sE)) + (r.pj > 0 ? ' · projeção das OS ' + esc(fpmK(r.pj)) + ' (fora da conta)' : '');
+    contas = r.totS; contasExp = 'lançadas ' + esc(fpmK(r.C.sS)) + ' · costuma sair e não foi lançado ' + esc(fpmK(r.C.sEst));
+    sobra2 = r.sobra; parcial2 = true;
+  }
+  const l2 = '<div class="fcrTit">Próximo ciclo: o que entra em ' + esc(nome(k)) + ' paga ' + esc(nome(nk)) + '</div><div class="fcrFluxo">'
+    + box('Entra em ' + esc(nome(k)), esc(BRL(entra)), entraExp)
+    + seta + box('Contas de ' + esc(nome(nk)), esc(BRL(contas)), contasExp)
+    + seta + res(sobra2, parcial2) + '</div>'
+    + (!temProx && r.pj > 0 ? '<p class="fpmPq" style="margin:4px 0 0">Se as OS em execução com previsão para ' + esc(nome(k)) + ' entrarem (' + esc(fpmK(r.pj)) + '): '
+        + (r.sobra + r.pj < 0 ? 'faltam ' + esc(BRL(-(r.sobra + r.pj))) : 'sobram ' + esc(BRL(r.sobra + r.pj))) + '.</p>' : '');
+  return '<div class="painel fpmCard">' + l1 + l2
+    + (atual ? '<p class="fpmPq" style="margin:10px 0 0">No dia 1º de ' + esc(nome(nk)) + ' o Vinícius retira da reserva exatamente o valor das contas de ' + esc(nome(nk)) + '. O que sobrar fica como colchão; o que faltar vem das provisões.</p>' : '')
+    + '</div>';
+}
+
+/** Detalhe do "entra em <mês>": quem já pagou, quem está lançado, as OS. */
+function fcrEntra(k){
+  const r = fcrConta(k), x = r.x, nm = FPM_NOMES[+k.slice(5, 7) - 1];
+  const lista = (L, n) => L.slice(0, n).map(a => esc(a[0]) + ' ' + esc(fpmK(a[1]))).join(' · ') + (L.length > n ? ' · +' + (L.length - n) : '');
+  const ja = (x.clientes || []).map(c => [c[0], Number(c[1]) || 0]);
+  const grandes = r.vaiE.slice().sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const max = Math.max(1, x.entrou, r.sE, r.pj);
+  return '<div class="painel fpmCard"><h3>O que entra em ' + esc(nm) + '</h3><p class="fpmPq">Vira a reserva do mês seguinte.</p>'
+    + fpmBarra('Já entrou', x.entrou, max, FPM_COR.entrou, esc(fpmK(x.entrou)))
+    + fpmBarra('Lançado para entrar', r.sE, max, FPM_PROJ_COR, esc(fpmK(r.sE)) + '<small>' + finPlural(r.vaiE.length, 'título', 'títulos') + '</small>')
+    + (r.pj > 0 ? '<div class="fpmLin"><span class="fpmNome">Projeção das OS</span><span class="fpmTrilho"><span class="b fpmHach" style="width:' + (100 * r.pj / max) + '%;background-color:' + FPM_PROJ_COR + '"></span></span><span class="fpmN">' + esc(fpmK(r.pj)) + '<small>' + finPlural(r.PJ.length, 'OS', 'OS') + '</small></span></div>' : '')
+    + (ja.length ? '<p class="fpmPq" style="margin:8px 0 0"><b>Já pagaram:</b> ' + lista(ja, 5) + '.</p>' : '')
+    + (r.vaiE.length ? '<p class="fpmPq" style="margin:4px 0 0"><b>Vai entrar:</b> ' + lista(r.vaiE, 5) + '.</p>' : '')
+    + (r.PJ.length ? '<p class="fpmPq" style="margin:4px 0 0"><b>Projeção:</b> ' + r.PJ.map(o => esc(o.numero) + ' ' + esc(o.cliente || '') + ' ' + esc(fpmK(o.v))).join(' · ') + '.</p>' : '')
+    + (grandes.length ? '<p class="fpmPq" style="margin:4px 0 0">Depende de os clientes pagarem em dia: só ' + [...new Set(grandes.map(a => esc(a[0])))].join(', ') + ' somam ' + esc(fpmK(fpmTot(grandes))) + '.</p>' : '')
+    + '</div>';
+}
+
+/** Detalhe das "contas de <mês seguinte>": o lançado e o que costuma sair. */
+function fcrContas(k){
+  const r = fcrConta(k), C = r.C, nn = r.nn;
+  const lanc = {}; C.vaiS.forEach(a => { lanc[a.q] = (lanc[a.q] || 0) + (Number(a.v) || 0); });
+  const L = Object.entries(lanc).sort((a, b) => b[1] - a[1]);
+  const lista = (X, n) => X.slice(0, n).map(a => esc(a[0]) + ' ' + esc(fpmK(a[1]))).join(' · ') + (X.length > n ? ' · +' + (X.length - n) : '');
+  const max = Math.max(1, C.sS, C.sEst);
+  return '<div class="painel fpmCard"><h3>As contas de ' + esc(nn) + '</h3><p class="fpmPq">O que a reserva precisa cobrir no dia 1º. A provisão mensal não entra: é reserva, não despesa.</p>'
+    + fpmBarra('Já lançadas', C.sS, max, '#E6B877', esc(fpmK(C.sS)) + '<small>' + finPlural(C.vaiS.length, 'título', 'títulos') + '</small>')
+    + '<div class="fpmLin"><span class="fpmNome" title="Costuma sair e ainda não foi lançado">Costuma sair (não lançado)</span><span class="fpmTrilho"><span class="b fpmHach" style="width:' + (100 * C.sEst / max) + '%;background-color:#E6B877"></span></span><span class="fpmN">' + esc(fpmK(C.sEst)) + '<small>média de 3 meses</small></span></div>'
+    + (L.length ? '<p class="fpmPq" style="margin:8px 0 0"><b>Lançadas:</b> ' + lista(L, 5) + '.</p>' : '')
+    + (C.est.length ? '<p class="fpmPq" style="margin:4px 0 0"><b>Costuma sair:</b> ' + lista(C.est, 5) + '.</p>' : '')
+    + '</div>';
 }
 
 /** O ciclo de um mês: a reserva (o que entrou no mês anterior) × o que saiu neste.
@@ -21470,22 +21555,6 @@ function fpmCiclo(m){
   const tem = FINPM.meses.includes(pk);
   const res = tem ? fpmMes(pk).entrou : null;
   return { res, saiu: x.saiu, sobra: tem ? res - x.saiu : null };
-}
-
-function fcrTiles(k){
-  const x = fpmMes(k), atual = k === FINPM.pm.mes_atual, c = fpmCiclo(k);
-  const nomeDe = m => FPM_NOMES[+m.slice(5, 7) - 1];
-  const pk = fpmSoma(k, -1), nk = fpmSoma(k, 1);
-  const t = (cor, rot, val, cls, extra) => '<div class="painel fpmTile"><div class="fpmRot">' + (cor ? '<span class="fpmDot" style="background:' + cor + '"></span>' : '') + rot + '</div>'
-    + '<div class="fpmVal ' + (cls || '') + '">' + val + '</div><span class="fpmCmp">' + extra + '</span></div>';
-  const falta = c.sobra !== null && c.sobra < 0;
-  return t(FPM_COR.entrou, 'Reserva usada em ' + esc(nomeDe(k)), c.res === null ? '—' : esc(BRL(c.res)), '',
-          c.res === null ? 'sem o mês anterior no painel' : 'o que entrou em ' + esc(nomeDe(pk)))
-    + t(FPM_COR.saiu, 'Saiu em ' + esc(nomeDe(k)), esc(BRL(x.saiu)), '', atual ? 'até hoje' : 'contas pagas no mês')
-    + t(FPM_COR.res, falta ? 'Falta do ciclo' : 'Sobra do ciclo', c.sobra === null ? '—' : esc(fpmBRL(c.sobra)), c.sobra === null ? '' : (falta ? 'fpmNeg' : 'fpmPos'),
-          c.sobra === null ? 'sem o mês anterior para formar o ciclo'
-            : 'reserva − saiu. ' + (falta ? 'A falta vem das provisões.' : 'A sobra vira colchão.') + (atual ? ' Parcial até o fim do mês.' : ''))
-    + t('', 'Entrou em ' + esc(nomeDe(k)), esc(BRL(x.entrou)), '', 'vira a <b>reserva de ' + esc(nomeDe(nk)) + '</b>' + (atual ? ' (até hoje)' : ''));
 }
 
 /** As contas do MÊS SEGUINTE a k: o que já está lançado com vencimento nele
@@ -21513,49 +21582,19 @@ function fcrConta(k){
   return { x, vaiE, PJ, C, sE, pj, totE, totS: C.tot, sobra: totE - C.tot, nn: FPM_NOMES[+fpmSoma(k, 1).slice(5, 7) - 1] };
 }
 
-/** N · reserva para o mês seguinte. Sobra vira colchão; falta vem das provisões. */
-function fpmReserva(k){
-  const r = fcrConta(k), x = r.x, C = r.C;
-  const nm = FPM_NOMES[+k.slice(5, 7) - 1], nn = r.nn;
-  const max = Math.max(1, r.totE + r.pj, r.totS);
-  const seg = (v, cor, cls, rot) => v > 0 ? '<span class="' + (cls || '') + '" data-tip="' + esc(rot + ': ' + BRL(v)) + '" style="width:' + (100 * v / max) + '%;background-color:' + cor + '"></span>' : '';
-  const lista = (L, n) => L.slice(0, n).map(a => esc(a[0]) + ' ' + esc(fpmK(a[1]))).join(' · ') + (L.length > n ? ' · +' + (L.length - n) : '');
-  const grandes = r.vaiE.slice().sort((a, b) => b[1] - a[1]).slice(0, 3);
-  const comProj = r.sobra + r.pj;
-  return '<div class="painel fpmCard"><h3>Reserva para ' + esc(nn) + '</h3>'
-    + '<p class="fpmPq">O que entra em ' + esc(nm) + ' vai para a reserva e paga as contas de ' + esc(nn) + '. No dia 1º o Vinícius retira exatamente o necessário.</p>'
-    + '<div class="fpmFechL larga"><span>Entra em ' + esc(nm) + '</span><div class="fpmSeg">' + seg(x.entrou, FPM_COR.entrou, '', 'Já entrou') + seg(r.sE, FPM_PROJ_COR, '', 'Vai entrar (lançado)') + seg(r.pj, FPM_PROJ_COR, 'fpmHach', 'Projeção das OS') + '</div><span class="fpmN">' + esc(fpmK(r.totE)) + '</span></div>'
-    + '<div class="fpmFechL larga"><span>Contas de ' + esc(nn) + '</span><div class="fpmSeg">' + seg(C.sS, '#E6B877', '', 'Já lançado para ' + nn) + seg(C.sEst, '#E6B877', 'fpmHach', 'Costuma sair e não foi lançado') + '</div><span class="fpmN">' + esc(fpmK(r.totS)) + '</span></div>'
-    + '<div class="fpmLeg" style="margin:0 0 4px"><span><i style="background:' + FPM_COR.entrou + '"></i>já entrou</span><span><i style="background:' + FPM_PROJ_COR + '"></i>vai entrar (lançado)</span>'
-    +   (r.pj > 0 ? '<span><i class="fpmHach" style="background-color:' + FPM_PROJ_COR + '"></i>projeção · OS</span>' : '')
-    +   '<span><i style="background:#E6B877"></i>contas já lançadas</span><span><i class="fpmHach" style="background-color:#E6B877"></i>costuma sair e não foi lançado</span></div>'
-    + '<div class="fpmGrande ' + (r.sobra < 0 ? 'fpmNeg' : 'fpmPos') + '">' + (r.sobra < 0 ? 'Faltam ' + esc(BRL(-r.sobra)) : 'Sobram ' + esc(BRL(r.sobra))) + '</div>'
-    + '<div style="font-size:13px">' + (r.sobra < 0
-        ? 'para pagar ' + esc(nn) + ', além do que já está lançado para entrar. A falta vem das provisões (13º, impostos, rescisões).'
-        : 'para o colchão, se tudo o que está lançado entrar até o fim de ' + esc(nm) + '.') + '</div>'
-    + (r.pj > 0 ? '<p class="fpmPq" style="margin:6px 0 0">Com a projeção das OS que devem receber ainda em ' + esc(nm) + ' (' + esc(fpmK(r.pj)) + '): '
-        + (comProj < 0 ? 'faltam ' + esc(BRL(-comProj)) : 'sobram ' + esc(BRL(comProj))) + '.</p>' : '')
-    + (r.vaiE.length ? '<p class="fpmPq" style="margin:6px 0 0"><b>Vai entrar:</b> ' + lista(r.vaiE, 5) + '.</p>' : '')
-    + (C.est.length ? '<p class="fpmPq" style="margin:4px 0 0"><b>Costuma sair em ' + esc(nn) + ' e ainda não foi lançado:</b> ' + lista(C.est, 4) + '.</p>' : '')
-    + (grandes.length ? '<p class="fpmPq" style="margin:4px 0 0">Depende de os clientes pagarem em dia: só ' + [...new Set(grandes.map(a => esc(a[0])))].join(', ') + ' somam ' + esc(fpmK(fpmTot(grandes))) + '. A provisão mensal (reserva) não entra como saída.</p>' : '')
-    + '</div>';
-}
-
 /** O pelo ciclo: o que entra em cada mês paga o mês SEGUINTE. Mês corrente =
  *  já entrou + lançado a receber; os outros, o a receber com vencimento no mês.
  *  A projeção das OS vai por cima, hachurada. */
 function fcrProximos(k){
-  const ab = FINPM.pm.abertos || [], ant = fpmAnteriores(k, 3), x = fpmMes(k);
+  const ab = FINPM.pm.abertos || [], ant = fpmAnteriores(k, 3);
   const desp = ant.length ? ant.reduce((s, m) => s + fpmMes(m).saiu, 0) / ant.length : 0;
-  const C = fpmContasDoProximo(k), needAtual = C.tot > 0 ? C.tot : desp;
   const nome = m => FPM_NOMES[+m.slice(5, 7) - 1];
   const cap = s => s.replace(/^./, c => c.toUpperCase());
-  const ms = [0, 1, 2].map(n => fpmSoma(k, n));
+  const ms = [1, 2, 3].map(n => fpmSoma(k, n));
   const linhas = ms.map((m, n) => {
     const L = ab.filter(a => a.t === 'r' && a.d.slice(0, 7) === m).map(a => [a.q, Number(a.v) || 0]);
-    const lanc = fpmTot(L), PJ = fpmProjMes(m), pj = fpmTot(PJ);
-    const v = n === 0 ? x.entrou + lanc : lanc, need = n === 0 ? needAtual : desp;
-    return { m, n, L, PJ, v, pj, need, tot: v + pj };
+    const v = fpmTot(L), PJ = fpmProjMes(m), pj = fpmTot(PJ);
+    return { m, n: n + 1, L, PJ, v, pj, need: desp, tot: v + pj };
   });
   const foco = linhas.find(l => l.tot < l.need);
   let h = '';
@@ -21570,22 +21609,20 @@ function fcrProximos(k){
       +   (pp > 0 ? '<span class="fpmHach" style="width:' + pp + '%;background-color:' + (f ? FPM_PROJ_COR : '#C9D0D6') + '"></span>' : '') + '</div>';
     if (f){
       const falta = l.need - l.tot;
-      h += '<div class="fpmGrande fpmNeg" style="font-size:19px">' + (l.n === 0 ? 'Faltam ' : 'Falta faturar ') + esc(BRL(falta)) + '</div>'
-        + '<div style="font-size:12.5px">' + (l.n === 0
-            ? 'entrar em ' + esc(nome(l.m)) + ' para cobrir ' + esc(paga) + ', além do que já está lançado a receber.'
-            : 'com vencimento em ' + esc(nome(l.m)) + ', para pagar ' + esc(paga) + (l.pj > 0 ? ', já contando as OS em execução (sem elas, faltariam ' + esc(BRL(l.need - l.v)) + ')' : '')
-              + '. Para cliente de 30 dias, a nota precisa sair até o fim de ' + esc(nome(fpmSoma(l.m, -1))) + '.') + '</div>'
+      h += '<div class="fpmGrande fpmNeg" style="font-size:19px">Falta faturar ' + esc(BRL(falta)) + '</div>'
+        + '<div style="font-size:12.5px">com vencimento em ' + esc(nome(l.m)) + ', para pagar ' + esc(paga) + (l.pj > 0 ? ', já contando as OS em execução (sem elas, faltariam ' + esc(BRL(l.need - l.v)) + ')' : '')
+              + '. Para cliente de 30 dias, a nota precisa sair até o fim de ' + esc(nome(fpmSoma(l.m, -1))) + '.</div>'
         + (l.L.length ? '<p class="fpmPq" style="margin:4px 0 0"><b>Já lançado:</b> ' + l.L.slice(0, 6).map(a => esc(a[0]) + ' ' + esc(fpmK(a[1]))).join(' · ') + (l.L.length > 6 ? ' · +' + (l.L.length - 6) : '') + '.</p>' : '')
         + (l.PJ.length ? '<p class="fpmPq" style="margin:2px 0 0"><b>Projeção:</b> ' + l.PJ.slice(0, 4).map(o => esc(o.numero) + ' ' + esc(o.cliente || '') + ' ' + esc(fpmK(o.v))).join(' · ') + (l.PJ.length > 4 ? ' · +' + (l.PJ.length - 4) : '') + '.</p>' : '');
     } else if (ok){
-      h += '<div class="fpmPq" style="margin:2px 0 0">' + (l.n === 0 ? esc(BRL(l.v)) + ' entrando em ' + esc(nome(l.m)) + '. ' : '') + 'Folga de ' + esc(BRL(l.tot - l.need)) + ' — vira colchão.</div>';
+      h += '<div class="fpmPq" style="margin:2px 0 0">Folga de ' + esc(BRL(l.tot - l.need)) + ' — vira colchão.</div>';
     } else {
       h += '<div class="fpmPq" style="margin:2px 0 0">' + esc(BRL(l.v)) + ' já lançados' + (l.pj > 0 ? ' + ' + esc(BRL(l.pj)) + ' de projeção (' + finPlural(l.PJ.length, 'OS', 'OS') + ')' : '') + '. Normal estar baixo: o faturamento desse mês ainda vai acontecer.</div>';
     }
     h += '</div>';
   });
-  return '<div class="painel fpmCard"><h3>Os próximos ciclos já estão pagos?</h3>'
-    + '<p class="fpmPq">O que entra em cada mês paga as contas do mês seguinte (' + esc(nome(ms[1])) + ': as contas lançadas e o que costuma sair, ' + esc(BRL(needAtual)) + '; os demais: ' + esc(BRL(desp)) + ', média dos 3 meses anteriores). A parte hachurada é a projeção das OS em execução.</p>'
+  return '<div class="painel fpmCard"><h3>E os ciclos seguintes?</h3>'
+    + '<p class="fpmPq">O que entra em cada mês paga as contas do mês seguinte. Como essas contas ainda não existem, a régua é o que costuma sair por mês (' + esc(BRL(desp)) + ', média dos 3 meses anteriores). A parte hachurada é a projeção das OS em execução.</p>'
     + h + '<p class="fpmPq" style="margin:6px 0 0">Só conta o serviço já lançado no Contas a Receber e as OS com proposta aprovada — por isso vale lançar cada serviço logo que é feito.</p></div>';
 }
 
