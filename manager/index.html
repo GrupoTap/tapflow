@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S69</title>
+<title>TapFlow Manager · S70</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2289,7 +2289,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S69';
+const APP_VERSION = 'S70';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -20985,10 +20985,12 @@ async function finpCarregar(){
   let proj;
   // S66 · a projeção não pode derrubar o painel: sem o SQL 500, a tela abre como antes e avisa.
   // S69 · + as despesas futuras (recorrentes e outras), que só a tela Projeções soma
-  let desp;
-  try{ [d, pm, proj, desp] = await Promise.all([rpc('tf_fin_painel', {}), rpc('tf_fin_painel_mensal', {}),
+  // S70 · + o ciclo pelo saldo real do dia 1º e o plano das provisões (SQL 503)
+  let desp, ciclo;
+  try{ [d, pm, proj, desp, ciclo] = await Promise.all([rpc('tf_fin_painel', {}), rpc('tf_fin_painel_mensal', {}),
                                           rpc('tf_fin_projecao_os', {}).catch(e => ({ erro: e.message })),
-                                          rpc('tf_fin_projecao_despesas', {}).catch(e => ({ erro: e.message }))]); }
+                                          rpc('tf_fin_projecao_despesas', {}).catch(e => ({ erro: e.message })),
+                                          rpc('tf_fin_ciclo', {}).catch(e => ({ erro: e.message }))]); }
   catch(e){
     el.innerHTML = '<div class="vazio2"><b>Não consegui abrir o painel</b><p></p>'
       + '<button class="btn" type="button" id="finpDeNovo">Tentar de novo</button></div>';
@@ -20996,7 +20998,7 @@ async function finpCarregar(){
     document.getElementById('finpDeNovo').addEventListener('click', finpCarregar);
     return;
   }
-  FINPM.d = d; FINPM.pm = pm; FINPM.proj = proj; FINPM.desp = desp;
+  FINPM.d = d; FINPM.pm = pm; FINPM.proj = proj; FINPM.desp = desp; FINPM.ciclo = ciclo;
   FINPM.meses = fpmMeses(pm);
   if (!FINPM.mes || !FINPM.meses.includes(FINPM.mes)) FINPM.mes = pm.mes_atual;
   fpmRedesenhar();
@@ -21007,7 +21009,7 @@ async function finpCarregar(){
 // ◀ ▶ muda os blocos A a M; "Precisa de ação", N e O são do mês corrente.
 // Prévia aprovada pelo Bruno em 16/10 (`_em_preparo/S59/painel_financeiro_previa.html`).
 // S66 · `proj` = tf_fin_projecao_os (ou {erro}); `verProj` = a tabela das OS aberta no A receber.
-const FINPM = { d: null, pm: null, meses: [], mes: null, abertos: new Set(), proj: null, verProj: false, desp: null, pjMes: null };
+const FINPM = { d: null, pm: null, meses: [], mes: null, abertos: new Set(), proj: null, verProj: false, desp: null, pjMes: null, ciclo: null };
 const FPM_FOLHA = ['Pro Labore', 'FGTS', 'GPS', 'Previdência', 'Vale Refeição', 'Plano de Saúde'];
 const FPM_COR = { entrou: '#1E7A42', saiu: '#D08A2E', res: '#1B6FA9' };
 const FPM_NOMES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
@@ -21092,7 +21094,8 @@ function fpmLigar(el, i){
   const go = j => { if (j >= 0 && j < FINPM.meses.length){ FINPM.mes = FINPM.meses[j]; fpmRedesenhar(); } };
   document.getElementById('fpmAnt').addEventListener('click', () => go(i - 1));
   document.getElementById('fpmProx').addEventListener('click', () => go(i + 1));
-  document.getElementById('fpmVerTab').addEventListener('click', e => { const t = document.getElementById('fpmTab'); t.hidden = !t.hidden; e.target.textContent = t.hidden ? 'ver tabela' : 'esconder tabela'; });
+  const vt = document.getElementById('fpmVerTab');   // S70: a tela Projeções não tem gráfico
+  if (vt) vt.addEventListener('click', e => { const t = document.getElementById('fpmTab'); t.hidden = !t.hidden; e.target.textContent = t.hidden ? 'ver tabela' : 'esconder tabela'; });
   el.querySelectorAll('.fpmGrupo').forEach(l => {
     const alterna = () => { const g = l.dataset.g; FINPM.abertos.has(g) ? FINPM.abertos.delete(g) : FINPM.abertos.add(g); fpmRedesenhar(); };
     l.addEventListener('click', alterna);
@@ -21112,7 +21115,7 @@ function fpmLigar(el, i){
     });
     addEventListener('resize', () => {
       if (!FINPM.mes) return;
-      if (visao === 'finp') fpmGrafico(FINPM.mes); else if (visao === 'fincr') fcrGrafico(FINPM.mes);
+      if (visao === 'finp') fpmGrafico(FINPM.mes);
     });
   }
 }
@@ -21357,6 +21360,11 @@ function fpmProximos(k){
 //    Recorrentes, não a média), a média de 3 meses do que não é recorrente, e
 //    as OS em execução (`tf_fin_projecao_os`, 500/501). E o ciclo da reserva,
 //    que também é uma leitura do futuro.
+// S70 (Bruno e Vinícius, 21/10): o ciclo é pelo SALDO REAL NO DIA 1º
+// (`tf_fin_ciclo`, SQL 503), não "o que entrou no mês anterior": em 01/10 havia
+// R$ 58,6 mil, e não os R$ 95,9 mil que entraram em setembro. O CDB do Inter é
+// uma conta operacional à parte; a provisão do dia 30 vai por transferência
+// para as caixinhas e entra nas projeções como saída do mês.
 // Sem os SQL, as telas abrem e avisam o que falta.
 // ════════════════════════════════════════════════════════════════════════════
 const FPM_PROJ_COR = '#6FB08A';
@@ -21394,7 +21402,7 @@ function fpmProjTabela(compacta){
         + C.map(o => '<tr><td>' + esc(o.numero) + '</td><td>' + esc(o.cliente || '—') + '</td><td><b>' + esc(BRL(o.v)) + '</b></td><td>' + esc(fpmMesCurto(o.m)) + '</td></tr>').join('')
         + '<tr class="sel"><td colspan="2">Total</td><td>' + esc(BRL(fpmTot(C))) + '</td><td></td></tr></table>' : '')
       + (S.length ? '<p class="fpmPq" style="margin:6px 0 0">Fora das contas, sem previsão: ' + S.map(o => esc(o.numero) + ' ' + esc(o.cliente || '') + ' ' + esc(fpmK(o.v)) + (o.parada ? ' (parada)' : '')).join(' · ') + '.</p>' : '')
-      + '<p class="fpmPq" style="margin:4px 0 0">O detalhe (aprovado, o que já foi lançado e como o mês foi estimado) está em <button class="fpmLk" type="button" data-ir="fincr">Ciclo da reserva</button>.</p>';
+      + '<p class="fpmPq" style="margin:4px 0 0">O detalhe (aprovado, o que já foi lançado e como o mês foi estimado) está em <button class="fpmLk" type="button" data-ir="fincr">Projeções</button>.</p>';
   }
   const como = o => o.recebe_em
     ? esc(o.dia_origem) + ' → ' + esc(dataBR(o.dia_base).slice(0, 5)) + (o.atrasada ? ' (já passou: conta de hoje)' : '') + ', + ' + esc(String(o.prazo_dias)) + ' dias de prazo do cliente'
@@ -21442,7 +21450,7 @@ function fpmPagar(){
 function fpmLinkProj(k){
   if (k !== FINPM.pm.mes_atual || !fpjTemDesp()) return '';
   const x = fpjSerie()[0], nm = FPM_NOMES[+k.slice(5, 7) - 1];
-  const partes = [['recorrentes sem título', x.rec], ['outras despesas pela média', x.out], ['OS em execução', x.os]]
+  const partes = [['recorrentes sem título', x.rec], ['outras despesas pela média', x.out], ['provisões do dia 30', x.prov], ['OS em execução', x.os]]
     .filter(p => p[1] > 0.009).map(p => p[0] + ' ' + esc(fpmK(p[1])));
   return '<div class="fpmChamada"><div><b>Projeções:</b> ' + (partes.length ? 'somando o que ainda não foi lançado (' + partes.join(', ') + '), ' : 'sem nada a projetar além do lançado, ') + esc(nm) + ' termina com <b class="' + (x.fim < 0 ? 'fpmNeg' : 'fpmPos') + '">' + esc(fpmBRL(x.fim)) + '</b> nas contas.</div>'
     + '<button type="button" class="btn" data-ir="fincr">Abrir Projeções →</button></div>';
@@ -21471,13 +21479,28 @@ function fpjDespesas(m){
 
 /** Um mês projetado, a partir do saldo com que ele começa. No mês corrente o
  *  lançado inclui o vencido em aberto (ainda vai entrar/sair). */
+/** S70 · a provisão do dia 30 (Inter → caixinhas do Nubank): o valor mensal das
+ *  caixinhas (tela Reservas); sem ele, a recorrência de provisão. No mês corrente,
+ *  menos o que já foi guardado (ou pago como título de provisão). */
+const fpjTemCiclo = () => !!(FINPM.ciclo && !FINPM.ciclo.erro && Array.isArray(FINPM.ciclo.meses));
+function fpjProvPlano(){
+  if (!fpjTemCiclo()) return { v: 0, fonte: '' };
+  const P = FINPM.ciclo.provisao || {}, cx = Number(P.caixinhas) || 0, rc = Number(P.recorrencias) || 0;
+  return cx > 0 ? { v: cx, fonte: 'caixinhas' } : { v: rc, fonte: rc > 0 ? 'recorrencia' : '' };
+}
+function fpjProvisao(m){
+  const pl = fpjProvPlano().v; if (!pl) return 0;
+  if (m !== FINPM.pm.mes_atual) return pl;
+  const c = FINPM.ciclo.meses.find(x => x.mes === m);
+  return Math.max(0, pl - (c ? Number(c.provisao) || 0 : 0));
+}
 function fpjMes(m, inicio){
   const ab = FINPM.pm.abertos || [], atual = m === FINPM.pm.mes_atual, fim = fpmFimMes(m);
   const noMes = a => atual ? a.d <= fim : a.d.slice(0, 7) === m;
   const rL = ab.filter(a => a.t === 'r' && noMes(a)).reduce((s, a) => s + (Number(a.v) || 0), 0);
   const pL = ab.filter(a => a.t === 'p' && !a.provisao && noMes(a)).reduce((s, a) => s + (Number(a.v) || 0), 0);
-  const os = fpmTot(fpmProjMes(m)), D = fpjDespesas(m);
-  return { m, inicio, rL, os, pL, rec: D.tRec, out: D.tOut, D, fim: inicio + rL + os - pL - D.tRec - D.tOut };
+  const os = fpmTot(fpmProjMes(m)), D = fpjDespesas(m), prov = fpjProvisao(m);
+  return { m, inicio, rL, os, pL, rec: D.tRec, out: D.tOut, prov, D, fim: inicio + rL + os - pL - D.tRec - D.tOut - prov };
 }
 /** O mês corrente e os 3 seguintes, encadeados: cada um começa com o fim do anterior. */
 function fpjSerie(){
@@ -21516,6 +21539,7 @@ function fcrDesenhar(){
   const falta = [];
   if (!fpjTemDesp()) falta.push('as despesas recorrentes (SQL 502' + (FINPM.desp && FINPM.desp.erro ? ': ' + FINPM.desp.erro : '') + ')');
   if (FINPM.proj && FINPM.proj.erro) falta.push('as OS em execução (SQL 500/501)');
+  if (!fpjTemCiclo()) falta.push('o saldo do dia 1º e as provisões (SQL 503)');
   el.innerHTML = (falta.length ? '<p class="fpmAviso">Não carregou ' + esc(falta.join(' e ')) + '. O resto da tela funciona sem elas.</p>' : '')
     + fpjSaldo()
     + '<div class="fpjChips" role="group" aria-label="Escolher o mês do detalhe">Detalhe de: ' + M.map(m => '<button type="button" class="btn sm' + (m === FINPM.pjMes ? ' pri' : '') + '" data-pjm="' + m + '" aria-pressed="' + (m === FINPM.pjMes) + '">' + esc(fpmMesCurto(m)) + (m === FINPM.pm.mes_atual ? ' (resto)' : '') + '</button>').join('') + '</div>'
@@ -21523,23 +21547,23 @@ function fcrDesenhar(){
     + '<div class="painel fpmCard"><h3>OS em execução</h3>'
     + '<p class="fpmPq">OS abertas com proposta aprovada, ainda não faturadas. Projeção = aprovado − o que já está no Contas a Receber ligado à OS (pelo campo OS, pelo número da proposta na descrição ou, sem número, pelo valor até 5% do mesmo cliente). O mês é o prazo da OS (ou a tarefa marcada + 15 dias para o laudo e a nota, ou a meta do tipo) + o prazo de recebimento do cliente.</p>'
     + fpmProjTabela() + fpmProjAvisos() + '</div>'
-    + '<h3 class="fpjSecao">Ciclo da reserva</h3>'
+    + '<h3 class="fpjSecao">Ciclo do dinheiro</h3>'
+    + '<p class="fpmPq" style="margin:-4px 0 10px">O que entra num mês vai para o CDB e paga as contas do mês seguinte: no dia 1º o Vinícius retira do CDB o que vai pagar. O ciclo fecha quando o <b>saldo do dia 1º</b> cobre as contas do mês; quando não cobre, a diferença sai do dinheiro que entra no próprio mês.</p>'
     + '<div class="fpmNav" role="group" aria-label="Escolher o mês">'
     +   '<button type="button" class="btn" id="fpmAnt" aria-label="Mês anterior"' + (i <= 0 ? ' disabled' : '') + '>◀</button>'
     +   '<b aria-live="polite">' + esc(fpmRot(k).replace(/^./, c => c.toUpperCase())) + (atual ? '<small>até ' + esc(dataBR(FINPM.pm.hoje).slice(0, 5)) + '</small>' : '') + '</b>'
     +   '<button type="button" class="btn" id="fpmProx" aria-label="Próximo mês"' + (i >= FINPM.meses.length - 1 ? ' disabled' : '') + '>▶</button>'
     + '</div>'
     + fcrFluxo(k)
-    + '<div class="painel fpmCard"><h3>Reserva × saiu, mês a mês</h3><p class="fpmPq">A reserva do mês anterior (o que entrou) cobriu as contas do mês? Clique numa coluna para ir ao mês.</p>'
-    +   '<div id="fpmGraf"></div>'
-    +   '<div class="fpmLeg"><span><i style="background:' + FPM_COR.entrou + '"></i>Reserva (entrou no mês anterior)</span><span><i style="background:' + FPM_COR.saiu + '"></i>Saiu</span><span><i class="ln" style="background:' + FPM_COR.res + '"></i>Sobra do ciclo (reserva − saiu)</span>'
-    +   '<button class="fpmLk" type="button" id="fpmVerTab">ver tabela</button></div><div id="fpmTab" hidden></div></div>'
-    + '<div class="fpmNota"><b>Colchão no Nubank:</b> a ligar — depende de registrar no Contas Bancárias a entrada do dinheiro na reserva e a retirada do dia 1º. '
-    +   'O realizado é pelo <b>caixa</b> (data em que o dinheiro entrou ou saiu). Março a setembro/2026 vêm do histórico do SIGE.</div>';
-  fcrGrafico(k);
+    + fcrTabela(k)
+    + '<div class="fpmNota"><b>Para o ciclo ficar certo:</b> lance em <button class="fpmLk" type="button" data-ir="finb">Contas Bancárias</button> › Transferir entre contas o Sicoob → Inter, a ida para o CDB e o resgate do dia 1º; e em <button class="fpmLk" type="button" data-ir="finrsv">Reservas</button> a provisão do dia 30 para as caixinhas. '
+    +   'O saldo do dia 1º só existe a partir da data de corte de todas as contas operacionais.</div>';
   fpmLigar(el, i);
   el.querySelectorAll('[data-pjm]').forEach(b => b.addEventListener('click', () => { FINPM.pjMes = b.dataset.pjm; fcrDesenhar(); }));
 }
+
+/** Os nomes das contas operacionais ("Inter, Inter CDB, Sicoob"). */
+const fpjNomesOp = () => (FINPM.pm.contas || []).filter(c => c.papel === 'operacional').map(c => c.nome.replace(/^Banco /, '')).join(', ') || 'nenhuma conta';
 
 /** O saldo projetado mês a mês: a tabela que responde "vai faltar dinheiro?". */
 function fpjSaldo(){
@@ -21548,7 +21572,7 @@ function fpjSaldo(){
   const lin = (rot, f, est, sinal) => '<tr' + (est ? ' class="fpjEst"' : '') + '><th scope="row">' + rot + '</th>' + S.map(x => { const n = f(x); return '<td>' + (n ? (sinal || '') + esc(BRL(n)) : '—') + '</td>'; }).join('') + '</tr>';
   const pior = S.reduce((a, x) => x.fim < a.fim ? x : a, S[0]);
   return '<div class="painel fpmCard"><h3>Saldo projetado</h3>'
-    + '<p class="fpmPq">Começa com o saldo de hoje nas contas (Inter, Sicoob' + (res.length ? '; a reserva ' + res.map(c => esc(c.nome.replace(/^Banco /, '')) + ' ' + ((Number(c.saldo) || 0) ? esc(fpmK(Number(c.saldo))) : '(sem saldo lançado)')).join(', ') + ' não entra' : '') + ') e soma, mês a mês, o lançado e o projetado. As linhas <span class="fpjEstTxt">em itálico</span> são estimativa.</p>'
+    + '<p class="fpmPq">Começa com o saldo de hoje nas contas (' + esc(fpjNomesOp()) + (res.length ? '; a reserva ' + res.map(c => esc(c.nome.replace(/^Banco /, '')) + ' ' + ((Number(c.saldo) || 0) ? esc(fpmK(Number(c.saldo))) : '(sem saldo lançado)')).join(', ') + ' não entra' : '') + ') e soma, mês a mês, o lançado e o projetado. As linhas <span class="fpjEstTxt">em itálico</span> são estimativa.</p>'
     + '<div class="fpmRolar"><table class="fpmTabela fpjTab"><tr><th></th>' + S.map(x => '<th>' + esc(fpmMesCurto(x.m)) + (x.m === FINPM.pm.mes_atual ? '<small>até o fim</small>' : '') + '</th>').join('') + '</tr>'
     + '<tr><th scope="row">Começa com</th>' + S.map(x => v(x.inicio)).join('') + '</tr>'
     + lin('+ A receber lançado', x => x.rL, false, '+')
@@ -21556,6 +21580,7 @@ function fpjSaldo(){
     + lin('− A pagar lançado', x => x.pL, false, '−')
     + lin('− Recorrentes sem título', x => x.rec, true, '−')
     + lin('− Outras (média de 3 meses)', x => x.out, true, '−')
+    + lin('− Provisões (dia 30 → caixinhas)', x => x.prov, true, '−')
     + '<tr class="sel"><th scope="row">Termina com</th>' + S.map(x => v(x.fim)).join('') + '</tr></table></div>'
     + (pior && pior.fim < 0 ? '<p style="font-size:13px;margin:8px 0 0">⚠ O saldo fica negativo em <b>' + esc(fpmRot(pior.m)) + '</b> (' + esc(fpmBRL(pior.fim)) + ') se nada mudar: é o que precisa vir da reserva, de faturamento novo ou de adiar contas.</p>'
         : '<p style="font-size:13px;margin:8px 0 0">O saldo não fica negativo nos 4 meses, com o que está lançado e projetado.</p>')
@@ -21576,13 +21601,23 @@ function fpjDespCard(m){
           + (r.venceu ? ' <span class="chip" style="background:var(--warn-soft);color:var(--warn)">venceu sem título</span>' : '') + '</span><span>' + esc(BRL(r.v)) + '</span></div>').join('');
   });
   return '<div class="painel fpmCard"><h3>Despesas futuras de ' + esc(nm) + (atual ? ' (até o fim do mês)' : '') + '</h3>'
-    + '<p class="fpmPq">Recorrências cadastradas que ainda não têm título em ' + esc(nm) + ' (' + finPlural(D.lancadas, 'já lançada', 'já lançadas') + ' — essas estão no Painel). A provisão mensal não entra: é reserva.</p>'
+    + '<p class="fpmPq">Recorrências cadastradas que ainda não têm título em ' + esc(nm) + ' (' + finPlural(D.lancadas, 'já lançada', 'já lançadas') + ' — essas estão no Painel). A provisão do dia 30 vem no fim, à parte.</p>'
     + (D.rec.length ? h + '<div class="fpjGrupo tot"><b>Recorrentes</b><span>' + esc(BRL(D.tRec)) + '</span></div>' : '<p class="nota">Todas as recorrências de ' + esc(nm) + ' já têm título.</p>')
     + (D.out.length ? '<div class="fpjGrupo" style="margin-top:10px"><b>Outras (não recorrentes, média de 3 meses' + (atual ? ', menos o que já saiu' : '') + ')</b><span>' + esc(BRL(D.tOut)) + '</span></div>'
         + D.out.slice(0, 8).map(o => '<div class="fpjItem fpjEst"><span>' + esc(o.sub) + ' <small>' + esc(o.grupo) + '</small></span><span>' + esc(BRL(o.v)) + '</span></div>').join('')
         + (D.out.length > 8 ? '<p class="fpmPq" style="margin:2px 0 0">+ ' + (D.out.length - 8) + ' outras.</p>' : '') : '')
+    + fpjProvLinha(m)
     + '<p class="fpmPq" style="margin:8px 0 0">Valor errado ou recorrência que acabou? Corrija em <button class="fpmLk" type="button" data-ir="finrec">Recorrentes</button>.</p>'
     + '</div>';
+}
+
+function fpjProvLinha(m){
+  const P = fpjProvPlano(), v = fpjProvisao(m), atual = m === FINPM.pm.mes_atual;
+  if (!fpjTemCiclo()) return '';
+  if (!P.v) return '<p class="fpmPq" style="margin:10px 0 0">Provisões do dia 30: sem valor mensal nas caixinhas (tela <button class="fpmLk" type="button" data-ir="finrsv">Reservas</button>) — não entram na conta.</p>';
+  return '<div class="fpjGrupo" style="margin-top:10px"><b>Provisões (dia 30 → caixinhas)</b><span>' + esc(BRL(v)) + '</span></div>'
+    + '<p class="fpmPq" style="margin:2px 0 0">' + (P.fonte === 'caixinhas' ? 'Pelo valor mensal das caixinhas (Reservas)' : 'Pela recorrência de provisão (' + esc(BRL(P.v)) + ') — ponha o valor mensal de cada caixinha em <button class="fpmLk" type="button" data-ir="finrsv">Reservas</button> e pause a recorrência')
+    + (atual && v < P.v ? '; ' + esc(BRL(P.v - v)) + ' já guardados este mês' : '') + '.</p>';
 }
 
 /** As receitas futuras de um mês: o a receber lançado e as OS com previsão nele. */
@@ -21599,115 +21634,74 @@ function fpjRecCard(m){
     + '</div>';
 }
 
-/** O coração da tela: dois ciclos, cada um em três caixas ligadas por setas.
- *  1) o ciclo DESTE mês: a reserva que veio do mês anterior × as contas deste mês;
- *  2) o PRÓXIMO: o que entra neste mês × as contas do mês seguinte.
- *  Num mês fechado os dois são números reais; no mês corrente o segundo é a
- *  conta do dia 1º (lançado + recorrentes sem título + outras). */
+/** S70 · o ciclo de um mês pelo SALDO REAL NO DIA 1º.
+ *  Mês passado: o saldo do dia 1º (503) × o que foi pago + as provisões.
+ *  Mês corrente: o mesmo, com o que falta pagar até o fim (lançado + recorrentes
+ *  sem título + outras + provisões) — estimado.
+ *  Mês futuro: o saldo previsto para o dia 1º (o "termina com" do mês anterior
+ *  na tabela do saldo projetado) × as contas previstas. */
+function fcCiclo(m){
+  const atual = FINPM.pm.mes_atual;
+  if (m > atual){
+    const x = fpjSerie().find(s => s.m === m); if (!x) return null;
+    const contas = x.pL + x.rec + x.out + x.prov;
+    return { m, ab: x.inicio, contas, pago: 0, resto: contas, x, prev: true, parcial: false };
+  }
+  const c = fpjTemCiclo() ? FINPM.ciclo.meses.find(y => y.mes === m) : null;
+  // sem o saldo do dia 1º (antes do corte), o que saiu vem do Painel (caixa, com o histórico do SIGE)
+  const temAb = !!(c && c.abertura !== null && c.abertura !== undefined);
+  const pago = temAb ? (Number(c.pagou) || 0) + (Number(c.provisao) || 0) : fpmMes(m).saiu;
+  let resto = 0, x = null;
+  if (m === atual){ x = fpjMes(m, 0); resto = x.pL + x.rec + x.out + x.prov; }
+  return { m, ab: temAb ? Number(c.abertura) : null, faltam: c ? c.faltam || [] : [],
+           contas: pago + resto, pago, resto, x, entrou: temAb ? Number(c.entrou) || 0 : fpmMes(m).entrou, prev: false, parcial: m === atual };
+}
+
 function fcrFluxo(k){
-  const atual = k === FINPM.pm.mes_atual, nome = m => FPM_NOMES[+m.slice(5, 7) - 1];
-  const pk = fpmSoma(k, -1), nk = fpmSoma(k, 1), x = fpmMes(k), c = fpmCiclo(k);
-  const r = fcrConta(k), temProx = FINPM.meses.includes(nk);
+  const nome = m => FPM_NOMES[+m.slice(5, 7) - 1], nk = fpmSoma(k, 1);
   const box = (rot, val, exp, cls) => '<div class="fcrBox ' + (cls || '') + '"><div class="r">' + rot + '</div><div class="v">' + val + '</div><div class="e">' + exp + '</div></div>';
   const seta = '<div class="fcrSeta" aria-hidden="true">→</div>';
-  const res = (v, parcial) => v === null ? box('Sobra do ciclo', '—', 'sem o mês anterior no painel')
-    : v < 0 ? box('Falta', esc(BRL(-v)), 'vem das provisões (13º, impostos, rescisões)' + (parcial ? ' · parcial até o fim do mês' : ''), 'res neg')
-            : box('Sobra', '+' + esc(BRL(v)), 'vira colchão' + (parcial ? ' · parcial até o fim do mês' : ''), 'res');
-  // ciclo 1
-  const l1 = '<div class="fcrTit">Ciclo de ' + esc(nome(k)) + ': a reserva de ' + esc(nome(pk)) + ' pagou ' + esc(nome(k)) + '?</div><div class="fcrFluxo">'
-    + box('Reserva de ' + esc(nome(pk)), c.res === null ? '—' : esc(BRL(c.res)), 'o que entrou em ' + esc(nome(pk)))
-    + seta + box('Contas de ' + esc(nome(k)), esc(BRL(x.saiu)), atual ? 'pagas até hoje' : 'pagas no mês')
-    + seta + res(c.sobra, atual) + '</div>';
-  // ciclo 2
-  let entra, entraExp, contas, contasExp, sobra2, parcial2 = false;
-  if (temProx){
-    entra = x.entrou; entraExp = 'o que entrou em ' + esc(nome(k));
-    contas = fpmMes(nk).saiu; contasExp = 'pagas em ' + esc(nome(nk)) + (nk === FINPM.pm.mes_atual ? ' até hoje' : '');
-    sobra2 = entra - contas; parcial2 = nk === FINPM.pm.mes_atual;
-  } else {
-    entra = r.totE; entraExp = 'já entrou ' + esc(fpmK(x.entrou)) + ' · lançado para entrar ' + esc(fpmK(r.sE)) + (r.pj > 0 ? ' · projeção das OS ' + esc(fpmK(r.pj)) + ' (fora da conta)' : '');
-    contas = r.totS; contasExp = 'lançadas ' + esc(fpmK(r.C.sS)) + ' · recorrentes sem título e outras (projeção) ' + esc(fpmK(r.C.sEst));
-    sobra2 = r.sobra; parcial2 = true;
-  }
-  const l2 = '<div class="fcrTit">Próximo ciclo: o que entra em ' + esc(nome(k)) + ' paga ' + esc(nome(nk)) + '</div><div class="fcrFluxo">'
-    + box('Entra em ' + esc(nome(k)), esc(BRL(entra)), entraExp)
-    + seta + box('Contas de ' + esc(nome(nk)), esc(BRL(contas)), contasExp)
-    + seta + res(sobra2, parcial2) + '</div>'
-    + (!temProx && r.pj > 0 ? '<p class="fpmPq" style="margin:4px 0 0">Se as OS em execução com previsão para ' + esc(nome(k)) + ' entrarem (' + esc(fpmK(r.pj)) + '): '
-        + (r.sobra + r.pj < 0 ? 'faltam ' + esc(BRL(-(r.sobra + r.pj))) : 'sobram ' + esc(BRL(r.sobra + r.pj))) + '.</p>' : '');
-  return '<div class="painel fpmCard">' + l1 + l2
-    + (atual ? '<p class="fpmPq" style="margin:10px 0 0">No dia 1º de ' + esc(nome(nk)) + ' o Vinícius retira da reserva exatamente o valor das contas de ' + esc(nome(nk)) + '. O que sobrar fica como colchão; o que faltar vem das provisões.</p>' : '')
+  const res = (c, mes) => {
+    if (c.ab === null) return box('Sobra ou falta', '—', 'sem o saldo do dia 1º');
+    const v = c.ab - c.contas, est = c.prev ? ' · previsto' : c.parcial ? ' · estimado até o fim do mês' : '';
+    return v < 0 ? box('Falta', esc(BRL(-v)), 'paga com o dinheiro que entra em ' + esc(nome(mes)) + est, 'res neg')
+                 : box('Sobra', '+' + esc(BRL(v)), 'fica para ' + esc(nome(fpmSoma(mes, 1))) + est, 'res');
+  };
+  const contasExp = c => c.prev
+      ? 'previstas: lançado ' + esc(fpmK(c.x.pL)) + ' · recorrentes ' + esc(fpmK(c.x.rec)) + ' · outras ' + esc(fpmK(c.x.out)) + ' · provisões ' + esc(fpmK(c.x.prov))
+      : c.parcial ? 'pagas até hoje ' + esc(fpmK(c.pago)) + ' + falta pagar ' + esc(fpmK(c.resto)) + ' (lançado e estimado)'
+                  : c.ab === null ? 'saiu no mês (Painel)' : 'pagas no mês, com as provisões';
+  const abExp = c => c.prev ? 'previsto: o saldo de hoje + o que falta entrar − o que falta sair em ' + esc(nome(fpmSoma(c.m, -1)))
+      : c.ab === null ? (c.faltam && c.faltam.length ? 'sem saldo: ' + esc(c.faltam.map(n => n.replace(/^Banco /, '')).join(', ')) + (c.faltam.length > 1 ? ' começam' : ' começa') + ' depois do dia 1º (data de corte)' : 'sem o saldo do dia 1º (SQL 503)')
+      : 'saldo real no dia 1º · ' + esc(fpjNomesOp());
+  const linha = (c, tit) => '<div class="fcrTit">' + tit + '</div><div class="fcrFluxo">'
+    + box((c.prev ? 'Vai começar ' : 'Começou ') + esc(nome(c.m)) + ' com', c.ab === null ? '—' : esc(BRL(c.ab)), abExp(c), c.prev ? 'fpjEst' : '')
+    + seta + box('Contas de ' + esc(nome(c.m)), esc(BRL(c.contas)), contasExp(c), c.prev || c.parcial ? 'fpjEst' : '')
+    + seta + res(c, c.m) + '</div>';
+  const c1 = fcCiclo(k), c2 = fcCiclo(nk);
+  let h = linha(c1, 'Ciclo de ' + esc(nome(k)) + ': o saldo do dia 1º pagou as contas de ' + esc(nome(k)) + '?');
+  if (c1.ab !== null && c1.ab - c1.contas < 0 && !c1.prev)
+    h += '<p class="fpmPq" style="margin:4px 0 0">Entrou em ' + esc(nome(k)) + (c1.parcial ? ' até hoje' : '') + ': ' + esc(BRL(c1.entrou)) + '. A falta foi coberta com esse dinheiro — e ele deixa de ir para o CDB, o que diminui o saldo de 1º de ' + esc(nome(nk)) + '.</p>';
+  if (c2) h += linha(c2, 'Próximo ciclo: ' + esc(nome(nk)));
+  return '<div class="painel fpmCard">' + h
+    + (k === FINPM.pm.mes_atual ? '<p class="fpmPq" style="margin:10px 0 0">No dia 1º de ' + esc(nome(nk)) + ' o Vinícius retira do CDB o valor das contas de ' + esc(nome(nk)) + '. Os números em itálico são estimativa (as mesmas contas da tabela do saldo projetado).</p>' : '')
     + '</div>';
 }
 
-/** O ciclo de um mês: a reserva (o que entrou no mês anterior) × o que saiu neste.
- *  `res` e `sobra` são null quando o mês anterior não está no painel. */
-function fpmCiclo(m){
-  const pk = fpmSoma(m, -1), x = fpmMes(m);
-  const tem = FINPM.meses.includes(pk);
-  const res = tem ? fpmMes(pk).entrou : null;
-  return { res, saiu: x.saiu, sobra: tem ? res - x.saiu : null };
-}
-
-/** A conta do dia 1º: o que entra no mês k (já entrou + lançado a receber, e à
- *  parte a projeção das OS) × as contas do mês seguinte — S69: o lançado para o
- *  mês seguinte + as recorrências sem título + as outras (média), como em
- *  Projeções (antes: a média de 3 meses de tudo). */
-function fcrConta(k){
-  const x = fpmMes(k), ab = FINPM.pm.abertos || [], fim = fpmFimMes(k), ini = k + '-01', nk = fpmSoma(k, 1);
-  const vaiE = ab.filter(a => a.t === 'r' && a.d >= ini && a.d <= fim).map(a => [a.q, Number(a.v) || 0]);
-  const PJ = fpmProjMes(k), N = fpjMes(nk, 0);
-  const C = { sS: N.pL, sEst: N.rec + N.out, tot: N.pL + N.rec + N.out };
-  const sE = fpmTot(vaiE), pj = fpmTot(PJ), totE = x.entrou + sE;
-  return { x, vaiE, PJ, C, sE, pj, totE, totS: C.tot, sobra: totE - C.tot, nn: FPM_NOMES[+nk.slice(5, 7) - 1] };
-}
-
-function fcrGrafico(k){
-  const el = document.getElementById('fpmGraf'); if (!el) return;
-  const M = FINPM.meses;
-  const W = Math.max(300, el.clientWidth || 700), H = 250, pl = 54, pr = 10, pt = 14, pb = 30;
-  const iw = W - pl - pr, ih = H - pt - pb;
-  const vals = M.flatMap(m => { const c = fpmCiclo(m); return [c.res || 0, c.saiu, c.sobra === null ? 0 : c.sobra]; });
-  const passo = 25000;
-  const max = Math.ceil(Math.max(passo, ...vals) / passo) * passo, min = Math.floor(Math.min(0, ...vals) / passo) * passo;
-  const y = v => pt + ih * (max - v) / (max - min);
-  const bw = iw / M.length, barW = Math.min(26, bw * 0.3), gap = 2;
-  let s = '<svg width="' + W + '" height="' + H + '" role="img" aria-label="Reserva do mês anterior, saiu e sobra do ciclo, por mês" style="display:block">';
-  for (let v = min; v <= max; v += passo){
-    s += '<line x1="' + pl + '" x2="' + (W - pr) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="' + (v === 0 ? '#9AA4AA' : '#EBEFF1') + '"/>'
-      + '<text x="' + (pl - 8) + '" y="' + (y(v) + 4) + '" text-anchor="end" font-size="11" fill="#78838A">' + (v / 1000).toLocaleString('pt-BR') + ' mil</text>';
-  }
-  const pts = [];
-  const bar = (x0, v, cor, op) => { const y0 = y(0), y1 = y(v), h = Math.max(1, Math.abs(y0 - y1)), top = Math.min(y0, y1), r = Math.min(4, h);
-    return '<path d="M' + x0 + ',' + (top + h) + 'V' + (top + r) + 'Q' + x0 + ',' + top + ' ' + (x0 + r) + ',' + top + 'H' + (x0 + barW - r) + 'Q' + (x0 + barW) + ',' + top + ' ' + (x0 + barW) + ',' + (top + r) + 'V' + (top + h) + 'Z" fill="' + cor + '" opacity="' + op + '"/>'; };
-  M.forEach((m, i) => {
-    const x = fpmMes(m), c = fpmCiclo(m), cx = pl + bw * i + bw / 2, sel = m === k, op = sel ? 1 : 0.42;
-    s += (c.res === null ? '' : bar(cx - barW - gap / 2, c.res, FPM_COR.entrou, op)) + bar(cx + gap / 2, x.saiu, FPM_COR.saiu, op);
-    s += '<text x="' + cx + '" y="' + (H - 10) + '" text-anchor="middle" font-size="11.5" fill="' + (sel ? '#14181B' : '#78838A') + '" font-weight="' + (sel ? 700 : 400) + '">'
-      + (bw < 60 ? _FINP_MESES[+m.slice(5, 7) - 1] : fpmCurto(m)) + (m === FINPM.pm.mes_atual ? '*' : '') + '</text>';
-    if (c.sobra !== null) pts.push([cx, y(c.sobra), m]);
-  });
-  s += '<polyline fill="none" stroke="' + FPM_COR.res + '" stroke-width="2" points="' + pts.map(p => p[0] + ',' + p[1]).join(' ') + '"/>';
-  pts.forEach(p => { s += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (p[2] === k ? 5 : 4) + '" fill="' + FPM_COR.res + '" stroke="#fff" stroke-width="2"/>'; });
-  const sp = pts.find(p => p[2] === k), sc = fpmCiclo(k), rv = sc.sobra;
-  if (sp){
-    const topo = Math.min(sp[1], y(sc.res || 0), y(sc.saiu)), nearR = sp[0] > W - 50;
-    s += '<text x="' + (nearR ? W - 2 : sp[0]) + '" y="' + (rv < 0 ? sp[1] + 18 : topo - 8) + '" text-anchor="' + (nearR ? 'end' : 'middle') + '" font-size="11.5" font-weight="700" fill="#14181B">' + esc(fpmK(rv)) + '</text>';
-  }
-  M.forEach((m, i) => { s += '<rect class="fpmHit" data-m="' + m + '" x="' + (pl + bw * i) + '" y="' + pt + '" width="' + bw + '" height="' + (ih + pb - 4) + '" fill="transparent" style="cursor:pointer"/>'; });
-  s += '</svg><div class="fpmPq" style="margin:2px 0 0">* mês corrente, até hoje</div>';
-  el.innerHTML = s;
-  el.querySelectorAll('.fpmHit').forEach(r => {
-    const m = r.dataset.m, x = fpmMes(m), c = fpmCiclo(m), pk = fpmSoma(m, -1);
-    r.addEventListener('mousemove', e => fpmTip(e, '<b>' + esc(fpmRot(m)) + '</b>'
-      + '<div class="l"><span>Reserva (entrou em ' + esc(FPM_NOMES[+pk.slice(5, 7) - 1]) + ')</span><span>' + (c.res === null ? '—' : esc(BRL(c.res))) + '</span></div>'
-      + '<div class="l"><span>Saiu</span><span>' + esc(BRL(x.saiu)) + '</span></div>'
-      + '<div class="l"><span>' + (c.sobra !== null && c.sobra < 0 ? 'Falta do ciclo' : 'Sobra do ciclo') + '</span><span>' + (c.sobra === null ? '—' : esc(fpmBRL(c.sobra))) + '</span></div>'));
-    r.addEventListener('mouseleave', fpmTipSai);
-    r.addEventListener('click', () => { fpmTipSai(); FINPM.mes = m; fpmRedesenhar(); });
-  });
-  document.getElementById('fpmTab').innerHTML = '<table class="fpmTabela"><tr><th>Mês</th><th>Reserva (entrou no mês anterior)</th><th>Saiu</th><th>Sobra do ciclo</th></tr>'
-    + M.map(m => { const c = fpmCiclo(m); return '<tr class="' + (m === k ? 'sel' : '') + '"><td>' + esc(fpmRot(m)) + '</td><td>' + (c.res === null ? '—' : esc(BRL(c.res))) + '</td><td>' + esc(BRL(c.saiu)) + '</td><td class="' + (c.sobra !== null && c.sobra < 0 ? 'fpmNeg' : '') + '">' + (c.sobra === null ? '—' : esc(fpmBRL(c.sobra))) + '</td></tr>'; }).join('') + '</table>';
+/** O ciclo mês a mês: do primeiro mês com saldo do dia 1º até 3 meses à frente. */
+function fcrTabela(k){
+  const atual = FINPM.pm.mes_atual;
+  const passados = fpjTemCiclo() ? FINPM.ciclo.meses.filter(c => c.abertura !== null && c.abertura !== undefined).map(c => c.mes) : [];
+  const L = [...new Set([...passados, ...fpjMeses().filter(m => m > atual)])].sort().map(fcCiclo).filter(Boolean);
+  if (!L.length) return '';
+  return '<div class="painel fpmCard"><h3>Ciclo mês a mês</h3>'
+    + '<p class="fpmPq">O saldo do dia 1º cobriu as contas do mês? Em itálico, o estimado.</p>'
+    + '<div class="fpmRolar"><table class="fpmTabela"><tr><th>Mês</th><th>Começou com (dia 1º)</th><th>Contas do mês</th><th>Sobra / falta</th></tr>'
+    + L.map(c => { const v = c.ab === null ? null : c.ab - c.contas;
+        return '<tr class="' + (c.m === k ? 'sel' : '') + (c.prev || c.parcial ? ' fpjEst' : '') + '"><td>' + esc(fpmRot(c.m)) + (c.prev ? ' <small>previsto</small>' : c.parcial ? ' <small>até o fim</small>' : '') + '</td>'
+          + '<td>' + (c.ab === null ? '—' : esc(BRL(c.ab))) + '</td><td>' + esc(BRL(c.contas)) + '</td>'
+          + '<td class="' + (v !== null && v < 0 ? 'fpmNeg' : '') + '">' + (v === null ? '—' : v < 0 ? 'falta ' + esc(BRL(-v)) : 'sobra ' + esc(BRL(v))) + '</td></tr>'; }).join('')
+    + '</table></div></div>';
 }
 
 /** Anel de progresso (SVG) — "X% do previsto". Não deixa passar de 100% no
@@ -21844,10 +21838,13 @@ async function pintarContasBancarias(){
   visao = 'finb';
   const board = document.getElementById('board');
   board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Contas Bancárias</h2>'
-    + '<p>Saldo a partir do que for lançado aqui no TapFlow (baixas e transferências) — não é o extrato real do banco.</p></div>'
-    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="finbNovo">+ Nova conta</button></div>'
+    + '<p>Saldo a partir do que for lançado aqui no TapFlow (baixas e transferências) — não é o extrato real do banco. '
+    +   'O CDB do Inter é uma conta à parte; Sicoob → Inter, a ida para o CDB e o resgate do dia 1º são transferências entre contas.</p></div>'
+    + '<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri" type="button" id="finbNovo">+ Nova conta</button>'
+    +   '<button class="btn" type="button" id="finbTransf">⇄ Transferir entre contas</button></div>'
     + '<div class="lista" id="finbLista"><p class="nota">Carregando…</p></div></div>';
   document.getElementById('finbNovo').addEventListener('click', () => modalConta(null));
+  document.getElementById('finbTransf').addEventListener('click', () => modalTransfConta());   // S70
   await finbCarregar();
 }
 async function finbCarregar(){
@@ -21902,7 +21899,9 @@ function modalConta(c){
     +  '<div class="campo"><label for="fcS">Saldo inicial</label><input id="fcS" type="number" step="0.01" value="'
     +    (c ? Number(c.saldo_inicial || 0) : 0) + '"></div>'
     +  '<div class="campo"><label for="fcD">Data de corte</label><input id="fcD" type="date" value="'
-    +    (c && c.data_corte ? c.data_corte : '') + '"></div></div>',
+    +    (c && c.data_corte ? c.data_corte : '') + '"></div></div>'
+    + '<p class="nota" style="margin:2px 0 0">O saldo inicial é o do banco no começo da data de corte. O CDB do Inter entra como conta <b>Operacional</b> à parte '
+    +   '("Inter CDB"), com o saldo do CDB nesse dia. <b>Reserva</b> é a conta das caixinhas (Nubank).</p>',
     [{ label:'Cancelar', onClick: fecharModal },
      { label: c ? 'Salvar' : 'Adicionar', pri:true, onClick: async () => {
         const v = id => (document.getElementById(id) || {}).value.trim();
@@ -21913,6 +21912,41 @@ function modalConta(c){
             p_papel: v('fcP'), p_saldo_inicial: Number(v('fcS')) || 0, p_data_corte: v('fcD'),
             p_codigo_banco: v('fcB') || null });
           fecharModal(); toast('Conta salva.', 'ok'); await finbCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+}
+
+/** S70 · transferência entre duas contas operacionais (Sicoob → Inter, Inter →
+ *  Inter CDB, resgate do dia 1º). Não é receita nem despesa: muda o saldo das
+ *  duas contas e nada mais. A provisão para as caixinhas é na tela Reservas. */
+async function modalTransfConta(){
+  let contas;
+  try{ contas = await rpc('tf_fin_contas_listar', {}); }
+  catch(e){ toast(e.message, 'err'); return; }
+  const op = (contas || []).filter(c => c.papel === 'operacional');
+  if (op.length < 2){ toast('Cadastre ao menos duas contas operacionais (ex.: Inter e Inter CDB).', 'err'); return; }
+  const hoje = new Date().toISOString().slice(0, 10);
+  const opcoes = sel => op.map(c => '<option value="' + esc(c.id) + '"' + (c.id === sel ? ' selected' : '') + '>' + esc(c.nome) + ' · ' + esc(BRL(c.saldo_atual)) + '</option>').join('');
+  abrirModal('Transferir entre contas',
+      '<div class="dupla">'
+    +  '<div class="campo"><label for="ftcO">Sai de</label><select id="ftcO">' + opcoes(op[0].id) + '</select></div>'
+    +  '<div class="campo"><label for="ftcD">Entra em</label><select id="ftcD">' + opcoes(op[1].id) + '</select></div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="ftcV">Valor</label><input id="ftcV" type="number" step="0.01" min="0" value=""></div>'
+    +  '<div class="campo"><label for="ftcDt">Data</label><input id="ftcDt" type="date" value="' + hoje + '"></div></div>'
+    + '<div class="campo"><label for="ftcDesc">Descrição (opcional)</label><input id="ftcDesc" type="text" autocomplete="off" placeholder="Ex.: Aplicação no CDB, Resgate para as contas de novembro"></div>'
+    + '<p class="nota" style="margin:2px 0 0">Não é receita nem despesa: só muda o saldo das duas contas. A provisão do dia 30 para as caixinhas é lançada em Reservas.</p>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Transferir', pri:true, onClick: async () => {
+        const v = id => (document.getElementById(id) || {}).value.trim();
+        const valor = Number(v('ftcV'));
+        if (v('ftcO') === v('ftcD')){ toast('Escolha duas contas diferentes.', 'err'); return; }
+        if (!valor || valor <= 0){ toast('Informe um valor maior que zero.', 'err'); return; }
+        if (!v('ftcDt')){ toast('Informe a data.', 'err'); return; }
+        try{
+          await rpc('tf_fin_transf_conta_criar', { p_origem_id: v('ftcO'), p_destino_id: v('ftcD'), p_valor: valor,
+            p_data: v('ftcDt'), p_descricao: v('ftcDesc') || null });
+          fecharModal(); toast('Transferência lançada.', 'ok'); await finbCarregar();
         }catch(e){ toast(e.message, 'err'); }
      }}]);
 }
@@ -21939,7 +21973,9 @@ function finExtratoLinha(m){
         + '<span class="n menos">' + esc(ccSinal(Number(i.valor))) + '</span></div>').join('') + '</details>';
   }
   return '<div class="ccLin finExt' + (m.estornado ? ' riscada' : '') + '">' + base
-    + '<span>' + esc(m.descricao) + (m.quem ? ' <small style="color:var(--ink-3)">· ' + esc(m.quem) + '</small>' : '') + '</span>' + val + '</div>';
+    + '<span>' + esc(m.descricao) + (m.quem && !(m.tipo === 'transf_conta' && String(m.descricao).includes(m.quem)) ? ' <small style="color:var(--ink-3)">· ' + esc(m.quem) + '</small>' : '')
+    + (m.tipo === 'transf_conta' ? (m.estornado ? ' <small style="color:var(--ink-3)">· estornada</small>' : ' <button class="btn sm" type="button" data-estornatc="' + esc(m.id) + '">Estornar</button>') : '')   // S70
+    + '</span>' + val + '</div>';
 }
 async function modalExtratoConta(id){
   abrirModal('Extrato', '<p class="nota">Carregando…</p>', [{ label:'Fechar', pri:true, onClick: fecharModal }]);
@@ -21955,6 +21991,14 @@ async function modalExtratoConta(id){
         ? '<div class="ccLin finExt cab"><span>Data</span><span>Descrição</span><span class="n">Valor</span></div>'
           + mv.map(finExtratoLinha).join('')
         : '<p class="nota">Nenhuma movimentação lançada ainda.</p>');
+  // S70 · estorno da transferência entre contas: dois cliques (sem diálogo do navegador)
+  document.querySelectorAll('#mBody [data-estornatc]').forEach(b => b.addEventListener('click', async () => {
+    if (!b.dataset.conf){ b.dataset.conf = '1'; b.textContent = 'Confirmar estorno'; b.classList.add('pri'); return; }
+    b.disabled = true;
+    try{ await rpc('tf_fin_transf_conta_estornar', { p_id: b.dataset.estornatc }); toast('Transferência estornada.', 'ok'); }
+    catch(e){ toast(e.message, 'err'); b.disabled = false; return; }
+    await modalExtratoConta(id); finbCarregar();
+  }));
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -21969,7 +22013,8 @@ async function pintarReservas(){
   visao = 'finrsv';
   const board = document.getElementById('board');
   board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Reservas e Transferências</h2>'
-    + '<p>13º salário, impostos do início do ano e rescisões — cada envelope soma o que entrou (reserva) menos o que saiu (resgate).</p></div>'
+    + '<p>13º salário, impostos do início do ano e rescisões — cada caixinha soma o que entrou (reserva) menos o que saiu (resgate). '
+    +   'No dia 30 a provisão vai do Inter para as caixinhas: lance aqui como "Reserva mensal" (não é conta a pagar). O valor mensal de cada caixinha entra nas Projeções.</p></div>'
     + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="finrsvNova">+ Nova transferência</button></div>'
     + '<div class="lista" id="finrsvLista"><p class="nota">Carregando…</p></div></div>';
   document.getElementById('finrsvNova').addEventListener('click', () => modalTransferencia());
@@ -21994,11 +22039,18 @@ function finrsvDesenhar(){
     el.innerHTML = '<p class="nota" style="padding:12px">Nenhum envelope encontrado — confira se o Passo 1 do banco foi executado.</p>';
     return;
   }
-  el.innerHTML = '<div class="ccLin cab"><span>Envelope</span><span class="n">Saldo atual</span><span></span></div>'
-    + L.map(e => '<div class="ccLin"><span>' + esc(e.nome) + '</span>'
-      + '<span class="n">' + esc(BRL(e.saldo_atual)) + '</span>'
-      + '<span class="a"><button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editarenv="'
-        + esc(e.id) + '">Editar</button></span></div>').join('');
+  // S70 · valor mensal (vai no dia 30) e o que já foi guardado no mês
+  const nm = FPM_NOMES[new Date().getMonth()], tot = k => L.reduce((s, e) => s + (Number(e[k]) || 0), 0);
+  const falta = e => Math.max(0, (Number(e.valor_mensal) || 0) - (Number(e.guardado_mes) || 0));
+  el.innerHTML = '<div class="fpmRolar"><table class="fpmTabela finrsvTab"><tr><th>Caixinha</th><th>Por mês</th><th>Guardado em ' + esc(nm) + '</th><th>Saldo atual</th><th></th></tr>'
+    + L.map(e => '<tr><td>' + esc(e.nome) + '</td>'
+      + '<td>' + (Number(e.valor_mensal) ? esc(BRL(e.valor_mensal)) : '<span style="color:var(--ink-3)">—</span>') + '</td>'
+      + '<td>' + esc(BRL(e.guardado_mes || 0)) + (falta(e) > 0.009 ? ' <small style="color:var(--warn)">falta ' + esc(BRL(falta(e))) + '</small>' : '') + '</td>'
+      + '<td>' + esc(BRL(e.saldo_atual)) + '</td>'
+      + '<td><button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editarenv="' + esc(e.id) + '">Editar</button></td></tr>').join('')
+    + '<tr class="sel"><td>Total</td><td>' + esc(BRL(tot('valor_mensal'))) + '</td><td>' + esc(BRL(tot('guardado_mes'))) + '</td><td>' + esc(BRL(tot('saldo_atual'))) + '</td><td></td></tr>'
+    + '</table></div>'
+    + (tot('valor_mensal') ? '' : '<p class="nota" style="margin-top:8px">Ponha em cada caixinha (Editar) quanto vai nela todo dia 30. Enquanto estiver vazio, as Projeções usam a recorrência de provisão.</p>');
   el.querySelectorAll('[data-editarenv]').forEach(b => b.addEventListener('click', () => {
     const env = (FINRSV.envelopes || []).find(x => x.id === b.dataset.editarenv);
     if (env) modalEnvelope(env);
@@ -22010,15 +22062,19 @@ function modalEnvelope(env){
   abrirModal('Editar envelope',
       '<div class="campo"><label for="feN">Nome</label><input id="feN" type="text" value="'
     +   esc(env.nome) + '" autocomplete="off"></div>'
-    + '<div class="campo"><label for="feS">Saldo inicial</label><input id="feS" type="number" step="0.01" value="'
-    +   (env.saldo_inicial != null ? Number(env.saldo_inicial) : 0) + '"></div>',
+    + '<div class="dupla"><div class="campo"><label for="feS">Saldo inicial</label><input id="feS" type="number" step="0.01" value="'
+    +   (env.saldo_inicial != null ? Number(env.saldo_inicial) : 0) + '"></div>'
+    + '<div class="campo"><label for="feM">Valor por mês (dia 30)</label><input id="feM" type="number" step="0.01" min="0" value="'
+    +   (Number(env.valor_mensal) || 0) + '"></div></div>',
     [{ label:'Cancelar', onClick: fecharModal },
      { label:'Salvar', pri:true, onClick: async () => {
         const nome = (document.getElementById('feN') || {}).value.trim();
         if (!nome){ toast('O nome do envelope é obrigatório.', 'err'); return; }
         const saldo = Number((document.getElementById('feS') || {}).value) || 0;
+        const mensal = Number((document.getElementById('feM') || {}).value) || 0;
+        if (mensal < 0){ toast('O valor por mês não pode ser negativo.', 'err'); return; }
         try{
-          await rpc('tf_fin_envelope_gravar', { p_id: env.id, p_nome: nome, p_saldo_inicial: saldo });
+          await rpc('tf_fin_envelope_gravar', { p_id: env.id, p_nome: nome, p_saldo_inicial: saldo, p_valor_mensal: mensal });
           fecharModal(); toast('Envelope salvo.', 'ok'); await finrsvCarregar();
         }catch(e){ toast(e.message, 'err'); }
      }}]);
