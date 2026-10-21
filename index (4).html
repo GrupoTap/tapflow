@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>TapHub · H7</title>
+<meta name="theme-color" content="#0C1420">
+<!-- ── favicon ────────────────────────────────────────────────────────────────────────
+     O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
+     apontando para icons/: o ícone por caminho só aparece se a pasta icons/ for
+     junto e se o nível de pasta bater — e o Hub apontava para field/icons/, que
+     existe no PUBLICAR e não existe em app/hub/. Embutido, a aba mostra o ícone
+     no GitHub Pages, no duplo clique e em qualquer pasta. É SVG: fica nítido em
+     tela retina. Os PNG de icons/ continuam existindo — o app instalado (PWA)
+     precisa de arquivo de verdade e usa aqueles. -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22104%22 fill=%22%231B6FA9%22/%3E%3Cg transform=%22translate(0,512) scale(1,-1) translate(256,256.5) scale(1.3) translate(-256,-256.5)%22 fill=%22%23fff%22 stroke=%22%23fff%22 stroke-width=%2222%22 stroke-linejoin=%22round%22 stroke-linecap=%22round%22%3E%3Cpath d=%22M117 414 l-1 0 0 -121 0 -120 19 0 19 0 0 -37 0 -38 121 0 121 0 -45 45 -44 45 -69 0 -69 0 0 12 0 11 90 0 89 0 0 1 0 1 -44 44 -45 44 -45 0 -45 0 0 12 0 11 99 0 99 0 0 1 0 0 -45 45 -44 45 -81 0 -80 0 0 -1z m184 -44 l30 -29 0 -1 0 -1 -88 0 -89 0 0 -75 0 -76 -11 0 -12 0 0 105 0 106 1 0 0 1 70 0 69 0 30 -30z m-19 -113 l30 -29 0 -1 0 -1 -67 0 -67 0 0 30 0 30 1 0 0 1 37 0 36 0 30 -30z m47 -114 l30 -29 0 -1 0 0 -95 0 -95 0 0 30 0 30 65 0 66 0 29 -30z%22/%3E%3C/g%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="field/icons/apple-touch-icon.png">
+<!-- ── manifesto (PWA) — por que o TapFlow passou a ter o seu ────────────────
+     H3, 21/09/2026. Sintoma: abrir o TapFlow pelo atalho do desktop trazia a
+     janela com o título «ProperHub - TapFlow Manager · S34».
+     Causa: o ProperHub (grupotap.github.io/ProperHub/) está INSTALADO como app
+     e o manifesto dele declara "scope": "/" — reivindica o endereço INTEIRO do
+     grupotap.github.io. O TapFlow mora no MESMO endereço (/tapflow/) e não
+     tinha manifesto nenhum; então, para o Chrome, estas páginas pertenciam ao
+     app ProperHub, e era a janela dele que abria.
+     Correção: manifesto próprio com scope "./" (= /tapflow/) e id "/tapflow/".
+     O Chrome escolhe o app instalado de ESCOPO MAIS LONGO, e /tapflow/ ganha de
+     "/" — sem precisar mexer no ProperCare, que continua com o escopo largo de
+     propósito (os módulos dele são pastas irmãs: /ProperForms/, /ProperRotores/).
+     ⚠ Não basta publicar: o atalho de hoje É o app do ProperHub apontado para
+     cá. Tem que apagar o atalho velho e instalar o TapFlow de novo.
+     O Field continua com o manifesto DELE (field/manifest.webmanifest, escopo
+     /tapflow/field/) — mais longo ainda, então no celular do inspetor quem
+     ganha é o Field, como deve ser.
+-->
+<link rel="manifest" href="manifest.webmanifest">
+<!-- H6 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
+<link rel="stylesheet" href="nucleo/nucleo.css?v=N1">
+<script src="nucleo/config.js?v=N1"></script>
+<script src="nucleo/nucleo.js?v=N1"></script>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="TapHub">
+<!-- ════════════════════════════════════════════════════════════════════════
+     TAPFLOW · HUB — a porta única.
+     ------------------------------------------------------------------------
+     Por que existe: até o S11 o time tinha DOIS endereços e DUAS senhas
+     guardadas, uma em cada app, porque eu usei duas chaves de armazenamento
+     diferentes (tapflow_sessao e tff_sessao). Isso nunca foi necessário: o
+     GitHub Pages serve os dois do MESMO endereço, e para o navegador
+     /tapflow/manager/ e /tapflow/field/ são o mesmo lugar. A separação era
+     invenção minha.
+
+     Agora: um endereço, um login, e o servidor — não esta página — decide o
+     que a pessoa vê, via tf_meu_acesso().
+     ════════════════════════════════════════════════════════════════════════ -->
+<style>
+:root{
+  --accent:#2C86C6; --accent-hover:#3A97D8; --accent-ink:#A9D2F2;
+  --accent-soft:#1B3550; --accent-alt:#0087CC;
+  --sidebar-bg:#102438;
+  /* H7 · N1b.1: tema escuro do desenho aprovado (20/10). */
+  --paper:#0C1420; --surface:#141F2E; --surface-2:#1A2738;
+  --ink:#EAF0F6; --ink-2:#B9C6D3; --ink-3:#8A9BAC;
+  --rule:#243449; --crit:#FF8A78; --crit-soft:#3A1B18;
+  --sans:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --shadow:0 1px 2px rgba(16,26,28,.06), 0 6px 18px -12px rgba(16,26,28,.3);
+  --sh-lift:0 2px 4px rgba(16,26,28,.08), 0 12px 28px -14px rgba(16,26,28,.42);
+  --t:120ms ease;
+}
+*{box-sizing:border-box}
+/* Sem isto, `.login{display:flex}` vence o `hidden` do navegador e a tela de
+   login continua por cima, invisível, comendo os cliques dos cards. Os outros
+   dois apps já tinham a regra; o hub nasceu sem, e o teste pegou. */
+[hidden]{display:none !important}
+html{overflow-x:hidden}
+body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.5 var(--sans);
+  -webkit-font-smoothing:antialiased;min-height:100dvh;display:flex;flex-direction:column}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+
+.topo{background:var(--sidebar-bg);color:#F5F9FC;padding:11px 18px;display:flex;
+  align-items:center;gap:12px;flex-wrap:wrap}
+.marca{font-size:18px;font-weight:700;letter-spacing:-.02em}
+.marca span{color:var(--accent-alt)}
+.selo{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#7E93A8;
+  border:1px solid rgba(255,255,255,.16);border-radius:3px;padding:2px 6px}
+.topo .dir{margin-left:auto;display:flex;align-items:center;gap:12px;font-size:12.5px;color:#9DB2C6}
+.topo .dir b{color:#F5F9FC;font-weight:600}
+.lnk{background:none;border:0;color:#9DB2C6;font:inherit;cursor:pointer;padding:3px 5px;
+  border-radius:3px;text-decoration:underline;text-underline-offset:2px}
+.lnk:hover{color:#F5F9FC;background:rgba(255,255,255,.06)}
+
+main{flex:1;width:100%;max-width:820px;margin:0 auto;padding:34px 18px 44px}
+h1{font-size:21px;margin:0 0 4px;letter-spacing:-.015em}
+.sub{color:var(--ink-3);font-size:13.5px;margin:0 0 26px}
+
+.cards{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+.card{display:block;text-decoration:none;color:inherit;background:var(--surface);
+  border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:5px;
+  padding:20px;box-shadow:var(--shadow);transition:box-shadow var(--t),transform var(--t)}
+.card:hover,.card:focus-visible{box-shadow:var(--sh-lift);transform:translateY(-1px)}
+.card .ic{width:34px;height:34px;color:var(--accent);margin-bottom:11px}
+.card b{display:block;font-size:16px;letter-spacing:-.01em;margin-bottom:4px}
+.card p{margin:0;font-size:13px;color:var(--ink-3);line-height:1.45}
+.card .quem{margin-top:11px;font-size:11.5px;color:var(--accent-ink);background:var(--accent-soft);
+  display:inline-block;padding:2px 7px;border-radius:3px}
+
+.aviso{background:var(--crit-soft);border:1px solid #E9C4BA;border-left:3px solid var(--crit);
+  border-radius:4px;padding:14px 16px;font-size:13.5px;color:#6E2113}
+.aviso b{display:block;margin-bottom:3px}
+.nota{margin-top:28px;font-size:12.5px;color:var(--ink-3);border-top:1px solid var(--rule);padding-top:14px}
+.nota code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;background:var(--surface-2);
+  border:1px solid var(--rule);border-radius:3px;padding:1px 4px}
+
+/* ── login ─────────────────────────────────────────────────────────────── */
+.login{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;
+  justify-content:center;z-index:10;padding:20px}
+.login .box{background:var(--surface);border:1px solid var(--rule);border-radius:5px;
+  padding:26px;width:min(360px,100%);box-shadow:var(--sh-lift)}
+.login h2{font-size:24px;margin:0 0 3px;letter-spacing:-.02em;font-weight:700}
+.login h2 span{color:var(--accent)}
+.login .casa{font-size:13px;color:var(--ink-3);margin:0 0 18px}
+label{display:block;font-size:12px;font-weight:600;color:var(--ink-2);margin:12px 0 4px}
+input{width:100%;padding:9px 11px;border:1px solid var(--rule);border-radius:4px;
+  font:inherit;background:var(--surface)}
+input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+/* Olho de ver a senha (H2) — o hub é a porta de entrada do time, então é aqui
+   que o olho mais serve. Mesmo desenho dos outros dois apps. */
+.cxSenha{position:relative}
+.cxSenha input{padding-right:42px}
+.cxSenha .olho{position:absolute;top:0;right:0;bottom:0;width:40px;display:flex;
+  align-items:center;justify-content:center;padding:0;margin:0;border:0;border-radius:0;
+  background:none;color:var(--ink-3);cursor:pointer}
+.cxSenha .olho:hover{color:var(--ink)}
+.cxSenha .olho svg{width:19px;height:19px;display:block}
+.cxSenha .olho .fechado{display:none}
+.cxSenha .olho.ver .aberto{display:none}
+.cxSenha .olho.ver .fechado{display:block}
+.btn{width:100%;margin-top:18px;padding:10px;border:0;border-radius:4px;background:var(--accent);
+  color:#fff;font:600 14px var(--sans);cursor:pointer;transition:background var(--t)}
+.btn:hover{background:var(--accent-hover)}
+.btn[disabled]{opacity:.6;cursor:default}
+.erro{color:var(--crit);font-size:12.5px;margin:12px 0 0;min-height:1em;line-height:1.4}
+.indo{font-size:13px;color:var(--ink-3);margin:18px 0 0}
+
+/* ── H5 · S45 item 1: o convite de instalar ──────────────────────────────── */
+.inst{margin-top:22px;background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--accent);
+  border-radius:5px;padding:14px 16px;font-size:13.5px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.inst p{margin:0;flex:1 1 260px;color:var(--ink-2);line-height:1.45}
+.inst b{color:var(--ink)}
+.inst .btn{width:auto;margin:0;padding:8px 14px}
+.inst .lnk{color:var(--ink-3)}
+@media(max-width:520px){
+  main{padding:24px 14px 34px}
+  .topo{padding:10px 14px}
+  .topo .dir{width:100%;margin-left:0;order:3}
+}
+
+/* H7 · N1b.1: topo, boas-vindas e botões inteiros coloridos (desenho aprovado em 20/10). */
+.topo{padding:12px 22px;gap:14px;border-bottom:1px solid var(--rule);background:var(--paper)}
+.marca{display:flex;align-items:center;gap:10px;font-size:19px}
+.marca .logo{width:34px;height:34px;border-radius:9px;background:#1B6FA9;color:#fff;display:flex;
+  align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.marca span{color:#4DA3E8}
+.marca .logo{color:#fff}
+.casa-top{font-size:13px;color:var(--ink-3);border-left:1px solid var(--rule);padding-left:12px}
+.chip{display:flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--rule);
+  border-radius:22px;padding:4px 5px 4px 14px;font-size:13px;color:var(--ink)}
+.chip b{font-weight:600}
+.chip .perf{color:var(--ink-3);font-size:12px}
+.chip .av{width:28px;height:28px;border-radius:50%;background:#2A4562;color:#fff;display:flex;
+  align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.topo .dir{gap:14px}
+.lnk{color:var(--ink-3)}
+.lnk:hover{color:var(--ink);background:rgba(255,255,255,.07)}
+main{max-width:1020px;padding:34px 22px 44px}
+.ola{margin:0 0 2px;font-size:15px;font-weight:600;color:#4DA3E8}
+h1{font-size:27px;margin:0 0 22px;letter-spacing:-.02em}
+.sub{margin:-14px 0 20px}.sub:empty{display:none}
+.cards{grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px}
+.card{position:relative;display:flex;flex-direction:column;justify-content:flex-end;min-height:116px;
+  padding:14px 15px;background:var(--cor,var(--accent));border:0;border-radius:14px;color:#fff;
+  box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.card:hover,.card:focus-visible{transform:translateY(-2px);box-shadow:0 8px 20px -8px rgba(0,0,0,.6);
+  filter:brightness(1.08)}
+.card:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.card .ic{position:absolute;top:13px;left:14px;width:24px;height:24px;margin:0;color:#fff;opacity:.95}
+.card b{font-size:16px;margin:0 0 1px;color:#fff}
+.card p{font-size:12px;color:rgba(255,255,255,.82);line-height:1.35}
+.card .pend{position:absolute;top:11px;right:11px;margin:0;font-size:11px;font-weight:700;
+  color:#fff;background:rgba(0,0,0,.32);border-radius:11px;padding:2px 9px}
+.card.breve{background:transparent;border:1px dashed var(--rule);box-shadow:none;filter:none}
+.card.breve .ic{color:var(--ink-3)}
+.card.breve b{color:var(--ink-3)}
+.card.breve p{color:var(--ink-3)}
+.card.breve:hover{transform:none;box-shadow:none;filter:none}
+.card .em{position:absolute;top:11px;right:11px;font-size:10.5px;color:var(--ink-3);
+  border:1px solid var(--rule);border-radius:11px;padding:1px 8px}
+.aviso{border-color:#7A3A32;color:#FFC9BF}
+.nota{opacity:.8}
+@media(max-width:520px){
+  .topo{padding:10px 14px}
+  .topo .dir{width:100%;margin-left:0;order:3;justify-content:space-between}
+  .casa-top{display:none}
+  .chip .perf{display:none}
+  main{padding:22px 14px 34px}
+  h1{font-size:23px}
+  .cards{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<div class="topo">
+  <div class="marca"><span class="logo" style="color:#fff">T</span><div>Tap<span>Hub</span></div></div>
+  <div class="casa-top">Engetap</div>
+  <div class="selo" id="selo">HUB · H7</div>
+  <div class="dir" id="quemSou" hidden>
+    <span class="chip"><span><b id="euNome"></b> <span class="perf">· <span id="euPerfil"></span></span></span><span class="av" id="euIni"></span></span>
+    <button class="lnk" id="btSair">Sair</button>
+  </div>
+</div>
+
+<main id="corpo" hidden>
+  <p class="ola" id="ola">Bem-vindo</p>
+  <h1>Em que vamos trabalhar hoje?</h1>
+  <p class="sub" id="subtitulo"></p>
+  <div class="cards" id="cards"></div>
+  <div id="semNada" hidden>
+    <div class="aviso">
+      <b>Seu perfil não tem nenhum sistema liberado.</b>
+      Isso é configuração, não erro de senha. Peça ao Fernando para ajustar o perfil
+      <code id="perfilCru"></code> na tabela <code>perfis</code>.
+    </div>
+  </div>
+  <!-- H5 · S45 item 1: instalar como app. Aparece só quando dá para instalar
+       (o navegador avisou) ou no iPhone fora do app instalado, e some para
+       quem disse "agora não". -->
+  <div class="inst" id="inst" hidden>
+    <p id="instTxt"></p>
+    <button class="btn" type="button" id="instSim" hidden>Instalar</button>
+    <button class="lnk" type="button" id="instNao">agora não</button>
+  </div>
+  <p class="nota" id="nota"></p>
+</main>
+
+<div class="login" id="login" hidden>
+  <div class="box">
+    <h2>Tap<span>Hub</span></h2>
+    <p class="casa">Engetap Engenharia</p>
+    <form id="frm">
+      <label for="lgEmail">E-mail</label>
+      <input id="lgEmail" type="email" autocomplete="username" required>
+      <label for="lgSenha">Senha</label>
+      <div class="cxSenha">
+        <input id="lgSenha" type="password" autocomplete="current-password" required>
+        <button type="button" class="olho" id="lgOlho" aria-label="Mostrar senha" aria-pressed="false" title="Mostrar senha" tabindex="-1"><svg class="aberto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.8-6.8 10-6.8S22 12 22 12s-3.8 6.8-10 6.8S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg><svg class="fechado" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.8-6.8 10-6.8S22 12 22 12s-3.8 6.8-10 6.8S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path d="M4.2 4.2 19.8 19.8"/></svg></button>
+      </div>
+      <p class="erro" id="lgErro"></p>
+      <button class="btn" id="lgBtn" type="submit">Entrar</button>
+    </form>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CONFIGURAÇÃO — as mesmas duas linhas dos outros dois apps.
+   Vazias = modo demonstração (é o que acontece ao abrir por duplo clique).
+   ════════════════════════════════════════════════════════════════════════════ */
+const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';
+
+const APP_VERSION = 'H7';
+try{ document.getElementById('selo').textContent = 'HUB · ' + APP_VERSION; }catch(e){}
+
+const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
+
+/* ── A CHAVE COMPARTILHADA ─────────────────────────────────────────────────
+   Uma só, lida pelos três arquivos. As duas antigas ficam sendo aceitas por
+   um tempo para ninguém ser deslogado no dia da virada — quem já estava
+   dentro continua dentro. */
+const K_SESSAO   = 'tf_sessao';
+const K_ANTIGAS  = ['tapflow_sessao', 'tff_sessao'];
+
+const VAZIA = { token:null, refresh:null, nome:null, email:null, perfil:null,
+                perfil_nome:null, admin:false, modulos:[], executa_em:null,
+                usa_gestao:false, usa_campo:false, rh_ficha:false, portas:null };
+let sessao = Object.assign({}, VAZIA);
+
+function gravar(){ try{ localStorage.setItem(K_SESSAO, JSON.stringify(sessao)); }catch(e){} }
+function ler(){
+  try{
+    const r = localStorage.getItem(K_SESSAO);
+    if (r){ sessao = Object.assign({}, VAZIA, JSON.parse(r)); return true; }
+    // adoção das chaves antigas: aproveita só o token; o resto vem do servidor
+    for (const k of K_ANTIGAS){
+      const v = localStorage.getItem(k);
+      if (v){
+        const o = JSON.parse(v);
+        if (o && o.token){ sessao = Object.assign({}, VAZIA,
+          { token:o.token, refresh:o.refresh||null, nome:o.nome||null, email:o.email||null }); return true; }
+      }
+    }
+  }catch(e){}
+  return false;
+}
+function limpar(){
+  sessao = Object.assign({}, VAZIA);
+  try{ localStorage.removeItem(K_SESSAO); localStorage.removeItem('tf_travado'); K_ANTIGAS.forEach(k => localStorage.removeItem(k)); }catch(e){}
+}
+
+/* ── rede ─────────────────────────────────────────────────────────────────
+   Prazo curto: o hub é a primeira tela do dia. Ficar rodando sem dizer nada
+   é pior que dizer "não deu". */
+function prazo(ms){ const c = new AbortController(); setTimeout(() => c.abort(), ms || 12000); return c.signal; }
+
+async function api(caminho, opt){
+  opt = opt || {};
+  const r = await fetch(SUPABASE_URL + caminho, {
+    method: opt.method || 'GET',
+    headers: Object.assign({
+      apikey: SUPABASE_ANON_KEY,
+      'Content-Type':'application/json'
+    }, sessao.token ? { Authorization:'Bearer ' + sessao.token } : {}),
+    body: opt.body ? JSON.stringify(opt.body) : undefined,
+    signal: prazo(opt.ms)
+  });
+  const j = await r.json().catch(() => null);
+  if (!r.ok){
+    const e = new Error((j && (j.error_description || j.msg || j.message || j.hint)) || ('Erro ' + r.status));
+    e.status = r.status; throw e;
+  }
+  return j;
+}
+
+async function renovar(){
+  if (!sessao.refresh) return false;
+  try{
+    const j = await api('/auth/v1/token?grant_type=refresh_token', { method:'POST', body:{ refresh_token: sessao.refresh } });
+    if (!j || !j.access_token) return false;
+    sessao.token = j.access_token;
+    if (j.refresh_token) sessao.refresh = j.refresh_token;
+    gravar(); return true;
+  }catch(e){ return false; }
+}
+
+/** Quem sou eu — resposta do SERVIDOR, não desta página. Uma chamada. */
+async function meuAcesso(){
+  const a = await api('/rest/v1/rpc/tf_meu_acesso', { method:'POST', body:{} });
+  if (!a || !a.perfil)
+    throw new Error('Seu login existe, mas você não está na tabela usuarios. É o Passo 3b do guia de instalação.');
+  Object.assign(sessao, {
+    nome:a.nome, email:a.email, perfil:a.perfil, perfil_nome:a.perfil_nome,
+    admin:!!a.admin, modulos:a.modulos || [], executa_em:a.executa_em,
+    usa_gestao:!!a.usa_gestao, usa_campo:!!a.usa_campo
+  });
+  // H4 · S42: quem é de escritório e tem ficha de RH confirma EPI pelo Field
+  // (Minha Segurança). Banco sem o 62 → falso, e o hub fica como no H3.
+  sessao.rh_ficha = false;
+  if (!sessao.usa_campo){
+    try{ sessao.rh_ficha = !!(await api('/rest/v1/rpc/tf_rh_tenho_ficha', { method:'POST', body:{} })); }catch(e){}
+  }
+  // H6 · N1a: as portas vêm do SERVIDOR (tf_hub_modulos): a regra mora num lugar só e o
+  // hub só desenha. Banco sem o 200 → null, e o hub decide pelos três campos de antes.
+  try{ sessao.portas = await api('/rest/v1/rpc/tf_hub_modulos', { method:'POST', body:{} }); }
+  catch(e){ if (e.status === 401) throw e; sessao.portas = null; }
+  gravar();
+  return a;
+}
+
+/* ── as portas ────────────────────────────────────────────────────────────
+   O ícone é desenhado aqui, sem biblioteca: o hub tem que abrir rápido no
+   celular do inspetor, às vezes com o sinal da obra. */
+const IC_GESTAO = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>';
+const IC_CAMPO  = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3.5 4 6v13l5-2.5 6 3 5-2.5V4l-5 2.5z"/><path d="M9 3.5v13M15 6.5v13"/></svg>';
+
+const IC_SEG = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17a8 8 0 0 1 16 0z"/><path d="M2.5 17h19M12 9V5.5M9 6.5V11M15 6.5V11"/></svg>';
+
+const IC_MOD = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>';
+
+/* `ir` = a tela do Manager onde o botão cai (o Manager valida e, se a pessoa não
+   puder ver, abre a primeira que ela pode). `legado` = regra de antes do servidor
+   mandar as portas (banco sem o 200). Os módulos novos só existem com `portas`. */
+const PORTAS = [
+  { chave:'tapflow', href:'manager/?ir=age', titulo:'TapFlow', icone:IC_GESTAO, cor:'#1B6FA9',
+    texto:'OS, quadros e agenda' },
+  { chave:'tapcrm', href:'manager/?ir=com', titulo:'TapCRM', icone:IC_MOD, cor:'#C2410C',
+    texto:'Negócios e propostas' },
+  { chave:'tapfin', href:'manager/?ir=finp', titulo:'TapFin', icone:IC_MOD, cor:'#15803D',
+    texto:'Financeiro e cartões' },
+  { chave:'taprh', href:'manager/?ir=rhf', titulo:'TapRH', icone:IC_MOD, cor:'#6D28D9',
+    texto:'Pessoal, diárias e ponto' },
+  { chave:'tapseg', href:'manager/?ir=rhs', titulo:'TapSeg', icone:IC_SEG, cor:'#BE123C',
+    texto:'EPI, ASO e treinamentos' },
+  { chave:'cadastros', href:'manager/?ir=cad', titulo:'Cadastros', icone:IC_MOD, cor:'#334155',
+    texto:'Clientes e catálogo' },
+  { chave:'gestao', href:'manager/', titulo:'Gestão', icone:IC_GESTAO, cor:'#0E5A8A',
+    texto:'Quadros e relatórios',
+    legado:s => s.usa_gestao },
+  { chave:'campo', href:'field/', titulo:'Campo', icone:IC_CAMPO, cor:'#0369A1',
+    texto:'Levantamento, mesmo sem sinal',
+    legado:s => s.usa_campo },
+  // H4 · S42: só para quem NÃO trabalha em campo — quem trabalha já tem a
+  // Minha Segurança dentro do Campo. S49: a mesma porta leva aos Documentos
+  // (ponto e demonstrativo) e às Diárias, que moram no Field.
+  { chave:'seg', href:'field/', titulo:'Minha Segurança', icone:IC_SEG, cor:'#9F1239',
+    texto:'EPI, ponto e diárias',
+    legado:s => !s.usa_campo && s.rh_ficha },
+];
+const EM_BREVE = [
+  { titulo:'TapDoc', texto:'Inspeção NR-13 e laudos' },
+  { titulo:'TapWeb', texto:'Portal do cliente' },
+];
+
+function liberada(p, s){
+  return s.portas ? s.portas.includes(p.chave) : (p.legado ? !!p.legado(s) : false);
+}
+
+let autoIndo = null;
+let resumo = {};
+let timerResumo = null;
+
+/* O número de cada botão vem de UMA chamada (tf_hub_resumo). Sem sinal ou sem o 201
+   no banco: mostra o último valor guardado (ou nada) e o botão continua funcionando. */
+function pintarResumo(){
+  document.querySelectorAll('#cards .card[data-chave]').forEach(a => {
+    const r = resumo[a.dataset.chave];
+    let el = a.querySelector('.pend');
+    if (r && r.n > 0 && r.texto){
+      if (!el){ el = document.createElement('span'); el.className = 'pend'; a.appendChild(el); }
+      el.textContent = r.texto;
+    } else if (el){ el.remove(); }
+  });
+}
+async function carregarResumo(){
+  if (DEMO || !sessao.token || !sessao.portas) return;
+  try{
+    const r = await api('/rest/v1/rpc/tf_hub_resumo', { method:'POST', body:{} });
+    if (r && typeof r === 'object'){
+      resumo = r;
+      try{ localStorage.setItem('tf_hub_resumo', JSON.stringify({ e:sessao.email, r:r })); }catch(e){}
+      pintarResumo();
+    }
+  }catch(e){ /* sem sinal ou banco sem o 201: fica o que já está na tela */ }
+}
+function resumoGuardado(){
+  try{
+    const g = JSON.parse(localStorage.getItem('tf_hub_resumo') || 'null');
+    if (g && g.e === sessao.email && g.r) resumo = g.r;
+  }catch(e){}
+}
+
+function montar(){
+  const abertas = PORTAS.filter(p => liberada(p, sessao));
+  const cx = document.getElementById('cards');
+  cx.innerHTML = '';
+  abertas.forEach(p => {
+    const a = document.createElement('a');
+    a.className = 'card'; a.href = p.href; a.dataset.chave = p.chave;
+    a.style.setProperty('--cor', p.cor);
+    a.innerHTML = p.icone + '<b>' + p.titulo + '</b><p>' + p.texto + '</p>'
+                ;
+    a.addEventListener('click', () => { if (autoIndo){ clearTimeout(autoIndo); autoIndo = null; } });
+    cx.appendChild(a);
+  });
+  // Quem administra vê o que vem aí (só vitrine, não clica).
+  if (sessao.admin && sessao.portas){
+    EM_BREVE.forEach(p => {
+      const d = document.createElement('div');
+      d.className = 'card breve'; d.setAttribute('aria-disabled', 'true');
+      d.innerHTML = IC_MOD + '<b>' + p.titulo + '</b><p>' + p.texto + '</p><span class="em">em breve</span>';
+      cx.appendChild(d);
+    });
+  }
+
+  document.getElementById('semNada').hidden = abertas.length > 0;
+  document.getElementById('perfilCru').textContent = sessao.perfil || '(sem perfil)';
+  document.getElementById('euNome').textContent = sessao.nome || sessao.email || '';
+  document.getElementById('euPerfil').textContent = sessao.perfil_nome || sessao.perfil || '';
+  document.getElementById('euIni').textContent = String(sessao.nome || sessao.email || '?').trim().split(/\s+/)
+    .slice(0, 2).map(x => x.charAt(0).toUpperCase()).join('');
+  document.getElementById('quemSou').hidden = false;
+  document.getElementById('ola').textContent =
+    'Olá, ' + String(sessao.nome || '').split(' ')[0] + '.';
+
+  const mods = (sessao.modulos || []).join(', ');
+  // A nota técnica (módulos e tabela perfis) só interessa a quem administra.
+  document.getElementById('nota').innerHTML = (abertas.length && sessao.admin)
+    ? 'Seu perfil abre <b>' + abertas.map(p => p.titulo).join(', ') + '</b>'
+      + (mods ? ', com os módulos <code>' + mods + '</code>' : '') + '. '
+      + 'Quem muda isso é o perfil na tabela <code>perfis</code> — não uma versão nova do app.'
+    : '';
+
+  // Uma porta só: não faz sentido obrigar a clicar. Vai, e deixa cancelar.
+  // `?para=manager` (vindo do botão "Início" do Manager) significa "volte para o hub", não "entre".
+  const p = new URLSearchParams(location.search).get('para');
+  // Nomes antigos continuam valendo: `manager` = Gestão (ou, sem ela, o primeiro módulo do Manager); `field` = Campo.
+  const ALIAS = { manager:['gestao','tapflow','tapcrm','tapfin','taprh','tapseg','cadastros'], field:['campo','seg'] };
+  let direto = null;
+  if (p){
+    const quais = ALIAS[p] || [p];
+    for (const k of quais){ direto = abertas.find(x => x.chave === k); if (direto) break; }
+  } else if (abertas.length === 1) direto = abertas[0];
+  if (direto){
+    const aviso = document.createElement('p');
+    aviso.className = 'indo';
+    aviso.innerHTML = 'Indo para <b>' + direto.titulo + '</b>… <button class="lnk" id="btFica" '
+                    + 'style="color:var(--accent)">ficar aqui</button>';
+    document.getElementById('corpo').appendChild(aviso);
+    autoIndo = setTimeout(() => { location.href = direto.href; }, 1400);
+    document.getElementById('btFica').addEventListener('click', () => {
+      clearTimeout(autoIndo); autoIndo = null; aviso.remove();
+    });
+  }
+  document.getElementById('corpo').hidden = false;
+  document.getElementById('login').hidden = true;
+  pintarConvite();
+
+  resumoGuardado(); pintarResumo(); carregarResumo();
+  if (timerResumo) clearInterval(timerResumo);
+  timerResumo = setInterval(() => { if (!document.hidden) carregarResumo(); }, 60000);
+}
+
+function telaLogin(recado){
+  // Recado deixado por quem mandou a pessoa para cá (sessão vencida, por
+  // exemplo). Sem isto o time cai numa tela de login sem saber por quê, que
+  // é como "o sistema me derrubou" vira chamado.
+  if (!recado){
+    try{
+      const r = sessionStorage.getItem('tf_recado');
+      if (r){ recado = r; sessionStorage.removeItem('tf_recado'); }
+    }catch(e){}
+  }
+  document.getElementById('corpo').hidden = true;
+  document.getElementById('quemSou').hidden = true;
+  document.getElementById('login').hidden = false;
+  document.getElementById('lgErro').textContent = recado || '';
+  try{ olhoSenha(false); }catch(e){}
+  setTimeout(() => { try{ document.getElementById('lgEmail').focus(); }catch(e){} }, 30);
+}
+
+
+/* ── Olho de ver a senha (H2) ───────────────────────────────────────────────
+   Senha digitada às cegas erra fácil, e o erro só aparece como "credenciais
+   inválidas" — que é a mesma mensagem de senha errada de verdade. O botão só
+   troca o `type` do campo: nada da senha é guardado, lido ou enviado a lugar
+   nenhum, e ele volta a ficar oculto toda vez que a tela de login aparece.
+   `tabindex="-1"` no botão de propósito: Tab vai do e-mail à senha e da senha
+   ao Entrar, sem parar no olho. */
+function olhoSenha(mostrar){
+  const b = document.getElementById('lgOlho'), c = document.getElementById('lgSenha');
+  if (!b || !c) return;
+  c.type = mostrar ? 'text' : 'password';
+  b.classList.toggle('ver', mostrar);
+  const rot = mostrar ? 'Ocultar senha' : 'Mostrar senha';
+  b.setAttribute('aria-label', rot);
+  b.setAttribute('aria-pressed', mostrar ? 'true' : 'false');
+  b.title = rot;
+}
+try{
+  document.getElementById('lgOlho').addEventListener('click', () => {
+    const c = document.getElementById('lgSenha');
+    olhoSenha(c.type === 'password');
+    c.focus();
+  });
+}catch(e){}
+
+document.getElementById('frm').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const bt = document.getElementById('lgBtn'), er = document.getElementById('lgErro');
+  const email = document.getElementById('lgEmail').value.trim();
+  const senha = document.getElementById('lgSenha').value;
+  if (!email || !senha) return;
+  bt.disabled = true; bt.textContent = 'Entrando…'; er.textContent = '';
+  try{
+    const j = await api('/auth/v1/token?grant_type=password', { method:'POST', body:{ email, password: senha } });
+    sessao.token = j.access_token; sessao.refresh = j.refresh_token || null;
+    await meuAcesso();
+    await entrada();
+    montar();
+  }catch(e){
+    limpar();
+    er.textContent = /invalid login|credentials|grant/i.test(e.message || '')
+      ? 'E-mail ou senha inválidos.' : (e.message || 'Não deu para entrar.');
+  }finally{
+    bt.disabled = false; bt.textContent = 'Entrar';
+  }
+});
+
+document.getElementById('btSair').addEventListener('click', () => {
+  if (autoIndo){ clearTimeout(autoIndo); autoIndo = null; }
+  limpar(); telaLogin('');
+});
+
+/* ── H5 · S45 item 1: o TapFlow como APP (PWA) ─────────────────────────────
+   O manifesto já existia (H3); faltava o service worker — sem ele o Chrome
+   não oferece "Instalar" em todo aparelho, e o Manager não abria sem sinal.
+   Um só, na raiz (sw.js), para o hub e o Manager; o Field continua com o dele.
+   Só em http(s): aberto do disco não existe service worker. */
+const K_INST = 'tf_inst_nao';
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
+const instalado = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches)
+                        || window.navigator.standalone === true;
+const ehIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent)
+                    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let promptInst = null;
+function pintarConvite(){
+  const cx = document.getElementById('inst');
+  let nao = false; try{ nao = localStorage.getItem(K_INST) === '1'; }catch(e){}
+  if (!cx || nao || instalado()){ if (cx) cx.hidden = true; return; }
+  const t = document.getElementById('instTxt'), b = document.getElementById('instSim');
+  if (promptInst){
+    t.innerHTML = '<b>Instale o TapFlow neste aparelho.</b> Fica um ícone na tela inicial e ele abre em '
+      + 'tela cheia, como um app — sem a barra do navegador.';
+    b.hidden = false; cx.hidden = false;
+  } else if (ehIOS()){
+    // O Safari do iPhone não tem o botão: o caminho é o menu Compartilhar.
+    t.innerHTML = '<b>No iPhone:</b> toque em <b>Compartilhar</b> (o quadrado com a seta para cima) e depois '
+      + 'em <b>Adicionar à Tela de Início</b>. O TapFlow passa a abrir em tela cheia, com o ícone da Engetap.';
+    b.hidden = true; cx.hidden = false;
+  } else cx.hidden = true;
+}
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); promptInst = e; pintarConvite(); });
+window.addEventListener('appinstalled', () => { promptInst = null; pintarConvite(); });
+document.getElementById('instSim').addEventListener('click', async () => {
+  if (!promptInst) return;
+  const p = promptInst; promptInst = null;
+  try{ p.prompt(); await p.userChoice; }catch(e){}
+  pintarConvite();
+});
+document.getElementById('instNao').addEventListener('click', () => {
+  try{ localStorage.setItem(K_INST, '1'); }catch(e){}
+  document.getElementById('inst').hidden = true;
+});
+
+/* ── H6 · N1a: depois da senha, o PIN ─────────────────────────────────────
+   Cria o PIN se a pessoa não tem e pergunta se lembra este aparelho. Falha de
+   sinal aqui NUNCA impede de entrar (o PIN é uma trava, não um segundo login). */
+async function entrada(){
+  if (DEMO || !window.Nucleo) return;
+  try{ await Nucleo.fluxoEntrada(); }catch(e){ if (e && e.status === 401) throw e; }
+}
+
+/* ── entrada ──────────────────────────────────────────────────────────── */
+(async function iniciar(){
+  if (DEMO){
+    Object.assign(sessao, { nome:'Fernando (demo)', perfil:'admin', perfil_nome:'Administração',
+      admin:true, modulos:['os','comercial','compras','campo','cadastros','relatorios','documentos'],
+      executa_em:'ambos', usa_gestao:true, usa_campo:true });
+    document.getElementById('subtitulo').textContent =
+      'Modo demonstração — as chaves do Supabase não estão preenchidas neste arquivo.';
+    montar();
+    return;
+  }
+  if (!ler() || !sessao.token){ telaLogin(''); return; }
+  // H6 · N1a: o porteiro do núcleo. Se precisar travar, COBRE a tela com o PIN.
+  let g = 'livre';
+  try{ if (window.Nucleo) g = Nucleo.porteiro({ app:'hub', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY }); }catch(e){}
+  if (!ler() || !sessao.token){ telaLogin((window.Nucleo && Nucleo.recado) || ''); return; }   // o porteiro pode ter encerrado a sessão
+  try{
+    await meuAcesso();
+    if (g === 'entrada') await entrada();
+    montar();
+  }catch(e){
+    if (e.status === 401 && await renovar()){
+      try{ await meuAcesso(); if (g === 'entrada') await entrada(); montar(); return; }catch(e2){}
+    }
+    // H6: sem sinal (erro sem status) NÃO derruba a sessão: abre com o que já estava guardado.
+    if (!e.status && sessao.perfil){ montar(); return; }
+    limpar();
+    telaLogin(e.status === 401 ? 'Sua sessão expirou. Entre de novo.' : (e.message || ''));
+  }
+})();
+</script>
+</body>
+</html>
