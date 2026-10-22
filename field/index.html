@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S33</title>
+<title>TapFlow Field · S34</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -505,9 +505,9 @@ main{padding-bottom:84px}
 .agSheetC .btn{margin-top:8px}
 </style>
 <!-- S33 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N1">
-<script src="../nucleo/config.js?v=N1"></script>
-<script src="../nucleo/nucleo.js?v=N1"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N2">
+<script src="../nucleo/config.js?v=N2"></script>
+<script src="../nucleo/nucleo.js?v=N2"></script>
 </head>
 <body>
 
@@ -567,7 +567,7 @@ main{padding-bottom:84px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S33';
+const APP_VERSION = 'S34';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -890,8 +890,13 @@ const filaLer = () => LS.get(K_FILA, []);
 const filaGravar = f => LS.set(K_FILA, f);
 
 function filaAdd(entrada){
-  const f = filaLer().filter(e => e.assinatura !== entrada.assinatura);
-  f.push(Object.assign({ tentativas:0, em: new Date().toISOString() }, entrada));
+  // S34 · N2 (decisão Q3, 22/10): a mesma assinatura SUBSTITUI no mesmo lugar.
+  // Antes ia para o fim da fila, e um item que depende de outro podia passar
+  // na frente dele.
+  const f = filaLer();
+  const novo = Object.assign({ tentativas:0, em: new Date().toISOString() }, entrada);
+  const i = f.findIndex(e => e.assinatura === entrada.assinatura);
+  if (i >= 0) f[i] = novo; else f.push(novo);
   filaGravar(f); pintarFila();
 }
 function filaRemover(assinatura){
@@ -905,6 +910,9 @@ async function flushFila(){
   flushEmVoo = true;
   try{
     for (const e of f){
+      // S34 · N2: entrada nova (v2, de qualquer módulo) é enviada pelo NÚCLEO,
+      // não por aqui — este laço só conhece os tipos antigos do Field.
+      if (e && e.v === 2) continue;
       try{
         if (e.tipo === 'anexo'){
           const dataUrl = await IDB.get(e.idbKey);
@@ -945,6 +953,8 @@ async function flushFila(){
     }
   } finally {
     flushEmVoo = false; pintarFila();
+    // S34 · N2: depois dos tipos antigos, o núcleo envia as entradas v2
+    try{ if (window.Nucleo && Nucleo.fila) Nucleo.fila.enviarAgora().then(pintarFila, pintarFila); }catch(e){}
     // a tela da execução conta a fila para decidir se o fechar acende — quando
     // a fila esvazia, ela precisa saber disso sem o inspetor sair e voltar
     if (tela === 'exec' && exec && !execForm) pintarExecucao();
@@ -982,10 +992,20 @@ function pintarFila(){
     const soLev = f.every(e => e.tipo === 'levantamento' || e.tipo === 'anexo');
     const rot = soLev ? ['levantamento aguardando envio','levantamentos aguardando envio']
                       : ['registro aguardando envio','registros aguardando envio'];
+    // S34 · N2: entrada parada (o servidor recusou uma anterior do mesmo grupo)
+    // não some: aparece contada, para a pessoa saber que precisa de atenção.
+    const parados = f.filter(e => e && e.v === 2 && e.parado).length;
     document.getElementById('filaTxt').textContent =
-      f.length + ' ' + (f.length === 1 ? rot[0] : rot[1]);
+      f.length + ' ' + (f.length === 1 ? rot[0] : rot[1]) + (parados ? ' · ' + parados + ' parado' + (parados > 1 ? 's' : '') : '');
   }
 }
+// S34 · N2: o núcleo avisa quando envia, recusa ou para algo — a faixa acompanha.
+try{
+  if (window.Nucleo && Nucleo.fila) Nucleo.fila.aoMudar(ev => {
+    pintarFila();
+    if (ev.situacao === 'recusado') toast('Recusado pelo servidor: ' + (ev.erro || ''), 'err');
+  });
+}catch(e){}
 document.getElementById('btnFlush').addEventListener('click', () => {
   setConn('sync','enviando…'); flushFila().then(()=>carregar(true)).catch(()=>{});
 });
@@ -2132,6 +2152,22 @@ function pintarOSBase(){
       b.addEventListener('click', () => assumirNoCampo(t, b));
       p.appendChild(b);
     }
+    return;
+  }
+
+  // ── S34 · N2: tarefa que abre a tela de OUTRO módulo ──
+  // O núcleo sabe para onde cada tipo vai (ex.: auto:inspecao → doc/, o TapDoc).
+  // O registro mora no núcleo para o Field mandar certo sem ter o código do
+  // módulo carregado. Tipo sem registro segue o despacho de sempre, abaixo.
+  const destinoMod = (window.Nucleo && Nucleo.tarefas) ? Nucleo.tarefas.destino(t.tipo) : null;
+  if (destinoMod){
+    const b = document.createElement('button');
+    b.className = 'btn pri';
+    b.textContent = String(t.tipo || '').startsWith('auto:inspecao') ? 'Abrir a inspeção' : 'Abrir';
+    b.addEventListener('click', () => {
+      location.href = destinoMod + '?os=' + encodeURIComponent(os.os_id) + '&tarefa=' + encodeURIComponent(t.tarefa_id);
+    });
+    p.appendChild(b);
     return;
   }
 

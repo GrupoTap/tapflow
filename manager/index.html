@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S72</title>
+<title>TapFlow Manager · S74</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2311,7 +2311,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S72';
+const APP_VERSION = 'S74';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -17576,6 +17576,12 @@ async function modalCompromisso(c, padrao){
     +   '<option value="">— ninguém ainda —</option>'
     +   EQUIPE.map(u => '<option value="' + esc(u.id) + '">' + esc(u.nome) + '</option>').join('')
     + '</select></div></div>'
+    // S74 · compromisso de inspeção não abre a coleta: a inspeção da OS se
+    // agenda pela T03 (pedido do central para a N1d2, 21/10). Só avisa.
+    + (pode && !fechado ? '<div class="aviso" id="acInsp" role="status" style="display:none">'
+        + '<b>Inspeção de OS se agenda pela T03.</b> Para abrir a coleta no Field, agende pela '
+        + '<b>T03 "Agendar serviço"</b> da OS (no quadro ou na Agenda). Este compromisso entra na '
+        + 'agenda, mas não abre a coleta de ninguém.</div>' : '')
     // S61 · início, hora, tempo em horas e minutos e a prévia dos dias
     + campoQuando('ac', { dis: !!dis })
     + '<p style="font-size:12px;color:var(--ink-3);margin:-4px 0 0;line-height:1.45">Dia sem '
@@ -17647,6 +17653,22 @@ async function modalCompromisso(c, padrao){
   setQuando('ac', { dia: v.data_prevista || '', hora: v.hora_inicio, minutos: v.tempo_estimado_min, fds: v.usa_fds });
   iniciarQuando('ac');   // S61
   acApoioLigar();
+  acInspLigar();         // S74
+}
+
+/** S74 · o aviso de inspeção: aparece quando a categoria ou o título têm
+ *  "inspe" (Inspeção, inspecao, INSPEÇÃO…) e some quando não têm mais. A
+ *  categoria é texto livre (`v_compromissos_categorias`), por isso a busca é
+ *  pelo pedaço da palavra, sem acento e sem maiúscula. Não impede gravar. */
+function acInspLigar(){
+  const av = document.getElementById('acInsp');
+  if (!av) return;
+  const t = document.getElementById('acT'), c = document.getElementById('acC');
+  const ver = () => { av.style.display = /inspe/.test(norm(c.value) + ' ' + norm(t.value)) ? '' : 'none'; };
+  t.addEventListener('input', ver);
+  c.addEventListener('input', ver);
+  c.addEventListener('change', ver);   // escolher na lista (datalist) dispara change
+  ver();
 }
 
 /** S51: o dono não aparece como apoio dele mesmo (some da lista e desmarca);

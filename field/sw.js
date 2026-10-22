@@ -24,7 +24,7 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S33';
+const VERSAO = 'S34';
 const CACHE  = 'tapflow-field-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -39,9 +39,10 @@ const ESSENCIAIS = [
   // N1a (S33): o núcleo comum, que mora FORA desta pasta (../nucleo/). O endereço tem que ser
   // IDÊNTICO ao do <script> do index.html, com o ?v= (c.match compara a consulta inteira).
   // Sem isto o Field sem sinal abriria sem o núcleo. Trocou o ?v= no index.html? Troque aqui também.
-  '../nucleo/nucleo.js?v=N1',
-  '../nucleo/nucleo.css?v=N1',
-  '../nucleo/config.js?v=N1'
+  // S34: N2 (fila de envios e utilitários)
+  '../nucleo/nucleo.js?v=N2',
+  '../nucleo/nucleo.css?v=N2',
+  '../nucleo/config.js?v=N2'
 ];
 
 self.addEventListener('install', ev => {
