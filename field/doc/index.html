@@ -1,0 +1,985 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1B6FA9">
+<title>TapDoc · Inspeção</title>
+<link rel="icon" href="../icons/favicon-32.png">
+<link rel="stylesheet" href="../../nucleo/nucleo.css?v=N2">
+<script src="../../nucleo/config.js?v=N2"></script>
+<script src="../../nucleo/nucleo.js?v=N2"></script>
+<!--
+  TapDoc 1 · a coleta da inspeção no celular (R02a)
+  ─────────────────────────────────────────────────
+  Mora em field/doc/ e é aberta pelo Field (botão "Abrir a inspeção" da T06).
+  Usa o núcleo N2: a sessão, o PIN, a fila de envios sem sinal e as fotos.
+  Banco: sql/400_tapdoc_r02a.sql. Desenho: inspecao-nr13/rodadas/R02-field-coleta.md.
+  Feito pelo chat central em 22/10/2026.
+
+  COMO FUNCIONA SEM SINAL
+   · Ao abrir com sinal, baixa o "pacote" da OS (tf_insp_pacote_os) e guarda
+     no aparelho. Daí em diante tudo funciona sem sinal.
+   · Cada gravação vira uma entrada da fila do núcleo (tipo 'insp', um grupo
+     por vaso), com o id gerado AQUI. O banco aceita reenvio sem duplicar.
+   · Vaso com envio pendente fica com a versão do aparelho; sem pendência,
+     o pacote novo do servidor substitui.
+  O endereço leva a OS depois do # (doc/#os=<id>&t=<id>): assim o service
+  worker do Field acha a página guardada sem sinal.
+-->
+<style>
+:root{
+  --paper:#F1F3F4; --surface:#FFFFFF; --surface-2:#F7F9FA;
+  --ink:#14181B; --ink-2:#515252; --ink-3:#78838A;
+  --rule:#DBE0E3; --rule-2:#EBEFF1;
+  --accent:#1B6FA9; --accent-soft:#E3EEF7; --accent-ink:#164C77;
+  --crit:#A62D18; --crit-soft:#F8E5E0;
+  --warn:#8A5A12; --warn-soft:#F8EEDC;
+  --ok:#1E7A42; --ok-soft:#DFF0E6;
+  --sh:0 1px 2px rgba(15,23,25,.06), 0 6px 16px -10px rgba(15,23,25,.28);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none !important}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.45;
+  -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overflow:hidden;
+  padding-bottom:env(safe-area-inset-bottom)}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+header{flex:0 0 auto;background:var(--accent);color:#fff;
+  padding:calc(10px + env(safe-area-inset-top)) 14px 10px;display:flex;align-items:center;gap:10px}
+header .back{background:rgba(255,255,255,.16);border:0;color:#fff;width:34px;height:34px;border-radius:4px;font-size:19px;line-height:1;flex:0 0 auto}
+header .tit{flex:1;min-width:0}
+header .tit b{display:block;font-size:16px;font-weight:600;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header .tit small{display:block;font-size:12px;opacity:.8;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header .st{display:flex;align-items:center;gap:6px;font-size:11.5px;opacity:.92;flex:0 0 auto}
+.dot{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.5)}
+.dot.ok{background:#7BE0A9}.dot.off{background:#FF9E86}
+.aviso{flex:0 0 auto;padding:8px 14px;font-size:13px;font-weight:600}
+.aviso.demo{background:var(--warn-soft);color:var(--warn)}
+.aviso.fila{background:var(--crit-soft);color:var(--crit);display:flex;gap:8px;align-items:center}
+.aviso.fila.so{background:var(--warn-soft);color:var(--warn)}
+.aviso.fila button{background:var(--crit);color:#fff;border:0;border-radius:3px;padding:4px 10px;font-size:12px;font-weight:600}
+.aviso.fila.so button{background:var(--warn)}
+.aviso.fila .esp{margin-left:auto}
+main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 40px}
+.wrap{max-width:720px;margin:0 auto}
+h2{font-size:13px;font-weight:700;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;margin:18px 2px 8px}
+h2:first-child{margin-top:4px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:13px 14px;box-shadow:var(--sh);margin-bottom:10px}
+.vaso{width:100%;text-align:left;display:flex;gap:10px;align-items:center;border-left:4px solid var(--accent)}
+.vaso.fora{border-left-color:var(--rule)}
+.vaso .tg{font-size:16px;font-weight:700;line-height:1.2}
+.vaso .nm{font-size:13.5px;color:var(--ink-2);margin-top:2px}
+.vaso .dir{margin-left:auto;font-size:20px;color:var(--ink-3)}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.chip{font-size:11px;font-weight:600;padding:3px 8px;border-radius:3px;background:var(--surface-2);color:var(--ink-3);border:1px solid var(--rule-2)}
+.chip.ok{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.chip.inc{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.chip.pend{background:var(--crit-soft);color:var(--crit);border-color:transparent}
+.chip.prov{background:#EEE7F7;color:#4B2E83;border-color:transparent}
+.btn{display:block;width:100%;border:1px solid var(--rule);background:var(--surface);border-radius:5px;padding:12px 14px;font-weight:600;font-size:15px;text-align:center;margin-top:10px}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.sec{background:var(--accent-soft);border-color:transparent;color:var(--accent-ink)}
+.btn.perigo{color:var(--crit)}
+.btn.peq{display:inline-block;width:auto;padding:7px 12px;font-size:13px;margin-top:6px}
+.btn:disabled{opacity:.5}
+.secao{width:100%;text-align:left;display:flex;align-items:center;gap:10px;padding:14px}
+.secao .sn{flex:1;font-weight:600}
+.secao .sn small{display:block;font-weight:400;font-size:12.5px;color:var(--ink-3);margin-top:1px}
+.secao.cinza{opacity:.55;box-shadow:none;background:var(--surface-2)}
+.est{font-size:11px;font-weight:700;padding:3px 8px;border-radius:3px;flex:0 0 auto}
+.est.vazia{background:var(--surface-2);color:var(--ink-3)}
+.est.inc{background:var(--warn-soft);color:var(--warn)}
+.est.ok{background:var(--ok-soft);color:var(--ok)}
+.alerta{background:var(--warn-soft);color:var(--warn);border-radius:5px;padding:9px 12px;font-size:13.5px;margin-bottom:10px}
+.alerta b{display:block;margin-bottom:2px}
+.alerta ul{margin:2px 0 0;padding-left:18px}
+.info{font-size:13.5px;color:var(--ink-2)}
+.muted{color:var(--ink-3);font-size:13px}
+label.f{display:block;margin-top:12px;font-size:13px;font-weight:600;color:var(--ink-2)}
+label.f:first-child{margin-top:0}
+.f small{display:block;font-weight:400;color:var(--ink-3);font-size:12px}
+input.t,select.t,textarea.t{display:block;width:100%;margin-top:4px;font-size:16px;padding:10px 11px;border:1px solid var(--rule);border-radius:5px;background:#fff}
+textarea.t{min-height:72px;resize:vertical}
+.lin{display:flex;gap:8px}
+.lin > *{flex:1;min-width:0}
+.conv{font-size:12.5px;color:var(--accent-ink);margin-top:3px;min-height:16px}
+.seg{display:flex;gap:6px;margin-top:5px;flex-wrap:wrap}
+.seg button{flex:1;min-width:56px;border:1px solid var(--rule);background:#fff;border-radius:5px;padding:9px 6px;font-size:14px;font-weight:600}
+.seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.chk{display:flex;gap:9px;align-items:center;margin-top:12px;font-size:14.5px}
+.chk input{width:20px;height:20px;flex:0 0 auto}
+.fotos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.foto{position:relative;aspect-ratio:1;border-radius:5px;overflow:hidden;background:var(--surface-2);border:1px solid var(--rule-2);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--ink-3);text-align:center;padding:4px}
+.foto img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.foto .x{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:15px;line-height:1;z-index:2}
+.foto .pend{position:absolute;left:4px;bottom:4px;background:var(--crit);color:#fff;font-size:10px;font-weight:700;padding:2px 5px;border-radius:3px;z-index:2}
+.foto.add{border:1.5px dashed var(--accent);color:var(--accent-ink);font-weight:600;background:var(--accent-soft);cursor:pointer}
+.foto .leg{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);color:#fff;font-size:10.5px;padding:2px 4px;z-index:1}
+.cam{border-left:4px solid var(--accent-soft)}
+.cam .ct{display:flex;align-items:center;gap:8px;font-weight:700}
+.cam .ct span{flex:1}
+.classe{font-size:12.5px;color:var(--ink-3);margin-top:4px}
+.comp{display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--rule-2);padding-top:10px;margin-top:10px}
+.comp:first-of-type{border-top:0;margin-top:0;padding-top:0}
+.passo{display:flex;gap:10px;align-items:center;border-top:1px solid var(--rule-2);padding:9px 0}
+.passo:first-of-type{border-top:0}
+.passo .n{width:24px;height:24px;border-radius:50%;background:var(--accent-soft);color:var(--accent-ink);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.passo .n.ok{background:var(--ok-soft);color:var(--ok)}
+.passo .tx{flex:1;font-size:14px}
+.vazio{text-align:center;color:var(--ink-3);padding:30px 10px}
+.rodape{text-align:center;font-size:11px;color:var(--ink-3);margin-top:24px}
+.fl{border-top:1px solid var(--rule-2);padding:9px 0;font-size:13.5px}
+.fl:first-child{border-top:0}
+.fl b{display:block}
+.fl .mot{color:var(--crit);font-size:12.5px}
+@media (min-width:900px){ main{padding:20px} .fotos{grid-template-columns:repeat(4,1fr)} }
+</style>
+</head>
+<body>
+<header>
+  <button class="back" id="voltar" aria-label="Voltar">‹</button>
+  <div class="tit"><b id="tTit">Inspeção</b><small id="tSub">TapDoc</small></div>
+  <div class="st"><span class="dot" id="dot"></span><span id="stx"></span></div>
+</header>
+<div class="aviso demo" id="barDemo" hidden>Modo demonstração: nada vai para o servidor.</div>
+<div class="aviso fila" id="barFila" hidden><span id="filaTx"></span><span class="esp"></span><button id="filaVer">Ver</button><button id="filaJa">Tentar agora</button></div>
+<main><div class="wrap" id="tela"></div></main>
+<input type="file" id="arqFoto" accept="image/*" capture="environment" hidden>
+<input type="file" id="arqPdf" accept="application/pdf" hidden>
+
+<script>
+'use strict';
+const VERSAO = 'TapDoc 1';
+const CFG = window.TF_CONFIG || {};
+const SUPA_URL = CFG.SUPABASE_URL || '', SUPA_ANON = CFG.SUPABASE_ANON_KEY || '';
+const DEMO = !SUPA_URL || !SUPA_ANON;
+const NO_SERVIDOR = /^https?:$/.test(location.protocol);
+const N = window.Nucleo;
+const $ = id => document.getElementById(id);
+
+if (!N){
+  document.getElementById('tela').innerHTML = '<div class="card vazio">Sem o núcleo do TapFlow. Abra o Field uma vez com sinal e tente de novo.</div>';
+  throw new Error('sem núcleo');
+}
+const U = N.util, esc = U.esc;
+
+// ── utilitários ────────────────────────────────────────────────────────────
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } }
+};
+function uid(){
+  try{ if (crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); });
+}
+/** "1,5" ou "1.5" → 1.5; vazio → null */
+function num(s){
+  if (s == null) return null;
+  let t = String(s).trim().replace(/\s/g, '');
+  if (!t) return null;
+  if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
+  const v = Number(t);
+  return isFinite(v) ? v : NaN;
+}
+function fmt(v, casas){
+  if (v == null || v === '' || !isFinite(Number(v))) return '';
+  const c = casas == null ? 4 : casas;
+  return String(Number(Number(v).toFixed(c))).replace('.', ',');
+}
+/** A janela do núcleo: botões {rotulo, classe:'pri', acao}. Sem acao, fecha.
+ *  A acao que devolve false deixa a janela aberta (faltou preencher algo). */
+function janela(tit, html, bts){
+  N.janela.abrir(tit, html, (bts || []).map(b => ({ label:b.rotulo, pri:b.classe === 'pri',
+    onClick:() => { const r = b.acao ? b.acao() : undefined; if (r !== false) N.janela.fechar(); } })));
+}
+function debounce(fn, ms){ const t = {}; return (k, ...a) => { clearTimeout(t[k]); t[k] = setTimeout(() => fn(...a), ms); }; }
+
+// unidades da plaqueta → MPa (manométrica)
+const UNID = { 'bar':0.1, 'kgf/cm2':0.0980665, 'MPa':1, 'psi':0.00689476 };
+const UNID_ROT = { 'bar':'bar', 'kgf/cm2':'kgf/cm²', 'MPa':'MPa', 'psi':'psi' };
+const paraMPa = (v, u) => v == null ? null : Math.round(v * UNID[u] * 1e4) / 1e4;
+const deMPa = (v, u) => v == null ? null : v / UNID[u];
+
+const FLUIDOS = [['Ar comprimido','C'],['Vapor d’água','C'],['Água','D'],['Nitrogênio','C'],['CO₂','C'],
+  ['Óleo térmico','B'],['GLP','A'],['Gás natural','A'],['Hidrogênio','A'],['Amônia','A']];
+const CLASSES = {
+  A:'Inflamável; combustível acima de 200 °C; tóxico com limite de tolerância ≤ 20 ppm; hidrogênio; acetileno.',
+  B:'Combustível abaixo de 200 °C; tóxico com limite de tolerância > 20 ppm.',
+  C:'Vapor de água, gases asfixiantes simples, ar comprimido.',
+  D:'Qualquer outro fluido (água, por exemplo).'
+};
+const TIPOS_COMP = { costado:'Costado (cilindro)', eliptico:'Tampo elíptico', torisferico:'Tampo torisférico',
+  hemisferico:'Tampo hemisférico', conico:'Tampo cônico', plano:'Tampo plano', janela:'Janela de visita' };
+const POS_COMP = ['superior','inferior','esquerdo','direito','lateral','frontal','traseiro'];
+const TIPOS_CAM = { unica:'Única', casco:'Casco', tubo:'Tubos', camisa:'Camisa' };
+const CODIGOS = ['ASME VIII Div. 1','ASME VIII Div. 2','AD-Merkblätter','BS 5500 / PD 5500','EN 13445','NBR'];
+const ROTEIRO_LAUDO = ['Folha de rosto (empresa, nº e data)','Conclusão (PMTA e categoria)',
+  'Plaqueta e dados do vaso','Quadro de espessuras','Assinatura (PLH e CREA)'];
+
+// ── parâmetros: depois do # (e ? por compatibilidade com o Field S34) ──────
+const PAR = (() => {
+  const q = new URLSearchParams(location.search), h = new URLSearchParams(location.hash.replace(/^#/, ''));
+  return { os: h.get('os') || q.get('os'), t: h.get('t') || h.get('tarefa') || q.get('tarefa') };
+})();
+const OS = PAR.os || (DEMO ? 'demo-os' : null);
+
+// ── estado do aparelho ─────────────────────────────────────────────────────
+const K_OS = 'tfd_os_' + OS, K_MINI = 'tfd_mini';
+let E = LS.get(K_OS, null);           // { os, vasos, fabricantes, materiais, baixado_em }
+let MINI = LS.get(K_MINI, {});        // miniaturas das fotos: id → dataURL (só para mostrar)
+let telaAtual = { nome:'lista' };
+function salvar(){
+  if (!LS.set(K_OS, E)){ U.toast('O aparelho está sem espaço para guardar. Envie o que está pendente.', 'err'); }
+}
+function salvarMini(){
+  const ks = Object.keys(MINI);
+  if (ks.length > 180) ks.slice(0, ks.length - 180).forEach(k => delete MINI[k]);
+  if (!LS.set(K_MINI, MINI)){ const ks2 = Object.keys(MINI); ks2.slice(0, Math.ceil(ks2.length / 2)).forEach(k => delete MINI[k]); LS.set(K_MINI, MINI); }
+}
+const vaso = id => (E && E.vasos || []).find(v => v.id === id);
+
+function normVaso(sv){
+  const v = Object.assign({}, sv);
+  v.camaras = (sv.camaras || []).map(c => Object.assign({}, c));
+  v.componentes = (sv.componentes || []).map(c => Object.assign({}, c));
+  v.inspecao = sv.inspecao ? Object.assign({}, sv.inspecao, { fotos:(sv.inspecao.fotos || []).map(f => Object.assign({}, f)) }) : null;
+  v.laudo_anterior = sv.laudo_anterior || null;
+  v._pv = {};
+  return v;
+}
+/** Pacote novo do servidor: vaso com envio pendente fica com a versão do aparelho. */
+function mesclar(p){
+  const pend = new Set(N.fila.listar({ tipo:'insp' }).map(e => e.grupo));
+  const velhos = {}; ((E && E.vasos) || []).forEach(v => { velhos[v.id] = v; });
+  const vasos = (p.vasos || []).map(sv => (velhos[sv.id] && pend.has('insp|' + sv.id)) ? velhos[sv.id] : normVaso(sv));
+  Object.values(velhos).forEach(v => {
+    if (!vasos.some(x => x.id === v.id) && pend.has('insp|' + v.id)) vasos.push(v);
+  });
+  E = { os:p.os, vasos, fabricantes:p.fabricantes || [], materiais:p.materiais || [], baixado_em:p.gerado_em || new Date().toISOString() };
+  salvar();
+}
+
+// ── a fila ─────────────────────────────────────────────────────────────────
+/** Uma gravação = uma entrada. Sem sinal, a gravação seguinte do MESMO dado
+ *  substitui a anterior no lugar (nada está sendo enviado); com sinal, cada
+ *  uma ganha id próprio (a anterior pode estar a caminho). */
+function enfileirar(v, chave, rotulo, rpc, fotos, fixo){
+  const grupo = 'insp|' + v.id;
+  let id = fixo ? chave : null;
+  if (!id && navigator.onLine === false){
+    const ex = N.fila.listar({ tipo:'insp', grupo }).filter(e => e.id.indexOf(chave + '~') === 0 && !e.parado).pop();
+    if (ex) id = ex.id;
+  }
+  if (!id) id = chave + '~' + uid();
+  N.fila.adicionar({ tipo:'insp', id, grupo, rotulo: v.tag + ' · ' + rotulo, rpc, fotos });
+  pintarFila();
+  return id;
+}
+const CAM_OK = ['id','tipo','nome','ordem','fluido','classe_fluido','p_operacao_max_mpa','t_operacao_c','volume_m3',
+  'volume_desconhecido','pmta_plaqueta_mpa','pth_mpa','pressao_externa','pmta_externa_plaqueta_mpa','unidade_campo','ativo'];
+function pegar(o, ks){ const r = {}; ks.forEach(k => { if (o[k] !== undefined) r[k] = o[k]; }); return r; }
+function gravarCamara(v, c){
+  enfileirar(v, 'cam-' + c.id, 'câmara ' + c.nome, { funcao:'tf_insp_camara_gravar', payload:{ p_equip:v.id, p_dados:pegar(c, CAM_OK) } });
+}
+function gravarComp(v, c){
+  enfileirar(v, 'comp-' + c.id, 'componente ' + c.nome, { funcao:'tf_insp_componente_gravar',
+    payload:{ p_equip:v.id, p_dados:pegar(c, ['id','tipo','nome','posicao','camara_id','nao_medir','ordem','ativo']) } });
+}
+function gravarVaso(v){
+  enfileirar(v, 'vaso', 'dados do vaso', { funcao:'tf_insp_vaso_gravar', payload:{ p_equip:v.id, p_dados:Object.assign({}, v._pv) } });
+}
+const adiar = debounce((tipo, v, x) => {
+  if (tipo === 'vaso') gravarVaso(v); else if (tipo === 'cam') gravarCamara(v, x); else if (tipo === 'comp') gravarComp(v, x);
+}, 700);
+function mudouVaso(v, campo, valor){
+  v[campo] = valor; v._pv[campo] = valor; salvar(); adiar('vaso:' + v.id, 'vaso', v);
+}
+function mudouCam(v, c, campo, valor){ c[campo] = valor; salvar(); adiar('cam:' + c.id, 'cam', v, c); }
+function mudouComp(v, c, campo, valor){ c[campo] = valor; salvar(); adiar('comp:' + c.id, 'comp', v, c); }
+
+function pendDoVaso(v){ return N.fila.listar({ tipo:'insp', grupo:'insp|' + v.id }); }
+function pintarFila(){
+  const l = N.fila.listar({ tipo:'insp' }).filter(e => (E && E.vasos || []).some(v => e.grupo === 'insp|' + v.id));
+  const parados = l.filter(e => e.parado).length;
+  const b = $('barFila');
+  b.hidden = !l.length;
+  b.classList.toggle('so', !parados);
+  $('filaTx').textContent = l.length === 1 ? '1 envio aguardando' : l.length + ' envios aguardando';
+  if (parados) $('filaTx').textContent += ' · ' + parados + ' parado' + (parados > 1 ? 's' : '');
+}
+$('filaJa').addEventListener('click', () => { N.fila.enviarAgora(); U.toast(navigator.onLine === false ? 'Sem sinal agora. Envia sozinho quando voltar.' : 'Enviando…'); });
+$('filaVer').addEventListener('click', verFila);
+function verFila(){
+  const l = N.fila.listar({ tipo:'insp' }).filter(e => (E && E.vasos || []).some(v => e.grupo === 'insp|' + v.id));
+  const grupos = [...new Set(l.filter(e => e.parado).map(e => e.grupo))];
+  const html = l.length ? l.map(e => '<div class="fl"><b>' + esc(e.rotulo) + '</b>' +
+      (e.fotos && e.fotos.length ? '<span class="muted">' + e.fotos.length + ' arquivo(s)</span>' : '') +
+      (e.motivo ? '<div class="mot">' + esc(e.motivo) + '</div>' : '') + '</div>').join('')
+    : '<p class="muted">Nada pendente.</p>';
+  const bts = [{ rotulo:'Fechar' }];
+  if (grupos.length) bts.unshift({ rotulo:'Tentar de novo os parados', classe:'pri', acao:() => { grupos.forEach(g => N.fila.retomar(g)); N.janela.fechar(); setTimeout(pintarFila, 600); } });
+  janela('Envios desta OS', html + (grupos.length ? '<p class="muted" style="margin-top:10px">Parado = o servidor recusou. Corrija o dado na tela e tente de novo. As fotos continuam no aparelho.</p>' : ''), bts);
+}
+N.fila.aoMudar(ev => {
+  pintarFila();
+  if (ev && ev.situacao === 'recusado') U.toast('Um envio foi recusado: ' + (ev.erro || ''), 'err');
+});
+
+// ── conexão ────────────────────────────────────────────────────────────────
+function pintarSinal(){
+  const on = navigator.onLine !== false;
+  $('dot').className = 'dot ' + (DEMO ? '' : on ? 'ok' : 'off');
+  $('stx').textContent = DEMO ? 'demo' : on ? 'online' : 'sem sinal';
+}
+window.addEventListener('online', () => { pintarSinal(); baixar(true); });
+window.addEventListener('offline', pintarSinal);
+
+// ── o pacote ───────────────────────────────────────────────────────────────
+let baixando = false;
+async function baixar(silencioso){
+  if (DEMO || baixando || navigator.onLine === false || !OS) return;
+  baixando = true;
+  try{
+    const p = await N.api.rpc('tf_insp_pacote_os', { p_os_id: OS });
+    mesclar(p);
+    if (!silencioso) U.toast('Pacote da OS atualizado.');
+    pintar();
+  }catch(e){
+    if (!E){ $('tela').innerHTML = '<div class="card vazio">' + esc(e.message || 'Não consegui baixar a OS.') + '</div>'; }
+    else if (!silencioso) U.toast(e.message || 'Não consegui atualizar.', 'err');
+  }finally{ baixando = false; }
+}
+
+// ── navegação ──────────────────────────────────────────────────────────────
+function ir(t, substituir){
+  telaAtual = t;
+  try{ history[substituir ? 'replaceState' : 'pushState']({ t }, '', location.pathname + location.search + location.hash); }catch(e){}
+  pintar(); $('tela').parentNode.scrollTop = 0;
+}
+window.addEventListener('popstate', ev => { telaAtual = (ev.state && ev.state.t) || { nome:'lista' }; pintar(); });
+$('voltar').addEventListener('click', () => {
+  if (telaAtual.nome === 'lista') location.href = '../';
+  else history.back();
+});
+
+function titulo(t, s){ $('tTit').textContent = t; $('tSub').textContent = s || ''; }
+function pintar(){
+  pintarSinal(); pintarFila();
+  if (!E){
+    titulo('Inspeção', VERSAO);
+    $('tela').innerHTML = '<div class="card vazio">' + (navigator.onLine === false
+      ? 'Esta OS ainda não foi aberta neste aparelho. Abra uma vez com sinal: depois funciona sem.'
+      : 'Baixando a OS…') + '</div>';
+    return;
+  }
+  const v = telaAtual.vaso ? vaso(telaAtual.vaso) : null;
+  if (telaAtual.nome !== 'lista' && !v){ telaAtual = { nome:'lista' }; }
+  if (telaAtual.nome === 'lista') return telaLista();
+  if (telaAtual.nome === 'vaso') return v.inspecao ? telaPainel(v) : telaCartao(v);
+  const f = { plaqueta:telaPlaqueta, operacao:telaOperacao, componentes:telaComponentes, localizacao:telaLocal, laudo:telaLaudo }[telaAtual.nome];
+  if (f) return f(v);
+}
+
+// ── estado das seções ──────────────────────────────────────────────────────
+function fotosDe(v, secao){ return ((v.inspecao && v.inspecao.fotos) || []).filter(f => f.secao === secao); }
+const ativas = v => v.camaras.filter(c => c.ativo !== false);
+const compsAtivos = v => v.componentes.filter(c => c.ativo !== false);
+function estPlaqueta(v){
+  const itens = [fotosDe(v, 'plaqueta').length > 0, !!(v.fabricante_id || v.fabricante), !!v.numero_serie, !!v.ano_fabricacao,
+    !!(v.codigo_construcao || v.sem_codigo_construcao), ativas(v).length > 0 && ativas(v).every(c => c.pmta_plaqueta_mpa)];
+  return est(itens);
+}
+function estOperacao(v){
+  const cs = ativas(v);
+  const itens = [!!v.posicao, cs.length > 0 && cs.every(c => c.fluido && c.classe_fluido),
+    cs.length > 0 && cs.every(c => c.p_operacao_max_mpa != null), cs.length > 0 && cs.every(c => c.volume_m3 || c.volume_desconhecido)];
+  return est(itens);
+}
+function estComp(v){ const cs = compsAtivos(v); return cs.length ? (cs.every(c => c.camara_id) ? 'ok' : 'inc') : 'vazia'; }
+function estLocal(v){ return est([!!v.localizacao, v.latitude != null, fotosDe(v, 'localizacao').length > 0]); }
+function estLaudo(v){
+  const s = v.laudo_anterior && v.laudo_anterior.situacao;
+  if (['em_conferencia','cliente_nao_tem','sem_laudo','conferido'].indexOf(s) >= 0) return 'ok';
+  return fotosDe(v, 'laudo_anterior').length ? 'inc' : 'vazia';
+}
+function est(itens){ const n = itens.filter(Boolean).length; return n === 0 ? 'vazia' : n === itens.length ? 'ok' : 'inc'; }
+const EST_ROT = { vazia:'vazia', inc:'incompleta', ok:'ok' };
+function secoesOk(v){ return [estPlaqueta(v), estOperacao(v), estComp(v), estLocal(v), estLaudo(v)].filter(x => x === 'ok').length; }
+function alertas(v){
+  const a = [];
+  if (!fotosDe(v, 'plaqueta').length) a.push('Falta a foto da plaqueta.');
+  ativas(v).forEach(c => {
+    const nm = ativas(v).length > 1 ? ' (' + c.nome + ')' : '';
+    if (!c.pmta_plaqueta_mpa) a.push('PMTA de plaqueta não informada' + nm + '.');
+    if (!c.pmta_vigente_mpa && !(v.laudo_anterior && v.laudo_anterior.situacao === 'conferido')) a.push('PMTA vigente desconhecida' + nm + ': o laudo anterior ainda não foi conferido.');
+    if (c.pressao_externa && !c.pmta_externa_plaqueta_mpa) a.push('Opera com vácuo, sem PMTA externa de plaqueta' + nm + '.');
+  });
+  if (v.latitude == null) a.push('Sem GPS do vaso.');
+  return a;
+}
+
+// ── tela 0 · vasos da OS ───────────────────────────────────────────────────
+let filtro = '';
+function telaLista(){
+  const os = E.os || {};
+  titulo(/^OS/i.test(os.numero || '') ? os.numero : 'OS ' + (os.numero || ''), os.cliente || '');
+  const com = E.vasos.filter(v => v.inspecao), sem = E.vasos.filter(v => !v.inspecao);
+  const f = filtro.trim().toUpperCase();
+  const casa = v => !f || String(v.tag || '').toUpperCase().indexOf(f) >= 0 || String(v.nome || '').toUpperCase().indexOf(f) >= 0;
+  const linha = v => {
+    const pend = pendDoVaso(v);
+    const chips = [];
+    if (v.inspecao){
+      const sit = v.inspecao.situacao;
+      chips.push(sit === 'em_campo' ? '<span class="chip ' + (secoesOk(v) === 5 ? 'ok' : 'inc') + '">' + secoesOk(v) + ' de 5 seções</span>'
+        : '<span class="chip">' + esc(sit.replace('_', ' ')) + '</span>');
+    }
+    if (v.provisorio) chips.push('<span class="chip prov">provisório</span>');
+    if (pend.length) chips.push('<span class="chip pend">' + pend.length + ' a enviar</span>');
+    return '<button class="card vaso' + (v.inspecao ? '' : ' fora') + '" data-v="' + esc(v.id) + '"><div style="min-width:0">' +
+      '<div class="tg">' + esc(v.tag) + '</div>' + (v.nome ? '<div class="nm">' + esc(v.nome) + '</div>' : '') +
+      (chips.length ? '<div class="chips">' + chips.join('') + '</div>' : '') + '</div><span class="dir">›</span></button>';
+  };
+  let h = '';
+  if (E.vasos.length > 8) h += '<input class="t" id="busca" placeholder="Procurar pela TAG" value="' + esc(filtro) + '" style="margin-bottom:10px">';
+  h += '<h2>Em inspeção nesta OS</h2>' + (com.filter(casa).map(linha).join('') || '<p class="muted" style="margin:0 2px 10px">Nenhum vaso começado ainda. Escolha um abaixo.</p>');
+  h += '<h2>Vasos do cliente</h2>' + (sem.filter(casa).map(linha).join('') || '<p class="muted" style="margin:0 2px 10px">' + (f ? 'Nenhum vaso com essa TAG.' : 'Nenhum outro vaso cadastrado.') + '</p>');
+  h += '<button class="btn sec" id="novoVaso">+ O vaso não está na lista</button>';
+  h += '<p class="rodape">' + VERSAO + ' · pacote de ' + (E.baixado_em ? new Date(E.baixado_em).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—') +
+       (DEMO ? '' : ' · <a href="#" id="atual">atualizar</a>') + '</p>';
+  $('tela').innerHTML = h;
+  $('tela').querySelectorAll('[data-v]').forEach(b => b.addEventListener('click', () => ir({ nome:'vaso', vaso:b.dataset.v })));
+  $('novoVaso').addEventListener('click', novoVaso);
+  const bu = $('busca'); if (bu) bu.addEventListener('input', () => { filtro = bu.value; const p = bu.selectionStart; telaLista(); const n = $('busca'); n.focus(); n.setSelectionRange(p, p); });
+  const at = $('atual'); if (at) at.addEventListener('click', ev => { ev.preventDefault(); baixar(); });
+}
+
+function novoVaso(){
+  janela('Vaso fora da lista',
+    '<label class="f">TAG do vaso<small>Como está pintada no vaso ou na plaqueta.</small><input class="t" id="nvTag" autocapitalize="characters"></label>' +
+    '<label class="f">Nome (opcional)<input class="t" id="nvNome" placeholder="Ex.: Reservatório de ar"></label>',
+    [{ rotulo:'Cancelar' }, { rotulo:'Criar', classe:'pri', acao:() => {
+      const tag = ($('nvTag').value || '').trim(), nome = ($('nvNome').value || '').trim();
+      if (!tag){ U.toast('Informe a TAG.', 'err'); return false; }
+      const ex = E.vasos.find(v => String(v.tag).trim().toUpperCase() === tag.toUpperCase());
+      N.janela.fechar();
+      if (ex){ U.toast('Esse vaso já está na lista.'); ir({ nome:'vaso', vaso:ex.id }); return; }
+      const v = normVaso({ id:uid(), tag, nome:nome || null, provisorio:true, camaras:[], componentes:[], inspecao:null });
+      E.vasos.push(v); salvar();
+      // a mesma TAG criada por outro celular sem sinal: o banco devolve o vaso que existe e guarda o apelido
+      enfileirar(v, 'prov-' + v.id, 'vaso provisório', { funcao:'tf_insp_vaso_provisorio',
+        payload:{ p_cliente_id:E.os.cliente_id, p_tag:tag, p_nome:nome || null, p_id:v.id } }, null, true);
+      comecar(v);
+      ir({ nome:'vaso', vaso:v.id });
+    } }]);
+  setTimeout(() => { const i = $('nvTag'); if (i) i.focus(); }, 50);
+}
+
+// ── cartão do vaso (antes de começar) ──────────────────────────────────────
+function linkMapa(v){ return v.latitude != null ? 'https://www.google.com/maps?q=' + v.latitude + ',' + v.longitude : null; }
+function telaCartao(v){
+  titulo(v.tag, v.nome || 'Vaso do cliente');
+  const mapa = linkMapa(v);
+  let h = '<div class="card">';
+  h += '<div class="info"><b>' + esc(v.tag) + '</b>' + (v.nome ? ' · ' + esc(v.nome) : '') + '</div>';
+  if (v.localizacao) h += '<p class="info" style="margin:8px 0 0">Local: ' + esc(v.localizacao) + '</p>';
+  if (mapa) h += '<p style="margin:8px 0 0"><a href="' + mapa + '" target="_blank" rel="noopener">Como chegar (mapa)</a></p>';
+  if (v.fabricante || v.numero_serie) h += '<p class="muted" style="margin:8px 0 0">' + esc([v.fabricante, v.numero_serie && 'nº ' + v.numero_serie, v.ano_fabricacao].filter(Boolean).join(' · ')) + '</p>';
+  if (!v.localizacao && !mapa) h += '<p class="muted" style="margin:8px 0 0">Sem local nem GPS no cadastro ainda.</p>';
+  h += '</div>';
+  h += '<button class="btn pri" id="comecar">Começar a inspeção deste vaso</button>';
+  h += '<p class="muted" style="text-align:center;margin-top:8px">Funciona sem sinal. Tudo vai para o servidor quando houver conexão.</p>';
+  $('tela').innerHTML = h;
+  $('comecar').addEventListener('click', () => { comecar(v); pintar(); });
+}
+
+/** Abre a inspeção do vaso (id do celular) e monta o mínimo: a câmara única e
+ *  costado + dois tampos. A ordem na fila é a de dependência. */
+function comecar(v){
+  if (v.inspecao) return;
+  const iid = uid();
+  v.inspecao = { id:iid, situacao:'em_campo', tipo:'periodica', fotos:[], pode_editar:true };
+  salvar();
+  enfileirar(v, 'abrir-' + iid, 'abrir a inspeção', { funcao:'tf_insp_abrir',
+    payload:{ p_os_id:E.os.id, p_equip:v.id, p_tipo:'periodica', p_os_item_id:null, p_id:iid, p_motivo_extraordinaria:null } }, null, true);
+  if (!ativas(v).length){
+    const c = { id:uid(), tipo:'unica', nome:'Única', ordem:1, ativo:true, volume_desconhecido:false, pressao_externa:false };
+    v.camaras.push(c); gravarCamara(v, c);
+  }
+  if (!compsAtivos(v).length){
+    const cam = ativas(v)[0].id, hz = v.posicao === 'horizontal';
+    [['costado','Costado',null], ['eliptico', hz ? 'Tampo esquerdo' : 'Tampo superior', hz ? 'esquerdo' : 'superior'],
+     ['eliptico', hz ? 'Tampo direito' : 'Tampo inferior', hz ? 'direito' : 'inferior']].forEach((x, i) => {
+      const c = { id:uid(), tipo:x[0], nome:x[1], posicao:x[2], camara_id:cam, nao_medir:false, ordem:i + 1, ativo:true };
+      v.componentes.push(c); gravarComp(v, c);
+    });
+  }
+  salvar();
+}
+
+// ── tela 1 · painel do vaso ────────────────────────────────────────────────
+function telaPainel(v){
+  titulo(v.tag, (v.nome || '') + (v.provisorio ? ' · provisório' : ''));
+  const ed = v.inspecao.pode_editar !== false && v.inspecao.situacao === 'em_campo';
+  const al = alertas(v);
+  let h = '';
+  if (!ed) h += '<div class="alerta"><b>Inspeção ' + esc(String(v.inspecao.situacao).replace('_', ' ')) + '</b>O campo não grava mais neste vaso.</div>';
+  if (al.length && ed) h += '<div class="alerta"><b>Atenção</b><ul>' + al.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
+  const sec = (k, nome, sub, e) => '<button class="card secao" data-s="' + k + '"' + (ed ? '' : ' disabled') + '><span class="sn">' + nome +
+    (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span><span class="est ' + e + '">' + EST_ROT[e] + '</span></button>';
+  const cs = ativas(v);
+  h += sec('plaqueta', 'Plaqueta', 'Foto, fabricante, série, ano, código, PMTA e PTH', estPlaqueta(v));
+  h += sec('operacao', 'Operação e câmaras', cs.length + (cs.length === 1 ? ' câmara' : ' câmaras') + ': fluido, classe, pressão, volume', estOperacao(v));
+  h += sec('componentes', 'Componentes', compsAtivos(v).length + ' na lista', estComp(v));
+  h += sec('localizacao', 'Localização', 'Local, GPS e fotos do vaso', estLocal(v));
+  const la = v.laudo_anterior && v.laudo_anterior.situacao;
+  h += sec('laudo', 'Laudo anterior', la === 'conferido' ? 'Já conferido pelo escritório' : la === 'cliente_nao_tem' ? 'O cliente não tem' :
+    la === 'sem_laudo' ? 'O vaso nunca teve laudo' : la === 'em_conferencia' ? 'Coletado, aguardando a conferência' : 'Fotos do laudo impresso, PDF ou "o cliente não tem"', estLaudo(v));
+  h += '<h2>Na próxima versão</h2>';
+  ['Exame visual e não conformidades', 'Acessórios (válvulas e manômetros)', 'Ultrassom (espessuras)', 'Teste de pressão', 'Prévia e envio'].forEach(n => {
+    h += '<div class="card secao cinza"><span class="sn">' + n + '</span><span class="est vazia">R03</span></div>';
+  });
+  $('tela').innerHTML = h;
+  $('tela').querySelectorAll('[data-s]').forEach(b => b.addEventListener('click', () => ir({ nome:b.dataset.s, vaso:v.id })));
+}
+
+// ── campos ─────────────────────────────────────────────────────────────────
+function campoTexto(rot, id, valor, extra){
+  return '<label class="f">' + rot + '<input class="t" id="' + id + '" value="' + esc(valor == null ? '' : valor) + '" ' + (extra || '') + '></label>';
+}
+function campoNum(rot, id, valor, ajuda, extra){
+  return '<label class="f">' + rot + (ajuda ? '<small>' + ajuda + '</small>' : '') +
+    '<input class="t" id="' + id + '" inputmode="decimal" value="' + esc(valor == null ? '' : fmt(valor)) + '" ' + (extra || '') + '></label>';
+}
+function ligar(id, fn, ev){ const el = $(id); if (el) el.addEventListener(ev || 'change', () => fn(el)); return el; }
+function numOuAviso(el, min, max, rot){
+  const v = num(el.value);
+  if (Number.isNaN(v)){ U.toast(rot + ': número inválido.', 'err'); el.focus(); return undefined; }
+  if (v != null && ((min != null && v < min) || (max != null && v > max))){ U.toast(rot + ': fora do esperado (' + min + ' a ' + max + ').', 'err'); el.focus(); return undefined; }
+  return v;
+}
+function unidadeDe(v){ const c = ativas(v)[0]; return (c && c.unidade_campo) || v._unid || 'bar'; }
+function campoPressao(rot, id, mpa, u, ajuda){
+  const val = mpa == null ? '' : fmt(deMPa(mpa, u), 4);
+  return '<label class="f">' + rot + ' (' + UNID_ROT[u] + ')' + (ajuda ? '<small>' + ajuda + '</small>' : '') +
+    '<input class="t" id="' + id + '" inputmode="decimal" value="' + esc(val) + '"></label><div class="conv" id="' + id + '_c">' +
+    (mpa != null && u !== 'MPa' ? '= ' + fmt(mpa, 4) + ' MPa' : '') + '</div>';
+}
+function ligarPressao(id, u, fn, max){
+  const el = $(id); if (!el) return;
+  el.addEventListener('input', () => { const x = num(el.value); $(id + '_c').textContent = (x != null && !Number.isNaN(x) && u !== 'MPa') ? '= ' + fmt(paraMPa(x, u), 4) + ' MPa' : ''; });
+  el.addEventListener('change', () => {
+    const x = num(el.value);
+    if (Number.isNaN(x)){ U.toast('Pressão: número inválido.', 'err'); return; }
+    const m = paraMPa(x, u);
+    if (m != null && (m <= -0.1013 || m >= (max || 100))){ U.toast('Pressão fora do esperado: confira a unidade.', 'err'); return; }
+    fn(m);
+  });
+}
+
+// ── fotos ──────────────────────────────────────────────────────────────────
+let alvoFoto = null;
+function gradeFotos(v, secao, max, rotulos){
+  const fs = fotosDe(v, secao).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  const pend = new Set(pendDoVaso(v).filter(e => e.id.indexOf('foto~') === 0).map(e => e.id.slice(5)));
+  let h = '<div class="fotos">';
+  fs.forEach(f => {
+    const src = MINI[f.id];
+    h += '<div class="foto" data-f="' + esc(f.id) + '">' + (src ? '<img alt="" src="' + src + '">' : (/\.pdf$/i.test(f.storage_path || '') ? 'PDF' : 'foto enviada')) +
+      (f.legenda ? '<span class="leg">' + esc(f.legenda) + '</span>' : '') +
+      (pend.has(f.id) ? '<span class="pend">a enviar</span>' : '') +
+      '<button class="x" data-rm="' + esc(f.id) + '" aria-label="Tirar a foto">×</button></div>';
+  });
+  if (!max || fs.length < max) h += '<div class="foto add" data-add="' + secao + '">+ foto' + (rotulos ? '' : '') + '</div>';
+  return h + '</div>';
+}
+function ligarFotos(v, secao, legendaFn){
+  $('tela').querySelectorAll('[data-add="' + secao + '"]').forEach(b => b.addEventListener('click', () => tirarFoto(v, secao, legendaFn ? legendaFn() : null)));
+  $('tela').querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', ev => { ev.stopPropagation(); tirarFotoDaLista(v, b.dataset.rm); }));
+  carregarMinis(v);
+}
+function tirarFoto(v, secao, legenda){
+  alvoFoto = { v:v.id, secao, legenda };
+  const a = $('arqFoto'); a.value = ''; a.click();
+}
+$('arqFoto').addEventListener('change', async () => {
+  const arq = $('arqFoto').files && $('arqFoto').files[0];
+  if (!arq || !alvoFoto) return;
+  const v = vaso(alvoFoto.v); if (!v || !v.inspecao) return;
+  try{
+    const blob = await N.foto.reduzir(arq, { lado:1600, qualidade:0.85 });   // decisão 12
+    const mini = await miniatura(blob);
+    await registrarArquivo(v, alvoFoto.secao, alvoFoto.legenda, blob, 'jpg', 'image/jpeg', mini);
+  }catch(e){ U.toast(e.message || 'Não consegui usar a foto.', 'err'); }
+  alvoFoto = null;
+});
+$('arqPdf').addEventListener('change', async () => {
+  const arq = $('arqPdf').files && $('arqPdf').files[0];
+  if (!arq || !alvoFoto) return;
+  const v = vaso(alvoFoto.v); if (!v) return;
+  if (arq.size > 5242880){ U.toast('PDF acima de 5 MB. Fotografe as páginas.', 'err'); return; }
+  await registrarArquivo(v, 'laudo_anterior', 'PDF do laudo', arq, 'pdf', 'application/pdf', null);
+  laudoColetado(v, 'pdf');
+  alvoFoto = null; pintar();
+});
+function miniatura(blob){
+  return new Promise(ok => {
+    const img = new Image(), u = URL.createObjectURL(blob);
+    img.onload = () => {
+      const l = 220, r = Math.min(1, l / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * r); c.height = Math.round(img.height * r);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(u);
+      ok(c.toDataURL('image/jpeg', 0.6));
+    };
+    img.onerror = () => { URL.revokeObjectURL(u); ok(null); };
+    img.src = u;
+  });
+}
+async function registrarArquivo(v, secao, legenda, blob, ext, tipo, mini){
+  const fid = uid(), caminho = v.inspecao.id + '/' + fid + '.' + ext;
+  const chave = await N.fila.guardarFoto(blob);
+  const ordem = fotosDe(v, secao).length + 1;
+  v.inspecao.fotos.push({ id:fid, secao, legenda, ordem, storage_path:caminho });
+  if (mini){ MINI[fid] = mini; salvarMini(); }
+  salvar();
+  enfileirar(v, 'foto~' + fid, (secao === 'laudo_anterior' ? 'laudo anterior' : 'foto de ' + secao), {
+    funcao:'tf_insp_foto_registrar',
+    payload:{ p_id:fid, p_dados:{ inspecao_id:v.inspecao.id, storage_path:caminho, secao, legenda:legenda || null, ordem, bytes:blob.size } }
+  }, [{ chave, bucket:'inspecoes', caminho, tipo }], true);
+  pintar();
+}
+function tirarFotoDaLista(v, fid){
+  N.janela.confirmar('Tirar esta foto?', '<p>Ela sai da inspeção.</p>', 'Tirar', true).then(sim => {
+    if (!sim) return;
+    const ainda = N.fila.listar({ tipo:'insp', grupo:'insp|' + v.id }).find(e => e.id === 'foto~' + fid);
+    if (ainda) N.fila.descartar(ainda.assinatura);       // nem chegou a subir
+    else enfileirar(v, 'fotorem-' + fid, 'tirar foto', { funcao:'tf_insp_foto_remover', payload:{ p_id:fid } }, null, true);
+    v.inspecao.fotos = v.inspecao.fotos.filter(f => f.id !== fid);
+    delete MINI[fid]; salvarMini(); salvar(); pintar();
+  });
+}
+/** Foto que já está no servidor e não tem miniatura aqui: baixa com o login. */
+const carregando = {};
+function carregarMinis(v){
+  if (DEMO || navigator.onLine === false) return;
+  const s = N.sessao();
+  ((v.inspecao && v.inspecao.fotos) || []).forEach(f => {
+    if (MINI[f.id] || carregando[f.id] || !f.storage_path || /\.pdf$/i.test(f.storage_path)) return;
+    carregando[f.id] = true;
+    fetch(SUPA_URL + '/storage/v1/object/authenticated/inspecoes/' + f.storage_path.split('/').map(encodeURIComponent).join('/'),
+      { headers:{ apikey:SUPA_ANON, Authorization:'Bearer ' + s.token } })
+      .then(r => r.ok ? r.blob() : null).then(b => b && miniatura(b)).then(m => {
+        if (m){ MINI[f.id] = m; salvarMini(); const el = document.querySelector('[data-f="' + f.id + '"]');
+          if (el && !el.querySelector('img')){ el.insertAdjacentHTML('afterbegin', '<img alt="" src="' + m + '">'); } }
+      }).catch(() => {});
+  });
+}
+
+// ── tela 2 · plaqueta ──────────────────────────────────────────────────────
+function telaPlaqueta(v){
+  titulo('Plaqueta', v.tag);
+  const u = unidadeDe(v), cs = ativas(v);
+  const fabs = E.fabricantes || [];
+  const codOutro = v.codigo_construcao && CODIGOS.indexOf(v.codigo_construcao) < 0;
+  let h = '<div class="card"><b>Foto da plaqueta</b><p class="muted" style="margin:2px 0 0">Primeiro a foto: o escritório confere por ela.</p>' + gradeFotos(v, 'plaqueta', 4) + '</div>';
+  h += '<div class="card">';
+  h += '<label class="f">Fabricante<select class="t" id="pFab"><option value="">—</option>' +
+    fabs.map(f => '<option value="' + esc(f.id) + '"' + (f.id === v.fabricante_id ? ' selected' : '') + '>' + esc(f.nome) + '</option>').join('') +
+    (v.fabricante && !fabs.some(f => f.id === v.fabricante_id) ? '<option value="__" selected>' + esc(v.fabricante) + '</option>' : '') +
+    '<option value="+">Outro (escrever)…</option></select></label>';
+  h += campoTexto('Nº de série', 'pSerie', v.numero_serie);
+  h += '<div class="lin">' + campoTexto('Modelo', 'pModelo', v.modelo) + campoNum('Ano de fabricação', 'pAno', v.ano_fabricacao, null, 'inputmode="numeric"') + '</div>';
+  h += '<div class="chk"><input type="checkbox" id="pSemCod"' + (v.sem_codigo_construcao ? ' checked' : '') + '><label for="pSemCod">Sem código de construção (não consta)</label></div>';
+  if (!v.sem_codigo_construcao){
+    h += '<label class="f">Código de construção<select class="t" id="pCod"><option value="">—</option>' +
+      CODIGOS.map(c => '<option' + (c === v.codigo_construcao ? ' selected' : '') + '>' + esc(c) + '</option>').join('') +
+      '<option value="+"' + (codOutro ? ' selected' : '') + '>Outro…</option></select></label>';
+    if (codOutro) h += campoTexto('Qual código', 'pCodOutro', v.codigo_construcao);
+    h += campoTexto('Edição / ano do código', 'pEd', v.codigo_edicao, 'placeholder="Ex.: 2010"');
+  }
+  h += '</div><div class="card"><b>Pressões da plaqueta</b>';
+  h += '<label class="f">Unidade como está na plaqueta<div class="seg" id="pUn">' +
+    Object.keys(UNID).map(k => '<button data-u="' + k + '" class="' + (k === u ? 'on' : '') + '">' + UNID_ROT[k] + '</button>').join('') + '</div></label>';
+  cs.forEach(c => {
+    if (cs.length > 1) h += '<p style="margin:14px 0 0;font-weight:700">' + esc(c.nome) + '</p>';
+    h += '<div class="lin"><div>' + campoPressao('PMTA', 'pPm_' + c.id, c.pmta_plaqueta_mpa, u) + '</div><div>' +
+         campoPressao('PTH (teste)', 'pPt_' + c.id, c.pth_mpa, u) + '</div></div>';
+  });
+  h += '<p class="muted" style="margin-top:8px">Vaso com casco e tubos? Crie as câmaras em "Operação e câmaras": aqui aparece um par por câmara.</p></div>';
+  $('tela').innerHTML = h;
+  ligarFotos(v, 'plaqueta', () => 'Plaqueta');
+  ligar('pFab', el => {
+    if (el.value === '+'){
+      janela('Fabricante', '<label class="f">Nome como está na plaqueta<input class="t" id="nfNome"></label>', [{ rotulo:'Cancelar', acao:() => pintar() }, { rotulo:'Usar', classe:'pri', acao:() => {
+        const nm = ($('nfNome').value || '').trim(); if (!nm){ U.toast('Escreva o nome.', 'err'); return false; }
+        const ex = fabs.find(f => f.nome.trim().toUpperCase() === nm.toUpperCase());
+        N.janela.fechar();
+        if (ex){ mudouVaso(v, 'fabricante_id', ex.id); v.fabricante = ex.nome; }
+        else { v.fabricante = nm; v.fabricante_id = null; delete v._pv.fabricante_id; salvar();
+          enfileirar(v, 'fab', 'fabricante', { funcao:'tf_insp_vaso_fabricante', payload:{ p_equip:v.id, p_nome:nm } }); }
+        pintar();
+      } }]);
+      return;
+    }
+    if (el.value === '__') return;
+    const f = fabs.find(x => x.id === el.value);
+    v.fabricante = f ? f.nome : null;
+    mudouVaso(v, 'fabricante_id', el.value || null);
+  });
+  ligar('pSerie', el => mudouVaso(v, 'numero_serie', el.value.trim() || null));
+  ligar('pModelo', el => mudouVaso(v, 'modelo', el.value.trim() || null));
+  ligar('pAno', el => { const a = numOuAviso(el, 1900, new Date().getFullYear() + 1, 'Ano'); if (a !== undefined) mudouVaso(v, 'ano_fabricacao', a == null ? null : Math.round(a)); });
+  ligar('pSemCod', el => { mudouVaso(v, 'sem_codigo_construcao', el.checked); if (el.checked){ mudouVaso(v, 'codigo_construcao', null); } pintar(); });
+  ligar('pCod', el => { if (el.value === '+'){ v.codigo_construcao = '(outro)'; pintar(); const o = $('pCodOutro'); if (o){ o.value = ''; o.focus(); } return; } mudouVaso(v, 'codigo_construcao', el.value || null); pintar(); });
+  ligar('pCodOutro', el => mudouVaso(v, 'codigo_construcao', el.value.trim() || null));
+  ligar('pEd', el => mudouVaso(v, 'codigo_edicao', el.value.trim() || null));
+  $('pUn').querySelectorAll('[data-u]').forEach(b => b.addEventListener('click', () => {
+    v._unid = b.dataset.u; ativas(v).forEach(c => mudouCam(v, c, 'unidade_campo', b.dataset.u)); salvar(); pintar();
+  }));
+  cs.forEach(c => {
+    ligarPressao('pPm_' + c.id, u, m => mudouCam(v, c, 'pmta_plaqueta_mpa', m));
+    ligarPressao('pPt_' + c.id, u, m => mudouCam(v, c, 'pth_mpa', m), 150);
+  });
+}
+
+// ── tela 3 · operação e câmaras ────────────────────────────────────────────
+function telaOperacao(v){
+  titulo('Operação e câmaras', v.tag);
+  const u = unidadeDe(v), cs = ativas(v), mats = E.materiais || [];
+  let h = '<div class="card"><b>O vaso</b>';
+  h += '<label class="f">Posição<div class="seg" id="oPos">' + ['vertical','horizontal'].map(p => '<button data-p="' + p + '" class="' + (v.posicao === p ? 'on' : '') + '">' + p + '</button>').join('') + '</div></label>';
+  h += campoNum('Circunferência medida (mm)', 'oCirc', v.circunferencia_mm, 'Com a trena, por fora do costado.');
+  h += '<label class="f">Material do costado<select class="t" id="oMat"><option value="">não sei / ver no laudo</option>' +
+    mats.map(m => '<option value="' + esc(m.id) + '"' + (m.id === v.material_id ? ' selected' : '') + '>' + esc(m.especificacao + (m.forma ? ' (' + m.forma + ')' : '')) + '</option>').join('') + '</select></label>';
+  h += '<p class="muted" style="margin-top:10px">A categoria é calculada (próxima versão). Ninguém escolhe a categoria.</p></div>';
+  cs.forEach(c => {
+    const conhecido = FLUIDOS.some(f => f[0] === c.fluido);
+    h += '<div class="card cam"><div class="ct"><span>' + esc(c.nome) + '</span>';
+    if (cs.length > 1) h += '<button class="btn peq perigo" data-rmcam="' + esc(c.id) + '">Tirar</button>';
+    h += '</div>';
+    if (cs.length > 1 || c.tipo !== 'unica') h += '<label class="f">Tipo<select class="t" data-cam="' + esc(c.id) + '" data-k="tipo">' +
+      Object.keys(TIPOS_CAM).map(t => '<option value="' + t + '"' + (t === c.tipo ? ' selected' : '') + '>' + TIPOS_CAM[t] + '</option>').join('') + '</select></label>';
+    h += '<label class="f">Fluido<select class="t" data-cam="' + esc(c.id) + '" data-k="fluido_sel"><option value="">—</option>' +
+      FLUIDOS.map(f => '<option' + (f[0] === c.fluido ? ' selected' : '') + '>' + esc(f[0]) + '</option>').join('') +
+      '<option value="+"' + (c.fluido && !conhecido ? ' selected' : '') + '>Outro…</option></select></label>';
+    if (c.fluido && !conhecido || c._outro) h += campoTexto('Qual fluido', 'fl_' + c.id, c.fluido && !conhecido ? c.fluido : '');
+    h += '<label class="f">Classe do fluido<div class="seg" data-cls="' + esc(c.id) + '">' + ['A','B','C','D'].map(k => '<button data-c="' + k + '" class="' + (c.classe_fluido === k ? 'on' : '') + '">' + k + '</button>').join('') + '</div></label>';
+    h += '<div class="classe">' + (c.classe_fluido ? esc(CLASSES[c.classe_fluido]) : 'Escolha o fluido: a classe é sugerida, você confirma.') + '</div>';
+    h += '<div class="lin"><div>' + campoPressao('Pressão máx. de operação', 'oP_' + c.id, c.p_operacao_max_mpa, u, 'Manométrica') + '</div><div>' +
+         campoNum('Temperatura (°C)', 'oT_' + c.id, c.t_operacao_c) + '</div></div>';
+    if (!c.volume_desconhecido) h += campoNum('Volume (m³)', 'oV_' + c.id, c.volume_m3, 'Da plaqueta ou do laudo. Litros ÷ 1000.');
+    h += '<div class="chk"><input type="checkbox" id="oVd_' + esc(c.id) + '"' + (c.volume_desconhecido ? ' checked' : '') + '><label for="oVd_' + esc(c.id) + '">Volume desconhecido</label></div>';
+    h += '<div class="chk"><input type="checkbox" id="oEx_' + esc(c.id) + '"' + (c.pressao_externa ? ' checked' : '') + '><label for="oEx_' + esc(c.id) + '">Opera com vácuo / pressão externa</label></div>';
+    if (c.pressao_externa) h += campoPressao('PMTA externa de plaqueta', 'oPe_' + c.id, c.pmta_externa_plaqueta_mpa, u, 'Se a plaqueta trouxer');
+    h += '</div>';
+  });
+  h += '<button class="btn sec" id="maisCam">+ câmara (casco, tubos ou camisa)</button>';
+  $('tela').innerHTML = h;
+
+  $('oPos').querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => { mudouVaso(v, 'posicao', b.dataset.p); pintar(); }));
+  ligar('oCirc', el => { const x = numOuAviso(el, 1, 100000, 'Circunferência'); if (x !== undefined) mudouVaso(v, 'circunferencia_mm', x); });
+  ligar('oMat', el => mudouVaso(v, 'material_id', el.value || null));
+  $('tela').querySelectorAll('[data-cam]').forEach(el => el.addEventListener('change', () => {
+    const c = v.camaras.find(x => x.id === el.dataset.cam); if (!c) return;
+    if (el.dataset.k === 'tipo'){ mudouCam(v, c, 'tipo', el.value); if (/^(Única|Casco|Tubos|Camisa)$/.test(c.nome)) mudouCam(v, c, 'nome', TIPOS_CAM[el.value]); pintar(); return; }
+    if (el.value === '+'){ c._outro = true; pintar(); const o = $('fl_' + c.id); if (o) o.focus(); return; }
+    c._outro = false;
+    mudouCam(v, c, 'fluido', el.value || null);
+    const f = FLUIDOS.find(x => x[0] === el.value);
+    if (f) mudouCam(v, c, 'classe_fluido', f[1]);
+    pintar();
+  }));
+  cs.forEach(c => {
+    ligar('fl_' + c.id, el => mudouCam(v, c, 'fluido', el.value.trim() || null));
+    const seg = document.querySelector('[data-cls="' + c.id + '"]');
+    if (seg) seg.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => { mudouCam(v, c, 'classe_fluido', b.dataset.c); pintar(); }));
+    ligarPressao('oP_' + c.id, u, m => mudouCam(v, c, 'p_operacao_max_mpa', m));
+    ligar('oT_' + c.id, el => { const x = numOuAviso(el, -272, 1499, 'Temperatura'); if (x !== undefined) mudouCam(v, c, 't_operacao_c', x); });
+    ligar('oV_' + c.id, el => { const x = numOuAviso(el, 0.0001, 100000, 'Volume'); if (x !== undefined) mudouCam(v, c, 'volume_m3', x); });
+    ligar('oVd_' + c.id, el => { mudouCam(v, c, 'volume_desconhecido', el.checked); if (el.checked) c.volume_m3 = null; pintar(); });
+    ligar('oEx_' + c.id, el => { mudouCam(v, c, 'pressao_externa', el.checked); if (!el.checked) c.pmta_externa_plaqueta_mpa = null; pintar(); });
+    ligarPressao('oPe_' + c.id, u, m => mudouCam(v, c, 'pmta_externa_plaqueta_mpa', m));
+  });
+  $('tela').querySelectorAll('[data-rmcam]').forEach(b => b.addEventListener('click', () => {
+    const c = v.camaras.find(x => x.id === b.dataset.rmcam);
+    if (compsAtivos(v).some(x => x.camara_id === c.id)){ U.toast('Esta câmara tem componentes. Mude-os de câmara antes (em Componentes).', 'err'); return; }
+    N.janela.confirmar('Tirar a câmara ' + c.nome + '?', '', 'Tirar', true).then(s => { if (s){ mudouCam(v, c, 'ativo', false); pintar(); } });
+  }));
+  $('maisCam').addEventListener('click', () => {
+    janela('Nova câmara', '<p class="muted">Trocador de calor: casco e tubos. Vaso encamisado: a câmara interna e a camisa.</p><div class="seg" id="ncT">' +
+      ['casco','tubo','camisa'].map(t => '<button data-t="' + t + '">' + TIPOS_CAM[t] + '</button>').join('') + '</div>', [{ rotulo:'Cancelar' }]);
+    document.querySelectorAll('#ncT [data-t]').forEach(b => b.addEventListener('click', () => {
+      const t = b.dataset.t;
+      // trocador: a câmara "única" vira o casco (os tampos dela continuam com ela)
+      const un = ativas(v).find(x => x.tipo === 'unica');
+      if (un && t === 'tubo'){ mudouCam(v, un, 'tipo', 'casco'); mudouCam(v, un, 'nome', 'Casco'); }
+      const c = { id:uid(), tipo:t, nome:TIPOS_CAM[t], ordem:v.camaras.length + 1, ativo:true, volume_desconhecido:false, pressao_externa:false, unidade_campo:unidadeDe(v) };
+      v.camaras.push(c); salvar(); gravarCamara(v, c);
+      N.janela.fechar(); pintar();
+    }));
+  });
+}
+
+// ── tela 4 · componentes ───────────────────────────────────────────────────
+function telaComponentes(v){
+  titulo('Componentes', v.tag);
+  const cs = ativas(v), comps = compsAtivos(v).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  let h = '<div class="card">';
+  if (!comps.length) h += '<p class="muted">Nenhum componente.</p>';
+  comps.forEach(c => {
+    h += '<div class="comp"><div class="lin"><label class="f" style="margin-top:0">Tipo<select class="t" data-cp="' + esc(c.id) + '" data-k="tipo">' +
+      Object.keys(TIPOS_COMP).map(t => '<option value="' + t + '"' + (t === c.tipo ? ' selected' : '') + '>' + TIPOS_COMP[t] + '</option>').join('') + '</select></label>' +
+      '<label class="f" style="margin-top:0">Posição<select class="t" data-cp="' + esc(c.id) + '" data-k="posicao"><option value="">—</option>' +
+      POS_COMP.map(p => '<option' + (p === c.posicao ? ' selected' : '') + '>' + p + '</option>').join('') + '</select></label></div>';
+    h += '<label class="f">Nome<input class="t" data-cp="' + esc(c.id) + '" data-k="nome" value="' + esc(c.nome) + '"></label>';
+    if (cs.length > 1) h += '<label class="f">Câmara<select class="t" data-cp="' + esc(c.id) + '" data-k="camara_id">' +
+      cs.map(k => '<option value="' + esc(k.id) + '"' + (k.id === c.camara_id ? ' selected' : '') + '>' + esc(k.nome) + '</option>').join('') + '</select></label>';
+    h += '<div class="lin" style="align-items:center"><div class="chk" style="margin-top:8px"><input type="checkbox" id="nm_' + esc(c.id) + '"' + (c.nao_medir ? ' checked' : '') +
+      '><label for="nm_' + esc(c.id) + '">Não medir</label></div><div style="text-align:right;flex:0 0 auto"><button class="btn peq perigo" data-rmc="' + esc(c.id) + '">Tirar</button></div></div>';
+    h += '</div>';
+  });
+  h += '</div><button class="btn sec" id="maisComp">+ componente</button>';
+  h += '<p class="muted" style="margin-top:10px">Este é o único lugar onde o tipo do tampo é informado. O ultrassom (próxima versão) usa esta mesma lista.</p>';
+  $('tela').innerHTML = h;
+  $('tela').querySelectorAll('[data-cp]').forEach(el => el.addEventListener('change', () => {
+    const c = v.componentes.find(x => x.id === el.dataset.cp); if (!c) return;
+    let val = el.value;
+    if (el.dataset.k === 'nome'){ val = val.trim(); if (!val){ U.toast('O nome não pode ficar vazio.', 'err'); el.value = c.nome; return; } }
+    if (el.dataset.k === 'posicao') val = val || null;
+    mudouComp(v, c, el.dataset.k, val);
+    if (el.dataset.k === 'tipo' && val === 'janela' && !c.nao_medir){ mudouComp(v, c, 'nao_medir', true); pintar(); }
+  }));
+  comps.forEach(c => ligar('nm_' + c.id, el => mudouComp(v, c, 'nao_medir', el.checked)));
+  $('tela').querySelectorAll('[data-rmc]').forEach(b => b.addEventListener('click', () => {
+    const c = v.componentes.find(x => x.id === b.dataset.rmc);
+    N.janela.confirmar('Tirar ' + c.nome + '?', '', 'Tirar', true).then(s => { if (s){ mudouComp(v, c, 'ativo', false); pintar(); } });
+  }));
+  $('maisComp').addEventListener('click', () => {
+    const c = { id:uid(), tipo:'janela', nome:'Janela de visita', posicao:null, camara_id:cs[0] && cs[0].id, nao_medir:true,
+                ordem:v.componentes.length + 1, ativo:true };
+    v.componentes.push(c); salvar(); gravarComp(v, c); pintar();
+  });
+}
+
+// ── tela 5 · localização ───────────────────────────────────────────────────
+function telaLocal(v){
+  titulo('Localização', v.tag);
+  const mapa = linkMapa(v);
+  let h = '<div class="card">' + '<label class="f">Local de instalação<small>Ex.: casa de compressores, ao lado do portão 2.</small><textarea class="t" id="lLoc">' + esc(v.localizacao || '') + '</textarea></label>';
+  h += '<p style="margin:14px 0 0;font-weight:600;font-size:13px;color:var(--ink-2)">GPS</p>';
+  h += v.latitude != null ? '<p class="info" style="margin:2px 0 0">' + fmt(v.latitude, 6) + ', ' + fmt(v.longitude, 6) +
+       (v.gps_precisao_m != null ? ' · precisão ' + Math.round(v.gps_precisao_m) + ' m' : '') + (mapa ? ' · <a href="' + mapa + '" target="_blank" rel="noopener">mapa</a>' : '') + '</p>'
+     : '<p class="muted" style="margin:2px 0 0">Ainda não capturado. Capture ao lado do vaso.</p>';
+  h += '<button class="btn sec" id="lGps">' + (v.latitude != null ? 'Capturar de novo' : 'Capturar o GPS') + '</button></div>';
+  h += '<div class="card"><b>Fotos do vaso</b><p class="muted" style="margin:2px 0 0">Até 3: o vaso inteiro e o acesso. Servem para achar o vaso na próxima visita.</p>' + gradeFotos(v, 'localizacao', 3) + '</div>';
+  $('tela').innerHTML = h;
+  ligar('lLoc', el => mudouVaso(v, 'localizacao', el.value.trim() || null));
+  ligarFotos(v, 'localizacao');
+  $('lGps').addEventListener('click', () => {
+    const b = $('lGps');
+    if (!navigator.geolocation){ U.toast('Este aparelho não dá o GPS ao navegador.', 'err'); return; }
+    b.disabled = true; b.textContent = 'Procurando o GPS…';
+    navigator.geolocation.getCurrentPosition(p => {
+      v.latitude = Math.round(p.coords.latitude * 1e6) / 1e6; v.longitude = Math.round(p.coords.longitude * 1e6) / 1e6;
+      v.gps_precisao_m = p.coords.accuracy != null ? Math.round(p.coords.accuracy * 10) / 10 : null; salvar();
+      enfileirar(v, 'gps', 'GPS', { funcao:'tf_insp_gps_gravar', payload:{ p_equip:v.id, p_lat:v.latitude, p_lon:v.longitude, p_precisao:v.gps_precisao_m } });
+      if (v.gps_precisao_m > 50) U.toast('Precisão de ' + Math.round(v.gps_precisao_m) + ' m: se puder, capture de novo ao ar livre.');
+      pintar();
+    }, e => {
+      b.disabled = false; b.textContent = 'Capturar o GPS';
+      U.toast(e && e.code === 1 ? 'O GPS foi negado. Libere a localização para o navegador.' : 'Não consegui o GPS agora. Tente ao ar livre.', 'err');
+    }, { enableHighAccuracy:true, timeout:20000, maximumAge:0 });
+  });
+}
+
+// ── tela 6 · laudo anterior ────────────────────────────────────────────────
+function laudoColetado(v, origem){
+  const la = v.laudo_anterior || { id:uid() };
+  if (la.situacao === 'conferido') return;
+  v.laudo_anterior = Object.assign(la, { situacao:'em_conferencia', origem, motivo:null }); salvar();
+  enfileirar(v, 'laudo', 'laudo anterior', { funcao:'tf_insp_laudo_anterior_gravar',
+    payload:{ p_equip:v.id, p_dados:{ id:la.id, situacao:'em_conferencia', origem, inspecao_id:v.inspecao.id } } });
+}
+function telaLaudo(v){
+  titulo('Laudo anterior', v.tag);
+  const la = v.laudo_anterior || {}, sit = la.situacao;
+  if (sit === 'conferido'){ $('tela').innerHTML = '<div class="card"><b>Já conferido pelo escritório.</b><p class="muted">Nada a coletar.</p></div>'; return; }
+  const fs = fotosDe(v, 'laudo_anterior');
+  let h = '';
+  if (sit === 'cliente_nao_tem' || sit === 'sem_laudo'){
+    h += '<div class="alerta"><b>' + (sit === 'cliente_nao_tem' ? 'O cliente não tem o laudo' : 'O vaso nunca teve laudo') + '</b>' + esc(la.motivo || '') +
+         '<div><button class="btn peq" id="lzDesfaz">Desfazer</button></div></div>';
+  } else {
+    h += '<div class="card"><b>Fotografe o laudo impresso</b><p class="muted" style="margin:2px 0 6px">Uma foto por página, nesta ordem. A digitação é do escritório, depois da visita.</p>';
+    ROTEIRO_LAUDO.forEach((r, i) => {
+      const tem = fs.some(f => f.legenda === r);
+      h += '<div class="passo"><span class="n' + (tem ? ' ok' : '') + '">' + (tem ? '✓' : i + 1) + '</span><span class="tx">' + esc(r) + '</span>' +
+           '<button class="btn peq' + (tem ? '' : ' pri') + '" data-pg="' + i + '">' + (tem ? 'Outra' : 'Foto') + '</button></div>';
+    });
+    h += gradeFotos(v, 'laudo_anterior') + '</div>';
+    h += '<div class="card"><b>O cliente deu o PDF?</b><button class="btn sec" id="lzPdf">Anexar o PDF</button></div>';
+    h += '<div class="card"><b>Não há laudo para coletar</b>' +
+         '<button class="btn" id="lzNaoTem">O cliente não tem</button><button class="btn" id="lzNunca">O vaso nunca teve laudo</button></div>';
+  }
+  $('tela').innerHTML = h;
+  $('tela').querySelectorAll('[data-pg]').forEach(b => b.addEventListener('click', () => {
+    const r = ROTEIRO_LAUDO[Number(b.dataset.pg)];
+    alvoFoto = { v:v.id, secao:'laudo_anterior', legenda:r, laudo:true };
+    const a = $('arqFoto'); a.value = ''; a.click();
+  }));
+  ligarFotos(v, 'laudo_anterior', () => 'Página do laudo');
+  ligar('lzPdf', () => { alvoFoto = { v:v.id, secao:'laudo_anterior' }; const a = $('arqPdf'); a.value = ''; a.click(); }, 'click');
+  const semLaudo = (s, tit) => janela(tit, '<label class="f">Motivo<small>Obrigatório. Ex.: o cliente comprou o vaso usado, sem documentos.</small><textarea class="t" id="lzMot"></textarea></label>',
+    [{ rotulo:'Cancelar' }, { rotulo:'Confirmar', classe:'pri', acao:() => {
+      const m = ($('lzMot').value || '').trim(); if (!m){ U.toast('Escreva o motivo.', 'err'); return false; }
+      const la2 = v.laudo_anterior || { id:uid() };
+      v.laudo_anterior = Object.assign(la2, { situacao:s, motivo:m, origem:null }); salvar();
+      enfileirar(v, 'laudo', 'laudo anterior', { funcao:'tf_insp_laudo_anterior_gravar', payload:{ p_equip:v.id, p_dados:{ id:la2.id, situacao:s, motivo:m, inspecao_id:v.inspecao.id } } });
+      N.janela.fechar(); pintar();
+    } }]);
+  ligar('lzNaoTem', () => semLaudo('cliente_nao_tem', 'O cliente não tem o laudo'), 'click');
+  ligar('lzNunca', () => semLaudo('sem_laudo', 'O vaso nunca teve laudo'), 'click');
+  ligar('lzDesfaz', () => {
+    const la2 = v.laudo_anterior; la2.situacao = fs.length ? 'em_conferencia' : 'pendente_cliente'; la2.motivo = null; salvar();
+    enfileirar(v, 'laudo', 'laudo anterior', { funcao:'tf_insp_laudo_anterior_gravar', payload:{ p_equip:v.id, p_dados:{ id:la2.id, situacao:la2.situacao, inspecao_id:v.inspecao.id } } });
+    pintar();
+  }, 'click');
+}
+// a foto de uma página do laudo marca o laudo como coletado
+const _reg = registrarArquivo;
+registrarArquivo = async function(v, secao, legenda, blob, ext, tipo, mini){
+  await _reg(v, secao, legenda, blob, ext, tipo, mini);
+  if (secao === 'laudo_anterior' && ext !== 'pdf'){ laudoColetado(v, 'fotos_campo'); pintar(); }
+};
+
+// ── início ─────────────────────────────────────────────────────────────────
+function demo(){
+  return { gerado_em:new Date().toISOString(), os:{ id:'demo-os', numero:'26000', status:'aberta', cliente_id:'demo-cli', cliente:'Cliente de demonstração' },
+    fabricantes:[{ id:'f1', nome:'Fabricante A' }, { id:'f2', nome:'Fabricante B' }],
+    materiais:[{ id:'m1', especificacao:'SA-285 Gr. C', forma:'chapa' }],
+    vasos:[{ id:'demo-v1', tag:'VP-01', nome:'Reservatório de ar', localizacao:'Casa de compressores', camaras:[], componentes:[], inspecao:null },
+           { id:'demo-v2', tag:'VP-02', nome:'Pulmão de ar', camaras:[], componentes:[], inspecao:null }] };
+}
+(function boot(){
+  $('barDemo').hidden = !DEMO;
+  if (!OS){ $('tela').innerHTML = '<div class="card vazio">Abra a inspeção pela tarefa T06 da OS, no Field.</div>'; titulo('Inspeção', VERSAO); return; }
+  if (!DEMO && NO_SERVIDOR){
+    const s = N.sessao();
+    if (!s.token){ try{ sessionStorage.setItem('tf_recado', 'Entre para abrir a inspeção.'); }catch(e){} location.href = '../../?para=field'; return; }
+    const g = N.porteiro({ app:'doc', demo:DEMO, url:SUPA_URL, anon:SUPA_ANON });
+    if (g === 'hub'){ location.href = '../../?para=field'; return; }
+  } else { N.porteiro({ app:'doc', demo:true }); }
+  try{ if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}   // não apagar foto pendente
+  if (DEMO && !E) mesclar(demo());
+  try{ history.replaceState({ t:telaAtual }, '', location.href); }catch(e){}
+  pintar();
+  baixar(true);
+  if (!DEMO) N.fila.enviarAgora();
+})();
+</script>
+</body>
+</html>

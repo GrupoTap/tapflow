@@ -24,7 +24,7 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S34';
+const VERSAO = 'S35';
 const CACHE  = 'tapflow-field-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -42,7 +42,9 @@ const ESSENCIAIS = [
   // S34: N2 (fila de envios e utilitários)
   '../nucleo/nucleo.js?v=N2',
   '../nucleo/nucleo.css?v=N2',
-  '../nucleo/config.js?v=N2'
+  '../nucleo/config.js?v=N2',
+  // S35 · TapDoc 1: a coleta da inspeção (página própria, abre sem sinal)
+  './doc/'
 ];
 
 self.addEventListener('install', ev => {
@@ -105,19 +107,26 @@ self.addEventListener('fetch', ev => {
   // a API junto do app) o ramo "ícones" abaixo guardava a PRIMEIRA resposta de
   // /rest/v1 e a devolvia para sempre — a lista de extras ficava vazia depois
   // do envio. É exatamente a "segunda verdade" que o cabeçalho deste arquivo proíbe.
-  if (url.pathname.indexOf('/rest/v1/') !== -1 || url.pathname.indexOf('/auth/v1/') !== -1) return;
+  if (url.pathname.indexOf('/rest/v1/') !== -1 || url.pathname.indexOf('/auth/v1/') !== -1 || url.pathname.indexOf('/storage/v1/') !== -1) return;
 
   // ── abrir o app ──
+  // S35: cada página com a sua chave. Até o S34 TODA página aberta aqui era
+  // guardada como "./index.html": abrir o TapDoc (doc/) com sinal e depois
+  // abrir o Field sem sinal mostraria o TapDoc no lugar do Field.
   if (req.mode === 'navigate') {
+    const base = new URL('./', self.location).pathname;          // /tapflow/field/
+    const resto = url.pathname.startsWith(base) ? url.pathname.slice(base.length) : '';
+    const ehDoc = /^doc(\/|$)/.test(resto);
+    const chave = ehDoc ? './doc/' : './index.html';
     ev.respondWith((async () => {
       try {
         const r = await comPrazo(req, 4000);
         const c = await caches.open(CACHE);
-        c.put('./index.html', r.clone()).catch(() => {});
+        if (r && r.ok && r.type === 'basic') c.put(chave, r.clone()).catch(() => {});
         return r;
       } catch (e) {
         const c = await caches.open(CACHE);
-        return (await c.match('./index.html')) || (await c.match('./')) ||
+        return (await c.match(chave)) || (ehDoc ? null : (await c.match('./'))) ||
           new Response('<h1>Sem sinal</h1><p>Abra de novo quando tiver conexão.</p>',
             { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 503 });
       }
