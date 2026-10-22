@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1B6FA9">
+<title>TapDoc · Preparação</title>
+<link rel="icon" href="../field/icons/favicon-32.png">
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N2">
+<script src="../nucleo/config.js?v=N2"></script>
+<script src="../nucleo/nucleo.js?v=N2"></script>
+<script src="motor-calculo-nr13.js?v=R00.1"></script>
+<!--
+  TapDoc (escritório) · R02b1 — preparar a inspeção
+  ─────────────────────────────────────────────────
+  A T05 "Preparar a inspeção": marcar os vasos da OS, registrar e conferir o
+  laudo anterior de cada um, deixar as instruções para o campo e concluir.
+  Banco: sql/401_tapdoc_r02b1.sql. Desenho: inspecao-nr13/rodadas/R02b-preparacao-desenho.md.
+  Abre pelo hub (card TapDoc) ou direto numa OS: doc/#os=<id>. Um vaso: doc/#os=<id>&v=<vaso>.
+  Feito pelo chat central em 22/10/2026.
+-->
+<style>
+:root{
+  --paper:#F1F3F4; --surface:#FFFFFF; --surface-2:#F7F9FA;
+  --ink:#14181B; --ink-2:#515252; --ink-3:#78838A;
+  --rule:#DBE0E3; --rule-2:#EBEFF1;
+  --accent:#1B6FA9; --accent-soft:#E3EEF7; --accent-ink:#164C77;
+  --crit:#A62D18; --crit-soft:#F8E5E0; --warn:#8A5A12; --warn-soft:#F8EEDC; --ok:#1E7A42; --ok-soft:#DFF0E6;
+  --plh:#6D28D9; --plh-soft:#EEE7F7;
+  --sh:0 1px 2px rgba(15,23,25,.06), 0 6px 16px -10px rgba(15,23,25,.28);
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.45;
+  display:flex;flex-direction:column;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+header{flex:0 0 auto;background:var(--accent);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px}
+header .back{background:rgba(255,255,255,.16);border:0;color:#fff;width:34px;height:34px;border-radius:4px;font-size:19px}
+header .tit{flex:1;min-width:0}
+header .tit b{display:block;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header .tit small{display:block;font-size:12px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header .ver{font-size:11px;opacity:.8}
+.aviso{flex:0 0 auto;padding:8px 16px;font-size:13px;font-weight:600;background:var(--warn-soft);color:var(--warn)}
+main{flex:1;overflow-y:auto;padding:16px 16px 48px}
+.wrap{max-width:1180px;margin:0 auto}
+.abas{display:flex;gap:6px;background:var(--surface);border:1px solid var(--rule);border-radius:7px;padding:4px;margin-bottom:14px}
+.abas button{flex:1;border:0;background:none;padding:9px 6px;border-radius:5px;font-weight:600;color:var(--ink-2)}
+.abas button.on{background:var(--accent);color:#fff}
+.abas .bolha{display:inline-block;min-width:20px;padding:0 6px;border-radius:10px;background:var(--crit);color:#fff;font-size:12px;margin-left:4px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:7px;padding:14px 16px;box-shadow:var(--sh);margin-bottom:12px}
+h2{font-size:13px;font-weight:700;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;margin:18px 2px 8px}
+h3{font-size:15px;margin:0 0 8px}
+table{width:100%;border-collapse:collapse}
+th{font-size:12px;text-align:left;color:var(--ink-3);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--rule)}
+td{padding:9px 8px;border-bottom:1px solid var(--rule-2);vertical-align:top}
+tr.lin{cursor:pointer}
+tr.lin:hover td{background:var(--surface-2)}
+.chip{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:3px;white-space:nowrap}
+.s-pronto{background:var(--ok-soft);color:var(--ok)}
+.s-precisa_laudo{background:var(--crit-soft);color:var(--crit)}
+.s-em_conferencia{background:var(--warn-soft);color:var(--warn)}
+.s-pegar_cliente{background:#FDEBD7;color:#9A4A0B}
+.s-grave{background:var(--plh-soft);color:var(--plh)}
+.s-sem_laudo{background:var(--surface-2);color:var(--ink-2);border:1px solid var(--rule)}
+.s-provisorio{background:var(--accent-soft);color:var(--accent-ink)}
+.s-fora{background:none;color:var(--ink-3);border:1px dashed var(--rule)}
+.btn{display:inline-block;border:1px solid var(--rule);background:var(--surface);border-radius:5px;padding:8px 14px;font-weight:600;font-size:14px}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.sec{background:var(--accent-soft);border-color:transparent;color:var(--accent-ink)}
+.btn.perigo{color:var(--crit)}
+.btn.mini{padding:4px 10px;font-size:12.5px}
+.btn:disabled{opacity:.5;cursor:default}
+.linha{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.muted{color:var(--ink-3);font-size:13px}
+.alerta{border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:14px}
+.alerta.falta{background:var(--warn-soft);color:var(--warn)}
+.alerta.ok{background:var(--ok-soft);color:var(--ok)}
+.alerta.crit{background:var(--crit-soft);color:var(--crit)}
+.alerta ul{margin:4px 0 0;padding-left:20px}
+label.f{display:block;font-size:12.5px;font-weight:600;color:var(--ink-2);margin-top:10px}
+label.f small{font-weight:400;color:var(--ink-3)}
+input.t,select.t,textarea.t{display:block;width:100%;margin-top:3px;padding:8px 10px;border:1px solid var(--rule);border-radius:5px;background:#fff;font-size:14.5px}
+textarea.t{min-height:60px;resize:vertical}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 12px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:0 12px}
+.dois{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:16px;align-items:start}
+.visor{position:sticky;top:0}
+.visor iframe{width:100%;height:72vh;border:1px solid var(--rule);border-radius:6px;background:#fff}
+.visor img{max-width:100%;border:1px solid var(--rule);border-radius:6px;display:block;margin-bottom:8px}
+.arqs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.arqs button{border:1px solid var(--rule);background:#fff;border-radius:4px;padding:4px 9px;font-size:12.5px}
+.arqs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+details.op{margin-top:12px;border-top:1px solid var(--rule-2);padding-top:8px}
+details.op summary{font-weight:700;font-size:13.5px;cursor:pointer;color:var(--accent-ink)}
+.conf td{font-size:13.5px}
+.r-confere{color:var(--ok);font-weight:700}
+.r-diverge{color:var(--warn);font-weight:700}
+.r-grave{color:var(--plh);font-weight:800}
+.r-aviso{color:var(--crit);font-weight:700}
+.r-informativo,.r-nao_informado{color:var(--ink-3)}
+.comp td{padding:4px}
+.comp input,.comp select{width:100%;padding:5px 6px;border:1px solid var(--rule);border-radius:4px;font-size:13px}
+.instr{width:100%;min-height:34px;padding:6px 8px;border:1px solid var(--rule);border-radius:4px;font-size:13px;resize:vertical}
+.vazio{text-align:center;color:var(--ink-3);padding:30px}
+.ck{width:18px;height:18px}
+.conv{font-size:12px;color:var(--accent-ink);min-height:15px}
+@media (max-width:900px){ .dois{grid-template-columns:1fr} .visor{position:static} .visor iframe{height:55vh} .g4{grid-template-columns:1fr 1fr} }
+@media (max-width:560px){ .g2,.g3,.g4{grid-template-columns:1fr} main{padding:12px 10px 40px} }
+/* a tabela de vasos vira um bloco por vaso no celular (o botão não pode sair da tela) */
+@media (max-width:700px){
+  table.tv tr:first-child{display:none}
+  table.tv tr{display:grid;grid-template-columns:30px 1fr auto;gap:2px 8px;padding:10px 4px;border-bottom:1px solid var(--rule-2)}
+  table.tv td{border:0;padding:0}
+  table.tv td.h-ins{grid-column:1/-1;margin-top:6px}
+  table.tv td.acoes{grid-column:1/-1;text-align:left !important;margin-top:6px}
+  table.vs th:nth-child(4),table.vs td:nth-child(4){display:none}
+}
+</style>
+</head>
+<body>
+<header>
+  <button class="back" id="voltar" aria-label="Voltar">‹</button>
+  <div class="tit"><b id="tTit">TapDoc</b><small id="tSub">Preparação da inspeção</small></div>
+  <span class="ver" id="ver"></span>
+</header>
+<div class="aviso" id="barDemo" hidden>Modo demonstração: abra pelo app publicado para gravar.</div>
+<main><div class="wrap" id="tela"><p class="muted">Carregando…</p></div></main>
+<input type="file" id="arqPdf" accept="application/pdf,image/*" hidden>
+
+<script>
+'use strict';
+const VERSAO = 'TapDoc E1';   // E = escritório (o celular é "TapDoc 1", "TapDoc 2"…)
+const CFG = window.TF_CONFIG || {};
+const SUPA_URL = CFG.SUPABASE_URL || '', SUPA_ANON = CFG.SUPABASE_ANON_KEY || '';
+const DEMO = !SUPA_URL || !SUPA_ANON;
+const N = window.Nucleo, M = window.MotorNR13;
+const $ = id => document.getElementById(id);
+$('ver').textContent = VERSAO;
+if (!N){ $('tela').innerHTML = '<div class="card vazio">Sem o núcleo do TapFlow. Recarregue com sinal.</div>'; throw new Error('sem núcleo'); }
+const U = N.util, esc = U.esc;
+const rpc = (f, p) => N.api.rpc(f, p || {});
+
+// ── utilitários ────────────────────────────────────────────────────────────
+function uid(){ try{ if (crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c === 'x' ? r : (r&3|8)).toString(16); }); }
+function num(s){ if (s == null) return null; let t = String(s).trim().replace(/\s/g, ''); if (!t) return null;
+  if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.'); const v = Number(t); return isFinite(v) ? v : NaN; }
+function fmt(v, c){ if (v == null || v === '' || !isFinite(Number(v))) return ''; return String(Number(Number(v).toFixed(c == null ? 4 : c))).replace('.', ','); }
+const dataBR = d => d ? String(d).slice(8,10) + '/' + String(d).slice(5,7) + '/' + String(d).slice(0,4) : '—';
+const UNID = { 'bar':0.1, 'kgf/cm2':0.0980665, 'MPa':1, 'psi':0.00689476 };
+const UNID_ROT = { 'bar':'bar', 'kgf/cm2':'kgf/cm²', 'MPa':'MPa', 'psi':'psi' };
+let UN = 'bar';
+try{ UN = localStorage.getItem('tfdoc_un') || 'bar'; }catch(e){}
+const paraMPa = v => v == null ? null : Math.round(v * UNID[UN] * 1e4) / 1e4;
+const deMPa = v => v == null || v === '' ? null : Number(v) / UNID[UN];
+const SIT = {
+  pronto:['Pronto','✅'], precisa_laudo:['Precisa do laudo anterior','📄'], em_conferencia:['Em conferência','🟡'],
+  pegar_cliente:['Pegar no cliente','🟠'], grave:['Divergência grave','⚠'], sem_laudo:['Sem laudo anterior','➖'],
+  provisorio:['Provisório','🆕']
+};
+const chipSit = s => '<span class="chip s-' + esc(s) + '">' + (SIT[s] ? SIT[s][1] + ' ' + SIT[s][0] : esc(s)) + '</span>';
+const FLUIDOS = [['Ar comprimido','C'],['Vapor d’água','C'],['Água','D'],['Nitrogênio','C'],['CO₂','C'],['Óleo térmico','B'],['GLP','A'],['Gás natural','A'],['Hidrogênio','A'],['Amônia','A']];
+const TIPOS_COMP = { costado:'Costado', eliptico:'Elíptico', torisferico:'Torisférico', hemisferico:'Hemisférico', conico:'Cônico', plano:'Plano', janela:'Janela' };
+
+/** janela do núcleo: botões {rotulo, classe:'pri', acao}; acao que devolve false mantém aberta */
+function janela(tit, html, bts){
+  N.janela.abrir(tit, html, (bts || []).map(b => ({ label:b.rotulo, pri:b.classe === 'pri',
+    onClick:async () => { const r = b.acao ? await b.acao() : undefined; if (r !== false) N.janela.fechar(); } })));
+}
+function erro(e){ U.toast(e && e.message ? e.message : String(e), 'err'); }
+
+// ── rotas: #os=<id>&v=<vaso>&aba=<a> ───────────────────────────────────────
+function rota(){ const h = new URLSearchParams(location.hash.replace(/^#/, '')); return { os:h.get('os'), v:h.get('v'), aba:h.get('aba') || 'os' }; }
+function ir(r){ const p = new URLSearchParams(); if (r.os) p.set('os', r.os); if (r.v) p.set('v', r.v); if (r.aba && !r.os) p.set('aba', r.aba);
+  location.hash = p.toString(); }
+window.addEventListener('hashchange', pintar);
+$('voltar').addEventListener('click', () => {
+  const r = rota();
+  if (r.v) ir({ os:r.os }); else if (r.os) ir({}); else location.href = '../';
+});
+function titulo(t, s){ $('tTit').textContent = t; $('tSub').textContent = s || ''; }
+
+async function pintar(){
+  const r = rota();
+  try{
+    if (r.os && r.v) return await telaVaso(r.os, r.v);
+    if (r.os) return await telaOS(r.os);
+    return await telaListas(r.aba);
+  }catch(e){
+    $('tela').innerHTML = '<div class="card vazio"></div>';
+    $('tela').querySelector('.vazio').textContent = e.message || 'Não deu para carregar.';
+  }
+}
+
+// ── 1 · as listas (entrada pelo hub) ───────────────────────────────────────
+let LISTAS = null;
+async function telaListas(aba){
+  titulo('TapDoc', 'Preparação da inspeção · escritório');
+  $('tela').innerHTML = '<p class="muted">Carregando…</p>';
+  LISTAS = await rpc('tf_insp_preparacao_lista');
+  const L = LISTAS, nPlh = (L.plh || []).filter(x => !x.decisao).length;
+  const abas = [['os','A preparar', (L.os || []).length], ['conf','Laudos a conferir', (L.a_conferir || []).length], ['plh','Para o PLH', nPlh]];
+  let h = '<div class="abas">' + abas.map(([k, r, n]) => '<button data-a="' + k + '" class="' + (aba === k ? 'on' : '') + '">' + r
+    + (n ? '<span class="bolha">' + n + '</span>' : '') + '</button>').join('') + '</div>';
+  if (aba === 'conf'){
+    h += '<div class="card"><h3>Laudos pegos em campo, a conferir</h3><p class="muted">A equipe que esteve no cliente digita e confere o laudo a partir das fotos.</p>'
+      + ((L.a_conferir || []).length ? '<table><tr><th>Vaso</th><th>Cliente</th><th>OS</th><th>Origem</th></tr>'
+        + L.a_conferir.map(x => '<tr class="lin" data-os="' + esc(x.os_id || '') + '" data-v="' + esc(x.equipamento_id) + '"><td><b>' + esc(x.tag) + '</b></td><td>'
+          + esc(x.cliente || '') + '</td><td>' + esc(x.os || '—') + '</td><td>' + (x.origem === 'pdf' ? 'PDF' : 'fotos do campo') + '</td></tr>').join('') + '</table>'
+        : '<p class="vazio">Nenhum laudo esperando.</p>') + '</div>';
+  } else if (aba === 'plh'){
+    const admin = !!(N.sessao() || {}).admin;
+    h += '<div class="card"><h3>Divergências graves</h3><p class="muted">PMTA recalculada mais de 5% abaixo da atribuída, ou válvula ajustada acima da PMTA. '
+      + 'Não trava a visita; trava a liberação do laudo. Só o PLH é avisado.</p>'
+      + ((L.plh || []).length ? '<table><tr><th>Vaso</th><th>Cliente</th><th>O que divergiu</th><th>Decisão do PLH</th></tr>'
+        + L.plh.map(x => '<tr><td><b>' + esc(x.tag) + '</b></td><td>' + esc(x.cliente || '') + '</td><td>' + esc(x.resumo || '') + '</td><td>'
+          + (x.decisao ? '<b>' + esc({ ciente:'Ciente', comunicar_cliente:'Comunicar o cliente', reduzir_pressao:'Reduzir a pressão' }[x.decisao]) + '</b>'
+             + (x.obs ? '<div class="muted">' + esc(x.obs) + '</div>' : '') : '<span class="muted">pendente</span>')
+          + (admin ? ' <button class="btn mini" data-plh="' + esc(x.laudo_id) + '">' + (x.decisao ? 'Mudar' : 'Decidir') + '</button>' : '') + '</td></tr>').join('') + '</table>'
+        : '<p class="vazio">Nenhuma divergência grave.</p>') + '</div>';
+  } else {
+    h += '<div class="card"><h3>OS de inspeção com a T05 "Preparar a inspeção" aberta</h3>'
+      + ((L.os || []).length ? '<table><tr><th>OS</th><th>Cliente</th><th>Visita</th><th>Vasos</th><th>Situação</th></tr>'
+        + L.os.map(o => '<tr class="lin" data-os="' + esc(o.id) + '"><td><b>' + esc(o.numero) + '</b></td><td>' + esc(o.cliente || '') + '</td><td>'
+          + (o.visita ? dataBR(o.visita) : '<span class="muted">sem dia</span>') + '</td><td>' + o.marcados + ' marcado' + (o.marcados === 1 ? '' : 's') + '</td><td>'
+          + (o.marcados && !o.faltam ? '<span class="chip s-pronto">pronta para concluir</span>'
+             : '<span class="chip s-em_conferencia">' + (o.marcados ? o.faltam + ' a fazer' : 'nenhum vaso marcado') + '</span>')
+          + (!o.trava ? ' <span class="muted">(OS antiga: conclui à mão)</span>' : '') + '</td></tr>').join('') + '</table>'
+        : '<p class="vazio">Nenhuma OS esperando a preparação.</p>') + '</div>';
+  }
+  $('tela').innerHTML = h;
+  $('tela').querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => ir({ aba:b.dataset.a })));
+  $('tela').querySelectorAll('tr.lin').forEach(t => t.addEventListener('click', () => {
+    if (t.dataset.v){ if (!t.dataset.os){ U.toast('Laudo sem OS ligada.', 'err'); return; } ir({ os:t.dataset.os, v:t.dataset.v }); }
+    else ir({ os:t.dataset.os });
+  }));
+  $('tela').querySelectorAll('[data-plh]').forEach(b => b.addEventListener('click', () => decidirPLH(b.dataset.plh)));
+}
+function decidirPLH(laudo){
+  janela('Decisão do PLH', '<label class="f">Decisão<select class="t" id="pDec"><option value="ciente">Ciente: segue normal</option>'
+    + '<option value="comunicar_cliente">Comunicar o cliente</option><option value="reduzir_pressao">Recomendar reduzir a pressão até a inspeção</option></select></label>'
+    + '<label class="f">Orientação <small>(obrigatória fora do "ciente")</small><textarea class="t" id="pObs"></textarea></label>',
+    [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
+      try{ await rpc('tf_insp_plh_decidir', { p_laudo:laudo, p_decisao:$('pDec').value, p_obs:$('pObs').value || null }); U.toast('Decisão gravada.', 'ok'); pintar(); }
+      catch(e){ erro(e); return false; } } }]);
+}
+
+// ── 2 · a OS ───────────────────────────────────────────────────────────────
+let PREP = null;
+async function carregarOS(os){ PREP = await rpc('tf_insp_preparacao_os', { p_os_id: os }); return PREP; }
+async function telaOS(os){
+  const P = await carregarOS(os);
+  titulo(P.os.numero + ' · preparar a inspeção', P.os.cliente || '');
+  const marc = P.vasos.filter(v => v.inspecao), fora = P.vasos.filter(v => !v.inspecao);
+  const t05 = P.t05 || {}, vis = P.visita || {};
+  const aberta = t05.status && t05.status !== 'completo' && t05.status !== 'dispensado';
+  let h = '<div class="card"><div class="linha" style="justify-content:space-between"><div><b>Visita:</b> '
+    + (vis.dia ? dataBR(vis.dia) + (vis.hora ? ' às ' + esc(String(vis.hora).slice(0,5)) : '') : '<span class="muted">sem dia marcado</span>')
+    + (vis.inspetor ? ' · ' + esc(vis.inspetor) : '') + '<div class="muted">T05 "' + esc(t05.nome || 'Preparar a inspeção') + '": ' + esc(t05.status || '—')
+    + (t05.trava ? '' : ' · OS antiga, sem a trava (conclui à mão no Manager)') + '</div></div>'
+    + (aberta ? '<button class="btn pri" id="concluir"' + ((P.falta || []).length ? ' disabled' : '') + '>Concluir a preparação</button>' : '<span class="chip s-pronto">T05 concluída</span>')
+    + '</div></div>';
+  if ((P.falta || []).length) h += '<div class="alerta falta"><b>Falta para concluir:</b><ul>' + P.falta.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul></div>';
+  else if (aberta) h += '<div class="alerta ok"><b>Preparação completa.</b> Pode concluir a T05.</div>';
+  h += '<h2>Vasos desta OS (' + marc.length + ')</h2><div class="card" style="padding:6px 8px">';
+  h += marc.length ? tabelaVasos(marc, true) : '<p class="vazio">Nenhum vaso marcado. Marque abaixo os vasos que serão inspecionados.</p>';
+  h += '</div><h2>Outros vasos do cliente (' + fora.length + ')</h2><div class="card" style="padding:6px 8px">';
+  h += fora.length ? tabelaVasos(fora, false) : '<p class="vazio">' + (P.vasos.length ? 'Todos os vasos do cliente estão na OS.'
+        : 'O cliente não tem vasos cadastrados. Importe a planilha do TapWeb pela ficha do cliente (Gestão), ou cadastre abaixo.') + '</p>';
+  h += '<div style="padding:8px"><button class="btn sec" id="novo">+ Vaso não cadastrado</button></div></div>';
+  $('tela').innerHTML = h;
+  const btC = $('concluir');
+  if (btC) btC.addEventListener('click', () => N.util.semDuploEnvio(btC, async () => {
+    try{ await rpc('tf_concluir_tarefa', { p_os_id: os, p_tarefa_id: 'T05' }); U.toast('Preparação concluída. A visita está liberada.', 'ok'); pintar(); }
+    catch(e){ erro(e); }
+  }));
+  $('tela').querySelectorAll('[data-marca]').forEach(c => c.addEventListener('change', async () => {
+    c.disabled = true;
+    try{ await rpc('tf_insp_preparar', { p_os_id: os, p_equip: c.dataset.marca, p_marcar: c.checked, p_instrucoes: null }); pintar(); }
+    catch(e){ erro(e); c.checked = !c.checked; c.disabled = false; }
+  }));
+  $('tela').querySelectorAll('[data-instr]').forEach(t => t.addEventListener('change', async () => {
+    try{ await rpc('tf_insp_preparar', { p_os_id: os, p_equip: t.dataset.instr, p_marcar: true, p_instrucoes: t.value }); U.toast('Instruções gravadas.', 'ok'); }
+    catch(e){ erro(e); }
+  }));
+  $('tela').querySelectorAll('[data-abre]').forEach(b => b.addEventListener('click', () => ir({ os, v:b.dataset.abre })));
+  $('tela').querySelectorAll('[data-conf]').forEach(b => b.addEventListener('click', () => N.util.semDuploEnvio(b, async () => {
+    try{ await rpc('tf_insp_vaso_confirmar', { p_equip: b.dataset.conf }); U.toast('Vaso confirmado no cadastro.', 'ok'); pintar(); }catch(e){ erro(e); }
+  })));
+  $('novo').addEventListener('click', () => novoVaso(os, P.os.cliente_id));
+}
+function tabelaVasos(lista, marcados){
+  return '<table class="tv"><tr><th style="width:42px">Na OS</th><th>Vaso</th><th>Situação</th>' + (marcados ? '<th class="h-ins">Instruções para o campo</th>' : '') + '<th></th></tr>'
+    + lista.map(v => {
+      const ins = v.inspecao, emCampo = ins && ins.situacao !== 'em_preparo';
+      return '<tr><td><input type="checkbox" class="ck" data-marca="' + esc(v.id) + '"' + (ins ? ' checked' : '') + (emCampo ? ' disabled title="Já começou em campo"' : '') + '></td>'
+        + '<td><b>' + esc(v.tag) + '</b>' + (v.nome ? '<div class="muted">' + esc(v.nome) + '</div>' : '') + '</td>'
+        + '<td>' + (marcados ? chipSit(v.situacao) : '<span class="chip s-fora">fora desta OS</span>')
+        + (emCampo ? '<div class="muted">em campo</div>' : '') + '</td>'
+        + (marcados ? '<td class="h-ins"><textarea class="instr" data-instr="' + esc(v.id) + '" placeholder="Ex.: medir também o tampo inferior">' + esc(ins.instrucoes_campo || '') + '</textarea></td>' : '')
+        + '<td class="acoes" style="text-align:right;white-space:nowrap">' + (v.provisorio ? '<button class="btn mini sec" data-conf="' + esc(v.id) + '">Confirmar cadastro</button> ' : '')
+        + (marcados ? '<button class="btn mini" data-abre="' + esc(v.id) + '">Laudo anterior ›</button>' : '') + '</td></tr>';
+    }).join('') + '</table>';
+}
+function novoVaso(os, cliente){
+  janela('Vaso não cadastrado', '<label class="f">TAG<input class="t" id="nvTag"></label><label class="f">Nome (opcional)<input class="t" id="nvNome"></label>'
+    + '<p class="muted">O vaso entra no cadastro do cliente (já confirmado, porque é o escritório) e fica marcado nesta OS.</p>',
+    [{ rotulo:'Cancelar' }, { rotulo:'Cadastrar', classe:'pri', acao:async () => {
+      const tag = ($('nvTag').value || '').trim(); if (!tag){ U.toast('Informe a TAG.', 'err'); return false; }
+      try{
+        const r = await rpc('tf_insp_vaso_provisorio', { p_cliente_id: cliente, p_tag: tag, p_nome: ($('nvNome').value || '').trim() || null, p_id: uid() });
+        if (!r.existente) await rpc('tf_insp_vaso_confirmar', { p_equip: r.equipamento_id });
+        await rpc('tf_insp_preparar', { p_os_id: os, p_equip: r.equipamento_id, p_marcar: true, p_instrucoes: null });
+        U.toast(r.existente ? 'Essa TAG já existia: o vaso foi marcado na OS.' : 'Vaso cadastrado e marcado.', 'ok'); pintar();
+      }catch(e){ erro(e); return false; }
+    } }]);
+}
+
+// ── 3 · um vaso: o laudo anterior ──────────────────────────────────────────
+let VASO = null, LAUDO = null, PREVIA = null;
+async function telaVaso(os, vid){
+  if (!PREP || PREP.os.id !== os) await carregarOS(os);
+  VASO = PREP.vasos.find(v => v.id === vid);
+  if (!VASO){ await carregarOS(os); VASO = PREP.vasos.find(v => v.id === vid); }
+  if (!VASO) throw new Error('Vaso não encontrado nesta OS.');
+  LAUDO = VASO.laudo || null; PREVIA = null;
+  const D = (LAUDO && LAUDO.declarado) || {};
+  titulo(VASO.tag + ' · laudo anterior', PREP.os.numero + ' · ' + (PREP.os.cliente || ''));
+  const cams = VASO.camaras || [];
+  const v = (x) => x == null ? '' : esc(String(x));
+  const pr = (x) => x == null ? '' : esc(fmt(deMPa(x), 4));
+  const arqs = VASO.arquivos || [];
+  let h = '<div class="linha" style="margin-bottom:10px">' + chipSit(VASO.situacao)
+    + (LAUDO && LAUDO.conferido_em ? '<span class="muted">conferido em ' + dataBR(String(LAUDO.conferido_em).slice(0,10)) + '</span>' : '')
+    + (LAUDO && LAUDO.grave ? '<span class="chip s-grave">⚠ ' + esc(LAUDO.grave_resumo || 'divergência grave') + '</span>' : '') + '</div>';
+  h += '<div class="dois"><div class="visor card"><h3>O laudo</h3>'
+    + (VASO.inspecao ? '<div class="linha" style="margin-bottom:8px"><button class="btn sec" id="anexar">Anexar PDF ou foto</button>'
+       + '<span class="muted">' + (arqs.length ? arqs.length + ' arquivo(s)' : 'nenhum arquivo ainda') + '</span></div>'
+       : '<p class="alerta falta">Marque o vaso na OS para anexar o laudo.</p>')
+    + '<div class="arqs" id="arqs">' + arqs.map((a, i) => '<button data-arq="' + i + '">' + esc(a.legenda || ('arquivo ' + (i + 1))) + '</button>').join('') + '</div>'
+    + '<div id="visor"><p class="muted">' + (arqs.length ? 'Escolha um arquivo acima.' : 'O PDF do último laudo aparece aqui.') + '</p></div></div>';
+  h += '<div><div class="card"><h3>Atalhos</h3><div class="linha">'
+    + '<button class="btn" id="pegar">O laudo não veio: pegar no cliente</button><button class="btn" id="semLaudo">Sem laudo anterior…</button></div>'
+    + '<p class="muted" style="margin:6px 0 0">"Pegar no cliente": o inspetor fotografa o laudo impresso em campo, e a equipe confere depois. A T05 pode concluir assim.</p></div>';
+  h += '<div class="card"><h3>1 · O que o laudo declara</h3>'
+    + '<label class="f">Unidade das pressões<select class="t" id="un">' + Object.keys(UNID).map(k => '<option value="' + k + '"' + (k === UN ? ' selected' : '') + '>' + UNID_ROT[k] + '</option>').join('') + '</select></label>'
+    + '<div class="g3"><label class="f">Empresa emissora *<input class="t" id="emissor" value="' + v(LAUDO && LAUDO.emissor) + '"></label>'
+    + '<label class="f">PLH<input class="t" id="plh" value="' + v(LAUDO && LAUDO.plh) + '"></label><label class="f">CREA<input class="t" id="crea" value="' + v(LAUDO && LAUDO.crea) + '"></label></div>'
+    + '<div class="g3"><label class="f">Nº do laudo *<input class="t" id="numero" value="' + v(LAUDO && LAUDO.numero) + '"></label>'
+    + '<label class="f">Data *<input class="t" type="date" id="data_laudo" value="' + v(LAUDO && LAUDO.data_laudo) + '"></label>'
+    + '<label class="f">Tipo<select class="t" id="tipo">' + ['', 'periodica', 'inicial', 'extraordinaria'].map(t => '<option value="' + t + '"' + ((LAUDO && LAUDO.tipo || '') === t ? ' selected' : '') + '>'
+        + ({ '':'—', periodica:'Periódica', inicial:'Inicial', extraordinaria:'Extraordinária' }[t]) + '</option>').join('') + '</select></label></div>';
+  if (cams.length > 1){
+    h += '<div class="g' + Math.min(cams.length, 3) + '">' + cams.map(c => '<label class="f">PMTA ' + esc(c.nome) + ' (<span class="un"></span>) *<input class="t pmtaCam" data-cam="' + esc(c.tipo) + '" inputmode="decimal" value="'
+      + pr(((D.pmtas || []).find(x => x.camara === c.tipo) || {}).pmta_mpa) + '"></label>').join('') + '</div>';
+  }
+  h += '<div class="g4"><label class="f">PMTA atribuída (<span class="un"></span>) *' + (cams.length > 1 ? ' <small>a menor</small>' : '') + '<input class="t" id="pmta" inputmode="decimal" value="' + pr(LAUDO && LAUDO.pmta_mpa) + '"></label>'
+    + '<label class="f">PMTA externa (vácuo)<input class="t" id="pmta_ext" inputmode="decimal" value="' + pr(LAUDO && LAUDO.pmta_externa_mpa) + '"></label>'
+    + '<label class="f">Categoria *<select class="t" id="categoria">' + ['', 'I','II','III','IV','V'].map(c => '<option' + ((LAUDO && LAUDO.categoria || '') === c ? ' selected' : '') + '>' + c + '</option>').join('') + '</select></label>'
+    + '<label class="f">Memória de cálculo<select class="t" id="memoria"><option value="">—</option><option value="true"' + (LAUDO && LAUDO.tem_memoria_calculo === true ? ' selected' : '') + '>tem</option>'
+      + '<option value="false"' + (LAUDO && LAUDO.tem_memoria_calculo === false ? ' selected' : '') + '>não tem</option></select></label></div>'
+    + '<div class="g3"><label class="f">Próxima externa *<input class="t" type="date" id="prox_ext" value="' + v(LAUDO && LAUDO.proxima_externa) + '"></label>'
+    + '<label class="f">Próxima interna *<input class="t" type="date" id="prox_int" value="' + v(LAUDO && LAUDO.proxima_interna) + '"></label>'
+    + '<label class="f">&nbsp;<span class="linha" style="margin-top:8px"><input type="checkbox" id="int_na"' + (D.interna_nao_se_aplica ? ' checked' : '') + '> interna não se aplica</span></label></div>'
+    + '<div class="g4"><label class="f">Fluido *<input class="t" id="fluido" list="fluidos" value="' + v(D.fluido) + '"></label>'
+    + '<label class="f">Classe *<select class="t" id="classe">' + ['', 'A','B','C','D'].map(c => '<option' + ((D.classe_fluido || '') === c ? ' selected' : '') + '>' + c + '</option>').join('') + '</select></label>'
+    + '<label class="f">Pressão de operação (<span class="un"></span>) *<input class="t" id="p_op" inputmode="decimal" value="' + pr(D.p_operacao_mpa) + '"></label>'
+    + '<label class="f">Volume (m³) *<input class="t" id="volume" inputmode="decimal" value="' + v(D.volume_m3 != null ? fmt(D.volume_m3) : '') + '"' + (D.volume_desconhecido ? ' disabled' : '') + '></label></div>'
+    + '<label class="linha" style="margin-top:6px;font-size:13px"><input type="checkbox" id="vol_desc"' + (D.volume_desconhecido ? ' checked' : '') + '> volume desconhecido</label>'
+    + '<datalist id="fluidos">' + FLUIDOS.map(f => '<option value="' + esc(f[0]) + '">').join('') + '</datalist>';
+  h += '<details class="op"' + ((D.componentes || []).length || D.pmta_plaqueta_mpa != null || D.material_id || (D.valvulas || []).length ? ' open' : '') + '><summary>Opcional: plaqueta, material, componentes e válvulas (com eles o sistema recalcula a PMTA)</summary>'
+    + '<div class="g3"><label class="f">PMTA de plaqueta (<span class="un"></span>)<input class="t" id="pmta_plaq" inputmode="decimal" value="' + pr(D.pmta_plaqueta_mpa) + '"></label>'
+    + '<label class="f">Material<select class="t" id="material"><option value="">—</option>' + (PREP.materiais || []).map(m => '<option value="' + esc(m.id) + '" data-s="' + esc(m.s_mpa) + '"' + (D.material_id === m.id ? ' selected' : '') + '>'
+        + esc(m.especificacao + (m.forma ? ' (' + m.forma + ')' : '')) + '</option>').join('') + '</select></label>'
+    + '<label class="f">S usado no laudo (MPa)<input class="t" id="s_mpa" inputmode="decimal" value="' + v(D.s_mpa != null ? fmt(D.s_mpa) : '') + '"></label></div>'
+    + '<p class="muted" style="margin:12px 0 4px"><b>Componentes</b>: R = raio interno (costado, elíptico, cônico); L = raio da coroa (torisférico, hemisférico); d e C para plano e janela; E = eficiência de junta; t = menor espessura medida (mm).</p>'
+    + '<table class="comp" id="comps"><tr><th>Tipo</th><th>Nome</th><th>R</th><th>L</th><th>d</th><th>C</th><th>α°</th><th>E</th><th>t mín</th><th></th></tr></table>'
+    + '<button class="btn mini" id="maisComp" style="margin-top:6px">+ componente</button>'
+    + '<p class="muted" style="margin:12px 0 4px"><b>Válvulas de segurança</b> (ajuste na unidade acima)</p>'
+    + '<table class="comp" id="valvs"><tr><th>TAG</th><th>Ajuste (<span class="un"></span>)</th><th></th></tr></table>'
+    + '<button class="btn mini" id="maisValv" style="margin-top:6px">+ válvula</button></details>'
+    + '<div class="linha" style="margin-top:14px"><button class="btn pri" id="gravar">Gravar e conferir</button><span class="muted">* mínimo para concluir</span></div></div>';
+  h += '<div class="card" id="cxConf"><h3>2 · Conferência</h3><p class="muted">Grave o que o laudo declara para ver a conferência.</p></div></div></div>';
+  $('tela').innerHTML = h;
+
+  // unidade
+  const pintaUn = () => document.querySelectorAll('.un').forEach(s => s.textContent = UNID_ROT[UN]);
+  pintaUn();
+  $('un').addEventListener('change', () => {
+    const lerMPa = id => { const x = num($(id).value); return x == null || Number.isNaN(x) ? null : paraMPa(x); };
+    const ids = ['pmta', 'pmta_ext', 'p_op', 'pmta_plaq'], vals = ids.map(lerMPa);
+    const cv = [...document.querySelectorAll('.pmtaCam')].map(i => { const x = num(i.value); return x == null || Number.isNaN(x) ? null : paraMPa(x); });
+    const vv = [...document.querySelectorAll('.vAj')].map(i => { const x = num(i.value); return x == null || Number.isNaN(x) ? null : paraMPa(x); });
+    UN = $('un').value; try{ localStorage.setItem('tfdoc_un', UN); }catch(e){}
+    ids.forEach((id, i) => { $(id).value = vals[i] == null ? '' : fmt(deMPa(vals[i]), 4); });
+    document.querySelectorAll('.pmtaCam').forEach((i, k) => { i.value = cv[k] == null ? '' : fmt(deMPa(cv[k]), 4); });
+    document.querySelectorAll('.vAj').forEach((i, k) => { i.value = vv[k] == null ? '' : fmt(deMPa(vv[k]), 4); });
+    pintaUn();
+  });
+  $('vol_desc').addEventListener('change', () => { $('volume').disabled = $('vol_desc').checked; if ($('vol_desc').checked) $('volume').value = ''; });
+  $('fluido').addEventListener('change', () => { const f = FLUIDOS.find(x => x[0] === $('fluido').value); if (f && !$('classe').value) $('classe').value = f[1]; });
+  $('material').addEventListener('change', () => { const o = $('material').selectedOptions[0]; if (o && o.dataset.s && !$('s_mpa').value) $('s_mpa').value = fmt(o.dataset.s); });
+  (D.componentes || []).forEach(c => linhaComp(c));
+  (D.valvulas || []).forEach(x => linhaValv(x));
+  $('maisComp').addEventListener('click', () => linhaComp({ tipo:'costado', nome:'' }));
+  $('maisValv').addEventListener('click', () => linhaValv({}));
+  // arquivos
+  $('tela').querySelectorAll('[data-arq]').forEach(b => b.addEventListener('click', () => {
+    $('tela').querySelectorAll('[data-arq]').forEach(x => x.classList.toggle('on', x === b));
+    mostrarArquivo(arqs[Number(b.dataset.arq)]);
+  }));
+  if (arqs.length) $('tela').querySelector('[data-arq]').click();
+  const an = $('anexar'); if (an) an.addEventListener('click', () => { $('arqPdf').value = ''; $('arqPdf').click(); });
+  $('pegar').addEventListener('click', () => situacaoRapida('pendente_cliente'));
+  $('semLaudo').addEventListener('click', () => janela('Sem laudo anterior', '<label class="f">Por quê<select class="t" id="slTipo"><option value="sem_laudo">Inspeção inicial / o vaso nunca teve laudo</option>'
+    + '<option value="cliente_nao_tem">O cliente não tem (laudo extraviado)</option></select></label><label class="f">Motivo *<textarea class="t" id="slMot"></textarea></label>'
+    + '<p class="muted">Laudo extraviado exige a reconstituição do prontuário (NR-13 13.5.1.6).</p>',
+    [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
+      const m = ($('slMot').value || '').trim(); if (!m){ U.toast('Escreva o motivo.', 'err'); return false; }
+      return situacaoRapida($('slTipo').value, m);
+    } }]));
+  $('gravar').addEventListener('click', () => N.util.semDuploEnvio($('gravar'), gravarEConferir));
+  if (LAUDO && (LAUDO.situacao === 'em_conferencia' || LAUDO.situacao === 'conferido') && LAUDO.numero) previa().catch(() => {});
+}
+function linhaComp(c){
+  const tr = document.createElement('tr'); tr.className = 'lc';
+  const cel = (k, val) => '<td><input data-k="' + k + '" inputmode="decimal" value="' + esc(val == null ? '' : fmt(val)) + '"></td>';
+  tr.innerHTML = '<td><select data-k="tipo">' + Object.keys(TIPOS_COMP).map(t => '<option value="' + t + '"' + (c.tipo === t ? ' selected' : '') + '>' + TIPOS_COMP[t] + '</option>').join('') + '</select></td>'
+    + '<td><input data-k="nome" value="' + esc(c.nome || '') + '"></td>' + cel('r_mm', c.r_mm) + cel('l_mm', c.l_mm) + cel('d_mm', c.d_mm) + cel('fator_c', c.fator_c)
+    + cel('alfa_graus', c.alfa_graus) + cel('eficiencia_junta', c.eficiencia_junta) + cel('t_min_mm', c.t_min_mm)
+    + '<td><button class="btn mini perigo" title="Tirar">×</button></td>';
+  tr.querySelector('button').addEventListener('click', () => tr.remove());
+  $('comps').appendChild(tr);
+}
+function linhaValv(x){
+  const tr = document.createElement('tr'); tr.className = 'lv';
+  tr.innerHTML = '<td><input data-k="tag" value="' + esc(x.tag || '') + '"></td><td><input class="vAj" data-k="ajuste" inputmode="decimal" value="' + esc(x.ajuste_mpa == null ? '' : fmt(deMPa(x.ajuste_mpa), 4)) + '"></td>'
+    + '<td><button class="btn mini perigo">×</button></td>';
+  tr.querySelector('button').addEventListener('click', () => tr.remove());
+  $('valvs').appendChild(tr);
+}
+const blobs = {};
+async function mostrarArquivo(a){
+  const vis = $('visor'); if (!a) return;
+  vis.innerHTML = '<p class="muted">Abrindo…</p>';
+  if (DEMO){ vis.innerHTML = '<p class="muted">Demonstração: sem o arquivo.</p>'; return; }
+  try{
+    if (!blobs[a.storage_path]){
+      const s = N.sessao();
+      const r = await fetch(SUPA_URL + '/storage/v1/object/authenticated/inspecoes/' + a.storage_path.split('/').map(encodeURIComponent).join('/'),
+        { headers:{ apikey:SUPA_ANON, Authorization:'Bearer ' + s.token } });
+      if (!r.ok) throw new Error('O arquivo não abriu (HTTP ' + r.status + ').');
+      blobs[a.storage_path] = URL.createObjectURL(await r.blob());
+    }
+    vis.innerHTML = /\.pdf$/i.test(a.storage_path) ? '<iframe title="Laudo"></iframe>' : '<img alt="">';
+    vis.firstChild.src = blobs[a.storage_path];
+  }catch(e){ vis.innerHTML = '<p class="alerta crit"></p>'; vis.firstChild.textContent = e.message; }
+}
+$('arqPdf').addEventListener('change', async () => {
+  const f = $('arqPdf').files && $('arqPdf').files[0]; if (!f || !VASO || !VASO.inspecao) return;
+  if (f.size > 5242880){ U.toast('Arquivo acima de 5 MB.', 'err'); return; }
+  const pdf = /pdf/i.test(f.type) || /\.pdf$/i.test(f.name);
+  let blob = f;
+  try{ if (!pdf) blob = await N.foto.reduzir(f, { lado:1600, qualidade:0.85 }); }catch(e){ erro(e); return; }
+  const fid = uid(), caminho = VASO.inspecao.id + '/' + fid + (pdf ? '.pdf' : '.jpg');
+  try{
+    U.toast('Enviando…');
+    await N.storage.enviar('inspecoes', caminho, pdf ? new Blob([blob], { type:'application/pdf' }) : blob);
+    await rpc('tf_insp_foto_registrar', { p_id: fid, p_dados:{ inspecao_id: VASO.inspecao.id, storage_path: caminho, secao: 'laudo_anterior',
+      legenda: pdf ? 'PDF do laudo' : 'Página do laudo', bytes: blob.size } });
+    U.toast('Anexado.', 'ok'); await carregarOS(PREP.os.id); pintar();
+  }catch(e){ erro(e); }
+});
+async function situacaoRapida(sit, motivo){
+  try{
+    await rpc('tf_insp_laudo_anterior_gravar', { p_equip: VASO.id, p_dados: Object.assign({ situacao: sit, inspecao_id: VASO.inspecao ? VASO.inspecao.id : null },
+      motivo ? { motivo } : {}, LAUDO ? { id: LAUDO.id } : {}) });
+    U.toast('Gravado.', 'ok'); await carregarOS(PREP.os.id); ir({ os: PREP.os.id });   // volta para a OS
+  }catch(e){ erro(e); return false; }
+}
+function lerForm(){
+  const n = (id, mpa) => { const x = num($(id).value); if (Number.isNaN(x)) throw new Error('Número inválido em: ' + ($(id).closest('label').firstChild.textContent || id).trim()); return x == null ? null : (mpa ? paraMPa(x) : x); };
+  const comps = [...document.querySelectorAll('#comps tr.lc')].map(tr => {
+    const o = {}; tr.querySelectorAll('[data-k]').forEach(i => { const k = i.dataset.k; if (k === 'tipo' || k === 'nome') o[k] = i.value.trim(); else { const x = num(i.value); if (Number.isNaN(x)) throw new Error('Número inválido num componente.'); if (x != null) o[k] = x; } });
+    return o; }).filter(o => o.nome);
+  const valvs = [...document.querySelectorAll('#valvs tr.lv')].map(tr => { const t = tr.querySelector('[data-k="tag"]').value.trim(), x = num(tr.querySelector('[data-k="ajuste"]').value);
+    if (Number.isNaN(x)) throw new Error('Número inválido no ajuste da válvula.'); return { tag: t || null, ajuste_mpa: x == null ? null : paraMPa(x) }; }).filter(x => x.ajuste_mpa != null);
+  const pmtas = [...document.querySelectorAll('.pmtaCam')].map(i => { const x = num(i.value); return { camara: i.dataset.cam, pmta_mpa: x == null || Number.isNaN(x) ? null : paraMPa(x) }; }).filter(x => x.pmta_mpa != null);
+  let pmta = n('pmta', true);
+  if (pmtas.length && pmta == null) pmta = Math.min(...pmtas.map(x => x.pmta_mpa));
+  return {
+    id: LAUDO ? LAUDO.id : undefined, emissor: $('emissor').value.trim() || null, plh: $('plh').value.trim() || null, crea: $('crea').value.trim() || null,
+    numero: $('numero').value.trim() || null, data_laudo: $('data_laudo').value || null, tipo: $('tipo').value || null,
+    pmta_mpa: pmta, pmta_externa_mpa: n('pmta_ext', true), categoria: $('categoria').value || null,
+    proxima_externa: $('prox_ext').value || null, proxima_interna: $('int_na').checked ? null : ($('prox_int').value || null),
+    tem_memoria_calculo: $('memoria').value === '' ? null : $('memoria').value === 'true',
+    origem: LAUDO && LAUDO.origem === 'fotos_campo' ? 'fotos_campo' : ((VASO.arquivos || []).some(a => /\.pdf$/i.test(a.storage_path)) ? 'pdf' : 'digitado'),
+    inspecao_id: VASO.inspecao ? VASO.inspecao.id : null,
+    declarado: { fluido: $('fluido').value.trim() || null, classe_fluido: $('classe').value || null, p_operacao_mpa: n('p_op', true),
+      volume_m3: $('vol_desc').checked ? null : n('volume'), volume_desconhecido: $('vol_desc').checked, interna_nao_se_aplica: $('int_na').checked,
+      pmtas, pmta_plaqueta_mpa: n('pmta_plaq', true), material_id: $('material').value || null, s_mpa: n('s_mpa'), componentes: comps, valvulas: valvs }
+  };
+}
+/** PMTA recalculada com os dados do próprio laudo (motor da R00): a menor entre
+ *  os componentes completos. null quando falta dado. */
+function pmtaRecalc(d){
+  if (!M || !d.s_mpa || !(d.componentes || []).length) return null;
+  let menor = null;
+  d.componentes.forEach(c => {
+    if (!c.t_min_mm || !c.eficiencia_junta) return;
+    const g = { tipo: c.tipo, R: c.r_mm, L: c.l_mm, d: c.d_mm, C: c.fator_c, alfaGraus: c.alfa_graus };
+    try{ const p = M.pmta(g, c.t_min_mm, d.s_mpa, c.eficiencia_junta); if (p > 0 && (menor == null || p < menor)) menor = p; }catch(e){}
+  });
+  return menor == null ? null : Math.round(menor * 1e4) / 1e4;
+}
+let PMTA_RECALC = null;
+async function gravarEConferir(){
+  let dados;
+  try{ dados = lerForm(); }catch(e){ erro(e); return; }
+  if (dados.pmta_mpa != null && (dados.pmta_mpa <= 0 || dados.pmta_mpa >= 100)){ U.toast('PMTA fora do esperado: confira a unidade.', 'err'); return; }
+  try{
+    const id = await rpc('tf_insp_laudo_anterior_declarar', { p_equip: VASO.id, p_dados: dados });
+    LAUDO = Object.assign(LAUDO || {}, { id });
+    PMTA_RECALC = pmtaRecalc(dados.declarado);
+    await previa();
+    U.toast('Gravado. Confira abaixo.', 'ok');
+  }catch(e){ erro(e); }
+}
+async function previa(){
+  if (!LAUDO || !LAUDO.id) return;
+  if (PMTA_RECALC == null && LAUDO.declarado) PMTA_RECALC = pmtaRecalc(LAUDO.declarado);
+  PREVIA = await rpc('tf_insp_laudo_anterior_conferir', { p_laudo: LAUDO.id, p_gravar: false, p_pmta_recalc: PMTA_RECALC, p_motivos: {} });
+  const conf = (LAUDO.conferencias || []);
+  const P = PREVIA, cx = $('cxConf');
+  const RES = { confere:'confere', diverge:'diverge', grave:'GRAVE', informativo:'informativo', aviso:'aviso', nao_informado:'sem dado' };
+  let h = '<h3>2 · Conferência</h3>';
+  if ((P.falta || []).length) h += '<div class="alerta falta"><b>Falta para concluir:</b> ' + P.falta.map(esc).join(', ') + '.</div>';
+  if (P.grave) h += '<div class="alerta" style="background:var(--plh-soft);color:var(--plh)"><b>Divergência grave:</b> ' + esc(P.resumo) + '. Vai para a lista do PLH; a visita segue.</div>';
+  h += '<table class="conf"><tr><th>Conferência</th><th>O laudo diz</th><th>O sistema calcula</th><th>Resultado</th></tr>'
+    + P.itens.map(i => { const ant = conf.find(c => c.item === i.item);
+      return '<tr><td>' + esc(i.rotulo) + '</td><td>' + esc(i.declarado || '—') + '</td><td>' + esc(i.calculado || '—') + '</td><td class="r-' + esc(i.resultado) + '">' + RES[i.resultado]
+        + (i.resultado === 'diverge' || i.resultado === 'grave' ? '<textarea class="instr motivo" data-item="' + esc(i.item) + '" placeholder="Motivo' + (i.resultado === 'diverge' ? ' (obrigatório)' : '') + '">'
+            + esc(ant && ant.motivo || '') + '</textarea>' : '') + '</td></tr>'; }).join('') + '</table>';
+  if (PMTA_RECALC == null) h += '<p class="muted">PMTA recalculada: preencha em "Opcional" o material (S) e, de cada componente, as dimensões, o E e a menor espessura.</p>';
+  h += '<div class="linha" style="margin-top:12px"><button class="btn pri" id="concluirConf"' + ((P.falta || []).length ? ' disabled' : '') + '>Concluir a conferência</button>'
+    + '<span class="muted">Conferido: a PMTA atribuída vira a PMTA vigente do vaso.</span></div>';
+  cx.innerHTML = h;
+  const b = $('concluirConf');
+  b.addEventListener('click', () => N.util.semDuploEnvio(b, async () => {
+    const mot = {}; cx.querySelectorAll('.motivo').forEach(t => { if (t.value.trim()) mot[t.dataset.item] = t.value.trim(); });
+    try{
+      const r = await rpc('tf_insp_laudo_anterior_conferir', { p_laudo: LAUDO.id, p_gravar: true, p_pmta_recalc: PMTA_RECALC, p_motivos: mot });
+      U.toast(r.grave ? 'Conferido, com divergência grave: foi para o PLH.' : 'Laudo conferido.', r.grave ? 'err' : 'ok');
+      await carregarOS(PREP.os.id); ir({ os: PREP.os.id });
+    }catch(e){ erro(e); }
+  }));
+}
+
+// ── início ─────────────────────────────────────────────────────────────────
+(function boot(){
+  $('barDemo').hidden = !DEMO;
+  if (DEMO){ N.porteiro({ app:'doc', demo:true }); $('tela').innerHTML = '<div class="card vazio">Demonstração: o TapDoc do escritório só funciona no app publicado.</div>'; return; }
+  const s = N.sessao();
+  if (!s.token){ try{ sessionStorage.setItem('tf_recado', 'Entre para abrir o TapDoc.'); }catch(e){} location.href = '../'; return; }
+  const g = N.porteiro({ app:'doc', demo:false, url:SUPA_URL, anon:SUPA_ANON });
+  if (g === 'hub'){ location.href = '../'; return; }
+  // o Esc fecha a janela do núcleo (a página não traz o próprio #modal)
+  pintar();
+})();
+</script>
+</body>
+</html>

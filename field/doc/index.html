@@ -152,7 +152,7 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 1';
+const VERSAO = 'TapDoc 2';   // S77 · R02b1: o vaso preparado pelo escritório (instruções, laudo conferido)
 const CFG = window.TF_CONFIG || {};
 const SUPA_URL = CFG.SUPABASE_URL || '', SUPA_ANON = CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPA_URL || !SUPA_ANON;
@@ -379,7 +379,8 @@ function pintar(){
   const v = telaAtual.vaso ? vaso(telaAtual.vaso) : null;
   if (telaAtual.nome !== 'lista' && !v){ telaAtual = { nome:'lista' }; }
   if (telaAtual.nome === 'lista') return telaLista();
-  if (telaAtual.nome === 'vaso') return v.inspecao ? telaPainel(v) : telaCartao(v);
+  // S77: o vaso preparado pelo escritório (em preparo) mostra o cartão com as instruções até "Começar"
+  if (telaAtual.nome === 'vaso') return (v.inspecao && v.inspecao.situacao !== 'em_preparo') ? telaPainel(v) : telaCartao(v);
   const f = { plaqueta:telaPlaqueta, operacao:telaOperacao, componentes:telaComponentes, localizacao:telaLocal, laudo:telaLaudo }[telaAtual.nome];
   if (f) return f(v);
 }
@@ -436,6 +437,7 @@ function telaLista(){
     if (v.inspecao){
       const sit = v.inspecao.situacao;
       chips.push(sit === 'em_campo' ? '<span class="chip ' + (secoesOk(v) === 5 ? 'ok' : 'inc') + '">' + secoesOk(v) + ' de 5 seções</span>'
+        : sit === 'em_preparo' ? '<span class="chip ok">preparado pelo escritório</span>'
         : '<span class="chip">' + esc(sit.replace('_', ' ')) + '</span>');
     }
     if (v.provisorio) chips.push('<span class="chip prov">provisório</span>');
@@ -491,6 +493,15 @@ function telaCartao(v){
   if (v.fabricante || v.numero_serie) h += '<p class="muted" style="margin:8px 0 0">' + esc([v.fabricante, v.numero_serie && 'nº ' + v.numero_serie, v.ano_fabricacao].filter(Boolean).join(' · ')) + '</p>';
   if (!v.localizacao && !mapa) h += '<p class="muted" style="margin:8px 0 0">Sem local nem GPS no cadastro ainda.</p>';
   h += '</div>';
+  // S77 · o que o escritório deixou na preparação
+  if (v.inspecao && v.inspecao.instrucoes_campo)
+    h += '<div class="alerta" style="background:var(--accent-soft);color:var(--accent-ink)"><b>Instruções do escritório</b>' + esc(v.inspecao.instrucoes_campo) + '</div>';
+  const la = v.laudo_anterior;
+  if (la && la.situacao === 'conferido')
+    h += '<div class="card"><b>Laudo anterior conferido</b><p class="info" style="margin:4px 0 0">' + esc([la.emissor, la.numero && 'nº ' + la.numero,
+         la.data_laudo && la.data_laudo.split('-').reverse().join('/')].filter(Boolean).join(' · ')) + (la.pmta_mpa != null ? '<br>PMTA vigente: ' + fmt(la.pmta_mpa, 3) + ' MPa' : '') + '</p></div>';
+  else if (la && la.situacao === 'pendente_cliente')
+    h += '<div class="alerta"><b>Laudo anterior: pegar no cliente</b>Fotografe o laudo impresso na seção "Laudo anterior".</div>';
   h += '<button class="btn pri" id="comecar">Começar a inspeção deste vaso</button>';
   h += '<p class="muted" style="text-align:center;margin-top:8px">Funciona sem sinal. Tudo vai para o servidor quando houver conexão.</p>';
   $('tela').innerHTML = h;
@@ -500,9 +511,12 @@ function telaCartao(v){
 /** Abre a inspeção do vaso (id do celular) e monta o mínimo: a câmara única e
  *  costado + dois tampos. A ordem na fila é a de dependência. */
 function comecar(v){
-  if (v.inspecao) return;
-  const iid = uid();
-  v.inspecao = { id:iid, situacao:'em_campo', tipo:'periodica', fotos:[], pode_editar:true };
+  if (v.inspecao && v.inspecao.situacao !== 'em_preparo') return;
+  // S77: o vaso preparado pelo escritório já tem a inspeção (em preparo): o
+  // celular usa o MESMO id, e o banco a passa para "em campo" com a equipe
+  const iid = v.inspecao ? v.inspecao.id : uid();
+  v.inspecao = Object.assign(v.inspecao || { fotos:[], tipo:'periodica' }, { id:iid, situacao:'em_campo', pode_editar:true });
+  v.inspecao.fotos = v.inspecao.fotos || [];
   salvar();
   enfileirar(v, 'abrir-' + iid, 'abrir a inspeção', { funcao:'tf_insp_abrir',
     payload:{ p_os_id:E.os.id, p_equip:v.id, p_tipo:'periodica', p_os_item_id:null, p_id:iid, p_motivo_extraordinaria:null } }, null, true);
@@ -528,6 +542,7 @@ function telaPainel(v){
   const al = alertas(v);
   let h = '';
   if (!ed) h += '<div class="alerta"><b>Inspeção ' + esc(String(v.inspecao.situacao).replace('_', ' ')) + '</b>O campo não grava mais neste vaso.</div>';
+  if (v.inspecao.instrucoes_campo) h += '<div class="alerta" style="background:var(--accent-soft);color:var(--accent-ink)"><b>Instruções do escritório</b>' + esc(v.inspecao.instrucoes_campo) + '</div>';
   if (al.length && ed) h += '<div class="alerta"><b>Atenção</b><ul>' + al.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
   const sec = (k, nome, sub, e) => '<button class="card secao" data-s="' + k + '"' + (ed ? '' : ' disabled') + '><span class="sn">' + nome +
     (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span><span class="est ' + e + '">' + EST_ROT[e] + '</span></button>';

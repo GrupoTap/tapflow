@@ -24,7 +24,7 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S36';
+const VERSAO = 'S36-T2';   // S77: só o TapDoc 2 (field/doc/) mudou
 const CACHE  = 'tapflow-field-' + VERSAO;
 
 const ESSENCIAIS = [

@@ -29,7 +29,7 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H8-S76';
+const VERSAO = 'H9-S77';
 const CACHE  = 'tapflow-hub-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -47,7 +47,10 @@ const ESSENCIAIS = [
   './nucleo/nucleo.css?v=N2',
   './nucleo/config.js?v=N2',
   // S74 · TapFin: a página (S76 · TapFin 2: o plano B fin/util.js saiu)
-  './fin/'
+  './fin/',
+  // S77 · TapDoc do escritório (R02b1) e o motor de cálculo que ele usa
+  './doc/',
+  './doc/motor-calculo-nr13.js?v=R00.1'
 ];
 
 self.addEventListener('install', ev => {
@@ -120,7 +123,7 @@ self.addEventListener('fetch', ev => {
   // Rede primeiro com 4 s e o cache como reserva: sem isto o Manager (que era um arquivo
   // só e abria sem sinal) abriria SEM o núcleo e quebraria — o .js/.css não era guardado.
   // S74: o mesmo vale para os .js/.css dos módulos que moram em pasta própria (fin/)
-  if (resto.startsWith('nucleo/') || /^fin\/.*\.(js|css)$/.test(resto)) {
+  if (resto.startsWith('nucleo/') || /^(fin|doc)\/.*\.(js|css)$/.test(resto)) {
     ev.respondWith((async () => {
       const c = await caches.open(CACHE);
       try {
