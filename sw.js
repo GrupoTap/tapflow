@@ -29,7 +29,7 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H8-S74';
+const VERSAO = 'H8-S76';
 const CACHE  = 'tapflow-hub-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -40,20 +40,14 @@ const ESSENCIAIS = [
   './field/icons/icon-512.png',
   './field/icons/icon-maskable-512.png',
   './field/icons/apple-touch-icon.png',
-  // N1a (H6): o núcleo comum. O endereço tem que ser IDÊNTICO ao do <script>, com o ?v=
+  // O núcleo comum. O endereço tem que ser IDÊNTICO ao do <script>, com o ?v=
   // (o cache compara a consulta inteira). Trocou o ?v= nas páginas? Troque aqui também.
-  './nucleo/nucleo.js?v=N1',
-  './nucleo/nucleo.css?v=N1',
-  './nucleo/config.js?v=N1',
-  // S73 · N2: o hub e o Field pedem ?v=N2; o Manager continua pedindo ?v=N1 (o
-  // arquivo é o mesmo, o N2 aceita tudo do N1). As DUAS formas ficam guardadas,
-  // senão o Manager sem sinal abriria sem o núcleo.
+  // S76: hub, Manager, Field e fin/ pedem todos ?v=N2 — saíram as linhas ?v=N1.
   './nucleo/nucleo.js?v=N2',
   './nucleo/nucleo.css?v=N2',
   './nucleo/config.js?v=N2',
-  // S74 · TapFin 1: a página e o plano B dos utilitários (o fin/ pede util.js?v=F1)
-  './fin/',
-  './fin/util.js?v=F1'
+  // S74 · TapFin: a página (S76 · TapFin 2: o plano B fin/util.js saiu)
+  './fin/'
 ];
 
 self.addEventListener('install', ev => {

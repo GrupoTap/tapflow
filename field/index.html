@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S34</title>
+<title>TapFlow Field · S36</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -457,7 +457,10 @@ details.termo.faq{margin-top:6px}
 .fabCanh .bolha{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:10px;background:var(--crit);color:#fff;
   font-style:normal;font-size:12px;line-height:20px;text-align:center;padding:0 5px;border:2px solid #fff}
 .fabCanh:active{transform:scale(.97)}
-main{padding-bottom:84px}
+main{padding-bottom:28px}   /* S36: sem o botão flutuante */
+.eqDet{margin:4px 0 10px}
+.eqDet summary{font-size:13px;font-weight:700;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;padding:10px 2px;cursor:pointer}
+.eqLinha{text-decoration:none;color:inherit}
 .canPainel .canPedido{background:var(--warn-soft);border-radius:5px;padding:8px 10px;margin-bottom:10px}
 .canPainel .canPedido b{display:block;font-size:13px;color:var(--warn)}
 .canPainel .canPedido small{font-size:14px}
@@ -567,7 +570,7 @@ main{padding-bottom:84px}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S35';
+const APP_VERSION = 'S36';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -1026,7 +1029,7 @@ let execForm = null;  // item aberto no formulario, ou 'fim' na conferencia
 // ════════════════════════════════════════════════════════════════════════════
 async function carregar(silencioso){
   if (DEMO){ listaOS = demoLista(); MEU_DIA = demoMeuDia(); MINHAS_AUS = demoMinhasAus(); FER = demoFer(); EQUIPE_AUS = demoEquipeAus(); setConn('ok','demo');
-             if(tela==='lista') pintarLista(); return; }
+             if(tela==='lista') pintarLista(); else if(tela==='eu') pintarEu(); return; }
   if (!silencioso) setConn('sync','carregando…');
   try{
     // As duas juntas: a lista de OS do campo e o ROTEIRO de hoje desta pessoa.
@@ -1067,6 +1070,7 @@ async function carregar(silencioso){
     falhaCarga = null;
     pararRecon(); setConn('ok','conectado');
     if (tela === 'lista') pintarLista();
+    else if (tela === 'eu') pintarEu();                       // S36
     else if (tela === 'seg' && !silencioso) pintarSeg();
     else if (tela === 'docs' && !silencioso) pintarDocsF();
   }catch(e){
@@ -1120,12 +1124,15 @@ function ampliarFoto(src, titulo){
 
 function pintarLista(){
   // S16 · quem é de escritório só usa o Field para a Minha Segurança
-  if (soSeg() && SEG && SEG.tem_ficha) return pintarSeg();
+  if (soSeg() && SEG && SEG.tem_ficha) return pintarEu();   // S36: o Eu é a casa de quem é só de escritório
   tela = 'lista'; atual = null; coleta = null;
   document.getElementById('btnBack').hidden = true;
-  document.getElementById('hTit').textContent = 'Minhas ordens';
+  // S36 · N1d2 (P4): o cabeçalho fala da PESSOA ("N hoje"), não do quadro
+  // inteiro ("18 no campo" era igual para todo mundo)
+  document.getElementById('hTit').textContent = 'Trabalho';
+  const nHoje = (MEU_DIA || []).length;
   document.getElementById('hSub').textContent =
-    (sessao.nome || '') + (listaOS.length ? ' · ' + listaOS.length + ' no campo' : '');
+    (sessao.nome || '') + ' · ' + (nHoje ? nHoje + ' hoje' : 'nada marcado para hoje');
 
   const m = document.getElementById('main');
   m.innerHTML = '';
@@ -1145,10 +1152,9 @@ function pintarLista(){
         () => carregar().then(pintarLista).catch(()=>pintarLista()));
       return;
     }
-    m.innerHTML = '<div class="vazio"><b>Nada no campo agora</b>' +
-      '<p>Quando o escritório abrir uma OS para você, ela aparece aqui.</p></div>';
-    try{ const pl = painelLembreteDiaria(); if (pl) m.insertBefore(pl, m.firstChild); }catch(e){}
-    abasTopo(m, 'lista');   // S20 · a aba Diárias vale para todo mundo
+    m.innerHTML = '<div class="vazio"><b>Nada para você agora</b>' +
+      '<p>Quando o escritório marcar uma tarefa no seu nome, ela aparece aqui.</p></div>';
+    abasTopo(m, 'lista');   // S36: Trabalho | Eu (as Diárias estão no Eu)
     return;
   }
 
@@ -1157,8 +1163,15 @@ function pintarLista(){
   // duas coisas diferentes.
   let noDia = new Set();
   try{ noDia = new Set((MEU_DIA || []).map(t => t.os_id)); }catch(e){ noDia = new Set(); }
-  const minhas = listaOS.filter(o => o.minha  && !noDia.has(o.os_id));
-  const outras = listaOS.filter(o => !o.minha && !noDia.has(o.os_id));
+  // S36 · N1d2 (P1/P2): "Para você" é o que está NO MEU NOME (designado ou
+  // apoio da tarefa atual: `minha_de_fato`, migration 300). Para o escritório
+  // entra também a tarefa do meu perfil SEM DONO — é trabalho a pegar. Para
+  // quem é de campo, a do perfil sem dono não é dele (era o "Agendar serviço"
+  // dos colegas aparecendo para o inspetor).
+  const deCampo = sessao.executa_em === 'campo';
+  const ehMinha = o => !!o.minha_de_fato || (!deCampo && !!o.minha && !o.tarefa_atual_designado);
+  const minhas = listaOS.filter(o => ehMinha(o)  && !noDia.has(o.os_id));
+  const outras = listaOS.filter(o => !ehMinha(o) && !noDia.has(o.os_id));
 
   const bloco = (titulo, arr, outro) => {
     if (!arr.length) return;
@@ -1177,11 +1190,8 @@ function pintarLista(){
   try{ const pa = painelAtrasadas(); if (pa) m.insertBefore(pa, m.firstChild); }
   catch(e){ console.error('[atrasadas]', e); }
   // S16 · a entrega de EPI para confirmar vem antes de tudo (item 17)
-  try{ const pe = painelEpiPendente(); if (pe) m.insertBefore(pe, m.firstChild); }catch(e){ console.error('[epi]', e); }
-  // S20 · documento para assinar e o lembrete das diárias (fim do dia, dia com serviço)
-  try{ const pd = painelDocsPendente(); if (pd) m.insertBefore(pd, m.firstChild); }catch(e){ console.error('[docs]', e); }
-  try{ const pl = painelLembreteDiaria(); if (pl) m.appendChild(pl); }catch(e){ console.error('[diarias]', e); }
-  try{ const pa = painelMinhaAusencia(); if (pa) m.appendChild(pa); }catch(e){ console.error('[ausencia]', e); }   // S24
+  // S36 · N1d2: EPI, documento para assinar, lembrete das diárias e a minha
+  // ausência foram para a aba Eu (com a bolha na aba). Aqui fica o trabalho.
   try{ const pf = painelForaSemana(); if (pf) m.appendChild(pf); }catch(e){ console.error('[fora]', e); }         // S28
   try{ pintarMeuDia(m); }
   catch(e){
@@ -1191,11 +1201,29 @@ function pintarLista(){
     m.appendChild(av);
   }
   bloco('Para você', minhas, false);
-  bloco('Da equipe', outras, true);
+  // S36 · N1d2: a equipe. Escritório e admin: UMA linha que abre o quadro no
+  // Manager (decisão de 19/10, opção C). Campo: as OS dos colegas ficam
+  // recolhidas (continua dando para "assumir no lugar de" quem não pôde ir).
+  if (outras.length){
+    if (!deCampo){
+      const nAtr = outras.filter(o => o.situacao === 'atrasada').length;
+      const a = document.createElement('a');
+      a.className = 'osCard outro eqLinha'; a.href = '../manager/';
+      a.innerHTML = '<div class="c" style="margin:0">Equipe</div><div class="t"><span>›</span><span class="tn"></span></div>';
+      a.querySelector('.tn').textContent = (nAtr ? nAtr + (nAtr === 1 ? ' atrasada · ' : ' atrasadas · ') : '')
+        + outras.length + (outras.length === 1 ? ' aberta' : ' abertas') + ' no campo — ver no quadro da Gestão';
+      m.appendChild(a);
+    } else {
+      const det = document.createElement('details'); det.className = 'eqDet';
+      det.innerHTML = '<summary>Outras OS no campo (' + outras.length + ')</summary>';
+      outras.forEach(o => det.appendChild(cardOS(o, true)));
+      m.appendChild(det);
+    }
+  }
   try{ const pe = painelEscaladas(); if (pe) m.appendChild(pe); }catch(e){ console.error('[escaladas]', e); }
   if (!listaOS.length && !(MEU_DIA || []).length && !(ESCALADAS || []).length){
     const v = document.createElement('div'); v.className = 'vazio';
-    v.innerHTML = '<b>Nada no campo agora</b><p>Quando o escritório abrir uma OS para você, ela aparece aqui.</p>';
+    v.innerHTML = '<b>Nada para você agora</b><p>Quando o escritório marcar uma tarefa no seu nome, ela aparece aqui.</p>';
     m.appendChild(v);
   }
   abasTopo(m, 'lista');
@@ -1442,11 +1470,10 @@ function pintarMeuDia(m){
     chips.push(...chipsQuando(t));   // S31
     if (t.origem !== 'visita') { const cr = chipReag(t.os_id, t.tarefa_id, null); if (cr) chips.push(cr); }   // S15
     if (Number(t.prioridade_rank) >= 3) chips.push('<span class="chip urg">🔴 urgente</span>');
-    if (t.dias_restantes != null){
+    // S36 · N1d2: o prazo só aparece quando vence ou atrasa
+    if (t.dias_restantes != null && Number(t.dias_restantes) <= 0){
       const d = Number(t.dias_restantes);
-      chips.push('<span class="chip' + (d < 0 ? ' atr' : '') + '">'
-        + (d < 0 ? Math.abs(d) + 'd de atraso' : d === 0 ? 'vence hoje' : 'faltam ' + d + 'd')
-        + '</span>');
+      chips.push('<span class="chip atr">' + (d < 0 ? Math.abs(d) + 'd de atraso' : 'vence hoje') + '</span>');
     }
     if (t.tempo_estimado_min)
       chips.push('<span class="chip">' + minHora(t.tempo_estimado_min) + '</span>');
@@ -1466,7 +1493,12 @@ function pintarMeuDia(m){
     b.querySelector('.tn').textContent = t.tarefa || '—';
     // Sem a OS na lista do campo (tarefa administrativa, por exemplo) o cartão
     // ainda aparece — só não abre. Sumir seria pior: a pessoa fica sem saber.
-    if (os) b.addEventListener('click', () => abrirOS(os));
+    // S36 · N1d2: tarefa de tipo com tela própria (auto:inspecao → TapDoc)
+    // abre direto a tela do módulo, pelo registro do núcleo
+    const destT = (t.origem === 'os' && window.Nucleo && Nucleo.tarefas) ? Nucleo.tarefas.destino(t.tarefa_tipo) : null;
+    if (destT) b.addEventListener('click', () => {
+      location.href = destT + '#os=' + encodeURIComponent(t.os_id) + '&t=' + encodeURIComponent(t.tarefa_id); });
+    else if (os) b.addEventListener('click', () => abrirOS(os));
     else if (t.origem === 'os' && (t.status === 'pendente' || t.status === 'em_andamento')
              && (t.executor === 'campo' || t.executor === 'ambos') && !DEMO){
       // S19 · S45 item 2: com o molde novo da inspeção, o mapa de espessura
@@ -1567,13 +1599,13 @@ function cardOS(o, outro){
   else if (Number(o.prioridade_rank) === 2) chips.push('<span class="chip alt">alta</span>');
   if (o.dias_restantes != null){
     const d = Number(o.dias_restantes);
+    // S36 · N1d2: só quando vence ou atrasa (o "faltam 2d"/"0d" virava ruído)
     if (d < 0)       chips.push('<span class="chip atr">' + Math.abs(d) + 'd de atraso</span>');
     else if (d === 0) chips.push('<span class="chip atr">vence hoje</span>');
-    else if (d <= 2)  chips.push('<span class="chip risc">faltam ' + d + 'd</span>');
   }
   if (o.tarefa_atual_lock) chips.push('<span class="chip eu">assumida</span>');
-  chips.push('<span class="chip">' + (o.coluna_rotulo || o.coluna) + '</span>');
-  if (o.dias_na_coluna != null) chips.push('<span class="chip">' + o.dias_na_coluna + 'd</span>');
+  // S36 · N1d2: a etapa aparece UMA vez (a linha da tarefa, abaixo); sem o
+  // chip da coluna e sem o "Nd" de dias na coluna
 
   b.innerHTML = '<div class="n mono"></div><div class="c"></div>' +
     '<div class="t"><span>›</span><span class="tn"></span></div>' +
@@ -4362,25 +4394,67 @@ const DIA_SEM_F = iso => ['domingo','segunda','terça','quarta','quinta','sexta'
 
 /** As abas do topo: Ordens · Diárias · Documentos · Segurança. Diárias é de
  *  todo mundo que abre o Field; Documentos e Segurança, de quem tem ficha de RH. */
+/* S36 · N1d2: DUAS abas, "Trabalho" (as ordens) e "Eu" (diárias, folga e
+   férias, canhotos, documentos, segurança). Até o S35 eram até cinco abas
+   lado a lado. As telas de dentro do Eu mostram a aba Eu acesa: tocar nela
+   volta ao menu do Eu. Quem é só de escritório (soSeg) não tem Trabalho. */
 function abasTopo(m, qual){
-  const temSeg = !!(SEG && SEG.tem_ficha), temDocs = !!(DOCS && DOCS.tem_ficha);
   const abas = [];
-  if (!soSeg()) abas.push(['lista', 'Ordens', 0]);
-  if (DIAR || !DEMO) abas.push(['dia', 'Diárias', 0]);
-  // S25 · Férias (ou Recesso, no estágio) — quem tem ficha com vínculo
-  if (FER && (FER.tipo === 'ferias' || FER.tipo === 'recesso')) abas.push(['fer', FER.tipo === 'recesso' ? 'Folga/Recesso' : 'Folga/Férias', 0]);   // S27: a folga no nome
-  if (temDocs) abas.push(['docs', 'Documentos', nPendDocs()]);
-  if (temSeg) abas.push(['seg', abas.length >= 3 ? 'Segurança' : 'Minha Segurança', nPendSeg()]);
-  if (abas.length < 2) return;
+  // a mesma regra do pintarLista: só de escritório COM ficha mora no Eu
+  if (!(soSeg() && SEG && SEG.tem_ficha)) abas.push(['lista', 'Trabalho', 0]);
+  abas.push(['eu', 'Eu', nAvisosEu()]);
+  if (abas.length < 2 && qual === 'eu') return;
+  const doEu = qual !== 'lista';
   const d = document.createElement('div'); d.className = 'abasTopo';
-  d.innerHTML = abas.map(([k, r, n]) => '<button type="button" data-t="' + k + '" class="' + (qual === k ? 'on' : '') + '">' + r
+  d.innerHTML = abas.map(([k, r, n]) => '<button type="button" data-t="' + k + '" class="'
+    + ((k === 'lista' ? !doEu : doEu) ? 'on' : '') + '">' + r
     + (n ? ' <span class="bolha">' + n + '</span>' : '') + '</button>').join('');
   d.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-    const t = b.dataset.t;
-    if (t === 'seg') pintarSeg(); else if (t === 'dia') pintarDiariasF(); else if (t === 'docs') pintarDocsF();
-    else if (t === 'fer') pintarFeriasF(); else pintarLista();
+    if (b.dataset.t === 'eu') pintarEu(); else pintarLista();
   }));
   m.insertBefore(d, m.firstChild);
+}
+/** Quantas coisas do Eu pedem a pessoa: EPI/presença/devolução, documento
+ *  para assinar, canhoto parado ou devolvido, o lembrete das diárias. */
+function nAvisosEu(){
+  let n = 0;
+  try{ n += nPendSeg(); }catch(e){}
+  try{ n += nPendDocs(); }catch(e){}
+  try{ n += canPendentes(); }catch(e){}
+  try{ if (painelLembreteDiaria()) n += 1; }catch(e){}
+  return n;
+}
+/** A aba Eu: os avisos no topo, depois as seções (só as que se aplicam). */
+function pintarEu(){
+  tela = 'eu'; atual = null; coleta = null;
+  document.getElementById('btnBack').hidden = true;
+  document.getElementById('hTit').textContent = 'Eu';
+  document.getElementById('hSub').textContent = sessao.nome || '';
+  const m = document.getElementById('main'); m.innerHTML = '';
+  const av = [];
+  try{ const pd = painelDocsPendente(); if (pd) av.push(pd); }catch(e){ console.error('[docs]', e); }
+  try{ const pe = painelEpiPendente(); if (pe) av.push(pe); }catch(e){ console.error('[epi]', e); }
+  try{ const pl = painelLembreteDiaria(); if (pl) av.push(pl); }catch(e){ console.error('[diarias]', e); }
+  try{ const pa = painelMinhaAusencia(); if (pa) av.push(pa); }catch(e){ console.error('[ausencia]', e); }
+  av.forEach(x => m.appendChild(x));
+  const temSeg = !!(SEG && SEG.tem_ficha), temDocs = !!(DOCS && DOCS.tem_ficha);
+  const itens = [];
+  if (DIAR || !DEMO) itens.push(['Diárias', 'Refeições na rua', 0, pintarDiariasF]);
+  if (FER && (FER.tipo === 'ferias' || FER.tipo === 'recesso'))
+    itens.push([FER.tipo === 'recesso' ? 'Folga e recesso' : 'Folga e férias', 'Saldo, pedidos e as suas ausências', 0, pintarFeriasF]);
+  itens.push(['Canhotos', 'Compra no cartão da empresa: tirar a foto e enviar', canPendentes(), () => canNovo()]);
+  if (temDocs) itens.push(['Documentos', 'Para ler e assinar', nPendDocs(), pintarDocsF]);
+  if (temSeg) itens.push(['Segurança', 'EPI, treinamentos e presença', nPendSeg(), pintarSeg]);
+  const h = document.createElement('div'); h.className = 'sec'; h.textContent = 'Seus registros'; m.appendChild(h);
+  itens.forEach(([tit, sub, n, fn]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'osCard outro euItem';
+    b.innerHTML = '<div class="c" style="margin:0"></div><div class="t"><span>›</span><span class="tn"></span></div>'
+      + (n ? '<div class="chips"><span class="chip atr">' + n + (n === 1 ? ' pede atenção' : ' pedem atenção') + '</span></div>' : '');
+    b.querySelector('.c').textContent = tit; b.querySelector('.tn').textContent = sub;
+    b.addEventListener('click', fn);
+    m.appendChild(b);
+  });
+  abasTopo(m, 'eu');
 }
 const nPendDocs = () => DOCS && DOCS.tem_ficha ? (DOCS.docs || []).filter(d => d.situacao === 'liberado').length : 0;
 
@@ -5123,7 +5197,7 @@ async function baixarDocF(id){
 // ════════════════════════════════════════════════════════════════════════════
 const K_CANH = 'tff_canhotos';
 const CAN = { meus: null, voltar: null, foto: null, pre: null, enviando: false, demo: [] };
-const CAN_TELAS = ['lista', 'dia', 'fer', 'docs', 'seg', 'os'];
+const CAN_TELAS = ['lista', 'eu', 'dia', 'fer', 'docs', 'seg', 'os'];
 const canFila = () => LS.get(K_CANH, []);
 const canFilaSet = L => LS.set(K_CANH, L);
 const canValTxt = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -5148,14 +5222,17 @@ function canFab(){
   document.body.appendChild(b);
   return b;
 }
+/** S36 · quantos canhotos pedem a pessoa (na fila, devolvidos, pedidos). */
+function canPendentes(){
+  return canFila().length + ((CAN.meus && CAN.meus.comprovantes) || []).filter(c => c.situacao === 'devolvido').length
+       + ((CAN.meus && CAN.meus.pedidos) || []).length;
+}
 function canAtualizarFab(){
   const b = canFab();
-  const lg = document.getElementById('login');
-  const logado = DEMO || !!sessao.token;
-  b.hidden = !(logado && (!lg || lg.hidden) && CAN_TELAS.indexOf(tela) >= 0 && !document.querySelector('.docView')
-    && !document.querySelector('#main .barra'));   // a barra de botões da OS fica livre
-  const n = canFila().length + ((CAN.meus && CAN.meus.comprovantes) || []).filter(c => c.situacao === 'devolvido').length
-          + ((CAN.meus && CAN.meus.pedidos) || []).length;
+  // S36 · N1d2: sem botão flutuante (cobria o último cartão). O canhoto está
+  // na aba Eu, com a bolha, e no atalho do ícone do app (?canhoto=1).
+  b.hidden = true;
+  const n = canPendentes();
   const bo = b.querySelector('.bolha'); bo.hidden = !n; bo.textContent = n;
   b.title = n ? n + (n === 1 ? ' item pede atenção' : ' itens pedem atenção') + ' — veja em Meus canhotos' : '';
 }
@@ -5188,6 +5265,7 @@ function canVoltarPara(){
   if (t === 'fer') return pintarFeriasF;
   if (t === 'docs') return pintarDocsF;
   if (t === 'seg') return pintarSeg;
+  if (t === 'eu') return pintarEu;                            // S36
   if (t === 'os' && a) return () => { atual = a; pintarOS(); };
   return pintarLista;
 }
