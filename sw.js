@@ -29,7 +29,7 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H9-S77';
+const VERSAO = 'H10-S81';   // S81 · hub H10 (cores, miniaturas, "Minha área") e nucleo/modulos.js M1
 const CACHE  = 'tapflow-hub-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -46,11 +46,13 @@ const ESSENCIAIS = [
   './nucleo/nucleo.js?v=N2',
   './nucleo/nucleo.css?v=N2',
   './nucleo/config.js?v=N2',
+  // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo" (mesmo ?v= das páginas)
+  './nucleo/modulos.js?v=M1',
   // S74 · TapFin: a página (S76 · TapFin 2: o plano B fin/util.js saiu)
   './fin/',
   // S77 · TapDoc do escritório (R02b1) e o motor de cálculo que ele usa
   './doc/',
-  './doc/motor-calculo-nr13.js?v=R00.1'
+  './doc/motor-calculo-nr13.js?v=R00.2'
 ];
 
 self.addEventListener('install', ev => {

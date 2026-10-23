@@ -24,7 +24,7 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S37-T4';   // S80: TapDoc 4 (ultrassom, geometria e prévia do motor)
+const VERSAO = 'S38-T5';   // S81: Field S38 (moldura, "Minha área", menu de troca), TapDoc 5 e nucleo/modulos.js
 const CACHE  = 'tapflow-field-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -43,6 +43,8 @@ const ESSENCIAIS = [
   '../nucleo/nucleo.js?v=N2',
   '../nucleo/nucleo.css?v=N2',
   '../nucleo/config.js?v=N2',
+  // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo"
+  '../nucleo/modulos.js?v=M1',
   // S35 · TapDoc 1: a coleta da inspeção (página própria, abre sem sinal)
   './doc/',
   // S80 · TapDoc 4: o motor de cálculo para a prévia sem sinal. Mesmo ?v= do <script> de doc/index.html.

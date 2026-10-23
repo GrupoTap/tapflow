@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S37</title>
+<title>TapFlow Field · S38</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -82,7 +82,7 @@ button{cursor:pointer}
 
 /* ── topo ─────────────────────────────────────── */
 header{
-  flex:0 0 auto;background:var(--accent);color:#fff;
+  flex:0 0 auto;background:var(--mod,var(--accent));color:#fff;
   padding:calc(10px + env(safe-area-inset-top)) 14px 10px;
   display:flex;align-items:center;gap:10px;
 }
@@ -511,6 +511,7 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 <link rel="stylesheet" href="../nucleo/nucleo.css?v=N2">
 <script src="../nucleo/config.js?v=N2"></script>
 <script src="../nucleo/nucleo.js?v=N2"></script>
+<script src="../nucleo/modulos.js?v=M1"></script>
 </head>
 <body>
 
@@ -526,7 +527,7 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 <div class="euPan" id="euPan" hidden>
   <div class="cx" role="dialog" aria-label="Sua conta">
     <b id="euNome">—</b><small id="euPerfil"></small>
-    <button id="euTrocar" hidden>Trocar de app</button>
+    <button id="euTrocar" hidden>Trocar de módulo</button>
     <button id="euSair" class="perigo">Sair da conta</button>
     <button id="euFecha" class="fraco">Cancelar</button>
   </div>
@@ -570,7 +571,7 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S37';
+const APP_VERSION = 'S38';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -1123,7 +1124,8 @@ function ampliarFoto(src, titulo){
 }
 
 function pintarLista(){
-  // S16 · quem é de escritório só usa o Field para a Minha Segurança
+  pintarModulo();
+  // S16 · quem é de escritório só usa o Field para a Minha área (aba Eu)
   if (soSeg() && SEG && SEG.tem_ficha) return pintarEu();   // S36: o Eu é a casa de quem é só de escritório
   tela = 'lista'; atual = null; coleta = null;
   document.getElementById('btnBack').hidden = true;
@@ -3702,6 +3704,12 @@ const LOGO_ENGETAP_F = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDA
 let SEG = null;            // tf_rh_meu_resumo(); null = banco sem o 62 ou falha
 let APOIO_ATR = [];        // S9 · atrasadas em que sou apoio (só leitura)
 const soSeg = () => sessao.executa_em === 'adm';
+/* H10 · a moldura (cabeçalho e barra da janela) na cor do card por onde a pessoa
+   entrou: "Minha área" para quem é de escritório COM ficha de RH (a mesma regra do card
+   do hub e do pintarLista, que leva essa pessoa direto ao Eu); "Campo" para os demais. */
+const soMinhaArea = () => !!(soSeg() && SEG && SEG.tem_ficha);
+const moduloField = () => soMinhaArea() ? 'seg' : 'campo';
+function pintarModulo(){ try{ if (window.TapModulos) TapModulos.aplicar(moduloField()); }catch(e){} }
 /** Escrita do RH NÃO se repete sozinha: um PIN reenviado depois de um
  *  "não respondeu" contaria como tentativa errada. */
 const rpc1 = (f, p) => req('/rest/v1/rpc/' + f, { method:'POST', body: JSON.stringify(p || {}) }, 0);
@@ -3737,7 +3745,7 @@ async function recarregarSeg(){
 function pintarSeg(){
   tela = 'seg'; atual = null;
   document.getElementById('btnBack').hidden = true;
-  document.getElementById('hTit').textContent = 'Minha Segurança';
+  document.getElementById('hTit').textContent = 'Segurança';
   document.getElementById('hSub').textContent = (sessao.nome || '') + (SEG && SEG.funcao ? ' · ' + SEG.funcao : '');
   const m = document.getElementById('main');
   m.innerHTML = '';
@@ -4430,8 +4438,10 @@ function nAvisosEu(){
 /** A aba Eu: os avisos no topo, depois as seções (só as que se aplicam). */
 function pintarEu(){
   tela = 'eu'; atual = null; coleta = null;
+  pintarModulo();
   document.getElementById('btnBack').hidden = true;
-  document.getElementById('hTit').textContent = 'Eu';
+  // H10: para quem é de escritório, o Eu é a "Minha área" (o card do hub)
+  document.getElementById('hTit').textContent = soMinhaArea() ? 'Minha área' : 'Eu';
   document.getElementById('hSub').textContent = sessao.nome || '';
   const m = document.getElementById('main'); m.innerHTML = '';
   const av = [];
@@ -4967,7 +4977,7 @@ async function pintarDocsF(){
     + 'Termo do ponto e do recibo pendente</div><p style="margin:6px 0 0">Para assinar pelo celular, falta assinar no papel o termo do ponto e do recibo '
     + '(uma folha, uma vez só). Fale com o Bruno. Você já pode abrir e conferir os documentos.</p></div>');
   if (!temPin && pend.length) m.insertAdjacentHTML('beforeend', '<div class="painel" style="border-left:4px solid var(--accent)"><div class="et">Crie o seu PIN</div>'
-    + '<p style="margin:6px 0 10px">A assinatura é com o mesmo PIN da Minha Segurança.</p><button class="btn sm" type="button" id="dcPin">Ir para a Minha Segurança</button></div>');
+    + '<p style="margin:6px 0 10px">A assinatura é com o mesmo PIN da Segurança.</p><button class="btn sm" type="button" id="dcPin">Ir para a Segurança</button></div>');
   if (bloq) m.insertAdjacentHTML('beforeend', '<div class="painel" style="border-left:4px solid var(--crit)"><div class="et" style="color:var(--crit)">PIN travado</div>'
     + '<p style="margin:6px 0 0">Cinco tentativas erradas. Tente depois de ' + esc(rhDTf(DOCS.pin.bloqueado_ate).slice(11)) + '.</p></div>');
   pend.forEach(d => m.appendChild(painelDocF(d, temPin && !bloq && DOCS.termo_ok)));
@@ -5097,7 +5107,7 @@ function painelDocF(d, podeAssinar){
       if (r.status === 'ok'){ toast('Assinado. Obrigado!', 'ok'); await recarregarDocs(); pintarDocsF(); return; }
       if (r.status === 'pin_errado') toast('PIN errado. Restam ' + r.restantes + ' tentativa(s) antes de travar 15 minutos.', 'err');
       else if (r.status === 'bloqueado'){ toast('PIN travado por 15 minutos.', 'err'); await recarregarDocs(); pintarDocsF(); return; }
-      else if (r.status === 'sem_pin'){ toast('Crie o seu PIN antes (Minha Segurança).', 'err'); return; }
+      else if (r.status === 'sem_pin'){ toast('Crie o seu PIN antes (Eu › Segurança).', 'err'); return; }
       p.querySelector('.pinC').value = '';
     }catch(e){ toast(e.message, 'err'); await recarregarDocs(); pintarDocsF(); return; }
     ba.disabled = false;
@@ -5540,7 +5550,12 @@ function euFechar(){ document.getElementById('euPan').hidden = true; }
 document.getElementById('btnEu').addEventListener('click', euAbrir);
 document.getElementById('euFecha').addEventListener('click', euFechar);
 document.getElementById('euPan').addEventListener('click', e => { if (e.target.id === 'euPan') euFechar(); });
-document.getElementById('euTrocar').addEventListener('click', () => { location.href = '../'; });
+// H10: "Trocar de módulo" abre o menu do núcleo (uma coluna) em vez de ir ao hub
+document.getElementById('euTrocar').addEventListener('click', () => {
+  euFechar();
+  if (window.TapModulos) TapModulos.abrir(document.getElementById('btnEu'), moduloField());
+  else location.href = '../';
+});
 document.getElementById('euSair').addEventListener('click', () => {
   const n = (LS.get(K_FILA, []) || []).length;
   if (n && !confirm('Você tem ' + n + ' envio(s) na fila. Eles ficam guardados neste aparelho e '
