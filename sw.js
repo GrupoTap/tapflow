@@ -29,7 +29,7 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H10-S81';   // S81 · hub H10 (cores, miniaturas, "Minha área") e nucleo/modulos.js M1
+const VERSAO = 'H10-S82';   // S82 · TapFin 3 (NFS-e): o fin/ mudou — o cache velho do fin/ sai
 const CACHE  = 'tapflow-hub-' + VERSAO;
 
 const ESSENCIAIS = [
