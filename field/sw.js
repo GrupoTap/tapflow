@@ -24,7 +24,7 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S36-T2';   // S77: só o TapDoc 2 (field/doc/) mudou
+const VERSAO = 'S37-T4';   // S80: TapDoc 4 (ultrassom, geometria e prévia do motor)
 const CACHE  = 'tapflow-field-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -44,7 +44,9 @@ const ESSENCIAIS = [
   '../nucleo/nucleo.css?v=N2',
   '../nucleo/config.js?v=N2',
   // S35 · TapDoc 1: a coleta da inspeção (página própria, abre sem sinal)
-  './doc/'
+  './doc/',
+  // S80 · TapDoc 4: o motor de cálculo para a prévia sem sinal. Mesmo ?v= do <script> de doc/index.html.
+  './doc/motor-calculo-nr13.js?v=R00.2'
 ];
 
 self.addEventListener('install', ev => {

@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="../nucleo/nucleo.css?v=N2">
 <script src="../nucleo/config.js?v=N2"></script>
 <script src="../nucleo/nucleo.js?v=N2"></script>
-<script src="motor-calculo-nr13.js?v=R00.1"></script>
+<script src="motor-calculo-nr13.js?v=R00.2"></script>
 <!--
   TapDoc (escritório) · R02b1 — preparar a inspeção
   ─────────────────────────────────────────────────
@@ -132,7 +132,7 @@ details.op summary{font-weight:700;font-size:13.5px;cursor:pointer;color:var(--a
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E1';   // E = escritório (o celular é "TapDoc 1", "TapDoc 2"…)
+const VERSAO = 'TapDoc E2';   // E = escritório · E2 (S80): abas Instrumentos e Materiais
 const CFG = window.TF_CONFIG || {};
 const SUPA_URL = CFG.SUPABASE_URL || '', SUPA_ANON = CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPA_URL || !SUPA_ANON;
@@ -202,9 +202,11 @@ async function telaListas(aba){
   $('tela').innerHTML = '<p class="muted">Carregando…</p>';
   LISTAS = await rpc('tf_insp_preparacao_lista');
   const L = LISTAS, nPlh = (L.plh || []).filter(x => !x.decisao).length;
-  const abas = [['os','A preparar', (L.os || []).length], ['conf','Laudos a conferir', (L.a_conferir || []).length], ['plh','Para o PLH', nPlh]];
+  const abas = [['os','A preparar', (L.os || []).length], ['conf','Laudos a conferir', (L.a_conferir || []).length], ['plh','Para o PLH', nPlh],
+                ['inst','Instrumentos', 0], ['mat','Materiais', 0]];   // E2 (S80)
   let h = '<div class="abas">' + abas.map(([k, r, n]) => '<button data-a="' + k + '" class="' + (aba === k ? 'on' : '') + '">' + r
     + (n ? '<span class="bolha">' + n + '</span>' : '') + '</button>').join('') + '</div>';
+  if (aba === 'inst' || aba === 'mat'){ $('tela').innerHTML = h + '<p class="muted">Carregando…</p>'; ligarAbas(); return aba === 'inst' ? telaInstrumentos() : telaMateriais(); }
   if (aba === 'conf'){
     h += '<div class="card"><h3>Laudos pegos em campo, a conferir</h3><p class="muted">A equipe que esteve no cliente digita e confere o laudo a partir das fotos.</p>'
       + ((L.a_conferir || []).length ? '<table><tr><th>Vaso</th><th>Cliente</th><th>OS</th><th>Origem</th></tr>'
@@ -226,18 +228,94 @@ async function telaListas(aba){
       + ((L.os || []).length ? '<table><tr><th>OS</th><th>Cliente</th><th>Visita</th><th>Vasos</th><th>Situação</th></tr>'
         + L.os.map(o => '<tr class="lin" data-os="' + esc(o.id) + '"><td><b>' + esc(o.numero) + '</b></td><td>' + esc(o.cliente || '') + '</td><td>'
           + (o.visita ? dataBR(o.visita) : '<span class="muted">sem dia</span>') + '</td><td>' + o.marcados + ' marcado' + (o.marcados === 1 ? '' : 's') + '</td><td>'
-          + (o.marcados && !o.faltam ? '<span class="chip s-pronto">pronta para concluir</span>'
+          + (o.marcados && !o.faltam ? '<span class="chip s-pronto">' + (o.trava ? 'pronta para concluir' : 'preparação completa') + '</span>'
              : '<span class="chip s-em_conferencia">' + (o.marcados ? o.faltam + ' a fazer' : 'nenhum vaso marcado') + '</span>')
-          + (!o.trava ? ' <span class="muted">(OS antiga: conclui à mão)</span>' : '') + '</td></tr>').join('') + '</table>'
+          + (!o.trava ? ' <span class="muted">(T05 conclui no Manager)</span>' : '') + '</td></tr>').join('') + '</table>'
         : '<p class="vazio">Nenhuma OS esperando a preparação.</p>') + '</div>';
   }
   $('tela').innerHTML = h;
-  $('tela').querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => ir({ aba:b.dataset.a })));
+  ligarAbas();
   $('tela').querySelectorAll('tr.lin').forEach(t => t.addEventListener('click', () => {
     if (t.dataset.v){ if (!t.dataset.os){ U.toast('Laudo sem OS ligada.', 'err'); return; } ir({ os:t.dataset.os, v:t.dataset.v }); }
     else ir({ os:t.dataset.os });
   }));
   $('tela').querySelectorAll('[data-plh]').forEach(b => b.addEventListener('click', () => decidirPLH(b.dataset.plh)));
+}
+function ligarAbas(){ $('tela').querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => ir({ aba:b.dataset.a }))); }
+
+// ── E2 (S80) · instrumentos e materiais ────────────────────────────────────
+const TIPOS_INST = { medidor_espessura:'Medidor de espessura', manometro_padrao:'Manômetro padrão', bancada:'Bancada', outro:'Outro' };
+async function telaInstrumentos(){
+  const L = await rpc('tf_insp_instrumentos_lista');
+  let h = '<div class="card"><div class="linha" style="justify-content:space-between"><h3 style="margin:0">Instrumentos</h3><button class="btn pri" id="instNovo">+ instrumento</button></div>'
+    + '<p class="muted">O celular só oferece o medidor de espessura com o certificado válido. Vencido não aparece para escolha.</p>'
+    + (L.length ? '<table><tr><th>Tipo</th><th>Descrição</th><th>Nº de série</th><th>Certificado</th><th>Validade</th><th></th></tr>'
+      + L.map(x => '<tr><td>' + esc(TIPOS_INST[x.tipo] || x.tipo) + '</td><td><b>' + esc(x.descricao || '') + '</b><div class="muted">' + esc([x.marca, x.modelo].filter(Boolean).join(' · ')) + '</div></td><td>'
+        + esc(x.numero_serie || '—') + '</td><td>' + esc(x.certificado_num || '—') + (x.laboratorio ? '<div class="muted">' + esc(x.laboratorio) + '</div>' : '') + '</td><td>'
+        + (x.validade ? (x.vencido ? '<span class="chip s-grave">vencido ' + dataBR(x.validade) + '</span>' : dataBR(x.validade)) : '<span class="muted">sem validade</span>')
+        + '</td><td><button class="btn mini" data-inst="' + esc(x.id) + '">Editar</button></td></tr>').join('') + '</table>'
+      : '<p class="vazio">Nenhum instrumento cadastrado. Cadastre o medidor de espessura antes da primeira inspeção.</p>') + '</div>';
+  $('tela').lastElementChild.remove();   // o "Carregando…"
+  $('tela').insertAdjacentHTML('beforeend', h);
+  $('instNovo').addEventListener('click', () => editarInstrumento(null));
+  $('tela').querySelectorAll('[data-inst]').forEach(b => b.addEventListener('click', () => editarInstrumento(L.find(x => x.id === b.dataset.inst))));
+}
+function editarInstrumento(x){
+  x = x || { tipo:'medidor_espessura' };
+  const c = (k, rot, tipo) => '<label class="f">' + rot + '<input class="t" id="in_' + k + '" type="' + (tipo || 'text') + '" value="' + esc(x[k] || '') + '"></label>';
+  janela(x.id ? 'Editar instrumento' : 'Novo instrumento',
+    (x.id ? '' : '<label class="f">Tipo<select class="t" id="in_tipo">' + Object.keys(TIPOS_INST).map(t => '<option value="' + t + '"' + (t === x.tipo ? ' selected' : '') + '>' + TIPOS_INST[t] + '</option>').join('') + '</select></label>')
+    + c('descricao', 'Descrição') + c('marca', 'Marca') + c('modelo', 'Modelo') + c('numero_serie', 'Nº de série') + c('certificado_num', 'Nº do certificado')
+    + c('laboratorio', 'Laboratório') + c('calibrado_em', 'Calibrado em', 'date') + c('validade', 'Validade', 'date'),
+    (x.id ? [{ rotulo:'Desativar', acao:async () => { try{ await rpc('tf_insp_instrumento_gravar', { p_dados:{ id:x.id, ativo:false } }); U.toast('Desativado.', 'ok'); pintar(); }catch(e){ erro(e); return false; } } }] : [])
+    .concat([{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
+      const d = {}; ['descricao','marca','modelo','numero_serie','certificado_num','laboratorio','calibrado_em','validade'].forEach(k => { d[k] = ($('in_' + k).value || '').trim() || null; });
+      if (!d.descricao){ U.toast('Escreva a descrição.', 'err'); return false; }
+      if (x.id) d.id = x.id; else d.tipo = $('in_tipo').value;
+      try{ await rpc('tf_insp_instrumento_gravar', { p_dados:d }); U.toast('Gravado.', 'ok'); pintar(); }catch(e){ erro(e); return false; }
+    } }]));
+}
+async function telaMateriais(){
+  const L = await rpc('tf_insp_materiais_lista'), admin = !!(N.sessao() || {}).admin, nConf = L.filter(x => !x.conferido).length;
+  let h = '<div class="card"><div class="linha" style="justify-content:space-between"><h3 style="margin:0">Materiais (tensão admissível)</h3>'
+    + (admin ? '<button class="btn pri" id="matNovo">+ material</button>' : '') + '</div>'
+    + '<p class="muted">S da ASME II-D, Tabela 1A. A prévia do celular usa também os não conferidos (avisando). <b>O resultado do laudo só grava com material conferido pelo PLH.</b>'
+    + (nConf ? ' Faltam conferir: <b>' + nConf + '</b>.' : '') + '</p>'
+    + (L.length ? '<table><tr><th>Especificação</th><th>Forma</th><th>S (MPa)</th><th>Até</th><th>Situação</th><th></th></tr>'
+      + L.map(x => '<tr><td><b>' + esc(x.especificacao) + '</b>' + (x.tabela_asme ? ' <span class="muted">' + esc(x.tabela_asme) + '</span>' : '') + '</td><td>' + esc(x.forma || '—') + '</td><td>'
+        + fmt(x.s_mpa, 1) + '</td><td>' + fmt(x.t_max_c, 0) + ' °C</td><td>'
+        + (x.conferido ? '<span class="chip s-pronto">conferido' + (x.conferido_por ? ' · ' + esc(x.conferido_por) : '') + '</span>' : '<span class="chip s-em_conferencia">a conferir</span>')
+        + '</td><td>' + (admin ? (x.conferido ? '' : '<button class="btn mini pri" data-mconf="' + esc(x.id) + '">Conferir</button> ') + '<button class="btn mini" data-med="' + esc(x.id) + '">Editar</button>' : '')
+        + '</td></tr>').join('') + '</table>' : '<p class="vazio">Nenhum material.</p>') + '</div>';
+  $('tela').lastElementChild.remove();
+  $('tela').insertAdjacentHTML('beforeend', h);
+  if (!admin) return;
+  $('matNovo').addEventListener('click', () => editarMaterial(null));
+  $('tela').querySelectorAll('[data-med]').forEach(b => b.addEventListener('click', () => editarMaterial(L.find(x => x.id === b.dataset.med))));
+  $('tela').querySelectorAll('[data-mconf]').forEach(b => b.addEventListener('click', () => {
+    const x = L.find(y => y.id === b.dataset.mconf);
+    janela('Conferir ' + x.especificacao, '<p><b>' + esc(x.especificacao) + '</b> · ' + esc(x.forma || '') + '<br>S = <b>' + fmt(x.s_mpa, 1) + ' MPa</b> até ' + fmt(x.t_max_c, 0) + ' °C</p>'
+      + '<p class="muted">Fonte: ' + esc(x.fonte || '—') + '</p><p>Confere com a ASME II-D? Depois de conferido, o material entra no resultado do laudo.</p>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Conferido', classe:'pri', acao:async () => { try{ await rpc('tf_insp_material_gravar', { p_dados:{ id:x.id, conferir:true } }); U.toast('Conferido.', 'ok'); pintar(); }catch(e){ erro(e); return false; } } }]);
+  }));
+}
+function editarMaterial(x){
+  x = x || {};
+  janela(x.id ? 'Editar ' + x.especificacao : 'Novo material',
+    '<label class="f">Especificação<input class="t" id="mt_esp" value="' + esc(x.especificacao || '') + '" placeholder="Ex.: SA-516 Gr. 70"></label>'
+    + '<label class="f">Forma<input class="t" id="mt_forma" value="' + esc(x.forma || '') + '" placeholder="chapa, tubo sem costura…"></label>'
+    + '<label class="f">S (MPa)<input class="t" id="mt_s" inputmode="decimal" value="' + esc(fmt(x.s_mpa, 2)) + '"></label>'
+    + '<label class="f">Vale até (°C)<input class="t" id="mt_t" inputmode="decimal" value="' + esc(fmt(x.t_max_c, 0) || '200') + '"></label>'
+    + '<label class="f">Fonte<input class="t" id="mt_f" value="' + esc(x.fonte || 'ASME II-D, Tabela 1A') + '"></label>'
+    + '<p class="muted">Mudar o S apaga a conferência: o número novo ainda não foi visto pelo PLH.</p>',
+    (x.id ? [{ rotulo:'Desativar', acao:async () => { try{ await rpc('tf_insp_material_gravar', { p_dados:{ id:x.id, ativo:false } }); pintar(); }catch(e){ erro(e); return false; } } }] : [])
+    .concat([{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
+      const s = num($('mt_s').value), t = num($('mt_t').value);
+      if (!$('mt_esp').value.trim() || !(s > 0)){ U.toast('Especificação e S são obrigatórios.', 'err'); return false; }
+      const d = { especificacao:$('mt_esp').value.trim(), forma:$('mt_forma').value.trim() || null, s_mpa:s, t_max_c:t || 200, fonte:$('mt_f').value.trim() || null, tabela_asme:'UCS-23' };
+      if (x.id) d.id = x.id;
+      try{ await rpc('tf_insp_material_gravar', { p_dados:d }); U.toast('Gravado.', 'ok'); pintar(); }catch(e){ erro(e); return false; }
+    } }]));
 }
 function decidirPLH(laudo){
   janela('Decisão do PLH', '<label class="f">Decisão<select class="t" id="pDec"><option value="ciente">Ciente: segue normal</option>'
@@ -256,15 +334,18 @@ async function telaOS(os){
   titulo(P.os.numero + ' · preparar a inspeção', P.os.cliente || '');
   const marc = P.vasos.filter(v => v.inspecao), fora = P.vasos.filter(v => !v.inspecao);
   const t05 = P.t05 || {}, vis = P.visita || {};
-  const aberta = t05.status && t05.status !== 'completo' && t05.status !== 'dispensado';
+  // 404 (23/10): TapDoc em paralelo. Sem a trava, o TapDoc NÃO conclui a T05: ela conclui no Manager, como sempre.
+  const aberta = t05.status && t05.status !== 'completo' && t05.status !== 'dispensado' && t05.trava;
   let h = '<div class="card"><div class="linha" style="justify-content:space-between"><div><b>Visita:</b> '
     + (vis.dia ? dataBR(vis.dia) + (vis.hora ? ' às ' + esc(String(vis.hora).slice(0,5)) : '') : '<span class="muted">sem dia marcado</span>')
     + (vis.inspetor ? ' · ' + esc(vis.inspetor) : '') + '<div class="muted">T05 "' + esc(t05.nome || 'Preparar a inspeção') + '": ' + esc(t05.status || '—')
-    + (t05.trava ? '' : ' · OS antiga, sem a trava (conclui à mão no Manager)') + '</div></div>'
-    + (aberta ? '<button class="btn pri" id="concluir"' + ((P.falta || []).length ? ' disabled' : '') + '>Concluir a preparação</button>' : '<span class="chip s-pronto">T05 concluída</span>')
+    + (t05.trava ? '' : ' · TapDoc em teste: a T05 conclui no Manager, como sempre') + '</div></div>'
+    + (aberta ? '<button class="btn pri" id="concluir"' + ((P.falta || []).length ? ' disabled' : '') + '>Concluir a preparação</button>'
+       : t05.status === 'completo' ? '<span class="chip s-pronto">T05 concluída</span>' : '<span class="chip">em teste</span>')
     + '</div></div>';
   if ((P.falta || []).length) h += '<div class="alerta falta"><b>Falta para concluir:</b><ul>' + P.falta.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul></div>';
   else if (aberta) h += '<div class="alerta ok"><b>Preparação completa.</b> Pode concluir a T05.</div>';
+  else if (!t05.trava && (P.vasos || []).length) h += '<div class="alerta ok"><b>Preparação completa.</b> A T05 continua no Manager (TapDoc em teste).</div>';
   h += '<h2>Vasos desta OS (' + marc.length + ')</h2><div class="card" style="padding:6px 8px">';
   h += marc.length ? tabelaVasos(marc, true) : '<p class="vazio">Nenhum vaso marcado. Marque abaixo os vasos que serão inspecionados.</p>';
   h += '</div><h2>Outros vasos do cliente (' + fora.length + ')</h2><div class="card" style="padding:6px 8px">';

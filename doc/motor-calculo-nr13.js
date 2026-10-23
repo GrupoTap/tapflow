@@ -1,6 +1,6 @@
 /**
  * Motor de cálculo NR-13 — TapFlow · módulo de inspeção
- * Versão R00.1 · 19/10/2026
+ * Versão R00.2 · 23/10/2026 (R00.1 de 19/10 + as correções C1–C4 da auditoria de 20/10)
  *
  * Calcula espessura mínima requerida e PMTA de cada componente de um vaso de pressão
  * pela ASME VIII Div. 1, a PMTA governante, a categoria (NR-13 13.5.1.1) e as datas das
@@ -129,8 +129,13 @@ function avisosDoComponente(c, P, S, E, t) {
  * (O TapDoc comparava textos: "10.08" < "9.95" dava verdadeiro e a mínima saía errada.)
  */
 function minimaLeituras(leituras) {
-    const nums = leituras.map((x) => (typeof x === 'string' ? parseFloat(x.replace(',', '.')) : x))
-        .filter((x) => typeof x === 'number' && isFinite(x));
+    // C3 (R00.2): leitura que não é número ('abc', '1O.08' com a letra O) é ERRO, não some em silêncio.
+    // Vazio (null, '') é só "sem leitura".
+    const nums = leituras.filter((x) => x != null && String(x).trim() !== '').map((x) => {
+        const v = typeof x === 'number' ? x : Number(String(x).trim().replace(',', '.'));
+        if (typeof v !== 'number' || !isFinite(v)) throw new Error(`Leitura inválida: ${x}`);
+        return v;
+    });
     if (!nums.length) return null;
     return Math.min(...nums);
 }
@@ -157,7 +162,9 @@ function grupoRisco(pMPa, vM3) {
 }
 
 function categoria(classeFluido, pMPa, vM3) {
-    const linha = CATEGORIA[classeFluido];
+    // C1 (R00.2): pressão ausente não vira categoria V. Negativa (vácuo) vale; zero não.
+    if (typeof pMPa !== 'number' || !isFinite(pMPa) || pMPa === 0) throw new Error(`Pressão de operação inválida ou ausente: ${pMPa}`);
+    const linha = CATEGORIA[String(classeFluido || '').toUpperCase()];   // C4: classe minúscula vale (o banco aceita)
     if (!linha) throw new Error(`Classe de fluido inválida: ${classeFluido}`);
     exigir('V', vM3);
     const grupo = grupoRisco(pMPa, vM3);
@@ -192,6 +199,7 @@ function somarAnos(dataISO, anos) {
 function calcularVaso(vaso) {
     const P = vaso.pOperacaoMPa;
     const cor = vaso.corrosaoMm || 0;
+    if (cor < 0) throw new Error(`Corrosão negativa: ${cor}`);   // C2 (R00.2): não contorna o mínimo de 1,5 mm
     const avisos = [];
     const comps = vaso.componentes.map((c) => {
         const tMin = c.tMin != null ? c.tMin : minimaLeituras(c.leituras || []);
@@ -201,6 +209,7 @@ function calcularVaso(vaso) {
         const pm = tUtil != null && tUtil > 0 ? pmta(c, tUtil, vaso.S, c.E) : null;
         const av = avisosDoComponente(c, P, vaso.S, c.E, tMin);
         if (eCalc < ESPESSURA_MINIMA_ABSOLUTA) av.push(`${c.nome}: espessura calculada abaixo de 1,5 mm — vale o mínimo da UG-16(b).`);
+        if (tMin == null) av.push(`${c.nome}: sem leitura — fica fora do governante.`);   // C4 (R00.2)
         avisos.push(...av);
         return {
             id: c.id, nome: c.nome, tipo: c.tipo,
@@ -222,7 +231,7 @@ function calcularVaso(vaso) {
 const MotorNR13 = {
     TIPOS, ESPESSURA_MINIMA_ABSOLUTA, espessuraMinima, pmta, avisosDoComponente, minimaLeituras,
     grupoRisco, categoria, prazos, somarAnos, calcularVaso,
-    versao: 'R00.1-2026-10-19',
+    versao: 'R00.2-2026-10-23',
 };
 
 if (typeof module !== 'undefined' && module.exports) module.exports = MotorNR13;

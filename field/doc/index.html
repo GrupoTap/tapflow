@@ -9,12 +9,17 @@
 <link rel="stylesheet" href="../../nucleo/nucleo.css?v=N2">
 <script src="../../nucleo/config.js?v=N2"></script>
 <script src="../../nucleo/nucleo.js?v=N2"></script>
+<script src="motor-calculo-nr13.js?v=R00.2"></script>
 <!--
-  TapDoc 1 · a coleta da inspeção no celular (R02a)
-  ─────────────────────────────────────────────────
-  Mora em field/doc/ e é aberta pelo Field (botão "Abrir a inspeção" da T06).
-  Usa o núcleo N2: a sessão, o PIN, a fila de envios sem sinal e as fotos.
-  Banco: sql/400_tapdoc_r02a.sql. Desenho: inspecao-nr13/rodadas/R02-field-coleta.md.
+  TapDoc 4 · a coleta da inspeção no celular (R02a, R02b1, R03a e R03b)
+  ─────────────────────────────────────────────────────────────────
+  Mora em field/doc/ e é aberta pelo Field (botão "Abrir a inspeção" da
+  T06 · Executar a inspeção). Usa o núcleo N2: a sessão, o PIN, a fila de envios
+  sem sinal e as fotos.
+  Banco: sql/400 (R02a), 401 (R02b1, preparação) e 402 (R03a: exame visual,
+  acessórios, boroscopia, teste de pressão, fechamento e envio) e 403 (R03b:
+  ultrassom, geometria dos componentes e a prévia do motor de cálculo).
+  Desenhos: inspecao-nr13/rodadas/R02-field-coleta.md e R03-campo-final-desenho.md.
   Feito pelo chat central em 22/10/2026.
 
   COMO FUNCIONA SEM SINAL
@@ -109,6 +114,7 @@ textarea.t{min-height:72px;resize:vertical}
 .seg{display:flex;gap:6px;margin-top:5px;flex-wrap:wrap}
 .seg button{flex:1;min-width:56px;border:1px solid var(--rule);background:#fff;border-radius:5px;padding:9px 6px;font-size:14px;font-weight:600}
 .seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.seg.sit button{flex:1 1 28%;font-size:13.5px;padding:9px 4px}
 .chk{display:flex;gap:9px;align-items:center;margin-top:12px;font-size:14.5px}
 .chk input{width:20px;height:20px;flex:0 0 auto}
 .fotos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
@@ -152,7 +158,7 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 2';   // S77 · R02b1: o vaso preparado pelo escritório (instruções, laudo conferido)
+const VERSAO = 'TapDoc 4';   // S80 · R03b: ultrassom (com CSV), geometria dos componentes e prévia do cálculo
 const CFG = window.TF_CONFIG || {};
 const SUPA_URL = CFG.SUPABASE_URL || '', SUPA_ANON = CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPA_URL || !SUPA_ANON;
@@ -246,7 +252,16 @@ function normVaso(sv){
   const v = Object.assign({}, sv);
   v.camaras = (sv.camaras || []).map(c => Object.assign({}, c));
   v.componentes = (sv.componentes || []).map(c => Object.assign({}, c));
-  v.inspecao = sv.inspecao ? Object.assign({}, sv.inspecao, { fotos:(sv.inspecao.fotos || []).map(f => Object.assign({}, f)) }) : null;
+  v.inspecao = sv.inspecao ? Object.assign({}, sv.inspecao, { fotos:(sv.inspecao.fotos || []).map(f => Object.assign({}, f)),
+    // S79 · R03a: o resto da coleta
+    visual:(sv.inspecao.visual || []).map(x => Object.assign({}, x)),
+    acessorios:(sv.inspecao.acessorios || []).map(x => Object.assign({}, x)),
+    boroscopia:sv.inspecao.boroscopia ? Object.assign({}, sv.inspecao.boroscopia) : null,
+    teste:sv.inspecao.teste ? Object.assign({}, sv.inspecao.teste) : null,
+    // S80 · R03b: o ultrassom
+    leituras:(sv.inspecao.leituras || []).map(x => Object.assign({}, x)),
+    ultrassom_sem_leitura:Object.assign({}, sv.inspecao.ultrassom_sem_leitura || {}) }) : null;
+  v.acessorios_anteriores = sv.acessorios_anteriores || [];
   v.laudo_anterior = sv.laudo_anterior || null;
   v._pv = {};
   return v;
@@ -259,7 +274,7 @@ function mesclar(p){
   Object.values(velhos).forEach(v => {
     if (!vasos.some(x => x.id === v.id) && pend.has('insp|' + v.id)) vasos.push(v);
   });
-  E = { os:p.os, vasos, fabricantes:p.fabricantes || [], materiais:p.materiais || [], baixado_em:p.gerado_em || new Date().toISOString() };
+  E = { os:p.os, vasos, fabricantes:p.fabricantes || [], materiais:p.materiais || [], medidores:p.medidores || [], baixado_em:p.gerado_em || new Date().toISOString() };
   salvar();
 }
 
@@ -287,7 +302,8 @@ function gravarCamara(v, c){
 }
 function gravarComp(v, c){
   enfileirar(v, 'comp-' + c.id, 'componente ' + c.nome, { funcao:'tf_insp_componente_gravar',
-    payload:{ p_equip:v.id, p_dados:pegar(c, ['id','tipo','nome','posicao','camara_id','nao_medir','ordem','ativo']) } });
+    payload:{ p_equip:v.id, p_dados:pegar(c, ['id','tipo','nome','posicao','camara_id','nao_medir','ordem','ativo',
+      'r_mm','l_mm','d_mm','alfa_graus','fator_c','aparafusada','eficiencia_junta','material_id']) } });
 }
 function gravarVaso(v){
   enfileirar(v, 'vaso', 'dados do vaso', { funcao:'tf_insp_vaso_gravar', payload:{ p_equip:v.id, p_dados:Object.assign({}, v._pv) } });
@@ -381,12 +397,14 @@ function pintar(){
   if (telaAtual.nome === 'lista') return telaLista();
   // S77: o vaso preparado pelo escritório (em preparo) mostra o cartão com as instruções até "Começar"
   if (telaAtual.nome === 'vaso') return (v.inspecao && v.inspecao.situacao !== 'em_preparo') ? telaPainel(v) : telaCartao(v);
-  const f = { plaqueta:telaPlaqueta, operacao:telaOperacao, componentes:telaComponentes, localizacao:telaLocal, laudo:telaLaudo }[telaAtual.nome];
+  const f = { plaqueta:telaPlaqueta, operacao:telaOperacao, componentes:telaComponentes, localizacao:telaLocal, laudo:telaLaudo,
+             visual:telaVisual, acessorios:telaAcessorios, ultrassom:telaUltrassom, boroscopia:telaBoroscopia, teste:telaTeste,
+             fechamento:telaFechamento, previa:telaPrevia }[telaAtual.nome];
   if (f) return f(v);
 }
 
 // ── estado das seções ──────────────────────────────────────────────────────
-function fotosDe(v, secao){ return ((v.inspecao && v.inspecao.fotos) || []).filter(f => f.secao === secao); }
+function fotosDe(v, secao, item){ return ((v.inspecao && v.inspecao.fotos) || []).filter(f => f.secao === secao && (item === undefined || f.item_ref === item)); }
 const ativas = v => v.camaras.filter(c => c.ativo !== false);
 const compsAtivos = v => v.componentes.filter(c => c.ativo !== false);
 function estPlaqueta(v){
@@ -409,7 +427,9 @@ function estLaudo(v){
 }
 function est(itens){ const n = itens.filter(Boolean).length; return n === 0 ? 'vazia' : n === itens.length ? 'ok' : 'inc'; }
 const EST_ROT = { vazia:'vazia', inc:'incompleta', ok:'ok' };
-function secoesOk(v){ return [estPlaqueta(v), estOperacao(v), estComp(v), estLocal(v), estLaudo(v)].filter(x => x === 'ok').length; }
+function estados(v){ return [estPlaqueta(v), estOperacao(v), estComp(v), estLocal(v), estLaudo(v), estVisual(v), estAcess(v), estUltra(v), estBoro(v), estTeste(v), estFech(v)]; }
+const N_SECOES = 11;
+function secoesOk(v){ return estados(v).filter(x => x === 'ok').length; }
 function alertas(v){
   const a = [];
   if (!fotosDe(v, 'plaqueta').length) a.push('Falta a foto da plaqueta.');
@@ -436,7 +456,9 @@ function telaLista(){
     const chips = [];
     if (v.inspecao){
       const sit = v.inspecao.situacao;
-      chips.push(sit === 'em_campo' ? '<span class="chip ' + (secoesOk(v) === 5 ? 'ok' : 'inc') + '">' + secoesOk(v) + ' de 5 seções</span>'
+      chips.push(sit === 'em_campo' ? '<span class="chip ' + (secoesOk(v) === N_SECOES ? 'ok' : 'inc') + '">' + secoesOk(v) + ' de ' + N_SECOES + ' seções</span>'
+        : v.inspecao.nao_inspecionado_motivo ? '<span class="chip inc">não inspecionado</span>'
+        : sit === 'enviada' ? '<span class="chip ok">enviada</span>'
         : sit === 'em_preparo' ? '<span class="chip ok">preparado pelo escritório</span>'
         : '<span class="chip">' + esc(sit.replace('_', ' ')) + '</span>');
     }
@@ -541,7 +563,8 @@ function telaPainel(v){
   const ed = v.inspecao.pode_editar !== false && v.inspecao.situacao === 'em_campo';
   const al = alertas(v);
   let h = '';
-  if (!ed) h += '<div class="alerta"><b>Inspeção ' + esc(String(v.inspecao.situacao).replace('_', ' ')) + '</b>O campo não grava mais neste vaso.</div>';
+  if (!ed) h += '<div class="alerta"><b>' + (v.inspecao.nao_inspecionado_motivo ? 'Vaso não inspecionado' : 'Inspeção ' + esc(String(v.inspecao.situacao).replace('_', ' '))) + '</b>' +
+    (v.inspecao.nao_inspecionado_motivo ? esc(v.inspecao.nao_inspecionado_motivo) + '<br>' : '') + 'O campo não grava mais neste vaso.</div>';
   if (v.inspecao.instrucoes_campo) h += '<div class="alerta" style="background:var(--accent-soft);color:var(--accent-ink)"><b>Instruções do escritório</b>' + esc(v.inspecao.instrucoes_campo) + '</div>';
   if (al.length && ed) h += '<div class="alerta"><b>Atenção</b><ul>' + al.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
   const sec = (k, nome, sub, e) => '<button class="card secao" data-s="' + k + '"' + (ed ? '' : ' disabled') + '><span class="sn">' + nome +
@@ -554,12 +577,19 @@ function telaPainel(v){
   const la = v.laudo_anterior && v.laudo_anterior.situacao;
   h += sec('laudo', 'Laudo anterior', la === 'conferido' ? 'Já conferido pelo escritório' : la === 'cliente_nao_tem' ? 'O cliente não tem' :
     la === 'sem_laudo' ? 'O vaso nunca teve laudo' : la === 'em_conferencia' ? 'Coletado, aguardando a conferência' : 'Fotos do laudo impresso, PDF ou "o cliente não tem"', estLaudo(v));
-  h += '<h2>Na próxima versão</h2>';
-  ['Exame visual e não conformidades', 'Acessórios (válvulas e manômetros)', 'Ultrassom (espessuras)', 'Teste de pressão', 'Prévia e envio'].forEach(n => {
-    h += '<div class="card secao cinza"><span class="sn">' + n + '</span><span class="est vazia">R03</span></div>';
-  });
+  // S79 · R03a
+  const vis = v.inspecao.visual || [], nc = vis.filter(x => x.conforme === false).length;
+  h += sec('visual', 'Exame visual', nc ? nc + ' não conforme' + (nc > 1 ? 's' : '') : 'Costado, tampos, conexões, base e aterramento', estVisual(v));
+  const acs = acessDe(v);
+  h += sec('acessorios', 'Acessórios', acs.length ? acs.length + ' na lista' : 'Válvulas, manômetros e outros, com lacre e foto', estAcess(v));
+  const nMed = compsAtivos(v).filter(c => !c.nao_medir).length, nLid = compsAtivos(v).filter(c => !c.nao_medir && leiturasDe(v, c.id).length).length;
+  h += sec('ultrassom', 'Ultrassom', nMed ? nLid + ' de ' + nMed + ' componentes medidos' : 'Medidor e espessuras por componente', estUltra(v));
+  h += sec('boroscopia', 'Boroscopia', 'Realizada ou o motivo', estBoro(v));
+  h += sec('teste', 'Teste de pressão', 'Realizado ou o motivo', estTeste(v));
+  h += sec('fechamento', 'Fechamento e envio', 'Observações, foto de capa e enviar', estFech(v));
+  h += '<h2>Cálculo</h2><button class="card secao" data-s="previa"><span class="sn">Prévia do cálculo<small>PMTA por câmara, categoria e prazos. Só informativa: o resultado oficial sai na revisão.</small></span><span class="est vazia">ver</span></button>';
   $('tela').innerHTML = h;
-  $('tela').querySelectorAll('[data-s]').forEach(b => b.addEventListener('click', () => ir({ nome:b.dataset.s, vaso:v.id })));
+  $('tela').querySelectorAll('[data-s]').forEach(b => { if (b.dataset.s === 'previa') b.disabled = false; b.addEventListener('click', () => ir({ nome:b.dataset.s, vaso:v.id })); });
 }
 
 // ── campos ─────────────────────────────────────────────────────────────────
@@ -598,8 +628,9 @@ function ligarPressao(id, u, fn, max){
 
 // ── fotos ──────────────────────────────────────────────────────────────────
 let alvoFoto = null;
-function gradeFotos(v, secao, max, rotulos){
-  const fs = fotosDe(v, secao).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+function chaveAdd(secao, item){ return secao + (item != null ? '|' + item : ''); }
+function gradeFotos(v, secao, max, rotulos, item){
+  const fs = fotosDe(v, secao, item == null ? undefined : item).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
   const pend = new Set(pendDoVaso(v).filter(e => e.id.indexOf('foto~') === 0).map(e => e.id.slice(5)));
   let h = '<div class="fotos">';
   fs.forEach(f => {
@@ -609,16 +640,17 @@ function gradeFotos(v, secao, max, rotulos){
       (pend.has(f.id) ? '<span class="pend">a enviar</span>' : '') +
       '<button class="x" data-rm="' + esc(f.id) + '" aria-label="Tirar a foto">×</button></div>';
   });
-  if (!max || fs.length < max) h += '<div class="foto add" data-add="' + secao + '">+ foto' + (rotulos ? '' : '') + '</div>';
+  if (!max || fs.length < max) h += '<div class="foto add" data-add="' + esc(chaveAdd(secao, item)) + '">+ foto' + (rotulos ? '' : '') + '</div>';
   return h + '</div>';
 }
-function ligarFotos(v, secao, legendaFn){
-  $('tela').querySelectorAll('[data-add="' + secao + '"]').forEach(b => b.addEventListener('click', () => tirarFoto(v, secao, legendaFn ? legendaFn() : null)));
-  $('tela').querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', ev => { ev.stopPropagation(); tirarFotoDaLista(v, b.dataset.rm); }));
+function ligarFotos(v, secao, legendaFn, item){
+  const k = chaveAdd(secao, item);
+  $('tela').querySelectorAll('[data-add]').forEach(b => { if (b.dataset.add === k) b.addEventListener('click', () => tirarFoto(v, secao, legendaFn ? legendaFn() : null, item)); });
+  $('tela').querySelectorAll('[data-rm]').forEach(b => { if (b.dataset.lig) return; b.dataset.lig = '1'; b.addEventListener('click', ev => { ev.stopPropagation(); tirarFotoDaLista(v, b.dataset.rm); }); });
   carregarMinis(v);
 }
-function tirarFoto(v, secao, legenda){
-  alvoFoto = { v:v.id, secao, legenda };
+function tirarFoto(v, secao, legenda, item){
+  alvoFoto = { v:v.id, secao, legenda, item:item == null ? null : item };
   const a = $('arqFoto'); a.value = ''; a.click();
 }
 $('arqFoto').addEventListener('change', async () => {
@@ -628,7 +660,7 @@ $('arqFoto').addEventListener('change', async () => {
   try{
     const blob = await N.foto.reduzir(arq, { lado:1600, qualidade:0.85 });   // decisão 12
     const mini = await miniatura(blob);
-    await registrarArquivo(v, alvoFoto.secao, alvoFoto.legenda, blob, 'jpg', 'image/jpeg', mini);
+    await registrarArquivo(v, alvoFoto.secao, alvoFoto.legenda, blob, 'jpg', 'image/jpeg', mini, alvoFoto.item);
   }catch(e){ U.toast(e.message || 'Não consegui usar a foto.', 'err'); }
   alvoFoto = null;
 });
@@ -654,16 +686,17 @@ function miniatura(blob){
     img.src = u;
   });
 }
-async function registrarArquivo(v, secao, legenda, blob, ext, tipo, mini){
+async function registrarArquivo(v, secao, legenda, blob, ext, tipo, mini, item){
   const fid = uid(), caminho = v.inspecao.id + '/' + fid + '.' + ext;
   const chave = await N.fila.guardarFoto(blob);
   const ordem = fotosDe(v, secao).length + 1;
-  v.inspecao.fotos.push({ id:fid, secao, legenda, ordem, storage_path:caminho });
+  item = item == null ? null : String(item);
+  v.inspecao.fotos.push({ id:fid, secao, legenda, ordem, storage_path:caminho, item_ref:item });
   if (mini){ MINI[fid] = mini; salvarMini(); }
   salvar();
   enfileirar(v, 'foto~' + fid, (secao === 'laudo_anterior' ? 'laudo anterior' : 'foto de ' + secao), {
     funcao:'tf_insp_foto_registrar',
-    payload:{ p_id:fid, p_dados:{ inspecao_id:v.inspecao.id, storage_path:caminho, secao, legenda:legenda || null, ordem, bytes:blob.size } }
+    payload:{ p_id:fid, p_dados:{ inspecao_id:v.inspecao.id, storage_path:caminho, secao, legenda:legenda || null, ordem, bytes:blob.size, item_ref:item } }
   }, [{ chave, bucket:'inspecoes', caminho, tipo }], true);
   pintar();
 }
@@ -770,7 +803,7 @@ function telaOperacao(v){
   h += campoNum('Circunferência medida (mm)', 'oCirc', v.circunferencia_mm, 'Com a trena, por fora do costado.');
   h += '<label class="f">Material do costado<select class="t" id="oMat"><option value="">não sei / ver no laudo</option>' +
     mats.map(m => '<option value="' + esc(m.id) + '"' + (m.id === v.material_id ? ' selected' : '') + '>' + esc(m.especificacao + (m.forma ? ' (' + m.forma + ')' : '')) + '</option>').join('') + '</select></label>';
-  h += '<p class="muted" style="margin-top:10px">A categoria é calculada (próxima versão). Ninguém escolhe a categoria.</p></div>';
+  h += '<p class="muted" style="margin-top:10px">A categoria é calculada (veja a prévia do cálculo no painel do vaso). Ninguém escolhe a categoria.</p></div>';
   cs.forEach(c => {
     const conhecido = FLUIDOS.some(f => f[0] === c.fluido);
     h += '<div class="card cam"><div class="ct"><span>' + esc(c.nome) + '</span>';
@@ -840,6 +873,64 @@ function telaOperacao(v){
 }
 
 // ── tela 4 · componentes ───────────────────────────────────────────────────
+// S80 · R03b · a geometria de cada componente. Em branco vale o padrão da
+// memória de cálculo (pendência 2, a validar pelo Fernando):
+//   R = circunferência ÷ 2π (raio EXTERNO: conservador) · torisférico L = D ·
+//   hemisférico L = R · tampo plano d = D, C = 0,33 · janela C = 0,33 ·
+//   E = 0,70 no costado e no cone, 1,0 nos tampos (o inspetor escolhe).
+const GEO_CAMPOS = { costado:['R'], eliptico:['R'], conico:['R','alfaGraus'], torisferico:['L'], hemisferico:['L'], plano:['d','C'], janela:['d','C'] };
+const GEO_COL = { R:'r_mm', L:'l_mm', d:'d_mm', C:'fator_c', alfaGraus:'alfa_graus', E:'eficiencia_junta' };
+const GEO_ROT = { R:'R · raio (mm)', L:'L · raio da coroa (mm)', d:'d · diâmetro (mm)', C:'C · fator', alfaGraus:'α · semiângulo (°)' };
+function geoPadrao(v, c){
+  const rx = v.circunferencia_mm > 0 ? v.circunferencia_mm / (2 * Math.PI) : null;
+  const p = { E: (c.tipo === 'costado' || c.tipo === 'conico') ? 0.7 : 1 };
+  if (rx){
+    if (['costado','eliptico','conico'].indexOf(c.tipo) >= 0) p.R = rx;
+    if (c.tipo === 'torisferico') p.L = 2 * rx;
+    if (c.tipo === 'hemisferico') p.L = rx;
+    if (c.tipo === 'plano') p.d = 2 * rx;
+  }
+  if (c.tipo === 'plano' || c.tipo === 'janela') p.C = 0.33;
+  return p;
+}
+/** A geometria que o motor usa: o informado ou o padrão. `padrao` lista o que veio do padrão. */
+function geoDe(v, c){
+  const p = geoPadrao(v, c), g = { tipo:c.tipo, nome:c.nome, id:c.id, aparafusada:c.aparafusada === true, padrao:[] };
+  (GEO_CAMPOS[c.tipo] || []).concat(['E']).forEach(k => {
+    const x = c[GEO_COL[k]];
+    if (x != null && x !== '') g[k] = Number(x);
+    else if (p[k] != null){ g[k] = p[k]; g.padrao.push(k); }
+  });
+  return g;
+}
+function campoGeo(v, c){
+  const p = geoPadrao(v, c), id = esc(c.id);
+  const e = c.eficiencia_junta;
+  let h = '<div class="lin">';
+  h += '<label class="f">E · eficiência da junta<select class="t" data-geo="' + id + '" data-g="E"><option value="">padrão (' + fmt(p.E, 2) + ')</option>' +
+    [1, 0.85, 0.7].map(x => '<option value="' + x + '"' + (e != null && Number(e) === x ? ' selected' : '') + '>' + fmt(x, 2) + '</option>').join('') + '</select></label>';
+  (GEO_CAMPOS[c.tipo] || []).forEach((k, n) => {
+    if (n && n % 2 === 1) h += '</div><div class="lin">';
+    const val = c[GEO_COL[k]];
+    h += '<label class="f">' + GEO_ROT[k] + '<input class="t" inputmode="decimal" data-geo="' + id + '" data-g="' + k + '" value="' + esc(val == null ? '' : fmt(val, 3)) +
+      '" placeholder="' + (p[k] != null ? 'padrão ' + fmt(p[k], k === 'C' ? 2 : 1) : (k === 'd' && c.tipo === 'janela' ? 'medir' : '—')) + '"></label>';
+  });
+  h += '</div>';
+  if (c.tipo === 'janela') h += '<div class="chk"><input type="checkbox" id="ap_' + id + '"' + (c.aparafusada ? ' checked' : '') + '><label for="ap_' + id + '">Tampa aparafusada</label></div>';
+  if (c.tipo === 'conico' && !(c.alfa_graus > 0)) h += '<div class="conv" style="color:var(--warn)">O cone precisa do semiângulo α (até 30°).</div>';
+  return h;
+}
+function ligarGeo(v){
+  const lim = { R:[1, 20000], L:[1, 40000], d:[1, 40000], C:[0.1, 1], alfaGraus:[0.1, 30] };
+  $('tela').querySelectorAll('[data-geo]').forEach(el => el.addEventListener('change', () => {
+    const c = v.componentes.find(x => x.id === el.dataset.geo); if (!c) return;
+    const k = el.dataset.g;
+    if (k === 'E'){ mudouComp(v, c, 'eficiencia_junta', el.value ? Number(el.value) : null); return; }
+    const x = numOuAviso(el, lim[k][0], lim[k][1], GEO_ROT[k].split(' ·')[0]);
+    if (x !== undefined) mudouComp(v, c, GEO_COL[k], x);
+  }));
+  compsAtivos(v).forEach(c => ligar('ap_' + c.id, el => mudouComp(v, c, 'aparafusada', el.checked)));
+}
 function telaComponentes(v){
   titulo('Componentes', v.tag);
   const cs = ativas(v), comps = compsAtivos(v).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
@@ -855,10 +946,12 @@ function telaComponentes(v){
       cs.map(k => '<option value="' + esc(k.id) + '"' + (k.id === c.camara_id ? ' selected' : '') + '>' + esc(k.nome) + '</option>').join('') + '</select></label>';
     h += '<div class="lin" style="align-items:center"><div class="chk" style="margin-top:8px"><input type="checkbox" id="nm_' + esc(c.id) + '"' + (c.nao_medir ? ' checked' : '') +
       '><label for="nm_' + esc(c.id) + '">Não medir</label></div><div style="text-align:right;flex:0 0 auto"><button class="btn peq perigo" data-rmc="' + esc(c.id) + '">Tirar</button></div></div>';
+    h += campoGeo(v, c);
     h += '</div>';
   });
   h += '</div><button class="btn sec" id="maisComp">+ componente</button>';
-  h += '<p class="muted" style="margin-top:10px">Este é o único lugar onde o tipo do tampo é informado. O ultrassom (próxima versão) usa esta mesma lista.</p>';
+  h += '<p class="muted" style="margin-top:10px">Este é o único lugar onde o tipo do tampo é informado. O ultrassom usa esta mesma lista.</p>';
+  h += '<p class="muted">Campo em branco = o <b>padrão</b> mostrado, tirado da circunferência (Operação e câmaras). Os padrões são provisórios, a validar pelo Fernando.</p>';
   $('tela').innerHTML = h;
   $('tela').querySelectorAll('[data-cp]').forEach(el => el.addEventListener('change', () => {
     const c = v.componentes.find(x => x.id === el.dataset.cp); if (!c) return;
@@ -866,9 +959,11 @@ function telaComponentes(v){
     if (el.dataset.k === 'nome'){ val = val.trim(); if (!val){ U.toast('O nome não pode ficar vazio.', 'err'); el.value = c.nome; return; } }
     if (el.dataset.k === 'posicao') val = val || null;
     mudouComp(v, c, el.dataset.k, val);
-    if (el.dataset.k === 'tipo' && val === 'janela' && !c.nao_medir){ mudouComp(v, c, 'nao_medir', true); pintar(); }
+    if (el.dataset.k === 'tipo' && val === 'janela' && !c.nao_medir) mudouComp(v, c, 'nao_medir', true);
+    if (el.dataset.k === 'tipo') pintar();   // a geometria muda com o tipo
   }));
   comps.forEach(c => ligar('nm_' + c.id, el => mudouComp(v, c, 'nao_medir', el.checked)));
+  ligarGeo(v);
   $('tela').querySelectorAll('[data-rmc]').forEach(b => b.addEventListener('click', () => {
     const c = v.componentes.find(x => x.id === b.dataset.rmc);
     N.janela.confirmar('Tirar ' + c.nome + '?', '', 'Tirar', true).then(s => { if (s){ mudouComp(v, c, 'ativo', false); pintar(); } });
@@ -966,10 +1061,737 @@ function telaLaudo(v){
 }
 // a foto de uma página do laudo marca o laudo como coletado
 const _reg = registrarArquivo;
-registrarArquivo = async function(v, secao, legenda, blob, ext, tipo, mini){
-  await _reg(v, secao, legenda, blob, ext, tipo, mini);
+registrarArquivo = async function(v, secao, legenda, blob, ext, tipo, mini, item){
+  await _reg(v, secao, legenda, blob, ext, tipo, mini, item);
   if (secao === 'laudo_anterior' && ext !== 'pdf'){ laudoColetado(v, 'fotos_campo'); pintar(); }
 };
+
+// ════════════════════════════════════════════════════════════════════════════
+// S79 · R03a — exame visual, acessórios, boroscopia, teste de pressão,
+// fechamento e envio (banco: sql/402_tapdoc_r03a.sql)
+// ════════════════════════════════════════════════════════════════════════════
+const ITENS_VISUAL = ['Costado', 'Tampos', 'Conexões', 'Base ou suporte', 'Aterramento'];   // decisão 5 (19/10)
+const TIPOS_ACESS = { valvula_seguranca:'Válvula de segurança', valvula_alivio:'Válvula de alívio', quebra_vacuo:'Quebra-vácuo',
+  manometro:'Manômetro', manovacuometro:'Manovacuômetro', termometro:'Termômetro', pressostato:'Pressostato', dreno:'Dreno',
+  ihm:'IHM', outro:'Outro' };
+const VALVULAS = ['valvula_seguranca', 'valvula_alivio', 'quebra_vacuo'];
+const MEDIDORES = ['manometro', 'manovacuometro', 'termometro', 'pressostato'];
+const SIT_ACESS = { ok:'ok', substituir:'substituir', ausente:'ausente', inoperante:'inoperante', retirado:'retirado' };
+const BITOLAS = ['1/8"', '1/4"', '3/8"', '1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"'];
+const MOTIVOS_BORO = ['O fluido do vaso inviabiliza a boroscopia.', 'O vaso não tem conexão para a boroscopia.',
+  'A inspeção interna está dentro do prazo de validade.', 'O vaso está em operação: não foi possível parar e abrir.',
+  'A boroscopia foi substituída pela medição de espessura, conforme o procedimento aplicado em campo.'];
+const MOTIVOS_TESTE = ['O teste hidrostático foi feito anteriormente: para preservar o vaso, não foi repetido.',
+  'O vaso está em operação: não foi possível parar para o teste.', 'O cliente não autorizou o teste.'];
+const MOTIVOS_NAO_INSP = ['O vaso está desligado ou fora de operação.', 'Não houve acesso ao vaso.', 'O vaso foi retirado ou vendido.'];
+
+function somenteLeitura(){ $('tela').querySelectorAll('.foto.add, .foto .x').forEach(el => el.remove()); }
+const ed = v => v.inspecao && v.inspecao.situacao === 'em_campo' && v.inspecao.pode_editar !== false;
+const acessDe = v => (v.inspecao && v.inspecao.acessorios) || [];
+
+// ── estados das seções ─────────────────────────────────────────────────────
+function estVisual(v){
+  const it = (v.inspecao && v.inspecao.visual) || [];
+  if (!it.length || it.every(x => x.conforme == null)) return 'vazia';
+  const ok = it.every(x => x.conforme === true || (x.conforme === false && (x.anomalia || '').trim() && fotosDe(v, 'visual', x.item).length));
+  return ok ? 'ok' : 'inc';
+}
+function estAcess(v){
+  const l = acessDe(v);
+  if (v.inspecao && v.inspecao.acessorios_conferidos && l.every(a => a.situacao)) return 'ok';
+  return l.length || (v.inspecao && v.inspecao.acessorios_conferidos) ? 'inc' : 'vazia';
+}
+function boroValida(b){
+  if (!b || b.realizada == null) return false;
+  if (b.realizada) return b.resultado === 'sem_anomalia' || (b.resultado === 'com_anomalia' && (b.anomalia || '').trim());
+  return !!(b.motivo_nao || '').trim();
+}
+function estBoro(v){
+  const b = v.inspecao && v.inspecao.boroscopia;
+  if (!b || b.realizada == null) return 'vazia';
+  if (!boroValida(b)) return 'inc';
+  return b.resultado === 'com_anomalia' && !fotosDe(v, 'boroscopia').length ? 'inc' : 'ok';
+}
+function testeValido(t){
+  if (!t || t.realizado == null) return false;
+  if (t.realizado) return !!t.tipo && t.pressao_mpa > 0 && (t.resultado === 'aprovado' || (t.resultado === 'reprovado' && (t.anomalia || '').trim()));
+  return !!(t.motivo_nao || '').trim();
+}
+function estTeste(v){
+  const t = v.inspecao && v.inspecao.teste;
+  if (!t || t.realizado == null) return 'vazia';
+  if (!testeValido(t)) return 'inc';
+  return t.resultado === 'reprovado' && !fotosDe(v, 'teste').length ? 'inc' : 'ok';
+}
+function estFech(v){
+  if (!v.inspecao) return 'vazia';
+  if (v.inspecao.situacao !== 'em_campo' && v.inspecao.situacao !== 'em_preparo') return 'ok';
+  return fotosDe(v, 'capa').length ? 'inc' : 'vazia';
+}
+/** O que impede o envio: a mesma lista do servidor (tf__insp_faltas_envio). */
+function faltasEnvio(v){
+  const f = [], i = v.inspecao || {};
+  if (!fotosDe(v, 'plaqueta').length) f.push('Falta a foto da plaqueta.');
+  const vis = i.visual || [];
+  if (!vis.length || vis.every(x => x.conforme == null)) f.push('Exame visual sem resposta.');
+  else {
+    vis.filter(x => x.conforme == null).forEach(x => f.push('Exame visual: "' + x.item + '" sem resposta.'));
+    vis.filter(x => x.conforme === false && !(x.anomalia || '').trim()).forEach(x => f.push('Exame visual: "' + x.item + '" sem a descrição da anomalia.'));
+    vis.filter(x => x.conforme === false && !fotosDe(v, 'visual', x.item).length).forEach(x => f.push('Exame visual: "' + x.item + '" não conforme sem foto.'));
+  }
+  if (!i.acessorios_conferidos) f.push('Acessórios: confirme a lista (mesmo que o vaso não tenha nenhum).');
+  acessDe(v).filter(a => !a.situacao).forEach(a => f.push('Acessório "' + (a.tag || a.marca || TIPOS_ACESS[a.tipo] || a.tipo) + '" sem a situação.'));
+  // S80 · R03b: o ultrassom (mesma ordem e texto do servidor)
+  if (!i.medidor_id) f.push('Ultrassom: escolha o medidor de espessura.');
+  compsAtivos(v).filter(c => !c.nao_medir && !leiturasDe(v, c.id).length && !((i.ultrassom_sem_leitura || {})[c.id] || '').trim())
+    .sort((a, b) => (a.ordem || 0) - (b.ordem || 0)).forEach(c => f.push('Ultrassom: "' + c.nome + '" sem leitura nem motivo.'));
+  if (!boroValida(i.boroscopia)) f.push('Boroscopia sem resposta.');
+  else if (i.boroscopia.resultado === 'com_anomalia' && !fotosDe(v, 'boroscopia').length) f.push('Boroscopia com anomalia sem foto.');
+  if (!testeValido(i.teste)) f.push('Teste de pressão sem resposta.');
+  else if (i.teste.resultado === 'reprovado' && !fotosDe(v, 'teste').length) f.push('Teste de pressão reprovado sem foto.');
+  if (!fotosDe(v, 'capa').length) f.push('Falta a foto de capa.');
+  return f;
+}
+function avisosEnvio(v){
+  const a = alertas(v).slice();
+  try{ previa(v).avisos.forEach(x => a.push(x)); }catch(e){ a.push('Prévia do cálculo: ' + e.message); }
+  avisosAcess(v).forEach(x => a.push(x));
+  return a;
+}
+
+// ── gravar (fila) ──────────────────────────────────────────────────────────
+function gravarVisual(v){
+  // não conforme ainda sem a descrição vai como "sem resposta": o servidor
+  // recusaria a lista inteira, e o que já foi respondido se perderia
+  const itens = (v.inspecao.visual || []).map((x, n) => ({ item:x.item, ordem:n + 1,
+    conforme: x.conforme === false && !(x.anomalia || '').trim() ? null : x.conforme,
+    anomalia: x.conforme === false ? (x.anomalia || '').trim() || null : null }));
+  enfileirar(v, 'visual', 'exame visual', { funcao:'tf_insp_visual_gravar', payload:{ p_id:v.inspecao.id, p_itens:itens } });
+}
+const ACESS_OK = ['id','tipo','tag','marca','modelo','conexao','escala','pressao_ajuste_mpa','lacre_num','situacao','camara_id','unidade_campo','observacao','ordem','origem_id'];
+function gravarAcess(v, a){
+  enfileirar(v, 'acess-' + a.id, (TIPOS_ACESS[a.tipo] || 'acessório').toLowerCase(), { funcao:'tf_insp_acessorio_gravar',
+    payload:{ p_id:v.inspecao.id, p_dados:pegar(a, ACESS_OK) } });
+}
+function gravarBoro(v){
+  const b = v.inspecao.boroscopia;
+  const dados = boroValida(b) ? { realizada:b.realizada, resultado:b.realizada ? b.resultado : null, anomalia:b.anomalia || null, motivo_nao:b.realizada ? null : b.motivo_nao } : null;
+  enfileirar(v, 'boro', 'boroscopia', { funcao:'tf_insp_boroscopia_gravar', payload:{ p_id:v.inspecao.id, p_dados:dados } });
+}
+function gravarTeste(v){
+  const t = v.inspecao.teste;
+  const dados = testeValido(t) ? pegar(t, ['realizado','tipo','pressao_mpa','duracao_min','resultado','anomalia','motivo_nao',
+    'th_fabricacao_comprovado','th_comprovacao','unidade_campo']) : null;
+  enfileirar(v, 'teste', 'teste de pressão', { funcao:'tf_insp_teste_gravar', payload:{ p_id:v.inspecao.id, p_dados:dados } });
+}
+const adiar2 = debounce((tipo, v, x) => {
+  if (tipo === 'visual') gravarVisual(v); else if (tipo === 'acess') gravarAcess(v, x);
+  else if (tipo === 'boro') gravarBoro(v); else if (tipo === 'teste') gravarTeste(v);
+  else if (tipo === 'fech') enfileirar(v, 'fech', 'observações', { funcao:'tf_insp_fechamento_gravar', payload:{ p_id:v.inspecao.id, p_dados:{ observacao:v.inspecao.observacao || null } } });
+}, 700);
+
+// ── exame visual ───────────────────────────────────────────────────────────
+function telaVisual(v){
+  titulo('Exame visual', v.tag);
+  const i = v.inspecao;
+  if (!i.visual || !i.visual.length){ i.visual = ITENS_VISUAL.map((n, k) => ({ item:n, conforme:null, anomalia:null, ordem:k + 1 })); salvar(); }
+  const pode = ed(v);
+  let h = '<p class="muted" style="margin:0 2px 10px">Não conforme pede a descrição e pelo menos uma foto. A conclusão do exame sai sozinha.</p>';
+  i.visual.forEach((x, k) => {
+    h += '<div class="card"><div class="ct" style="display:flex;align-items:center;gap:8px"><b style="flex:1">' + esc(x.item) + '</b>' +
+      (k >= ITENS_VISUAL.length && pode ? '<button class="btn peq perigo" data-vrm="' + k + '">Tirar</button>' : '') + '</div>' +
+      '<div class="seg" data-vis="' + k + '"><button data-c="1" class="' + (x.conforme === true ? 'on' : '') + '">Conforme</button>' +
+      '<button data-c="0" class="' + (x.conforme === false ? 'on' : '') + '">Não conforme</button></div>';
+    if (x.conforme === false){
+      h += '<label class="f">O que foi encontrado<small>Local, tamanho, tipo (corrosão, deformação, vazamento…)</small><textarea class="t" data-van="' + k + '">' + esc(x.anomalia || '') + '</textarea></label>';
+      h += gradeFotos(v, 'visual', 7, null, x.item);
+    }
+    h += '</div>';
+  });
+  if (pode) h += '<button class="btn sec" id="visMais">+ outro item</button>';
+  const nc = i.visual.filter(x => x.conforme === false).length;
+  h += '<div class="card"><b>Conclusão</b><p class="info" style="margin:4px 0 0">' +
+    (i.visual.some(x => x.conforme == null) ? 'Responda todos os itens.' : nc ? 'Com anomalias (' + nc + ' não conforme' + (nc > 1 ? 's' : '') + ').' : 'Sem anomalias.') + '</p></div>';
+  $('tela').innerHTML = h;
+  if (!pode){ $('tela').querySelectorAll('button,textarea').forEach(el => { el.disabled = true; }); somenteLeitura(); return; }
+  $('tela').querySelectorAll('[data-vis]').forEach(seg => seg.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => {
+    const x = i.visual[Number(seg.dataset.vis)];
+    x.conforme = b.dataset.c === '1'; if (x.conforme) x.anomalia = null;
+    salvar(); adiar2('visual:' + v.id, 'visual', v); pintar();
+  })));
+  $('tela').querySelectorAll('[data-van]').forEach(el => el.addEventListener('input', () => {
+    i.visual[Number(el.dataset.van)].anomalia = el.value; salvar(); adiar2('visual:' + v.id, 'visual', v);
+  }));
+  i.visual.filter(x => x.conforme === false).forEach(x => ligarFotos(v, 'visual', () => x.item, x.item));
+  $('tela').querySelectorAll('[data-vrm]').forEach(b => b.addEventListener('click', () => {
+    i.visual.splice(Number(b.dataset.vrm), 1); salvar(); gravarVisual(v); pintar();
+  }));
+  ligar('visMais', () => janela('Outro item do exame', '<label class="f">Nome do item<input class="t" id="viNome" placeholder="Ex.: Isolamento térmico"></label>',
+    [{ rotulo:'Cancelar' }, { rotulo:'Acrescentar', classe:'pri', acao:() => {
+      const n = ($('viNome').value || '').trim(); if (!n){ U.toast('Escreva o nome.', 'err'); return false; }
+      if (i.visual.some(x => x.item.toUpperCase() === n.toUpperCase())){ U.toast('Esse item já está na lista.', 'err'); return false; }
+      i.visual.push({ item:n, conforme:null, anomalia:null }); salvar(); gravarVisual(v); N.janela.fechar(); pintar();
+    } }]), 'click');
+}
+
+// ── acessórios ─────────────────────────────────────────────────────────────
+function pmtaVigenteCam(v, camId){
+  const cs = ativas(v), c = cs.find(x => x.id === camId) || (cs.length === 1 ? cs[0] : null);
+  if (c && c.pmta_vigente_mpa) return c.pmta_vigente_mpa;
+  const la = v.laudo_anterior; return la && la.situacao === 'conferido' && cs.length <= 1 ? la.pmta_mpa : null;
+}
+function avisosAcess(v){
+  const a = [], l = acessDe(v).filter(x => x.situacao !== 'retirado');
+  l.filter(x => VALVULAS.includes(x.tipo) && x.pressao_ajuste_mpa != null).forEach(x => {
+    const p = pmtaVigenteCam(v, x.camara_id);
+    if (p && x.pressao_ajuste_mpa > p + 1e-9) a.push((TIPOS_ACESS[x.tipo]) + (x.lacre_num ? ' lacre ' + x.lacre_num : '') + ': ajuste ' + fmt(x.pressao_ajuste_mpa, 3) +
+      ' MPa acima da PMTA vigente (' + fmt(p, 3) + ' MPa). NR-13 13.5.1.2 "a".');
+  });
+  const cs = ativas(v);
+  cs.forEach(c => {
+    const tem = l.some(x => x.tipo === 'valvula_seguranca' && (cs.length === 1 || x.camara_id === c.id));
+    if (!tem && (v.inspecao && v.inspecao.acessorios_conferidos)) a.push('Sem válvula de segurança' + (cs.length > 1 ? ' na câmara ' + c.nome : '') + '.');
+  });
+  return a;
+}
+function novoAcess(v, base){
+  const a = Object.assign({ tipo:'valvula_seguranca', situacao:null, camara_id:ativas(v).length === 1 ? ativas(v)[0].id : null, unidade_campo:unidadeDe(v) }, base || {},
+    { id:uid(), ordem:acessDe(v).length + 1 });
+  v.inspecao.acessorios = acessDe(v).concat([a]); salvar(); gravarAcess(v, a);
+  return a;
+}
+function telaAcessorios(v){
+  titulo('Acessórios', v.tag);
+  const i = v.inspecao, pode = ed(v), l = acessDe(v), cs = ativas(v);
+  const ant = (v.acessorios_anteriores || []).filter(x => !l.some(y => y.origem_id === x.id));
+  let h = '';
+  const av = avisosAcess(v);
+  if (av.length) h += '<div class="alerta"><b>Atenção</b><ul>' + av.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
+  if (pode && ant.length && !l.length)
+    h += '<div class="card"><b>Da inspeção anterior</b><p class="muted" style="margin:2px 0 0">' + ant.length + ' acessório(s): ' +
+      esc(ant.map(x => TIPOS_ACESS[x.tipo] + (x.lacre_num ? ' (lacre ' + x.lacre_num + ')' : '')).join(', ')) +
+      '. Traga e confirme um por um.</p><button class="btn pri" id="acAnt">Trazer os da inspeção anterior</button></div>';
+  l.forEach(a => {
+    const u = a.unidade_campo || unidadeDe(v);
+    h += '<div class="card" data-ac="' + esc(a.id) + '"><div style="display:flex;gap:8px;align-items:center"><b style="flex:1">' + esc(TIPOS_ACESS[a.tipo] || a.tipo) +
+      (a.origem_id ? ' <span class="chip">da anterior</span>' : '') + '</b>' +
+      (pode && !a.origem_id ? '<button class="btn peq perigo" data-acrm="' + esc(a.id) + '">Tirar</button>' : '') + '</div>';
+    h += '<label class="f">Tipo<select class="t" data-k="tipo">' + Object.keys(TIPOS_ACESS).map(t => '<option value="' + t + '"' + (t === a.tipo ? ' selected' : '') + '>' + TIPOS_ACESS[t] + '</option>').join('') + '</select></label>';
+    h += '<label class="f">Situação<div class="seg sit" data-sit>' + Object.keys(SIT_ACESS).map(s => '<button data-s="' + s + '" class="' + (a.situacao === s ? 'on' : '') + '">' + SIT_ACESS[s] + '</button>').join('') + '</div></label>';
+    if (a.situacao !== 'retirado' && a.situacao !== 'ausente'){
+      h += '<div class="lin">' + campoTexto('TAG', 'ac_tag_' + a.id, a.tag, 'data-k="tag"') + campoTexto('Lacre', 'ac_lac_' + a.id, a.lacre_num, 'data-k="lacre_num" inputmode="numeric"') + '</div>';
+      h += '<div class="lin">' + campoTexto('Marca', 'ac_mar_' + a.id, a.marca, 'data-k="marca"') + campoTexto('Modelo', 'ac_mod_' + a.id, a.modelo, 'data-k="modelo"') + '</div>';
+      h += '<label class="f">Conexão<select class="t" data-k="conexao"><option value="">—</option>' + BITOLAS.map(b => '<option' + (b === a.conexao ? ' selected' : '') + '>' + esc(b) + '</option>').join('') +
+        (a.conexao && BITOLAS.indexOf(a.conexao) < 0 ? '<option selected>' + esc(a.conexao) + '</option>' : '') + '<option value="+">Outra…</option></select></label>';
+      if (VALVULAS.includes(a.tipo)) h += campoPressao('Pressão de ajuste', 'ac_p_' + a.id, a.pressao_ajuste_mpa, u, 'Como está na válvula ou no certificado');
+      if (MEDIDORES.includes(a.tipo)) h += campoTexto('Escala', 'ac_esc_' + a.id, a.escala, 'data-k="escala" placeholder="Ex.: 0 a 16 bar"');
+      if (cs.length > 1) h += '<label class="f">Câmara<select class="t" data-k="camara_id"><option value="">—</option>' +
+        cs.map(c => '<option value="' + esc(c.id) + '"' + (c.id === a.camara_id ? ' selected' : '') + '>' + esc(c.nome) + '</option>').join('') + '</select></label>';
+      h += '<p style="margin:12px 0 0;font-size:13px;font-weight:600;color:var(--ink-2)">Foto do item</p>' + gradeFotos(v, 'acessorios', 3, null, a.id);
+    }
+    h += '</div>';
+  });
+  if (pode) h += '<button class="btn sec" id="acMais">+ acessório</button>';
+  h += '<div class="card"><div class="chk" style="margin-top:0"><input type="checkbox" id="acConf"' + (i.acessorios_conferidos ? ' checked' : '') + (pode ? '' : ' disabled') +
+    '><label for="acConf">Conferi: a lista está completa' + (l.length ? '' : ' (o vaso não tem acessório)') + '</label></div></div>';
+  $('tela').innerHTML = h;
+  l.forEach(a => ligarFotos(v, 'acessorios', () => TIPOS_ACESS[a.tipo] + (a.lacre_num ? ' · lacre ' + a.lacre_num : ''), a.id));
+  if (!pode){ $('tela').querySelectorAll('input,select,button').forEach(el => { el.disabled = true; }); somenteLeitura(); return; }
+  const mudou = (a, k, val) => { a[k] = val; salvar(); adiar2('acess:' + a.id, 'acess', v, a); };
+  $('tela').querySelectorAll('[data-ac]').forEach(card => {
+    const a = l.find(x => x.id === card.dataset.ac); if (!a) return;
+    card.querySelectorAll('[data-k]').forEach(el => el.addEventListener('change', () => {
+      const k = el.dataset.k;
+      if (k === 'conexao' && el.value === '+'){
+        janela('Conexão', '<label class="f">Bitola<input class="t" id="acBit"></label>', [{ rotulo:'Cancelar', acao:() => pintar() }, { rotulo:'Usar', classe:'pri', acao:() => {
+          const b = ($('acBit').value || '').trim(); if (!b){ U.toast('Escreva a bitola.', 'err'); return false; } mudou(a, 'conexao', b); N.janela.fechar(); pintar(); } }]);
+        return;
+      }
+      mudou(a, k, (el.value || '').trim() || null);
+      if (k === 'tipo') pintar();
+    }));
+    const seg = card.querySelector('[data-sit]');
+    seg.querySelectorAll('[data-s]').forEach(b => b.addEventListener('click', () => { mudou(a, 'situacao', b.dataset.s); pintar(); }));
+    ligarPressao('ac_p_' + a.id, a.unidade_campo || unidadeDe(v), m => { mudou(a, 'pressao_ajuste_mpa', m); pintar(); });
+  });
+  $('tela').querySelectorAll('[data-acrm]').forEach(b => b.addEventListener('click', () => {
+    const a = l.find(x => x.id === b.dataset.acrm);
+    if (a.origem_id){ U.toast('Este veio da inspeção anterior: se saiu do vaso, marque "retirado" (o laudo registra).', 'err'); return; }
+    N.janela.confirmar('Tirar este acessório?', '<p>Use só para o que foi lançado por engano.</p>', 'Tirar', true).then(s => {
+      if (!s) return;
+      i.acessorios = l.filter(x => x.id !== a.id); salvar();
+      enfileirar(v, 'acessrm-' + a.id, 'tirar acessório', { funcao:'tf_insp_acessorio_remover', payload:{ p_acessorio:a.id } }, null, true);
+      pintar();
+    });
+  }));
+  ligar('acAnt', () => {
+    ant.forEach(x => novoAcess(v, { tipo:x.tipo, tag:x.tag, marca:x.marca, modelo:x.modelo, conexao:x.conexao, escala:x.escala,
+      pressao_ajuste_mpa:x.pressao_ajuste_mpa, lacre_num:x.lacre_num, camara_id:x.camara_id, unidade_campo:x.unidade_campo || unidadeDe(v), origem_id:x.id }));
+    pintar();
+  }, 'click');
+  ligar('acMais', () => {
+    janela('Novo acessório', '<div class="seg" id="naT" style="flex-direction:column">' +
+      Object.keys(TIPOS_ACESS).map(t => '<button data-t="' + t + '">' + TIPOS_ACESS[t] + '</button>').join('') + '</div>', [{ rotulo:'Cancelar' }]);
+    document.querySelectorAll('#naT [data-t]').forEach(x => x.addEventListener('click', () => { novoAcess(v, { tipo:x.dataset.t }); N.janela.fechar(); pintar(); }));
+  }, 'click');
+  ligar('acConf', el => {
+    i.acessorios_conferidos = el.checked; salvar();
+    enfileirar(v, 'acconf', 'acessórios conferidos', { funcao:'tf_insp_acessorios_conferidos', payload:{ p_id:i.id, p_ok:el.checked } });
+    pintar();
+  });
+}
+
+// ── boroscopia ─────────────────────────────────────────────────────────────
+function telaBoroscopia(v){
+  titulo('Boroscopia', v.tag);
+  const i = v.inspecao, pode = ed(v);
+  const b = i.boroscopia || (i.boroscopia = { realizada:null });
+  const motOutro = b.motivo_nao && MOTIVOS_BORO.indexOf(b.motivo_nao) < 0;
+  let h = '<div class="card"><b>Foi feita a inspeção interna por boroscopia?</b><div class="seg" id="bR"><button data-r="1" class="' + (b.realizada === true ? 'on' : '') + '">Sim</button>' +
+    '<button data-r="0" class="' + (b.realizada === false ? 'on' : '') + '">Não</button></div>';
+  if (b.realizada === true){
+    h += '<label class="f">Resultado<div class="seg" id="bRes"><button data-x="sem_anomalia" class="' + (b.resultado === 'sem_anomalia' ? 'on' : '') + '">Sem anomalia</button>' +
+      '<button data-x="com_anomalia" class="' + (b.resultado === 'com_anomalia' ? 'on' : '') + '">Com anomalia</button></div></label>';
+    if (b.resultado === 'com_anomalia') h += '<label class="f">O que foi encontrado<textarea class="t" id="bAn">' + esc(b.anomalia || '') + '</textarea></label>';
+    h += '<p style="margin:12px 0 0;font-size:13px;font-weight:600;color:var(--ink-2)">Fotos' + (b.resultado === 'com_anomalia' ? ' (obrigatória)' : '') + '</p>' + gradeFotos(v, 'boroscopia', 4);
+  } else if (b.realizada === false){
+    h += '<label class="f">Motivo<select class="t" id="bMot"><option value="">—</option>' + MOTIVOS_BORO.map(m => '<option' + (m === b.motivo_nao ? ' selected' : '') + '>' + esc(m) + '</option>').join('') +
+      '<option value="+"' + (motOutro || b._outro ? ' selected' : '') + '>Outro…</option></select></label>';
+    if (motOutro || b._outro) h += '<label class="f">Qual<textarea class="t" id="bMotTx">' + esc(motOutro ? b.motivo_nao : '') + '</textarea></label>';
+  }
+  h += '</div>';
+  $('tela').innerHTML = h;
+  ligarFotos(v, 'boroscopia', () => 'Boroscopia');
+  if (!pode){ $('tela').querySelectorAll('input,select,button,textarea').forEach(el => { el.disabled = true; }); somenteLeitura(); return; }
+  const mudou = () => { salvar(); adiar2('boro:' + v.id, 'boro', v); };
+  $('bR').querySelectorAll('[data-r]').forEach(x => x.addEventListener('click', () => {
+    b.realizada = x.dataset.r === '1'; b.resultado = null; b.anomalia = null; b.motivo_nao = null; b._outro = false; mudou(); pintar();
+  }));
+  const res = $('bRes'); if (res) res.querySelectorAll('[data-x]').forEach(x => x.addEventListener('click', () => { b.resultado = x.dataset.x; if (b.resultado !== 'com_anomalia') b.anomalia = null; mudou(); pintar(); }));
+  ligar('bAn', el => { b.anomalia = el.value; mudou(); }, 'input');
+  ligar('bMot', el => { if (el.value === '+'){ b._outro = true; b.motivo_nao = null; mudou(); pintar(); return; } b._outro = false; b.motivo_nao = el.value || null; mudou(); pintar(); });
+  ligar('bMotTx', el => { b.motivo_nao = el.value.trim() || null; mudou(); }, 'input');
+}
+
+// ── teste de pressão (um por vaso, D3) ─────────────────────────────────────
+function telaTeste(v){
+  titulo('Teste de pressão', v.tag);
+  const i = v.inspecao, pode = ed(v), u = unidadeDe(v);
+  const t = i.teste || (i.teste = { realizado:null });
+  const pth = Math.max(0, ...ativas(v).map(c => c.pth_mpa || 0)) || null;
+  let h = '<div class="card"><b>Foi feito o teste de pressão?</b><div class="seg" id="tR"><button data-r="1" class="' + (t.realizado === true ? 'on' : '') + '">Sim</button>' +
+    '<button data-r="0" class="' + (t.realizado === false ? 'on' : '') + '">Não</button></div>';
+  if (t.realizado === true){
+    h += '<label class="f">Tipo<div class="seg" id="tTipo">' + [['hidrostatico','Hidrostático'],['pneumatico','Pneumático'],['hidropneumatico','Hidropneumático']]
+      .map(x => '<button data-t="' + x[0] + '" class="' + (t.tipo === x[0] ? 'on' : '') + '">' + x[1] + '</button>').join('') + '</div></label>';
+    h += '<div class="lin"><div>' + campoPressao('Pressão do teste', 'tP', t.pressao_mpa, u, pth ? 'PTH da plaqueta: ' + fmt(deMPa(pth, u), 3) + ' ' + UNID_ROT[u] : null) + '</div><div>' +
+      campoNum('Duração (min)', 'tD', t.duracao_min, null, 'inputmode="numeric"') + '</div></div>';
+    h += '<label class="f">Resultado<div class="seg" id="tRes"><button data-x="aprovado" class="' + (t.resultado === 'aprovado' ? 'on' : '') + '">Aprovado</button>' +
+      '<button data-x="reprovado" class="' + (t.resultado === 'reprovado' ? 'on' : '') + '">Reprovado</button></div></label>';
+    if (t.resultado === 'reprovado') h += '<label class="f">O que reprovou<textarea class="t" id="tAn">' + esc(t.anomalia || '') + '</textarea></label>';
+    h += '<p style="margin:12px 0 0;font-size:13px;font-weight:600;color:var(--ink-2)">Fotos' + (t.resultado === 'reprovado' ? ' (obrigatória)' : '') + '</p>' + gradeFotos(v, 'teste', 3);
+  } else if (t.realizado === false){
+    const outro = t.motivo_nao && MOTIVOS_TESTE.indexOf(t.motivo_nao) < 0;
+    h += '<label class="f">Motivo<select class="t" id="tMot"><option value="">—</option>' + MOTIVOS_TESTE.map(m => '<option' + (m === t.motivo_nao ? ' selected' : '') + '>' + esc(m) + '</option>').join('') +
+      '<option value="+"' + (outro || t._outro ? ' selected' : '') + '>Outro…</option></select></label>';
+    if (outro || t._outro) h += '<label class="f">Qual<textarea class="t" id="tMotTx">' + esc(outro ? t.motivo_nao : '') + '</textarea></label>';
+    h += '<div class="chk"><input type="checkbox" id="tTh"' + (t.th_fabricacao_comprovado ? ' checked' : '') + '><label for="tTh">O teste de fabricação está comprovado (NR-13 13.5.4.3)</label></div>';
+    if (t.th_fabricacao_comprovado) h += campoTexto('Comprovado por', 'tThTx', t.th_comprovacao, 'placeholder="Ex.: certificado do fabricante no prontuário"');
+  }
+  h += '</div>';
+  $('tela').innerHTML = h;
+  ligarFotos(v, 'teste', () => 'Teste de pressão');
+  if (!pode){ $('tela').querySelectorAll('input,select,button,textarea').forEach(el => { el.disabled = true; }); somenteLeitura(); return; }
+  const mudou = () => { salvar(); adiar2('teste:' + v.id, 'teste', v); };
+  $('tR').querySelectorAll('[data-r]').forEach(x => x.addEventListener('click', () => {
+    const r = x.dataset.r === '1';
+    i.teste = { realizado:r, unidade_campo:u, tipo:r ? 'hidrostatico' : null, pressao_mpa:r ? pth : null }; mudou(); pintar();
+  }));
+  const tp = $('tTipo'); if (tp) tp.querySelectorAll('[data-t]').forEach(x => x.addEventListener('click', () => { t.tipo = x.dataset.t; mudou(); pintar(); }));
+  ligarPressao('tP', u, m => { t.pressao_mpa = m; t.unidade_campo = u; mudou(); }, 150);
+  ligar('tD', el => { const d = numOuAviso(el, 1, 1440, 'Duração'); if (d !== undefined){ t.duracao_min = d == null ? null : Math.round(d); mudou(); } });
+  const tr = $('tRes'); if (tr) tr.querySelectorAll('[data-x]').forEach(x => x.addEventListener('click', () => { t.resultado = x.dataset.x; if (t.resultado !== 'reprovado') t.anomalia = null; mudou(); pintar(); }));
+  ligar('tAn', el => { t.anomalia = el.value; mudou(); }, 'input');
+  ligar('tMot', el => { if (el.value === '+'){ t._outro = true; t.motivo_nao = null; mudou(); pintar(); return; } t._outro = false; t.motivo_nao = el.value || null; mudou(); pintar(); });
+  ligar('tMotTx', el => { t.motivo_nao = el.value.trim() || null; mudou(); }, 'input');
+  ligar('tTh', el => { t.th_fabricacao_comprovado = el.checked; if (!el.checked) t.th_comprovacao = null; mudou(); pintar(); });
+  ligar('tThTx', el => { t.th_comprovacao = el.value.trim() || null; mudou(); });
+}
+
+// ── fechamento e envio ─────────────────────────────────────────────────────
+function telaFechamento(v){
+  titulo('Fechamento e envio', v.tag);
+  const i = v.inspecao, pode = ed(v);
+  if (!pode){
+    $('tela').innerHTML = '<div class="card"><b>' + (i.nao_inspecionado_motivo ? 'Vaso não inspecionado' : 'Inspeção enviada') + '</b><p class="info" style="margin:4px 0 0">' +
+      esc(i.nao_inspecionado_motivo || 'O escritório revisa a partir daqui. Para corrigir algo, peça ao escritório para reabrir.') + '</p></div>' +
+      (i.observacao ? '<div class="card"><b>Observações</b><p class="info" style="margin:4px 0 0">' + esc(i.observacao) + '</p></div>' : '');
+    return;
+  }
+  const f = faltasEnvio(v), a = avisosEnvio(v);
+  let h = '';
+  h += f.length ? '<div class="alerta" style="background:var(--crit-soft);color:var(--crit)"><b>Falta para enviar</b><ul>' + f.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>'
+               : '<div class="alerta" style="background:var(--ok-soft);color:var(--ok)"><b>Pronto para enviar</b>Tudo o que é obrigatório foi preenchido.</div>';
+  if (a.length) h += '<div class="alerta"><b>Avisos</b><ul>' + a.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
+  h += '<div class="card"><label class="f">Observações do vaso<small>O que o escritório precisa saber e não coube nas seções.</small><textarea class="t" id="fObs">' + esc(i.observacao || '') + '</textarea></label></div>';
+  h += '<div class="card"><b>Foto de capa</b><p class="muted" style="margin:2px 0 0">O vaso inteiro, de frente: vai na capa do laudo.</p>' + gradeFotos(v, 'capa', 1) + '</div>';
+  h += '<button class="btn pri" id="fEnviar"' + (f.length ? ' disabled' : '') + '>Enviar a inspeção deste vaso</button>';
+  h += '<p class="muted" style="text-align:center;margin-top:6px">Depois de enviar, o campo não altera mais. Sem sinal, vai quando o sinal voltar.</p>';
+  h += '<button class="btn perigo" id="fNao">Não foi possível inspecionar este vaso</button>';
+  $('tela').innerHTML = h;
+  ligarFotos(v, 'capa', () => 'Capa');
+  ligar('fObs', el => { i.observacao = el.value.trim() || null; salvar(); adiar2('fech:' + v.id, 'fech', v); }, 'input');
+  const fechar = (situ, motivo) => {
+    i.situacao = 'enviada'; i.pode_editar = false; if (motivo) i.nao_inspecionado_motivo = motivo; salvar();
+  };
+  ligar('fEnviar', () => {
+    N.janela.confirmar('Enviar a inspeção do ' + v.tag + '?', '<p>Depois de enviar, o campo não altera mais este vaso.</p>', 'Enviar').then(s => {
+      if (!s) return;
+      if (i.observacao !== undefined) enfileirar(v, 'fech', 'observações', { funcao:'tf_insp_fechamento_gravar', payload:{ p_id:i.id, p_dados:{ observacao:i.observacao || null } } });
+      enfileirar(v, 'enviar-' + i.id, 'enviar', { funcao:'tf_insp_enviar', payload:{ p_id:i.id } }, null, true);
+      fechar('enviada'); U.toast(navigator.onLine === false ? 'Guardado: vai quando o sinal voltar.' : 'Enviando…');
+      ir({ nome:'lista' });
+    });
+  }, 'click');
+  ligar('fNao', () => janela('Não foi possível inspecionar', '<label class="f">Motivo<select class="t" id="niSel"><option value="">—</option>' +
+      MOTIVOS_NAO_INSP.map(m => '<option>' + esc(m) + '</option>').join('') + '<option value="+">Outro…</option></select></label>' +
+      '<label class="f">Detalhe<small>Obrigatório em "Outro". Ex.: o cliente pediu nova data.</small><textarea class="t" id="niTx"></textarea></label>',
+    [{ rotulo:'Cancelar' }, { rotulo:'Confirmar', classe:'pri', acao:() => {
+      const s = $('niSel').value, tx = ($('niTx').value || '').trim();
+      const m = s && s !== '+' ? (tx ? s + ' ' + tx : s) : tx;
+      if (!m){ U.toast('Informe o motivo.', 'err'); return false; }
+      enfileirar(v, 'naoinsp-' + i.id, 'vaso não inspecionado', { funcao:'tf_insp_nao_inspecionado', payload:{ p_id:i.id, p_motivo:m } }, null, true);
+      fechar('enviada', m); N.janela.fechar(); ir({ nome:'lista' });
+    } }]), 'click');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// S80 · R03b · ULTRASSOM, CSV DO MEDIDOR E A PRÉVIA DO CÁLCULO
+// ════════════════════════════════════════════════════════════════════════════
+const MOTIVOS_US = ['Sem acesso ao componente.', 'Isolamento térmico no componente.', 'Revestimento ou pintura impede a leitura.'];
+const MAX_PONTOS = 60;
+const leiturasDe = (v, cid) => ((v.inspecao && v.inspecao.leituras) || []).filter(l => l.componente_id === cid);
+const semLeitura = v => (v.inspecao && v.inspecao.ultrassom_sem_leitura) || {};
+const compsMedir = v => compsAtivos(v).filter(c => !c.nao_medir).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+function estUltra(v){
+  const i = v.inspecao || {}, cs = compsMedir(v);
+  const feitos = cs.filter(c => leiturasDe(v, c.id).length || (semLeitura(v)[c.id] || '').trim()).length;
+  if (!i.medidor_id && !feitos) return 'vazia';
+  return i.medidor_id && feitos === cs.length ? 'ok' : 'inc';
+}
+function minimaDe(v, cid){
+  const l = leiturasDe(v, cid); if (!l.length) return null;
+  try{ return MotorNR13.minimaLeituras(l.map(x => x.valor_mm)); }catch(e){ return null; }
+}
+function materialDe(v, c){
+  const id = (c && c.material_id) || v.material_id;
+  return id ? (E.materiais || []).find(m => m.id === id) || null : null;
+}
+const camaraDe = (v, c) => v.camaras.find(k => k.id === c.camara_id) || ativas(v)[0] || null;
+
+/** Espessura mínima requerida (com o mínimo de 1,5 mm e a corrosão), ou o motivo de não dar. */
+function eMinDe(v, c){
+  const k = camaraDe(v, c), m = materialDe(v, c);
+  if (!k || k.p_operacao_max_mpa == null) return { erro:'sem a pressão de operação' };
+  if (k.pressao_externa || k.p_operacao_max_mpa <= 0) return { erro:'pressão externa: calculada no escritório' };
+  if (!m || !(m.s_mpa > 0)) return { erro:'sem o material' };
+  try{
+    const g = geoDe(v, c);
+    const e = MotorNR13.espessuraMinima(g, k.p_operacao_max_mpa, Number(m.s_mpa), g.E);
+    return { valor: Math.max(e, 1.5) + (Number(v.corrosao_mm) || 0), padrao:g.padrao };
+  }catch(e){ return { erro:e.message }; }
+}
+
+// ── gravar ─────────────────────────────────────────────────────────────────
+function gravarLeituras(v, c){
+  const l = leiturasDe(v, c.id);
+  const origem = l.length && l.every(x => x.origem === 'csv') ? 'csv' : 'digitado';
+  enfileirar(v, 'leit-' + c.id, 'espessuras ' + c.nome, { funcao:'tf_insp_leituras_gravar',
+    payload:{ p_id:v.inspecao.id, p_componente:c.id, p_leituras:l.map(x => ({ ponto:x.ponto, leitura:x.leitura, valor:x.valor_mm })), p_origem:origem } });
+}
+function gravarUS(v){
+  const i = v.inspecao;
+  enfileirar(v, 'us', 'ultrassom', { funcao:'tf_insp_ultrassom_gravar',
+    payload:{ p_id:i.id, p_dados:{ medidor_id:i.medidor_id || null, pasta:i.ultrassom_pasta || null, sem_leitura:Object.assign({}, semLeitura(v)) } } });
+}
+const adiar3 = debounce((tipo, v, x) => { if (tipo === 'leit') gravarLeituras(v, x); else gravarUS(v); }, 900);
+function porLeitura(v, cid, ponto, leitura, valor){
+  const i = v.inspecao;
+  i.leituras = (i.leituras || []).filter(x => !(x.componente_id === cid && x.ponto === ponto && x.leitura === leitura));
+  if (valor != null) i.leituras.push({ componente_id:cid, ponto, leitura, valor_mm:valor, origem:'digitado' });
+  i.leituras.sort((a, b) => a.componente_id < b.componente_id ? -1 : a.componente_id > b.componente_id ? 1 : (a.ponto - b.ponto) || (a.leitura - b.leitura));
+  salvar();
+}
+
+// ── a tela ─────────────────────────────────────────────────────────────────
+function rotMin(v, c){
+  const t = minimaDe(v, c.id), e = eMinDe(v, c);
+  let h = 'Mínima: <b>' + (t == null ? '—' : fmt(t, 2) + ' mm') + '</b>';
+  h += e.valor != null ? ' · requerida ' + fmt(e.valor, 2) + ' mm' + (e.padrao && e.padrao.length ? ' (geometria padrão)' : '') : ' · requerida: ' + esc(e.erro);
+  const baixo = t != null && e.valor != null && t < e.valor;
+  return { html:h + (baixo ? ' · <b>ABAIXO DA MÍNIMA</b>' : ''), baixo };
+}
+function pintarMin(v, c){
+  const el = $('min_' + c.id); if (!el) return;
+  const r = rotMin(v, c); el.innerHTML = r.html; el.style.color = r.baixo ? 'var(--crit)' : 'var(--accent-ink)';
+}
+function telaUltrassom(v){
+  titulo('Ultrassom', v.tag);
+  const i = v.inspecao, pode = ed(v), meds = E.medidores || [];
+  let h = '<div class="card"><b>Medidor de espessura</b>';
+  if (!meds.length && !i.medidor_id) h += '<p class="alerta" style="margin:8px 0 0">Nenhum medidor com o certificado válido no pacote. O escritório cadastra em TapDoc › Instrumentos.</p>';
+  h += '<label class="f">Medidor<small>Só os com o certificado válido hoje.</small><select class="t" id="usMed"><option value="">—</option>' +
+    meds.map(m => '<option value="' + esc(m.id) + '"' + (m.id === i.medidor_id ? ' selected' : '') + '>' + esc([m.descricao, m.marca, m.modelo, m.numero_serie && 'nº ' + m.numero_serie].filter(Boolean).join(' · ')) +
+      (m.validade ? ' (até ' + esc(String(m.validade).split('-').reverse().join('/')) + ')' : '') + '</option>').join('') +
+    (i.medidor_id && !meds.some(m => m.id === i.medidor_id) ? '<option value="' + esc(i.medidor_id) + '" selected>medidor escolhido (fora da lista)</option>' : '') + '</select></label>';
+  h += campoTexto('Pasta no medidor', 'usPasta', i.ultrassom_pasta, 'placeholder="ex.: FD-33"');
+  h += '<button class="btn sec peq" id="usCsv">Importar o CSV do medidor</button></div>';
+  const cs = compsMedir(v);
+  if (!cs.length) h += '<div class="card"><p class="muted">Nenhum componente para medir. Confira a lista em Componentes.</p></div>';
+  const multi = ativas(v).length > 1;
+  cs.forEach(c => {
+    const l = leiturasDe(v, c.id), mot = semLeitura(v)[c.id] || '';
+    const nP = Math.max(l.reduce((a, x) => Math.max(a, x.ponto), 0), (c._pontos || 0), mot ? 0 : 1);
+    h += '<div class="card"><div style="display:flex;align-items:center;gap:8px"><b style="flex:1">' + esc(c.nome) + '</b><span class="muted">' + esc(TIPOS_COMP[c.tipo] || c.tipo) +
+      (multi && camaraDe(v, c) ? ' · ' + esc(camaraDe(v, c).nome) : '') + '</span></div>';
+    if (mot){
+      h += '<div class="alerta" style="margin:8px 0 0"><b>Sem leitura</b>' + esc(mot) + '</div>';
+      if (pode) h += '<button class="btn peq" data-usvolta="' + esc(c.id) + '">Medir este componente</button>';
+    } else {
+      h += '<div class="conv" id="min_' + esc(c.id) + '"></div>';
+      for (let p = 1; p <= nP; p++){
+        h += '<div class="lin" style="align-items:flex-end;margin-top:6px"><div style="flex:0 0 34px;font-weight:700;padding-bottom:12px">P' + p + '</div>';
+        for (let r = 1; r <= 4; r++){
+          const x = l.find(y => y.ponto === p && y.leitura === r);
+          h += '<input class="t" inputmode="decimal" data-us="' + esc(c.id) + '" data-p="' + p + '" data-r="' + r + '" value="' + esc(x ? fmt(x.valor_mm, 2) : '') + '" placeholder="' + r + 'ª"' +
+            (x && x.origem === 'csv' ? ' style="background:var(--accent-soft)"' : '') + (pode ? '' : ' disabled') + '>';
+        }
+        h += '</div>';
+      }
+      if (pode) h += '<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn peq sec" data-usmais="' + esc(c.id) + '">+ ponto</button>' +
+        (!l.length ? '<button class="btn peq" data-ussem="' + esc(c.id) + '">Não deu para medir</button>' : '') + '</div>';
+    }
+    h += '</div>';
+  });
+  h += '<p class="muted">Até 4 leituras por ponto, em mm. Vale a menor de todas. Em vermelho: abaixo da espessura requerida (prévia; o oficial sai na revisão).</p>';
+  $('tela').innerHTML = h;
+  cs.forEach(c => pintarMin(v, c));
+  if (!pode){ $('tela').querySelectorAll('select, #usPasta, #usCsv').forEach(el => { el.disabled = true; }); return; }
+  ligar('usMed', el => { i.medidor_id = el.value || null; salvar(); gravarUS(v); });
+  ligar('usPasta', el => { i.ultrassom_pasta = el.value.trim() || null; salvar(); adiar3('us:' + v.id, 'us', v); });
+  $('tela').querySelectorAll('[data-us]').forEach(el => el.addEventListener('change', () => {
+    const c = v.componentes.find(x => x.id === el.dataset.us); if (!c) return;
+    const x = numOuAviso(el, 0.01, 300, 'Leitura');
+    if (x === undefined) return;
+    porLeitura(v, c.id, +el.dataset.p, +el.dataset.r, x);
+    el.style.background = '';
+    pintarMin(v, c);
+    adiar3('leit:' + c.id, 'leit', v, c);
+  }));
+  $('tela').querySelectorAll('[data-usmais]').forEach(b => b.addEventListener('click', () => {
+    const c = v.componentes.find(x => x.id === b.dataset.usmais);
+    const nP = Math.max(leiturasDe(v, c.id).reduce((a, x) => Math.max(a, x.ponto), 0), c._pontos || 1);
+    if (nP >= MAX_PONTOS){ U.toast('No máximo ' + MAX_PONTOS + ' pontos por componente.', 'err'); return; }
+    c._pontos = nP + 1; salvar(); pintar();
+    const el = document.querySelector('[data-us="' + c.id + '"][data-p="' + c._pontos + '"][data-r="1"]'); if (el) el.focus();
+  }));
+  $('tela').querySelectorAll('[data-ussem]').forEach(b => b.addEventListener('click', () => {
+    const c = v.componentes.find(x => x.id === b.dataset.ussem);
+    janela('Sem leitura · ' + c.nome, '<label class="f">Motivo<select class="t" id="usmSel"><option value="">—</option>' +
+      MOTIVOS_US.map(m => '<option>' + esc(m) + '</option>').join('') + '<option value="+">Outro…</option></select></label>' +
+      '<label class="f">Detalhe<small>Obrigatório em "Outro".</small><textarea class="t" id="usmTx"></textarea></label>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Confirmar', classe:'pri', acao:() => {
+        const s = $('usmSel').value, tx = ($('usmTx').value || '').trim();
+        const m = s && s !== '+' ? (tx ? s + ' ' + tx : s) : tx;
+        if (!m){ U.toast('Informe o motivo.', 'err'); return false; }
+        i.ultrassom_sem_leitura = Object.assign({}, semLeitura(v), { [c.id]:m }); salvar(); gravarUS(v); setTimeout(pintar, 0);
+      } }]);
+  }));
+  $('tela').querySelectorAll('[data-usvolta]').forEach(b => b.addEventListener('click', () => {
+    const s2 = Object.assign({}, semLeitura(v)); delete s2[b.dataset.usvolta];
+    i.ultrassom_sem_leitura = s2; salvar(); gravarUS(v); pintar();
+  }));
+  ligar('usCsv', () => importarCsv(v), 'click');
+}
+
+// ── o CSV do medidor (colunas Spot_No, Reading_No e Reading) ───────────────
+function lerCsv(txt){
+  const linhas = String(txt).replace(/^﻿/, '').split(/\r?\n/).filter(x => x.trim());
+  if (!linhas.length) throw new Error('Arquivo vazio.');
+  const sep = [';', '\t', ','].find(c => linhas[0].indexOf(c) >= 0) || ',';
+  const cab = linhas[0].split(sep).map(x => x.trim().replace(/^"|"$/g, '').toLowerCase());
+  const iS = cab.indexOf('spot_no'), iN = cab.indexOf('reading_no'), iR = cab.indexOf('reading');
+  if (iS < 0 || iR < 0) throw new Error('O arquivo não tem as colunas Spot_No e Reading.');
+  const spots = [], por = {};
+  linhas.slice(1).forEach((ln, n) => {
+    const c = ln.split(sep).map(x => x.trim().replace(/^"|"$/g, ''));
+    const sp = c[iS], val = num(c[iR]);
+    if (!sp) return;
+    if (val == null || Number.isNaN(val) || val <= 0 || val > 300) throw new Error('Linha ' + (n + 2) + ': leitura inválida (' + (c[iR] || 'vazia') + ').');
+    if (!por[sp]){ por[sp] = []; spots.push(sp); }
+    por[sp].push({ n: iN >= 0 ? Number(c[iN]) || por[sp].length + 1 : por[sp].length + 1, val });
+  });
+  if (!spots.length) throw new Error('Nenhuma leitura no arquivo.');
+  spots.forEach(sp => por[sp].sort((a, b) => a.n - b.n));
+  return { spots, por };
+}
+function importarCsv(v){
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.csv,text/csv,text/plain';
+  inp.addEventListener('change', () => {
+    const f = inp.files && inp.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => { try{ distribuirCsv(v, lerCsv(rd.result)); }catch(e){ U.toast(e.message, 'err'); } };
+    rd.readAsText(f);
+  });
+  inp.click();
+}
+function distribuirCsv(v, d){
+  const cs = compsMedir(v).filter(c => !(semLeitura(v)[c.id] || '').trim());
+  const n = d.spots.length;
+  // sugestão: divide os pontos do arquivo na ordem dos componentes, em partes iguais
+  const passo = Math.max(1, Math.floor(n / Math.max(1, cs.length)));
+  let h = '<p class="info" style="margin-top:0">O arquivo tem <b>' + n + ' ponto' + (n > 1 ? 's' : '') + '</b> (do ' + esc(d.spots[0]) + ' ao ' + esc(d.spots[n - 1]) +
+    '). Diga quais pontos (pela ordem no arquivo, 1 a ' + n + ') vão para cada componente. Componente em branco fica como está.</p>';
+  h += '<p class="muted">Substitui as leituras já digitadas do componente.</p>';
+  cs.forEach((c, k) => {
+    const de = k * passo + 1, ate = k === cs.length - 1 ? n : Math.min(n, (k + 1) * passo);
+    h += '<div class="lin" style="align-items:flex-end"><div style="flex:2;font-weight:600;padding-bottom:12px">' + esc(c.nome) + '</div>' +
+      '<label class="f">de<input class="t" inputmode="numeric" id="cd_' + esc(c.id) + '" value="' + (de <= n ? de : '') + '"></label>' +
+      '<label class="f">até<input class="t" inputmode="numeric" id="ca_' + esc(c.id) + '" value="' + (de <= n ? ate : '') + '"></label></div>';
+  });
+  janela('Importar o CSV', h, [{ rotulo:'Cancelar' }, { rotulo:'Conferir', classe:'pri', acao:() => {
+    const usados = new Set(), plano = [];
+    for (const c of cs){
+      const de = num($('cd_' + c.id).value), ate = num($('ca_' + c.id).value);
+      if (de == null && ate == null) continue;
+      if (!(de >= 1 && ate >= de && ate <= n && Number.isInteger(de) && Number.isInteger(ate))){ U.toast(c.nome + ': faixa inválida (1 a ' + n + ').', 'err'); return false; }
+      if (ate - de + 1 > MAX_PONTOS){ U.toast(c.nome + ': no máximo ' + MAX_PONTOS + ' pontos.', 'err'); return false; }
+      for (let p = de; p <= ate; p++){ if (usados.has(p)){ U.toast('O ponto ' + p + ' do arquivo está em dois componentes.', 'err'); return false; } usados.add(p); }
+      plano.push({ c, de, ate });
+    }
+    if (!plano.length){ U.toast('Nenhuma faixa preenchida.', 'err'); return false; }
+    setTimeout(() => conferirCsv(v, d, plano), 0);
+  } }]);
+}
+function conferirCsv(v, d, plano){
+  let corte = 0;
+  const novo = plano.map(({ c, de, ate }) => {
+    const l = [];
+    for (let p = de; p <= ate; p++){
+      const rs = d.por[d.spots[p - 1]];
+      if (rs.length > 4) corte++;
+      rs.slice(0, 4).forEach((r, k) => l.push({ componente_id:c.id, ponto:p - de + 1, leitura:k + 1, valor_mm:Math.round(r.val * 100) / 100, origem:'csv' }));
+    }
+    return { c, l };
+  });
+  const h = novo.map(({ c, l }) => {
+    const mn = MotorNR13.minimaLeituras(l.map(x => x.valor_mm));
+    return '<div class="fl"><b>' + esc(c.nome) + '</b>' + (l.length ? new Set(l.map(x => x.ponto)).size + ' pontos, ' + l.length + ' leituras · mínima ' + fmt(mn, 2) + ' mm' : '') + '</div>';
+  }).join('') + (corte ? '<p class="alerta" style="margin-top:8px">' + corte + ' ponto(s) com mais de 4 leituras: ficaram as 4 primeiras.</p>' : '');
+  janela('Conferir antes de gravar', h, [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
+    const i = v.inspecao;
+    novo.forEach(({ c, l }) => {
+      i.leituras = (i.leituras || []).filter(x => x.componente_id !== c.id).concat(l);
+      c._pontos = 0;
+      gravarLeituras(v, c);
+    });
+    salvar(); U.toast('Leituras importadas.'); setTimeout(pintar, 0);
+  } }]);
+}
+
+// ── a prévia do cálculo (motor no aparelho, sem sinal) ─────────────────────
+const RISCO = { A:4, B:3, C:2, D:1 };
+function previa(v){
+  const r = { camaras:[], vaso:null, avisos:[], detalhes:[] };
+  const cs = ativas(v), u = unidadeDe(v);
+  const m = materialDe(v, null);
+  if (!m) r.avisos.push('Prévia: sem o material do costado (Operação e câmaras), a PMTA não sai.');
+  else {
+    if (!m.conferido) r.avisos.push('O material ' + m.especificacao + ' é da lista provisória, ainda não conferida pelo Fernando: a prévia é indicativa.');
+    cs.forEach(k => { if (m.t_max_c != null && k.t_operacao_c != null && Number(k.t_operacao_c) > Number(m.t_max_c))
+      r.avisos.push('Temperatura de operação' + (cs.length > 1 ? ' (' + k.nome + ')' : '') + ' acima de ' + fmt(m.t_max_c, 0) + ' °C: o S do material não vale.'); });
+  }
+  const padrao = new Set();
+  cs.forEach(k => {
+    const ck = { cam:k, comps:[], governante:null, erro:null };
+    const P = k.p_operacao_max_mpa;
+    if (P == null) ck.erro = 'Sem a pressão de operação.';
+    else if (k.pressao_externa || P <= 0) ck.erro = 'Pressão externa (vácuo): a PMTA externa é do escritório (PLH).';
+    else if (!m) ck.erro = 'Sem o material.';
+    compsMedir(v).filter(c => camaraDe(v, c) === k).forEach(c => {
+      const t = minimaDe(v, c.id), x = { c, tMin:t, eMin:null, pmta:null, erro:null, abaixo:false };
+      if (!ck.erro){
+        try{
+          const g = geoDe(v, c), mc = materialDe(v, c);
+          const res = MotorNR13.calcularVaso({ pOperacaoMPa:P, S:Number(mc.s_mpa), corrosaoMm:Number(v.corrosao_mm) || 0,
+            componentes:[Object.assign({}, g, { leituras:leiturasDe(v, c.id).map(y => y.valor_mm) })] });
+          const rc = res.componentes[0];
+          x.eMin = rc.eMin; x.pmta = rc.pmtaMPa; x.abaixo = rc.abaixoDaMinima;
+          g.padrao.forEach(p => padrao.add(c.nome));
+        }catch(e){ x.erro = e.message; }
+      }
+      ck.comps.push(x);
+    });
+    const ok = ck.comps.filter(x => x.pmta != null);
+    if (ok.length) ck.governante = ok.reduce((a, b) => b.pmta < a.pmta ? b : a);
+    const nm = cs.length > 1 ? ' (' + k.nome + ')' : '';
+    if (ck.governante && ck.governante.pmta < P) r.avisos.push('PMTA calculada' + nm + ' de ' + fmt(deMPa(ck.governante.pmta, u), 2) + ' ' + UNID_ROT[u] + ', abaixo da pressão de operação (' + ck.governante.c.nome + ').');
+    ck.comps.filter(x => x.abaixo).forEach(x => r.avisos.push(x.c.nome + ': espessura medida abaixo da mínima requerida.'));
+    ck.comps.filter(x => x.erro).forEach(x => r.detalhes.push(x.c.nome + ': ' + x.erro));
+    r.camaras.push(ck);
+  });
+  if (padrao.size) r.detalhes.push('Geometria padrão (a validar pelo Fernando) em: ' + [...padrao].join(', ') + '.');
+  // a categoria do vaso pela conta única (pendência 20)
+  try{
+    if (!cs.length) throw new Error('Sem câmaras.');
+    if (cs.some(k => k.p_operacao_max_mpa == null || !k.classe_fluido)) throw new Error('Falta a pressão de operação ou a classe do fluido.');
+    if (cs.some(k => k.volume_desconhecido || !(k.volume_m3 > 0))) throw new Error('Volume desconhecido: o escritório informa o volume para a categoria.');
+    const kP = cs.reduce((a, b) => Math.abs(b.p_operacao_max_mpa) > Math.abs(a.p_operacao_max_mpa) ? b : a);
+    const V = cs.reduce((a, k) => a + Number(k.volume_m3), 0);
+    const classe = cs.map(k => String(k.classe_fluido).toUpperCase()).reduce((a, b) => RISCO[b] > RISCO[a] ? b : a);
+    const cat = MotorNR13.categoria(classe, kP.p_operacao_max_mpa, V);
+    const pr = MotorNR13.prazos(cat.categoria, { semCodigoConstrucao:!!v.sem_codigo_construcao, temperaturaAbaixoDeZeroSemDeterioracao:!!v.abaixo_zero_sem_deterioracao });
+    r.vaso = { P:kP.p_operacao_max_mpa, deCamara:kP, V, classe, pv:cat.pv, grupo:cat.grupo, categoria:cat.categoria, prazos:pr };
+  }catch(e){ r.vaso = { erro:e.message }; }
+  return r;
+}
+function telaPrevia(v){
+  titulo('Prévia do cálculo', v.tag);
+  const u = unidadeDe(v), pr = (x, c) => x == null ? '—' : fmt(deMPa(x, u), c == null ? 2 : c) + ' ' + UNID_ROT[u] + (u !== 'MPa' ? ' <span class="muted">(' + fmt(x, 3) + ' MPa)</span>' : '');
+  let r;
+  try{ r = previa(v); }catch(e){ $('tela').innerHTML = '<div class="card">' + esc(e.message) + '</div>'; return; }
+  const m = materialDe(v, null);
+  let h = '<div class="alerta" style="background:var(--accent-soft);color:var(--accent-ink)"><b>Só informativa</b>O resultado oficial é calculado e gravado na revisão, no escritório.</div>';
+  if (r.avisos.length) h += '<div class="alerta"><b>Avisos</b><ul>' + r.avisos.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
+  h += '<div class="card"><b>Material</b><p class="info" style="margin:4px 0 0">' + (m ? esc(m.especificacao + (m.forma ? ' (' + m.forma + ')' : '')) + ' · S = ' + fmt(m.s_mpa, 1) + ' MPa' +
+    (m.conferido ? '' : ' · <span class="chip inc">provisório</span>') : 'não informado') + (Number(v.corrosao_mm) ? ' · corrosão ' + fmt(v.corrosao_mm, 2) + ' mm' : '') + '</p></div>';
+  r.camaras.forEach(ck => {
+    h += '<div class="card cam"><div class="ct"><span>' + esc(ck.cam.nome) + '</span></div><div class="classe">Pressão de operação: ' + pr(ck.cam.p_operacao_max_mpa) + '</div>';
+    if (ck.erro) h += '<p class="muted" style="margin:6px 0 0">' + esc(ck.erro) + '</p>';
+    ck.comps.forEach(x => {
+      const gov = ck.governante && ck.governante.c.id === x.c.id;
+      h += '<div class="fl"' + (x.abaixo ? ' style="color:var(--crit)"' : '') + '><b>' + esc(x.c.nome) + (gov ? ' · governante' : '') + '</b>' +
+        (x.erro ? '<span class="mot">' + esc(x.erro) + '</span>' : x.tMin == null && (semLeitura(v)[x.c.id] || '').trim() ? '<span class="muted">sem leitura: ' + esc(semLeitura(v)[x.c.id]) + '</span>' :
+          'medida ' + (x.tMin == null ? '—' : fmt(x.tMin, 2) + ' mm') + ' · requerida ' + (x.eMin == null ? '—' : fmt(x.eMin, 2) + ' mm') + ' · PMTA ' + pr(x.pmta)) + '</div>';
+    });
+    if (ck.governante) h += '<p style="margin:8px 0 0"><b>PMTA calculada: ' + pr(ck.governante.pmta) + '</b></p>';
+    h += '</div>';
+  });
+  h += '<div class="card"><b>O vaso · categoria e prazos</b>';
+  if (r.vaso.erro) h += '<p class="muted" style="margin:4px 0 0">' + esc(r.vaso.erro) + '</p>';
+  else {
+    const z = r.vaso;
+    h += '<p class="info" style="margin:4px 0 0">P = ' + pr(z.P) + (ativas(v).length > 1 ? ' (de ' + esc(z.deCamara.nome) + ')' : '') + ' · V = ' + fmt(z.V, 3) + ' m³ · classe ' + z.classe + '</p>' +
+      '<p class="info" style="margin:2px 0 0">P·V = ' + fmt(z.pv, 3) + ' · grupo ' + z.grupo + ' · <b>categoria ' + z.categoria + '</b></p>' +
+      '<p class="info" style="margin:2px 0 0">Próximas: externa em ' + z.prazos.externo + ' ano' + (z.prazos.externo > 1 ? 's' : '') +
+      ' · interna ' + (z.prazos.interno == null ? 'a critério do PLH' : 'em ' + z.prazos.interno + ' anos') + ' <span class="muted">· item ' + esc(z.prazos.regra) + ' da NR-13</span></p>';
+    if (ativas(v).length > 1) h += '<p class="muted" style="margin:6px 0 0">Conta única: a maior pressão entre as câmaras, o volume total e o fluido de maior risco.</p>';
+  }
+  h += '</div>';
+  if (r.detalhes.length) h += '<div class="card"><b>Observações do cálculo</b><ul style="margin:4px 0 0;padding-left:18px">' + r.detalhes.map(x => '<li class="info">' + esc(x) + '</li>').join('') + '</ul></div>';
+  h += '<p class="rodape">Motor ' + esc(MotorNR13.versao || '') + '</p>';
+  $('tela').innerHTML = h;
+}
 
 // ── início ─────────────────────────────────────────────────────────────────
 function demo(){
