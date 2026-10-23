@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S76</title>
+<title>TapFlow Manager · S78</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -219,6 +219,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 .btn:hover{background:var(--surface-2)}
 .btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn.pri:hover{filter:brightness(1.1)}
+/* S78 · o "Abrir a preparação" é um link (vai para doc/) com cara de botão */
+a.btn{display:inline-block;text-decoration:none;cursor:pointer}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 /* S45 · item 4: o botão que ainda não vale — branco, letra cinza, não grava.
    NÃO é `disabled`: botão desabilitado não recebe o toque, e no celular (sem
@@ -2313,7 +2315,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S76';
+const APP_VERSION = 'S78';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -3351,6 +3353,9 @@ function pintarDrawer(){
         bcp.addEventListener('click', ev => { ev.stopPropagation(); confirmarParalela(card, t); });
         d.appendChild(bcp);
       }
+      // S78 · a T05 "Preparar a inspeção" aberta fora da tarefa atual: em vez
+      // do "concluir" (que o banco recusaria), o caminho para a preparação
+      if (!eAtual && podePreparar(t)) d.appendChild(botaoPreparacao(card.os_id, true));
       if (!podeTrocar && !eAtual && possoAssumir(t)){
         const ba = document.createElement('button');
         ba.className = 'btn mini'; ba.type = 'button'; ba.textContent = 'assumir';
@@ -3802,6 +3807,15 @@ function pintarAcoes_(){
       + ' — conclua pelo botão "concluir" na linha dela, acima.';
     cx.appendChild(hp);
   }
+  // S78 · a preparação da inspeção aberta em paralelo também é dita aqui
+  const preps = tarefas.filter(x => x.tarefa_id !== card.tarefa_atual_id && podePreparar(x));
+  if (preps.length){
+    const hp = document.createElement('div');
+    hp.className = 'hint paralela';
+    hp.textContent = '"' + preps[0].nome + '" está aberta: ela conclui no TapDoc, quando a preparação '
+      + 'estiver completa. Use "abrir a preparação" na linha dela, acima.';
+    cx.appendChild(hp);
+  }
 
   if (!podeAgir){
     hint.textContent = 'Esta tarefa é de ' + t.perfis_responsaveis.join(' ou ')
@@ -3932,7 +3946,19 @@ function pintarAcoes_(){
        { label:'Sim, foi feito', pri:true, onClick: async () => {
            fecharModal(); await agir('concluir', t); }}]);
   });
+  // S78 · T05 com a trava: o botão principal é a preparação; o "Concluir"
+  // fica como segunda opção (o banco só aceita com a preparação completa)
+  if (pedePreparacao(t)){
+    row.appendChild(botaoPreparacao(card.os_id, false));
+    bc.className = 'btn';
+  }
   row.appendChild(bc);
+  if (pedePreparacao(t)){
+    hint.textContent = 'Esta tarefa conclui quando a preparação no TapDoc estiver completa (vasos marcados, '
+      + 'laudo anterior conferido, instruções para o campo). O "Concluir" daqui só passa depois disso — '
+      + 'antes, o TapFlow diz o que falta.';
+    return;
+  }
   hint.textContent = fecha
     ? 'Esta tarefa ' + (fecha === 'fechar_os' ? 'encerra a OS' : 'fecha a fase')
       + ' — o TapFlow pede confirmação antes.'
@@ -4205,7 +4231,35 @@ const carRecNome = r => ((r && String(r.descricao || '').match(/[A-Za-zÀ-ÿ]/g)
 function temRequisitosObrigatorios(t){
   const r = t.requisitos || {};
   return (r.fotos || []).some(f => (f.min || 0) > 0) || (r.checklist || []).some(q => q.obrigatoria)
-      || !!r.agenda;   // S61 · o "Agendar serviço" pede a janela de agendamento
+      || !!r.agenda    // S61 · o "Agendar serviço" pede a janela de agendamento
+      || !!r.preparacao;   // S78 · a T05 "Preparar a inspeção" só conclui com a preparação completa (401)
+}
+// ── S78 · A T05 "PREPARAR A INSPEÇÃO" (pedido do central, S77) ─────────────
+// A 401 pôs no banco a trava: a T05 com `requisitos.preparacao` (OS novas) não
+// conclui enquanto a preparação no TapDoc (`doc/`) não estiver completa. A tela
+// do Manager não refaz a conta: ela leva até a preparação, e o "Concluir" que
+// sobra recebe a mensagem do banco se ainda faltar alguma coisa.
+const pedePreparacao = t => !!(t && t.requisitos && t.requisitos.preparacao);
+const linkPreparacao = osId => '../doc/#os=' + encodeURIComponent(osId);
+/** Quem abre a preparação daqui: quem faria a tarefa (o admin, ou o perfil da
+ *  T05). A porta do TapDoc no hub segue a mesma gente (técnico adm e admin). */
+function podePreparar(t){
+  if (!pedePreparacao(t) || (t.status !== 'pendente' && t.status !== 'em_andamento')) return false;
+  if (sessao.admin) return true;
+  const ps = t.perfis_responsaveis || [];
+  return !ps.length || ps.includes(sessao.perfil);
+}
+function botaoPreparacao(osId, mini){
+  const a = document.createElement('a');
+  a.className = mini ? 'btn mini pri' : 'btn pri';
+  a.href = linkPreparacao(osId);
+  a.textContent = mini ? 'abrir a preparação' : 'Abrir a preparação';
+  a.title = 'Abre a preparação desta OS no TapDoc (marcar os vasos, conferir o laudo anterior, instruções para o campo).';
+  a.addEventListener('click', ev => {
+    ev.stopPropagation();
+    if (DEMO){ ev.preventDefault(); toast('Modo demonstração: a preparação abre no TapDoc (doc/) com o banco ligado.', 'err'); }
+  });
+  return a;
 }
 function possoConcluirParalela(t, card){
   if (!t || !card || t.tarefa_id === card.tarefa_atual_id) return false;
@@ -4494,7 +4548,9 @@ function demoSeed(){
     Object.assign(T('T03','Agendar serviço (data e hora)','manual','Agendamento',20,1,'bloqueado',['comercial','tecnico_adm','inspetor'],null,['campo']),
                   { requisitos: { agenda: { tarefa:'T06', hora:true, rotulo:'a inspeção' } } }),
     T('T04','Emitir ART','manual','Documentação pré-inspeção',30,1,'bloqueado',['tecnico_adm'],null,['adm']),
-    T('T05','Lançar no TapDoc','manual','Documentação pré-inspeção',30,2,'bloqueado',['tecnico_adm'],null,['adm']),
+    // S78 · o nome e a trava da 401 (OS novas): "Preparar a inspeção", só conclui com a preparação completa
+    Object.assign(T('T05','Preparar a inspeção','manual','Documentação pré-inspeção',30,2,'bloqueado',['tecnico_adm'],null,['adm']),
+                  { requisitos: { preparacao: true } }),
     T('T06','Executar a inspeção','manual','Inspeção em campo',40,1,'bloqueado',['inspetor','auxiliar'],null,['campo']),
     T('T07','Extrair e tratar o CSV','manual','Processamento e revisão',50,1,'bloqueado',['inspetor','auxiliar'],null,['campo']),
     T('T08','Gerar documentações no TapDoc Web','manual','Processamento e revisão',50,2,'bloqueado',['inspetor','auxiliar'],null,['campo']),
@@ -13178,7 +13234,7 @@ const _demoTpl = [
   ['INSPECAO_NR13','Inspeção NR-13','T02','Lançar na planilha de controle','Administrativo inicial',['admin','tecnico_adm'],'adm',1],
   ['INSPECAO_NR13','Inspeção NR-13','T03','Agendar serviço (data e hora)','Agendamento',['comercial','tecnico_adm','inspetor'],'ambos',1],
   ['INSPECAO_NR13','Inspeção NR-13','T04','Emitir ART','Documentação pré-inspeção',['tecnico_adm'],'adm',3],
-  ['INSPECAO_NR13','Inspeção NR-13','T05','Lançar no TapDoc','Documentação pré-inspeção',['tecnico_adm'],'adm',3],
+  ['INSPECAO_NR13','Inspeção NR-13','T05','Preparar a inspeção','Documentação pré-inspeção',['tecnico_adm'],'adm',3],
   ['INSPECAO_NR13','Inspeção NR-13','T06','Executar a inspeção','Inspeção em campo',['inspetor','auxiliar'],'campo',2],
   ['ACESSORIOS_NR13','Fornecimento de Acessórios','T01','Aceitar OS e deslocar','Aberta',['inspetor','auxiliar'],'campo',1],
   ['ACESSORIOS_NR13','Fornecimento de Acessórios','T04','Conferir levantamento','Orçamento',['tecnico_adm','compras','comercial'],'adm',2],
