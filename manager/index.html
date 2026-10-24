@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S82</title>
+<title>TapFlow Manager · S87</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2319,7 +2319,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S82';
+const APP_VERSION = 'S87';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -16364,6 +16364,7 @@ function montarNav(){
     });
     el.appendChild(d);
   });
+  filtrarNavArea();   // S87 · só o menu do módulo aberto
 }
 
 const ROTULO = { campo:'Equipes de Inspeção', adm:'Equipe Administrativa',
@@ -16382,7 +16383,10 @@ NAV.forEach(g => g.itens.forEach(i => { GRUPO_DE[i.v] = g.rot; }));
 // O Manager tem várias áreas; cada uma pinta a moldura (menu lateral, "Flow"
 // do logo, barra do item ativo, faixa do topo, barra da janela) com a cor do
 // card do hub que leva a ela. Botões, links e cores de significado não mudam.
-const AREA_DO_GRUPO = { quadros:'gestao', analise:'gestao', operacao:'tapflow', rh:'taprh', cadastros:'cadastros' };
+// S87 (Bruno, 24/10): os quadros das OS (Administrativa, Inspeção, Técnico
+// Administrativa, Fornecimento) são o fluxo da OS: passam para o TapFlow. A
+// Gestão fica com os Relatórios; a Equipe Comercial é do TapCRM.
+const AREA_DO_GRUPO = { quadros:'tapflow', analise:'gestao', operacao:'tapflow', rh:'taprh', cadastros:'cadastros' };
 const AREA_DA_TELA  = { com:'tapcrm', rhs:'tapseg' };   // as que fogem do grupo
 const AREA = {};
 NAV.forEach(g => g.itens.forEach(i => { const a = AREA_DA_TELA[i.v] || AREA_DO_GRUPO[g.id]; if (a) AREA[i.v] = a; }));
@@ -16390,6 +16394,29 @@ let AREA_ATUAL = 'tapflow';   // Meu perfil e Configurações ficam na área de 
 function aplicarArea(v){
   if (AREA[v]) AREA_ATUAL = AREA[v];
   try{ if (window.TapModulos) TapModulos.aplicar(AREA_ATUAL); }catch(e){}
+  filtrarNavArea();   // S87
+}
+// ── S87 · SEPARAÇÃO VISUAL: O MENU MOSTRA SÓ O MÓDULO DA ÁREA ABERTA ─────────
+// (Bruno, 24/10: "hoje você acessa o TapFlow e aparecem links de outros módulos
+// também"). Os outros módulos ficam no "Trocar de módulo". Meu perfil,
+// Configurações e Sair (sem área) ficam em todos. Quem pode ver cada tela não
+// muda: o menu é montado por `navVisivel()` como antes, e este filtro só
+// ESCONDE o que é de outra área — os contadores continuam vivos, escondidos.
+function filtrarNavArea(){
+  const el = document.getElementById('navGroups');
+  if (!el) return;
+  el.querySelectorAll('.nav-group').forEach(g => {
+    let n = 0;
+    g.querySelectorAll('.nav-item').forEach(b => {
+      const a = AREA[b.dataset.v];
+      const mostra = !a || a === AREA_ATUAL;
+      b.hidden = !mostra;
+      if (mostra) n++;
+    });
+    g.hidden = !n;
+    const gn = g.querySelector('.nav-gn');
+    if (gn) gn.textContent = n;
+  });
 }
 // S82 · as telas do Financeiro saíram do Manager: o caminho é o `fin/`
 const FIN_SAIU = ['finp','fincr','finre','finpg','fincar','finrec','finprz','finb','finrsv','fincat','finrl','ccp'];

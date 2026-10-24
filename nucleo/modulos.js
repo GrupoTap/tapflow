@@ -53,14 +53,14 @@
 
   // A ordem é a dos cards do hub. `chave` = a porta do servidor (tf_hub_modulos).
   var LISTA = [
-    { chave: 'tapflow',   titulo: 'TapFlow',    texto: 'OS, quadros e agenda',          cor: '#1D4ED8', href: 'manager/?ir=age' },
+    { chave: 'tapflow',   titulo: 'TapFlow',    texto: 'OS, quadros e agenda',          cor: '#1D4ED8', href: 'manager/?ir=adm' },   // S87: abre no quadro da Administrativa
     { chave: 'tapcrm',    titulo: 'TapCRM',     texto: 'Negócios e propostas',          cor: '#C2410C', href: 'manager/?ir=com' },
     { chave: 'tapfin',    titulo: 'TapFin',     texto: 'Financeiro e cartões',          cor: '#15803D', href: 'fin/' },
     { chave: 'taprh',     titulo: 'TapRH',      texto: 'Pessoal, diárias e ponto',      cor: '#6D28D9', href: 'manager/?ir=rhf' },
     { chave: 'tapseg',    titulo: 'TapSeg',     texto: 'EPI, ASO e treinamentos',       cor: '#BE123C', href: 'manager/?ir=rhs' },
     { chave: 'tapdoc',    titulo: 'TapDoc',     texto: 'Preparar a inspeção NR-13',     cor: '#A16207', href: 'doc/' },
     { chave: 'cadastros', titulo: 'Cadastros',  texto: 'Clientes e catálogo',           cor: '#334155', href: 'manager/?ir=cad' },
-    { chave: 'gestao',    titulo: 'Gestão',     texto: 'Quadros e relatórios',          cor: '#A21CAF', href: 'manager/' },
+    { chave: 'gestao',    titulo: 'Gestão',     texto: 'Relatórios',                    cor: '#A21CAF', href: 'manager/?ir=rel' },   // S87: os quadros passaram ao TapFlow
     { chave: 'campo',     titulo: 'Campo',      texto: 'Levantamento, mesmo sem sinal', cor: '#0E7490', href: 'field/' },
     // "Minha área" (antes "Minha Segurança"): o autoatendimento de quem não usa o Campo.
     { chave: 'seg',       titulo: 'Minha área', texto: 'EPI, ponto e diárias',          cor: '#5B7189', href: 'field/' }

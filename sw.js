@@ -29,7 +29,7 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H10-S86';   // S86 · TapDoc E6 e TapDoc 8 (407, R04a) e o motor R00.3: o doc/ e o field/doc/ mudaram
+const VERSAO = 'H10-S87';   // S87 · Manager com o menu por módulo (TapFlow) e o modulos.js com os cards do TapFlow e da Gestão
 const CACHE  = 'tapflow-hub-' + VERSAO;
 
 const ESSENCIAIS = [
