@@ -24,7 +24,7 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S38-T6';   // S84: TapDoc 6 (a faixa de resistência abaixo do material)
+const VERSAO = 'S38-T7';   // S85: TapDoc 7 (material do escritório; troca em campo com motivo)
 const CACHE  = 'tapflow-field-' + VERSAO;
 
 const ESSENCIAIS = [

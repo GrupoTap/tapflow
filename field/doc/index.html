@@ -161,7 +161,7 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 6';   // S84 · 405: a faixa de resistência abaixo do material (TapDoc 5: moldura H10; S80 · R03b: ultrassom e prévia)
+const VERSAO = 'TapDoc 7';   // S85 · 406: o material vem do escritório; trocar em campo pede o motivo (TapDoc 6: faixa; 5: moldura H10)
 // 405: uma linha curta com a faixa do material, para conferir com a plaqueta ou o certificado da chapa
 function linhaFaixa(m){
   if (!m || m.resist_min_mpa == null) return '';
@@ -273,6 +273,9 @@ function normVaso(sv){
     ultrassom_sem_leitura:Object.assign({}, sv.inspecao.ultrassom_sem_leitura || {}) }) : null;
   v.acessorios_anteriores = sv.acessorios_anteriores || [];
   v.laudo_anterior = sv.laudo_anterior || null;
+  // 406: o material que o escritório definiu (a referência) e o motivo de uma troca em campo já gravada
+  v._matEsc = (sv.inspecao && sv.inspecao.material_escritorio_id) || sv.material_id || null;
+  v._matMotivo = (sv.inspecao && sv.inspecao.material_campo_motivo) || null;
   v._pv = {};
   return v;
 }
@@ -813,8 +816,12 @@ function telaOperacao(v){
   h += campoNum('Circunferência medida (mm)', 'oCirc', v.circunferencia_mm, 'Com a trena, por fora do costado.');
   h += '<label class="f">Material do costado<select class="t" id="oMat"><option value="">não sei / ver no laudo</option>' +
     mats.map(m => '<option value="' + esc(m.id) + '"' + (m.id === v.material_id ? ' selected' : '') + '>' + esc(m.especificacao + (m.forma ? ' (' + m.forma + ')' : '')) + '</option>').join('') + '</select></label>';
-  const mSel = mats.find(m => m.id === v.material_id), lf = linhaFaixa(mSel);
+  if (v._matEsc === undefined) v._matEsc = v.material_id || null;   // pacote antigo (antes do TapDoc 7)
+  const mSel = mats.find(m => m.id === v.material_id), lf = linhaFaixa(mSel), mEsc = mats.find(m => m.id === v._matEsc);
   h += '<div class="faixa" id="oFaixa"' + (lf ? '' : ' hidden') + '>' + esc(lf) + '</div>';
+  h += '<p class="muted" id="oMatEsc" style="margin:6px 0 0">' + (mEsc ? 'Definido pelo escritório: <b>' + esc(mEsc.especificacao + (mEsc.forma ? ' (' + mEsc.forma + ')' : '')) + '</b>'
+    : 'O escritório não definiu o material: escolha pela plaqueta ou pelo laudo.') + '</p>';
+  if (v._matEsc && v.material_id !== v._matEsc) h += '<p class="alerta" id="oMatCampo" style="margin:6px 0 0">Alterado em campo' + (v._matMotivo ? ': ' + esc(v._matMotivo) : '') + '. O escritório confere.</p>';
   h += '<p class="muted" style="margin-top:10px">A categoria é calculada (veja a prévia do cálculo no painel do vaso). Ninguém escolhe a categoria.</p></div>';
   cs.forEach(c => {
     const conhecido = FLUIDOS.some(f => f[0] === c.fluido);
@@ -842,8 +849,22 @@ function telaOperacao(v){
 
   $('oPos').querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => { mudouVaso(v, 'posicao', b.dataset.p); pintar(); }));
   ligar('oCirc', el => { const x = numOuAviso(el, 1, 100000, 'Circunferência'); if (x !== undefined) mudouVaso(v, 'circunferencia_mm', x); });
-  ligar('oMat', el => { mudouVaso(v, 'material_id', el.value || null);
-    const lf = linhaFaixa(mats.find(m => m.id === el.value)), cx = $('oFaixa'); if (cx){ cx.textContent = lf; cx.hidden = !lf; } });
+  ligar('oMat', el => {
+    const novo = el.value || null;
+    const aplica = motivo => {
+      if (motivo){ v._pv.material_motivo = motivo; v._matMotivo = motivo; } else { delete v._pv.material_motivo; v._matMotivo = null; }
+      mudouVaso(v, 'material_id', novo); pintar();
+    };
+    // 406: trocar o material do escritório pede o motivo; voltar a ele (ou vaso sem material) não
+    if (!v._matEsc || novo === v._matEsc){ aplica(null); return; }
+    janela('Trocar o material do escritório?',
+      '<p>O escritório definiu <b>' + esc((mats.find(m => m.id === v._matEsc) || {}).especificacao || 'outro material') + '</b>. Diga por que é diferente em campo.</p>'
+      + '<label class="f">Motivo<textarea class="t" id="matMot" placeholder="Ex.: plaqueta indica SA-285 Gr. C">' + esc(v._matMotivo || '') + '</textarea></label>'
+      + '<p class="muted">Fotografe a plaqueta (Identificação). O escritório confere a troca.</p>',
+      [{ rotulo:'Cancelar', acao:() => { el.value = v.material_id || ''; } },
+       { rotulo:'Trocar', classe:'pri', acao:() => { const m = ($('matMot').value || '').trim();
+           if (m.length < 5){ U.toast('Escreva o motivo (pelo menos 5 letras).', 'err'); return false; } aplica(m); } }]);
+  });
   $('tela').querySelectorAll('[data-cam]').forEach(el => el.addEventListener('change', () => {
     const c = v.camaras.find(x => x.id === el.dataset.cam); if (!c) return;
     if (el.dataset.k === 'tipo'){ mudouCam(v, c, 'tipo', el.value); if (/^(Única|Casco|Tubos|Camisa)$/.test(c.nome)) mudouCam(v, c, 'nome', TIPOS_CAM[el.value]); pintar(); return; }

@@ -141,7 +141,7 @@ details.op summary{font-weight:700;font-size:13.5px;cursor:pointer;color:var(--a
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E4';   // E = escritório · E4 (S84 · 405): faixa de resistência do material e o S do ASME como teto (E3: moldura H10)
+const VERSAO = 'TapDoc E5';   // E = escritório · E5 (S85 · 406): troca de material em campo, com a decisão do escritório (E4: faixa; E3: moldura H10)
 // 405: a faixa de resistência (norma do material) e o S esperado pelo ASME (fator 3,5; 2/3 do escoamento; costura × 0,85)
 function faixaTxt(m){
   if (!m || m.resist_min_mpa == null) return 'faixa de resistência não cadastrada';
@@ -160,6 +160,25 @@ function contaS(rmin, resc, forma, s){
   if (!(s > 0)) return '<p class="sAviso">' + conta + '</p>';
   const ok = Math.abs(s - e) <= e * 0.02;
   return '<p class="sAviso ' + (ok ? 'ok' : 'ruim') + '">' + (ok ? '✓ Confere: ' : '⚠ Não confere: ') + conta + (ok ? '' : ' (cadastrado: ' + fmt(s, 1) + ' MPa)') + '</p>';
+}
+// 406: a troca de material feita em campo e a decisão do escritório
+function quadroMaterialCampo(ins){
+  const mc = ins && ins.material_campo; if (!mc) return '';
+  const quando = mc.em ? new Date(mc.em).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+  let h = '<div class="card" id="cxMatCampo" style="border-left:4px solid #B42318"><h3 style="margin-top:0">Material alterado em campo</h3>'
+    + '<p>De <b>' + esc(mc.de || '—') + '</b> (escritório) para <b>' + esc(mc.para || 'nenhum') + '</b> (campo).</p>'
+    + '<p class="muted">Motivo: ' + esc(mc.motivo || '') + (mc.por ? ' · ' + esc(mc.por) : '') + (quando ? ' · ' + quando : '') + '</p>';
+  if (mc.decisao) h += '<p><span class="chip s-pronto">' + (mc.decisao === 'aceito' ? 'aceito: fica o de campo' : 'revertido: voltou o do escritório') + '</span>' + (mc.decidido_por ? ' <span class="muted">' + esc(mc.decidido_por) + '</span>' : '') + '</p>';
+  else h += '<p class="muted">O cálculo oficial espera esta decisão.</p><div class="linha"><button class="btn pri" data-matdec="1">Aceitar o de campo</button><button class="btn" data-matdec="0">Voltar ao do escritório</button></div>';
+  return h + '</div>';
+}
+function ligarMaterialCampo(ins){
+  document.querySelectorAll('[data-matdec]').forEach(b => b.addEventListener('click', async () => {
+    const aceitar = b.dataset.matdec === '1';
+    try{ await rpc('tf_insp_material_campo_decidir', { p_id: ins.id, p_aceitar: aceitar });
+      U.toast(aceitar ? 'Aceito: fica o material de campo.' : 'Voltou o material do escritório.', 'ok'); PREP = null; pintar(); }
+    catch(e){ erro(e); }
+  }));
 }
 function quadroFaixa(m){
   if (!m) return '';
@@ -427,7 +446,8 @@ function tabelaVasos(lista, marcados){
       return '<tr><td><input type="checkbox" class="ck" data-marca="' + esc(v.id) + '"' + (ins ? ' checked' : '') + (emCampo ? ' disabled title="Já começou em campo"' : '') + '></td>'
         + '<td><b>' + esc(v.tag) + '</b>' + (v.nome ? '<div class="muted">' + esc(v.nome) + '</div>' : '') + '</td>'
         + '<td>' + (marcados ? chipSit(v.situacao) : '<span class="chip s-fora">fora desta OS</span>')
-        + (emCampo ? '<div class="muted">em campo</div>' : '') + '</td>'
+        + (emCampo ? '<div class="muted">em campo</div>' : '')
+        + (ins && ins.material_campo && !ins.material_campo.decisao ? '<div><span class="chip s-grave">material alterado em campo</span></div>' : '') + '</td>'
         + (marcados ? '<td class="h-ins"><textarea class="instr" data-instr="' + esc(v.id) + '" placeholder="Ex.: medir também o tampo inferior">' + esc(ins.instrucoes_campo || '') + '</textarea></td>' : '')
         + '<td class="acoes" style="text-align:right;white-space:nowrap">' + (v.provisorio ? '<button class="btn mini sec" data-conf="' + esc(v.id) + '">Confirmar cadastro</button> ' : '')
         + (marcados ? '<button class="btn mini" data-abre="' + esc(v.id) + '">Laudo anterior ›</button>' : '') + '</td></tr>';
@@ -464,6 +484,7 @@ async function telaVaso(os, vid){
   let h = '<div class="linha" style="margin-bottom:10px">' + chipSit(VASO.situacao)
     + (LAUDO && LAUDO.conferido_em ? '<span class="muted">conferido em ' + dataBR(String(LAUDO.conferido_em).slice(0,10)) + '</span>' : '')
     + (LAUDO && LAUDO.grave ? '<span class="chip s-grave">⚠ ' + esc(LAUDO.grave_resumo || 'divergência grave') + '</span>' : '') + '</div>';
+  h += quadroMaterialCampo(VASO.inspecao);
   h += '<div class="dois"><div class="visor card"><h3>O laudo</h3>'
     + (VASO.inspecao ? '<div class="linha" style="margin-bottom:8px"><button class="btn sec" id="anexar">Anexar PDF ou foto</button>'
        + '<span class="muted">' + (arqs.length ? arqs.length + ' arquivo(s)' : 'nenhum arquivo ainda') + '</span></div>'
@@ -514,6 +535,7 @@ async function telaVaso(os, vid){
     + '<div class="linha" style="margin-top:14px"><button class="btn pri" id="gravar">Gravar e conferir</button><span class="muted">* mínimo para concluir</span></div></div>';
   h += '<div class="card" id="cxConf"><h3>2 · Conferência</h3><p class="muted">Grave o que o laudo declara para ver a conferência.</p></div></div></div>';
   $('tela').innerHTML = h;
+  ligarMaterialCampo(VASO.inspecao || {});
 
   // unidade
   const pintaUn = () => document.querySelectorAll('.un').forEach(s => s.textContent = UNID_ROT[UN]);
