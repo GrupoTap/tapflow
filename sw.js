@@ -29,7 +29,7 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H10-S87';   // S87 · Manager com o menu por módulo (TapFlow) e o modulos.js com os cards do TapFlow e da Gestão
+const VERSAO = 'H11-S88';   // S88 · Acessos P1: hub H11 com o link "Pessoas e acessos" e a página acessos/
 const CACHE  = 'tapflow-hub-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -52,7 +52,9 @@ const ESSENCIAIS = [
   './fin/',
   // S77 · TapDoc do escritório (R02b1) e o motor de cálculo que ele usa
   './doc/',
-  './doc/motor-calculo-nr13.js?v=R00.3'
+  './doc/motor-calculo-nr13.js?v=R00.3',
+  // S88 · Acessos P1: a tela do admin
+  './acessos/'
 ];
 
 self.addEventListener('install', ev => {

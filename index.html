@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>TapHub · H10</title>
+<title>TapHub · H11</title>
 <meta name="theme-color" content="#0C1420">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -199,6 +199,11 @@ h1{font-size:27px;margin:0 0 22px;letter-spacing:-.02em}
   border:1px solid var(--rule);border-radius:11px;padding:1px 8px}
 .aviso{border-color:#7A3A32;color:#FFC9BF}
 .nota{opacity:.8}
+/* H11: a porta do admin para "Pessoas e acessos" (fora da grade dos módulos) */
+.adm-acessos{display:flex;align-items:center;gap:10px;margin-top:18px;padding:12px 16px;border:1px solid var(--rule);
+  border-radius:5px;color:var(--ink-2);text-decoration:none;background:var(--surface)}
+.adm-acessos:hover,.adm-acessos:focus-visible{border-color:var(--accent);color:var(--ink)}
+.adm-acessos b{color:var(--ink)} .adm-acessos span{font-size:12.5px;color:var(--ink-3)}
 @media(max-width:520px){
   .topo{padding:10px 14px}
   .topo .dir{width:100%;margin-left:0;order:3;justify-content:space-between}
@@ -215,7 +220,7 @@ h1{font-size:27px;margin:0 0 22px;letter-spacing:-.02em}
 <div class="topo">
   <div class="marca"><span class="logo" style="color:#fff">T</span><div>Tap<span>Hub</span></div></div>
   <div class="casa-top">Engetap</div>
-  <div class="selo" id="selo">HUB · H10</div>
+  <div class="selo" id="selo">HUB · H11</div>
   <div class="dir" id="quemSou" hidden>
     <span class="chip"><span><b id="euNome"></b> <span class="perf">· <span id="euPerfil"></span></span></span><span class="av" id="euIni"></span></span>
     <button class="lnk" id="btSair">Sair</button>
@@ -227,11 +232,12 @@ h1{font-size:27px;margin:0 0 22px;letter-spacing:-.02em}
   <h1>Em que vamos trabalhar hoje?</h1>
   <p class="sub" id="subtitulo"></p>
   <div class="cards" id="cards"></div>
+  <a class="adm-acessos" id="admAcessos" href="acessos/" hidden><b>Pessoas e acessos</b><span>quem vê cada módulo e o PLH · só o admin</span></a>
   <div id="semNada" hidden>
     <div class="aviso">
       <b>Seu perfil não tem nenhum sistema liberado.</b>
-      Isso é configuração, não erro de senha. Peça ao Fernando para ajustar o perfil
-      <code id="perfilCru"></code> na tabela <code>perfis</code>.
+      Isso é configuração, não erro de senha. Peça ao admin para liberar os módulos em
+      "Pessoas e acessos" (perfil <code id="perfilCru"></code>).
     </div>
   </div>
   <!-- H5 · S45 item 1: instalar como app. Aparece só quando dá para instalar
@@ -273,7 +279,7 @@ h1{font-size:27px;margin:0 0 22px;letter-spacing:-.02em}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';
 
-const APP_VERSION = 'H10';
+const APP_VERSION = 'H11';   // H11 (S88): o link "Pessoas e acessos" do admin (Acessos P1)
 try{ document.getElementById('selo').textContent = 'HUB · ' + APP_VERSION; }catch(e){}
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
@@ -457,6 +463,8 @@ function montar(){
     });
   }
 
+  // H11 (S88): "Pessoas e acessos" só para o admin (o banco também recusa os outros)
+  document.getElementById('admAcessos').hidden = !(sessao.admin && !DEMO);
   document.getElementById('semNada').hidden = abertas.length > 0;
   // H10: sem o nucleo/modulos.js (publicação pela metade, cache velho) não há cards:
   // diz isso, em vez de culpar o perfil
@@ -476,7 +484,7 @@ function montar(){
   document.getElementById('nota').innerHTML = (abertas.length && sessao.admin)
     ? 'Seu perfil abre <b>' + abertas.map(p => p.titulo).join(', ') + '</b>'
       + (mods ? ', com os módulos <code>' + mods + '</code>' : '') + '. '
-      + 'Quem muda isso é o perfil na tabela <code>perfis</code> — não uma versão nova do app.'
+      + 'Quem muda isso é a tela "Pessoas e acessos" — não uma versão nova do app.'
     : '';
 
   // Uma porta só: não faz sentido obrigar a clicar. Vai, e deixa cancelar.
@@ -489,6 +497,8 @@ function montar(){
     const quais = ALIAS[p] || [p];
     for (const k of quais){ direto = abertas.find(x => x.chave === k); if (direto) break; }
   } else if (abertas.length === 1) direto = abertas[0];
+  // H11: voltar de "Pessoas e acessos" (sessão travada e destravada aqui) leva de volta para lá
+  if (p === 'acessos' && sessao.admin && !DEMO){ location.href = 'acessos/'; return; }
   if (direto){
     const aviso = document.createElement('p');
     aviso.className = 'indo';
