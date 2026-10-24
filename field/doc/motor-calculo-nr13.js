@@ -1,6 +1,6 @@
 /**
  * Motor de cálculo NR-13 — TapFlow · módulo de inspeção
- * Versão R00.2 · 23/10/2026 (R00.1 de 19/10 + as correções C1–C4 da auditoria de 20/10)
+ * Versão R00.3 · 24/10/2026 (R00.2 de 23/10 + a aferição de manômetro e o teste de válvula, R04a)
  *
  * Calcula espessura mínima requerida e PMTA de cada componente de um vaso de pressão
  * pela ASME VIII Div. 1, a PMTA governante, a categoria (NR-13 13.5.1.1) e as datas das
@@ -228,10 +228,138 @@ function calcularVaso(vaso) {
     };
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// R00.3 · AFERIÇÃO DE MANÔMETRO E TESTE DE VÁLVULA (R04a, 24/10/2026)
+// Procedimento PR-ENG-001. Pressões na unidade do instrumento (a mesma nas
+// leituras, na faixa, na resolução e na U do padrão); a válvula converte para
+// MPa só para a tolerância ASME e a PMTA.
+// ════════════════════════════════════════════════════════════════════════════
+// Dentro de uma função: o motor é carregado como script comum nas páginas, e nomes soltos
+// (num, deMPa, media…) colidiriam com os da página.
+const R04 = (() => {
+const UNIDADES_MPA = { 'MPa': 1, 'bar': 0.1, 'kgf/cm2': 0.0980665, 'psi': 0.00689476, 'kPa': 0.001 };
+
+function paraMPa(v, unidade) {
+    const f = UNIDADES_MPA[unidade];
+    if (!f) throw new Error('Unidade desconhecida: ' + unidade);
+    return v * f;
+}
+function deMPa(v, unidade) { return v / paraMPa(1, unidade); }
+
+/** Tolerância do manômetro pela posição do ponto na faixa (decisão do Bruno, 24/10):
+ *  ±20% de 0 a 25%, ±10% de 25 a 75%, ±5% acima de 75%. No zero: 1 resolução. */
+function toleranciaManometro(nominal, faixaIni, faixaFim, refPadrao, resolucao) {
+    const pos = (nominal - faixaIni) / (faixaFim - faixaIni);
+    if (Math.abs(nominal - faixaIni) < 1e-9) return { pct: null, tol: resolucao, trecho: 'zero' };
+    const pct = pos <= 0.25 ? 0.20 : pos <= 0.75 ? 0.10 : 0.05;
+    return { pct, tol: pct * Math.abs(refPadrao), trecho: pos <= 0.25 ? '0–25%' : pos <= 0.75 ? '25–75%' : '75–100%' };
+}
+
+function media(xs) { return xs.reduce((a, b) => a + b, 0) / xs.length; }
+function desvio(xs) {
+    if (xs.length < 2) return 0;
+    const m = media(xs);
+    return Math.sqrt(xs.reduce((a, x) => a + (x - m) * (x - m), 0) / (xs.length - 1));
+}
+function num(v) {
+    if (v === null || v === undefined || v === '') return null;
+    const n = typeof v === 'number' ? v : Number(String(v).replace(',', '.'));
+    if (!Number.isFinite(n)) throw new Error('Valor inválido: ' + v);
+    return n;
+}
+
+/**
+ * Aferição de manômetro: 3 cargas e 3 descargas por ponto.
+ * a = { faixaIni, faixaFim, resolucao, uPadrao, kPadrao,
+ *       pontos: [{ nominal, leituras: [{ sentido: 'carga'|'descarga', padrao, indicado }] }] }
+ * Incerteza (GUM / EA-4/02): raiz da soma dos quadrados de tipo A (desvio dos 6 erros ÷ √n),
+ * resolução ÷ (2√3) e U/k do padrão; U = 2 · uc.
+ */
+function afericaoManometro(a) {
+    const faltas = [], avisos = [];
+    const ini = num(a.faixaIni), fim = num(a.faixaFim), res = num(a.resolucao);
+    const uPad = num(a.uPadrao), kPad = num(a.kPadrao) || 2;
+    if (ini === null || fim === null || !(fim > ini)) faltas.push('Informe a faixa de indicação (o fim maior que o início).');
+    if (!(res > 0)) faltas.push('Informe a resolução de leitura.');
+    if (uPad === null || !(uPad >= 0)) faltas.push('O padrão está sem a incerteza (U) no cadastro.');
+    if (faltas.length) return { aprovado: false, completo: false, faltas, avisos, pontos: [] };
+    const pontos = (a.pontos || []).map((p) => {
+        const nominal = num(p.nominal);
+        const ls = (p.leituras || []).map((l) => ({ sentido: l.sentido, padrao: num(l.padrao), indicado: num(l.indicado) }))
+            .filter((l) => l.padrao !== null && l.indicado !== null);
+        const nc = ls.filter((l) => l.sentido === 'carga').length, nd = ls.filter((l) => l.sentido === 'descarga').length;
+        const r = { nominal, n: ls.length, completo: nc >= 3 && nd >= 3 };
+        if (!ls.length) return r;
+        const erros = ls.map((l) => l.indicado - l.padrao);
+        r.refPadrao = media(ls.map((l) => l.padrao));
+        r.erroMedio = media(erros);
+        const tl = toleranciaManometro(nominal, ini, fim, r.refPadrao, res);
+        Object.assign(r, tl);
+        const uA = desvio(erros) / Math.sqrt(erros.length), uRes = res / (2 * Math.sqrt(3)), uP = uPad / kPad;
+        r.uc = Math.sqrt(uA * uA + uRes * uRes + uP * uP);
+        r.U = 2 * r.uc;
+        r.ok = Math.abs(r.erroMedio) <= r.tol + 1e-9;
+        r.padraoInadequado = r.trecho !== 'zero' && uPad > r.tol / 4 + 1e-12;   // no zero a tolerância é a resolução
+        return r;
+    });
+    const naoZero = pontos.filter((p) => p.nominal !== null && Math.abs(p.nominal - ini) > 1e-9);
+    if (naoZero.length < 3) faltas.push('Afira pelo menos 3 pontos além do zero.');
+    if (!naoZero.some((p) => (p.nominal - ini) / (fim - ini) > 0.75)) faltas.push('Afira pelo menos um ponto acima de 75% da faixa.');
+    pontos.forEach((p) => { if (!p.completo) faltas.push('Ponto ' + p.nominal + ': faltam leituras (3 cargas e 3 descargas).'); });
+    pontos.filter((p) => p.padraoInadequado).forEach((p) => avisos.push('Ponto ' + p.nominal + ': padrão inadequado (U do padrão maior que 1/4 da tolerância).'));
+    pontos.filter((p) => p.ok === false).forEach((p) => avisos.push('Ponto ' + p.nominal + ': erro ' + p.erroMedio.toFixed(3) + ' fora da tolerância ±' + p.tol.toFixed(3) + '.'));
+    const completo = !faltas.length;
+    const com = pontos.filter((p) => p.erroMedio !== undefined);
+    return {
+        completo, faltas, avisos, pontos,
+        aprovado: completo && pontos.every((p) => p.ok),
+        erroMax: com.length ? Math.max(...com.map((p) => Math.abs(p.erroMedio))) : null,
+        Umax: com.length ? Math.max(...com.map((p) => p.U)) : null,
+    };
+}
+
+/** Tolerância ASME da abertura: ±2 psi até 70 psi; ±3% acima (decisão do Bruno, 24/10). Em MPa. */
+function toleranciaValvulaMPa(ajusteMPa) {
+    return ajusteMPa <= 70 * 0.00689476 + 1e-12 ? 2 * 0.00689476 : 0.03 * ajusteMPa;
+}
+
+/**
+ * Teste de válvula: 3 aberturas e o assentamento.
+ * v = { unidade, ajuste, aberturas: [a1, a2, a3], assentamento, pmtaMPa }
+ */
+function testeValvula(v) {
+    const faltas = [], avisos = [];
+    const un = v.unidade || 'bar';
+    const aj = num(v.ajuste), ab = (v.aberturas || []).map(num).filter((x) => x !== null), as = num(v.assentamento);
+    if (!(aj > 0)) faltas.push('Informe a pressão de ajuste.');
+    if (ab.length < 3) faltas.push('Faça 3 aberturas.');
+    if (as === null) faltas.push('Informe o assentamento.');
+    if (faltas.length) return { aprovada: false, completo: false, grave: false, faltas, avisos };
+    const ajM = paraMPa(aj, un), med = media(ab), medM = paraMPa(med, un), maxM = paraMPa(Math.max(...ab), un);
+    const tolM = toleranciaValvulaMPa(ajM);
+    const r = { completo: true, faltas, avisos, media: med, tol: deMPa(tolM, un), desvio: med - aj };
+    r.dentroTolerancia = Math.abs(medM - ajM) <= tolM + 1e-9;
+    if (!r.dentroTolerancia) avisos.push('Abertura média ' + med.toFixed(3) + ' ' + un + ' fora da tolerância do ajuste (±' + r.tol.toFixed(3) + ').');
+    if (as > Math.min(...ab) + 1e-9) avisos.push('Assentamento acima da abertura.');
+    r.assentamentoOk = as <= Math.min(...ab) + 1e-9;
+    const pm = num(v.pmtaMPa);
+    r.acimaPMTA = pm !== null && maxM > pm + 1e-9;
+    if (r.acimaPMTA) avisos.push('Abertura acima da PMTA vigente (' + deMPa(pm, un).toFixed(3) + ' ' + un + '): NR-13 13.5.1.2 "a".');
+    if (pm === null) avisos.push('Sem a PMTA vigente: a abertura não foi conferida contra ela.');
+    r.grave = r.acimaPMTA;
+    r.aprovada = r.dentroTolerancia && r.assentamentoOk && !r.acimaPMTA;
+    return r;
+}
+    return { UNIDADES_MPA, paraMPa, deMPa, toleranciaManometro, afericaoManometro, toleranciaValvulaMPa, testeValvula };
+})();
+
 const MotorNR13 = {
     TIPOS, ESPESSURA_MINIMA_ABSOLUTA, espessuraMinima, pmta, avisosDoComponente, minimaLeituras,
     grupoRisco, categoria, prazos, somarAnos, calcularVaso,
-    versao: 'R00.2-2026-10-23',
+    // R00.3 · R04a
+    UNIDADES_MPA: R04.UNIDADES_MPA, paraMPa: R04.paraMPa, deMPa: R04.deMPa, toleranciaManometro: R04.toleranciaManometro,
+    afericaoManometro: R04.afericaoManometro, toleranciaValvulaMPa: R04.toleranciaValvulaMPa, testeValvula: R04.testeValvula,
+    versao: 'R00.3-2026-10-24',
 };
 
 if (typeof module !== 'undefined' && module.exports) module.exports = MotorNR13;

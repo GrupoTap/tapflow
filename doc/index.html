@@ -10,7 +10,7 @@
 <script src="../nucleo/config.js?v=N2"></script>
 <script src="../nucleo/nucleo.js?v=N2"></script>
 <script src="../nucleo/modulos.js?v=M1"></script>
-<script src="motor-calculo-nr13.js?v=R00.2"></script>
+<script src="motor-calculo-nr13.js?v=R00.3"></script>
 <!--
   TapDoc (escritório) · R02b1 — preparar a inspeção
   ─────────────────────────────────────────────────
@@ -141,7 +141,7 @@ details.op summary{font-weight:700;font-size:13.5px;cursor:pointer;color:var(--a
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E5';   // E = escritório · E5 (S85 · 406): troca de material em campo, com a decisão do escritório (E4: faixa; E3: moldura H10)
+const VERSAO = 'TapDoc E6';   // E = escritório · E6 (S86 · 407, R04a): padrão com U/k, numeração M/V e as aferições da inspeção (E5: material de campo; E4: faixa)
 // 405: a faixa de resistência (norma do material) e o S esperado pelo ASME (fator 3,5; 2/3 do escoamento; costura × 0,85)
 function faixaTxt(m){
   if (!m || m.resist_min_mpa == null) return 'faixa de resistência não cadastrada';
@@ -303,16 +303,18 @@ const TIPOS_INST = { medidor_espessura:'Medidor de espessura', manometro_padrao:
 async function telaInstrumentos(){
   const L = await rpc('tf_insp_instrumentos_lista');
   let h = '<div class="card"><div class="linha" style="justify-content:space-between"><h3 style="margin:0">Instrumentos</h3><button class="btn pri" id="instNovo">+ instrumento</button></div>'
-    + '<p class="muted">O celular só oferece o medidor de espessura com o certificado válido. Vencido não aparece para escolha.</p>'
+    + '<p class="muted">O celular só oferece medidor, padrão e bancada com o certificado válido. Vencido não aparece para escolha. O padrão precisa da U do certificado.</p>'
     + (L.length ? '<table><tr><th>Tipo</th><th>Descrição</th><th>Nº de série</th><th>Certificado</th><th>Validade</th><th></th></tr>'
       + L.map(x => '<tr><td>' + esc(TIPOS_INST[x.tipo] || x.tipo) + '</td><td><b>' + esc(x.descricao || '') + '</b><div class="muted">' + esc([x.marca, x.modelo].filter(Boolean).join(' · ')) + '</div></td><td>'
-        + esc(x.numero_serie || '—') + '</td><td>' + esc(x.certificado_num || '—') + (x.laboratorio ? '<div class="muted">' + esc(x.laboratorio) + '</div>' : '') + '</td><td>'
+        + esc(x.numero_serie || '—') + '</td><td>' + esc(x.certificado_num || '—') + (x.laboratorio ? '<div class="muted">' + esc(x.laboratorio) + '</div>' : '')
+        + (x.tipo === 'manometro_padrao' ? '<div class="muted">' + (x.u_expandida != null ? 'U ' + fmt(x.u_expandida, 4) + ' ' + esc(x.unidade || '') + ' (k = ' + fmt(x.k || 2, 2) + ')' : '<span class="chip s-grave">sem a U</span>') + '</div>' : '') + '</td><td>'
         + (x.validade ? (x.vencido ? '<span class="chip s-grave">vencido ' + dataBR(x.validade) + '</span>' : dataBR(x.validade)) : '<span class="muted">sem validade</span>')
         + '</td><td><button class="btn mini" data-inst="' + esc(x.id) + '">Editar</button></td></tr>').join('') + '</table>'
       : '<p class="vazio">Nenhum instrumento cadastrado. Cadastre o medidor de espessura antes da primeira inspeção.</p>') + '</div>';
   $('tela').lastElementChild.remove();   // o "Carregando…"
-  $('tela').insertAdjacentHTML('beforeend', h);
+  $('tela').insertAdjacentHTML('beforeend', h + '<div class="card" id="cxNum"><p class="muted">Carregando a numeração…</p></div>');
   $('instNovo').addEventListener('click', () => editarInstrumento(null));
+  cartaoNumeracao();
   $('tela').querySelectorAll('[data-inst]').forEach(b => b.addEventListener('click', () => editarInstrumento(L.find(x => x.id === b.dataset.inst))));
 }
 function editarInstrumento(x){
@@ -321,14 +323,73 @@ function editarInstrumento(x){
   janela(x.id ? 'Editar instrumento' : 'Novo instrumento',
     (x.id ? '' : '<label class="f">Tipo<select class="t" id="in_tipo">' + Object.keys(TIPOS_INST).map(t => '<option value="' + t + '"' + (t === x.tipo ? ' selected' : '') + '>' + TIPOS_INST[t] + '</option>').join('') + '</select></label>')
     + c('descricao', 'Descrição') + c('marca', 'Marca') + c('modelo', 'Modelo') + c('numero_serie', 'Nº de série') + c('certificado_num', 'Nº do certificado')
-    + c('laboratorio', 'Laboratório') + c('calibrado_em', 'Calibrado em', 'date') + c('validade', 'Validade', 'date'),
+    + c('laboratorio', 'Laboratório') + c('calibrado_em', 'Calibrado em', 'date') + c('validade', 'Validade', 'date')
+    // S86 · R04a: o manômetro padrão leva a U do certificado (a aferição calcula a incerteza com ela)
+    + '<fieldset id="in_pad" style="border:1px solid #DBE0E3;border-radius:6px;padding:8px 10px;margin-top:8px"><legend class="muted">Só para manômetro padrão (do certificado)</legend>'
+    + '<div class="g3"><label class="f">U (incerteza expandida)<input class="t" id="in_u" inputmode="decimal" value="' + esc(fmt(x.u_expandida, 5)) + '"></label>'
+    + '<label class="f">k<input class="t" id="in_k" inputmode="decimal" value="' + esc(fmt(x.k == null ? 2 : x.k, 2)) + '"></label>'
+    + '<label class="f">Unidade<select class="t" id="in_un">' + ['kgf/cm2','bar','MPa','psi','kPa'].map(u => '<option value="' + u + '"' + ((x.unidade || 'kgf/cm2') === u ? ' selected' : '') + '>' + u.replace('cm2', 'cm²') + '</option>').join('') + '</select></label></div>'
+    + '<div class="g3"><label class="f">Faixa máxima<input class="t" id="in_fx" inputmode="decimal" value="' + esc(fmt(x.faixa_max, 4)) + '"></label>'
+    + '<label class="f">Resolução<input class="t" id="in_res" inputmode="decimal" value="' + esc(fmt(x.resolucao, 5)) + '"></label></div></fieldset>',
     (x.id ? [{ rotulo:'Desativar', acao:async () => { try{ await rpc('tf_insp_instrumento_gravar', { p_dados:{ id:x.id, ativo:false } }); U.toast('Desativado.', 'ok'); pintar(); }catch(e){ erro(e); return false; } } }] : [])
     .concat([{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
       const d = {}; ['descricao','marca','modelo','numero_serie','certificado_num','laboratorio','calibrado_em','validade'].forEach(k => { d[k] = ($('in_' + k).value || '').trim() || null; });
       if (!d.descricao){ U.toast('Escreva a descrição.', 'err'); return false; }
       if (x.id) d.id = x.id; else d.tipo = $('in_tipo').value;
+      if ((x.id ? x.tipo : d.tipo) === 'manometro_padrao'){
+        const nn = id => { const v = num($(id).value); return v == null || Number.isNaN(v) ? null : v; };
+        d.u_expandida = nn('in_u'); d.k = nn('in_k') || 2; d.unidade = $('in_un').value; d.faixa_max = nn('in_fx'); d.resolucao = nn('in_res');
+        if (d.u_expandida == null){ U.toast('O padrão precisa da U do certificado.', 'err'); return false; }
+      }
       try{ await rpc('tf_insp_instrumento_gravar', { p_dados:d }); U.toast('Gravado.', 'ok'); pintar(); }catch(e){ erro(e); return false; }
     } }]));
+}
+// S86 · R04a: a numeração dos relatórios (M) e certificados (V)
+async function cartaoNumeracao(){
+  const cx = $('cxNum'); if (!cx) return;
+  let r; try{ r = await rpc('tf_insp_afericao_numeracao_ver'); }catch(e){ cx.innerHTML = '<p class="alerta falta">' + esc(e.message) + '</p>'; return; }
+  const admin = !!(N.sessao() || {}).admin, seq = r.sequencias || [], esp = r.esperando || {};
+  const linha = tp => { const q = seq.find(x => x.tipo === tp && x.ano === r.ano);
+    return '<tr><td><b>' + (tp === 'manometro' ? 'Relatório de Aferição de Manômetro (M)' : 'Certificado de Inspeção e Teste de Válvula (V)') + '</b></td><td>'
+      + (q ? 'próximo: <b>' + esc(q.codigo) + '</b><div class="muted">' + esc(q.definido_por || '') + '</div>' : '<span class="chip s-grave">não informada</span>') + '</td><td>'
+      + (esp[tp] ? '<span class="chip s-em_conferencia">' + esp[tp] + ' esperando número</span>' : '<span class="muted">nenhuma esperando</span>') + '</td><td>'
+      + (admin ? '<button class="btn mini" data-numtp="' + tp + '">' + (q ? 'Mudar' : 'Informar') + '</button>' : '') + '</td></tr>'; };
+  cx.innerHTML = '<h3 style="margin-top:0">Numeração de ' + r.ano + '</h3><p class="muted">O servidor dá o número quando a aferição completa chega. Até a sequência ser informada, ela espera; depois recebe o número na ordem em que foi feita. Número usado não volta.</p>'
+    + '<table>' + linha('manometro') + linha('valvula') + '</table>';
+  cx.querySelectorAll('[data-numtp]').forEach(b => b.addEventListener('click', () => {
+    const tp = b.dataset.numtp;
+    janela('Próximo número (' + (tp === 'manometro' ? 'M' : 'V') + ', ' + r.ano + ')', '<label class="f">Próximo número<input class="t" id="numProx" inputmode="numeric" placeholder="Ex.: 264"></label>'
+      + '<p class="muted">O último número da tabela do Túlio + 1.</p>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
+        const x = parseInt($('numProx').value, 10); if (!(x > 0)){ U.toast('Informe um número maior que zero.', 'err'); return false; }
+        try{ const o = await rpc('tf_insp_afericao_numeracao', { p_tipo:tp, p_ano:r.ano, p_proximo:x });
+          U.toast('Numeração gravada' + (o.numeradas ? ': ' + o.numeradas + ' aferição(ões) numerada(s).' : '.'), 'ok'); cartaoNumeracao(); }
+        catch(e){ erro(e); return false; } } }]);
+  }));
+}
+// S86 · R04a: as aferições da inspeção (no vaso)
+async function cartaoAfericoes(ins){
+  const cx = $('cxAfer'); if (!cx || !ins) return;
+  let L; try{ L = await rpc('tf_insp_afericoes_lista', { p_inspecao: ins.id }); }catch(e){ cx.innerHTML = '<p class="alerta falta">' + esc(e.message) + '</p>'; return; }
+  if (!L.length){ cx.innerHTML = '<h3 style="margin-top:0">Aferições</h3><p class="muted">Nenhuma aferição de manômetro ou teste de válvula nesta inspeção.</p>'; return; }
+  const res = x => x.cancelada_em ? '<span class="chip">cancelada</span>' : x.resultado === 'aprovado' ? '<span class="chip s-pronto">aprovado</span>'
+    : x.resultado === 'reprovado' ? '<span class="chip s-grave">reprovado</span>' : '<span class="chip s-em_conferencia">incompleta</span>';
+  cx.innerHTML = '<h3 style="margin-top:0">Aferições</h3><table><tr><th>Número</th><th>Instrumento</th><th>Resultado</th><th>Padrão</th><th>Validade</th></tr>'
+    + L.map(x => '<tr' + (x.grave ? ' style="background:#FDECEA"' : '') + '><td><b>' + esc(x.codigo || 'sem número') + '</b>' + (x.codigo ? '' : '<div class="muted">aguardando a sequência</div>') + '</td><td>'
+      + (x.tipo === 'valvula' ? 'Válvula' : 'Manômetro') + ' · ' + esc(x.acessorio || '') + '<div class="muted">' + esc(x.por || '') + '</div></td><td>' + res(x)
+      + (x.grave ? ' <span class="chip s-grave">grave</span>' : '') + ((x.avisos || []).length ? '<div class="muted" style="color:#B42318">' + x.avisos.map(esc).join('<br>') + '</div>' : '')
+      + (x.cancelada_motivo ? '<div class="muted">' + esc(x.cancelada_motivo) + '</div>' : '') + '</td><td>' + esc(x.padrao || '—') + '</td><td>'
+      + (x.tipo === 'manometro' ? (x.validade_meses || 24) + ' meses' + (x.validade_anterior ? '<div class="muted">antes: ' + x.validade_anterior + '</div>' : '')
+        + (x.cancelada_em ? '' : ' <button class="btn mini" data-afval="' + esc(x.id) + '">Mudar</button>') : '—') + '</td></tr>').join('') + '</table>';
+  cx.querySelectorAll('[data-afval]').forEach(b => b.addEventListener('click', () => {
+    const x = L.find(y => y.id === b.dataset.afval);
+    janela('Validade do relatório ' + (x.codigo || ''), '<label class="f">Meses<input class="t" id="avM" inputmode="numeric" value="' + (x.validade_meses || 24) + '"></label>'
+      + '<label class="f">Motivo<input class="t" id="avMot" placeholder="Ex.: o cliente pediu 1 ano"></label>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
+        const m = parseInt($('avM').value, 10); if (!(m >= 1 && m <= 120)){ U.toast('De 1 a 120 meses.', 'err'); return false; }
+        try{ await rpc('tf_insp_afericao_validade', { p_id:x.id, p_meses:m, p_motivo:$('avMot').value || null }); U.toast('Validade gravada.', 'ok'); cartaoAfericoes(ins); }
+        catch(e){ erro(e); return false; } } }]);
+  }));
 }
 async function telaMateriais(){
   const L = await rpc('tf_insp_materiais_lista'), admin = !!(N.sessao() || {}).admin, nConf = L.filter(x => !x.conferido).length;
@@ -485,6 +546,7 @@ async function telaVaso(os, vid){
     + (LAUDO && LAUDO.conferido_em ? '<span class="muted">conferido em ' + dataBR(String(LAUDO.conferido_em).slice(0,10)) + '</span>' : '')
     + (LAUDO && LAUDO.grave ? '<span class="chip s-grave">⚠ ' + esc(LAUDO.grave_resumo || 'divergência grave') + '</span>' : '') + '</div>';
   h += quadroMaterialCampo(VASO.inspecao);
+  if (VASO.inspecao && VASO.inspecao.situacao !== 'em_preparo') h += '<div class="card" id="cxAfer"><p class="muted">Carregando as aferições…</p></div>';
   h += '<div class="dois"><div class="visor card"><h3>O laudo</h3>'
     + (VASO.inspecao ? '<div class="linha" style="margin-bottom:8px"><button class="btn sec" id="anexar">Anexar PDF ou foto</button>'
        + '<span class="muted">' + (arqs.length ? arqs.length + ' arquivo(s)' : 'nenhum arquivo ainda') + '</span></div>'
@@ -536,6 +598,7 @@ async function telaVaso(os, vid){
   h += '<div class="card" id="cxConf"><h3>2 · Conferência</h3><p class="muted">Grave o que o laudo declara para ver a conferência.</p></div></div></div>';
   $('tela').innerHTML = h;
   ligarMaterialCampo(VASO.inspecao || {});
+  cartaoAfericoes(VASO.inspecao);
 
   // unidade
   const pintaUn = () => document.querySelectorAll('.un').forEach(s => s.textContent = UNID_ROT[UN]);

@@ -24,7 +24,7 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S38-T7';   // S85: TapDoc 7 (material do escritório; troca em campo com motivo)
+const VERSAO = 'S38-T8';   // S86: TapDoc 8 (R04a: aferição em campo) e o motor R00.3
 const CACHE  = 'tapflow-field-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -48,7 +48,7 @@ const ESSENCIAIS = [
   // S35 · TapDoc 1: a coleta da inspeção (página própria, abre sem sinal)
   './doc/',
   // S80 · TapDoc 4: o motor de cálculo para a prévia sem sinal. Mesmo ?v= do <script> de doc/index.html.
-  './doc/motor-calculo-nr13.js?v=R00.2'
+  './doc/motor-calculo-nr13.js?v=R00.3'
 ];
 
 self.addEventListener('install', ev => {

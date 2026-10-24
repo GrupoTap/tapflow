@@ -10,7 +10,7 @@
 <script src="../../nucleo/config.js?v=N2"></script>
 <script src="../../nucleo/nucleo.js?v=N2"></script>
 <script src="../../nucleo/modulos.js?v=M1"></script>
-<script src="motor-calculo-nr13.js?v=R00.2"></script>
+<script src="motor-calculo-nr13.js?v=R00.3"></script>
 <!--
   TapDoc 4 · a coleta da inspeção no celular (R02a, R02b1, R03a e R03b)
   ─────────────────────────────────────────────────────────────────
@@ -161,7 +161,7 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 7';   // S85 · 406: o material vem do escritório; trocar em campo pede o motivo (TapDoc 6: faixa; 5: moldura H10)
+const VERSAO = 'TapDoc 8';   // S86 · 407 (R04a): aferição de manômetro e teste de válvula em campo (TapDoc 7: material do escritório; 6: faixa)
 // 405: uma linha curta com a faixa do material, para conferir com a plaqueta ou o certificado da chapa
 function linhaFaixa(m){
   if (!m || m.resist_min_mpa == null) return '';
@@ -270,7 +270,9 @@ function normVaso(sv){
     teste:sv.inspecao.teste ? Object.assign({}, sv.inspecao.teste) : null,
     // S80 · R03b: o ultrassom
     leituras:(sv.inspecao.leituras || []).map(x => Object.assign({}, x)),
-    ultrassom_sem_leitura:Object.assign({}, sv.inspecao.ultrassom_sem_leitura || {}) }) : null;
+    ultrassom_sem_leitura:Object.assign({}, sv.inspecao.ultrassom_sem_leitura || {}),
+    // S86 · R04a: as aferições
+    afericoes:(sv.inspecao.afericoes || []).map(x => Object.assign({}, x, { leituras:JSON.parse(JSON.stringify(x.leituras || {})) })) }) : null;
   v.acessorios_anteriores = sv.acessorios_anteriores || [];
   v.laudo_anterior = sv.laudo_anterior || null;
   // 406: o material que o escritório definiu (a referência) e o motivo de uma troca em campo já gravada
@@ -287,7 +289,7 @@ function mesclar(p){
   Object.values(velhos).forEach(v => {
     if (!vasos.some(x => x.id === v.id) && pend.has('insp|' + v.id)) vasos.push(v);
   });
-  E = { os:p.os, vasos, fabricantes:p.fabricantes || [], materiais:p.materiais || [], medidores:p.medidores || [], baixado_em:p.gerado_em || new Date().toISOString() };
+  E = { os:p.os, vasos, fabricantes:p.fabricantes || [], materiais:p.materiais || [], medidores:p.medidores || [], padroes:p.padroes || [], bancadas:p.bancadas || [], baixado_em:p.gerado_em || new Date().toISOString() };
   salvar();
 }
 
@@ -412,7 +414,7 @@ function pintar(){
   if (telaAtual.nome === 'vaso') return (v.inspecao && v.inspecao.situacao !== 'em_preparo') ? telaPainel(v) : telaCartao(v);
   const f = { plaqueta:telaPlaqueta, operacao:telaOperacao, componentes:telaComponentes, localizacao:telaLocal, laudo:telaLaudo,
              visual:telaVisual, acessorios:telaAcessorios, ultrassom:telaUltrassom, boroscopia:telaBoroscopia, teste:telaTeste,
-             fechamento:telaFechamento, previa:telaPrevia }[telaAtual.nome];
+             fechamento:telaFechamento, previa:telaPrevia, afericao:telaAfericao }[telaAtual.nome];
   if (f) return f(v);
 }
 
@@ -1132,7 +1134,7 @@ function estVisual(v){
 }
 function estAcess(v){
   const l = acessDe(v);
-  if (v.inspecao && v.inspecao.acessorios_conferidos && l.every(a => a.situacao)) return 'ok';
+  if (v.inspecao && v.inspecao.acessorios_conferidos && l.every(a => a.situacao) && !faltasAfericao(v).length) return 'ok';
   return l.length || (v.inspecao && v.inspecao.acessorios_conferidos) ? 'inc' : 'vazia';
 }
 function boroValida(b){
@@ -1175,6 +1177,7 @@ function faltasEnvio(v){
   }
   if (!i.acessorios_conferidos) f.push('Acessórios: confirme a lista (mesmo que o vaso não tenha nenhum).');
   acessDe(v).filter(a => !a.situacao).forEach(a => f.push('Acessório "' + (a.tag || a.marca || TIPOS_ACESS[a.tipo] || a.tipo) + '" sem a situação.'));
+  const fAf = faltasAfericao(v);
   // S80 · R03b: o ultrassom (mesma ordem e texto do servidor)
   if (!i.medidor_id) f.push('Ultrassom: escolha o medidor de espessura.');
   compsAtivos(v).filter(c => !c.nao_medir && !leiturasDe(v, c.id).length && !((i.ultrassom_sem_leitura || {})[c.id] || '').trim())
@@ -1183,6 +1186,7 @@ function faltasEnvio(v){
   else if (i.boroscopia.resultado === 'com_anomalia' && !fotosDe(v, 'boroscopia').length) f.push('Boroscopia com anomalia sem foto.');
   if (!testeValido(i.teste)) f.push('Teste de pressão sem resposta.');
   else if (i.teste.resultado === 'reprovado' && !fotosDe(v, 'teste').length) f.push('Teste de pressão reprovado sem foto.');
+  fAf.forEach(x => f.push(x));   // S86 · R04a (mesma ordem do servidor: antes da capa)
   if (!fotosDe(v, 'capa').length) f.push('Falta a foto de capa.');
   return f;
 }
@@ -1202,7 +1206,7 @@ function gravarVisual(v){
     anomalia: x.conforme === false ? (x.anomalia || '').trim() || null : null }));
   enfileirar(v, 'visual', 'exame visual', { funcao:'tf_insp_visual_gravar', payload:{ p_id:v.inspecao.id, p_itens:itens } });
 }
-const ACESS_OK = ['id','tipo','tag','marca','modelo','conexao','escala','pressao_ajuste_mpa','lacre_num','situacao','camara_id','unidade_campo','observacao','ordem','origem_id'];
+const ACESS_OK = ['id','tipo','tag','marca','modelo','conexao','escala','pressao_ajuste_mpa','lacre_num','situacao','camara_id','unidade_campo','observacao','ordem','origem_id','afericao_motivo'];
 function gravarAcess(v, a){
   enfileirar(v, 'acess-' + a.id, (TIPOS_ACESS[a.tipo] || 'acessório').toLowerCase(), { funcao:'tf_insp_acessorio_gravar',
     payload:{ p_id:v.inspecao.id, p_dados:pegar(a, ACESS_OK) } });
@@ -1288,6 +1292,197 @@ function avisosAcess(v){
   });
   return a;
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// S86 · R04a: AFERIÇÃO DE MANÔMETRO E TESTE DE VÁLVULA (banco: sql/407)
+// A conta é a do motor R00.3; o servidor refaz e é ele quem vale.
+// ════════════════════════════════════════════════════════════════════════════
+const AFERIVEIS = ['manometro', 'manovacuometro', 'valvula_seguranca', 'valvula_alivio', 'quebra_vacuo'];
+const UN_AF = ['bar', 'kgf/cm2', 'MPa', 'psi', 'kPa'];
+const UN_AF_ROT = { 'bar':'bar', 'kgf/cm2':'kgf/cm²', 'MPa':'MPa', 'psi':'psi', 'kPa':'kPa' };
+const tipoAf = a => VALVULAS.includes(a.tipo) ? 'valvula' : 'manometro';
+const afDe = (v, a) => ((v.inspecao && v.inspecao.afericoes) || []).filter(x => x.acessorio_id === a.id && !x.cancelada_em).pop() || null;
+const nomeAc = a => a.tag || a.marca || TIPOS_ACESS[a.tipo] || a.tipo;
+/** O envio pede, para manômetro e válvula presentes, a aferição completa ou o motivo (o mesmo texto do servidor). */
+function faltasAfericao(v){
+  const f = [];
+  acessDe(v).filter(a => AFERIVEIS.includes(a.tipo) && a.situacao !== 'ausente' && a.situacao !== 'retirado' && !(a.afericao_motivo || '').trim())
+    .sort((x, y) => (x.ordem || 0) - (y.ordem || 0)).forEach(a => {
+      const af = afDe(v, a), r = af ? resultadoAf(v, a, af) : null;
+      if (!af) f.push('Acessório "' + nomeAc(a) + '": afira ou diga por que não.');
+      else if (!r.completo) f.push('Acessório "' + nomeAc(a) + '": aferição incompleta.');
+    });
+  return f;
+}
+function padraoDe(id){ return (E.padroes || []).find(p => p.id === id) || null; }
+/** A conta local (a mesma do servidor): o resultado, as faltas e os avisos. */
+function resultadoAf(v, a, af){
+  const M = window.MotorNR13, pad = padraoDe(af.padrao_id);
+  let r;
+  try{
+    if (af.tipo === 'manometro'){
+      const uPad = pad && pad.u_expandida != null && pad.unidade ? M.deMPa(M.paraMPa(Number(pad.u_expandida), pad.unidade), af.unidade || 'bar') : null;
+      r = M.afericaoManometro({ faixaIni:af.faixa_ini, faixaFim:af.faixa_fim, resolucao:af.resolucao, uPadrao:uPad, kPadrao:pad && pad.k || 2,
+        pontos:(af.leituras && af.leituras.pontos) || [] });
+      r.aprovadaOk = r.aprovado;
+    } else {
+      r = M.testeValvula({ unidade:af.unidade || 'bar', ajuste:af.ajuste, aberturas:(af.leituras && af.leituras.aberturas) || [],
+        assentamento:af.leituras && af.leituras.assentamento, pmtaMPa:pmtaVigenteCam(v, a.camara_id) });
+      r.aprovadaOk = r.aprovada;
+    }
+  }catch(e){ r = { completo:false, faltas:[e.message], avisos:[], aprovadaOk:false }; }
+  if (!af.padrao_id) r.faltas.push('Escolha o manômetro padrão.');
+  if (!af.bancada_id) r.faltas.push('Escolha a bancada.');
+  if (!(af.lacre_colocado || '').trim()) r.faltas.push('Informe o lacre colocado.');
+  r.completo = !r.faltas.length;
+  r.resultado = !r.completo ? 'incompleto' : r.aprovadaOk ? 'aprovado' : 'reprovado';
+  return r;
+}
+function chipAf(res){ return res === 'aprovado' ? '<span class="chip ok">' + 'aprovado' + '</span>' : res === 'reprovado' ? '<span class="chip pend">reprovado</span>' : '<span class="chip inc">incompleta</span>'; }
+function blocoAfericao(v, a, pode){
+  const af = afDe(v, a), vv = tipoAf(a) === 'valvula';
+  let h = '<div class="afBloco" style="margin-top:10px;padding:8px 10px;border:1px solid var(--rule-2);border-radius:6px">';
+  if (af){
+    const r = resultadoAf(v, a, af);
+    h += '<div style="display:flex;gap:8px;align-items:center"><b style="flex:1">' + (vv ? 'Teste' : 'Aferição') + '</b>' + chipAf(r.resultado) + '</div>'
+      + '<p class="muted" style="margin:4px 0 0">' + (af.codigo ? esc(af.codigo) : 'Número ao enviar (o servidor numera).') + '</p>'
+      + (r.grave ? '<p class="alerta" style="margin:6px 0 0">Abertura acima da PMTA vigente: grave.</p>' : '')
+      + '<button class="btn sec" data-afabre="' + esc(a.id) + '" style="margin-top:6px">' + (pode ? 'Abrir ' + (vv ? 'o teste' : 'a aferição') : 'Ver') + '</button>';
+  } else if ((a.afericao_motivo || '').trim()){
+    h += '<b>Não ' + (vv ? 'testada' : 'aferido') + '</b><p class="muted" style="margin:4px 0 0">' + esc(a.afericao_motivo) + '</p>'
+      + (pode ? '<button class="btn sec" data-afdesf="' + esc(a.id) + '" style="margin-top:6px">' + (vv ? 'Testar' : 'Aferir') + ' mesmo assim</button>' : '');
+  } else {
+    h += '<b>' + (vv ? 'Teste da válvula' : 'Aferição do manômetro') + '</b><p class="muted" style="margin:4px 0 0">O envio pede ' + (vv ? 'o teste' : 'a aferição') + ' ou o motivo.</p>'
+      + (pode ? '<div style="display:flex;gap:8px;margin-top:6px"><button class="btn pri" data-afnovo="' + esc(a.id) + '">' + (vv ? 'Testar' : 'Aferir') + '</button>'
+        + '<button class="btn sec" data-afnao="' + esc(a.id) + '">Não ' + (vv ? 'testar' : 'aferir') + '…</button></div>' : '');
+  }
+  return h + '</div>';
+}
+function ligarBlocoAfericao(v, l, mudou){
+  $('tela').querySelectorAll('[data-afabre]').forEach(b => b.addEventListener('click', () => ir({ nome:'afericao', vaso:v.id, ac:b.dataset.afabre })));
+  $('tela').querySelectorAll('[data-afnovo]').forEach(b => b.addEventListener('click', () => {
+    const a = l.find(x => x.id === b.dataset.afnovo); novaAfericao(v, a); ir({ nome:'afericao', vaso:v.id, ac:a.id });
+  }));
+  $('tela').querySelectorAll('[data-afdesf]').forEach(b => b.addEventListener('click', () => {
+    const a = l.find(x => x.id === b.dataset.afdesf); mudou(a, 'afericao_motivo', null); novaAfericao(v, a); ir({ nome:'afericao', vaso:v.id, ac:a.id });
+  }));
+  $('tela').querySelectorAll('[data-afnao]').forEach(b => b.addEventListener('click', () => {
+    const a = l.find(x => x.id === b.dataset.afnao);
+    janela('Por que não ' + (tipoAf(a) === 'valvula' ? 'testar' : 'aferir') + '?',
+      '<label class="f">Motivo<textarea class="t" id="afMot" placeholder="Ex.: o cliente não liberou a retirada"></textarea></label>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
+        const m = ($('afMot').value || '').trim(); if (m.length < 5){ U.toast('Escreva o motivo.', 'err'); return false; }
+        mudou(a, 'afericao_motivo', m); pintar(); } }]);
+  }));
+}
+const ultimoPad = () => LS.get('tfdoc_af_pad', null), ultimaBan = () => LS.get('tfdoc_af_ban', null);
+function novaAfericao(v, a){
+  if (afDe(v, a)) return afDe(v, a);
+  const vv = tipoAf(a) === 'valvula', un = a.unidade_campo || unidadeDe(v);
+  const pad = (E.padroes || []).find(p => p.id === ultimoPad()) || (E.padroes || [])[0];
+  const ban = (E.bancadas || []).find(p => p.id === ultimaBan()) || (E.bancadas || [])[0];
+  const af = { id:uid(), tipo:vv ? 'valvula' : 'manometro', acessorio_id:a.id, unidade:UN_AF.includes(un) ? un : 'bar',
+    padrao_id:pad ? pad.id : null, bancada_id:ban ? ban.id : null, lacre_retirado:a.lacre_num || null, lacre_colocado:null,
+    validade_meses:vv ? null : 24, realizada_em:new Date().toISOString(),
+    ajuste:vv && a.pressao_ajuste_mpa != null ? Number(fmt(window.MotorNR13.deMPa(a.pressao_ajuste_mpa, UN_AF.includes(un) ? un : 'bar'), 3).replace(',', '.')) : null,
+    leituras:vv ? { aberturas:[null, null, null], assentamento:null } : { pontos:[] } };
+  v.inspecao.afericoes = ((v.inspecao.afericoes) || []).concat([af]); salvar(); gravarAfericao(v, af);
+  return af;
+}
+const AF_OK = ['tipo','acessorio_id','padrao_id','bancada_id','unidade','faixa_ini','faixa_fim','resolucao','ajuste','leituras','lacre_retirado','lacre_colocado','validade_meses','realizada_em'];
+function gravarAfericao(v, af){
+  const d = pegar(af, AF_OK); d.inspecao_id = v.inspecao.id;
+  enfileirar(v, 'afer-' + af.id, (af.tipo === 'valvula' ? 'teste de válvula' : 'aferição de manômetro'), { funcao:'tf_insp_afericao_gravar', payload:{ p_id:af.id, p_dados:d } });
+}
+const adiarAf = debounce((v, af) => gravarAfericao(v, af), 700);
+/** 5 pontos (0, 25, 50, 75, 100%) arredondados para o número mais perto do mostrador. */
+function sugerirPontos(ini, fim){
+  const passo = (fim - ini) / 4, mag = Math.pow(10, Math.floor(Math.log10(passo)));
+  const arr = x => { const r = Math.round(x / (mag / 2)) * (mag / 2); return Number(r.toFixed(6)); };
+  const out = [ini, arr(ini + passo), arr(ini + 2 * passo), arr(ini + 3 * passo), fim];
+  return out.filter((x, k) => out.indexOf(x) === k);
+}
+function telaAfericao(v){
+  const a = acessDe(v).find(x => x.id === telaAtual.ac);
+  if (!a){ ir({ nome:'acessorios', vaso:v.id }, true); return; }
+  const af = afDe(v, a) || novaAfericao(v, a), vv = af.tipo === 'valvula', pode = ed(v), un = af.unidade || 'bar';
+  titulo(vv ? 'Teste da válvula' : 'Aferição do manômetro', v.tag + ' · ' + nomeAc(a));
+  const r = resultadoAf(v, a, af);
+  let h = '<div class="card"><div style="display:flex;gap:8px;align-items:center"><b style="flex:1">' + (af.codigo ? esc(af.codigo) : 'Número ao enviar') + '</b>' + chipAf(r.resultado) + '</div>'
+    + '<p class="muted" style="margin:4px 0 0">PR-ENG-001 · ' + (vv ? 'desmontada até onde a construção permite, inspecionada, limpa e testada' : '3 cargas e 3 descargas por ponto') + '</p></div>';
+  h += '<div class="card"><label class="f">Manômetro padrão<select class="t" id="afPad"><option value="">—</option>' + (E.padroes || []).map(p => '<option value="' + esc(p.id) + '"' + (p.id === af.padrao_id ? ' selected' : '') + '>'
+      + esc((p.descricao || 'Padrão') + (p.numero_serie ? ' · ' + p.numero_serie : '') + (p.validade ? ' · até ' + String(p.validade).slice(5, 7) + '/' + String(p.validade).slice(0, 4) : '')) + '</option>').join('') + '</select></label>'
+    + ((E.padroes || []).length ? '' : '<p class="alerta">Nenhum padrão com certificado válido no pacote. O escritório cadastra em TapDoc › Instrumentos.</p>')
+    + '<label class="f">Bancada<select class="t" id="afBan"><option value="">—</option>' + (E.bancadas || []).map(p => '<option value="' + esc(p.id) + '"' + (p.id === af.bancada_id ? ' selected' : '') + '>'
+      + esc((p.descricao || 'Bancada') + (p.numero_serie ? ' · ' + p.numero_serie : '')) + '</option>').join('') + '</select></label>'
+    + '<label class="f">Unidade<select class="t" id="afUn">' + UN_AF.map(u => '<option value="' + u + '"' + (u === un ? ' selected' : '') + '>' + UN_AF_ROT[u] + '</option>').join('') + '</select></label></div>';
+  if (vv){
+    const L = af.leituras || (af.leituras = { aberturas:[null, null, null], assentamento:null });
+    h += '<div class="card">' + campoNum('Pressão de ajuste (' + UN_AF_ROT[un] + ')', 'afAj', af.ajuste, 'Da plaqueta da válvula ou do lacre anterior')
+      + '<div class="lin">' + [0, 1, 2].map(k => campoNum('Abertura ' + (k + 1), 'afAb' + k, L.aberturas[k])).join('') + '</div>'
+      + campoNum('Assentamento (' + UN_AF_ROT[un] + ')', 'afAs', L.assentamento) + '</div>';
+  } else {
+    const L = af.leituras || (af.leituras = { pontos:[] });
+    h += '<div class="card"><div class="lin">' + campoNum('Faixa: início', 'afIni', af.faixa_ini) + campoNum('Faixa: fim', 'afFim', af.faixa_fim) + '</div>'
+      + campoNum('Resolução de leitura (' + UN_AF_ROT[un] + ')', 'afRes', af.resolucao, 'O que dá para ler; por exemplo, meia divisão')
+      + '<label class="f">Pontos (os números do mostrador)<small>Separe por espaço. Mínimo de 3 além do zero, um acima de 75% da faixa.</small><input class="t" id="afPts" value="' + esc(L.pontos.map(p => fmt(p.nominal)).join(' ')) + '"></label>'
+      + '<button class="btn sec" id="afSug">Sugerir 5 pontos</button></div>';
+    L.pontos.forEach((p, k) => {
+      const rp = (r.pontos || []).find(x => x.nominal === Number(p.nominal));
+      h += '<div class="card"><div style="display:flex;gap:8px;align-items:center"><b style="flex:1">Ponto ' + esc(fmt(p.nominal)) + ' ' + UN_AF_ROT[un] + '</b>'
+        + (rp && rp.ok !== undefined ? (rp.ok ? '<span class="chip ok">ok</span>' : '<span class="chip pend">fora</span>') : '') + '</div>'
+        + '<table class="comp" style="width:100%"><tr><th></th><th>Padrão</th><th>Indicado</th></tr>'
+        + [0, 1, 2, 3, 4, 5].map(n => { const l = (p.leituras || [])[n] || {}; return '<tr><td>' + (n < 3 ? 'carga ' + (n + 1) : 'descarga ' + (n - 2)) + '</td>'
+          + '<td><input class="t" inputmode="decimal" data-pp="' + k + '" data-n="' + n + '" data-c="padrao" value="' + esc(l.padrao == null ? fmt(p.nominal) : fmt(l.padrao)) + '"></td>'
+          + '<td><input class="t" inputmode="decimal" data-pp="' + k + '" data-n="' + n + '" data-c="indicado" value="' + esc(l.indicado == null ? '' : fmt(l.indicado)) + '"></td></tr>'; }).join('')
+        + '</table>' + (rp && rp.erroMedio !== undefined ? '<p class="muted" style="margin:6px 0 0">Erro médio ' + fmt(rp.erroMedio, 3) + ' · tolerância ±' + fmt(rp.tol, 3) + ' · U ' + fmt(rp.U, 3) + '</p>' : '') + '</div>';
+    });
+  }
+  h += '<div class="card"><div class="lin">' + campoTexto('Lacre retirado', 'afLr', af.lacre_retirado, 'inputmode="numeric"') + campoTexto('Lacre colocado', 'afLc', af.lacre_colocado, 'inputmode="numeric"') + '</div>'
+    + (vv ? '' : campoNum('Validade do relatório (meses)', 'afVal', af.validade_meses == null ? 24 : af.validade_meses, 'Padrão: 24 meses (2 anos)')) + '</div>';
+  h += '<div class="card" id="afResultado"><b>Resultado</b>' + (r.faltas.length ? '<ul>' + r.faltas.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '')
+    + (r.avisos.length ? '<div class="alerta" style="margin-top:6px"><ul>' + r.avisos.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '')
+    + (r.completo ? '<p class="info" style="margin:6px 0 0">' + (vv ? (r.aprovadaOk ? 'Aprovada.' : 'Reprovada.') : (r.aprovadaOk ? 'Aprovado.' : 'Reprovado: o acessório vai para "substituir".')) + '</p>' : '') + '</div>';
+  $('tela').innerHTML = h;
+  if (!pode){ $('tela').querySelectorAll('input,select,button').forEach(el => { el.disabled = true; }); return; }
+  const mudou = (repinta) => {
+    salvar(); adiarAf('af:' + af.id, v, af);
+    const rr = resultadoAf(v, a, af);
+    if (rr.resultado === 'reprovado' && (a.situacao || 'ok') === 'ok'){ a.situacao = 'substituir'; salvar(); gravarAcess(v, a); }
+    if (repinta) pintar();
+  };
+  const n = x => { const y = num(x); return y == null || Number.isNaN(y) ? null : y; };
+  ligar('afPad', el => { af.padrao_id = el.value || null; LS.set('tfdoc_af_pad', af.padrao_id); mudou(true); });
+  ligar('afBan', el => { af.bancada_id = el.value || null; LS.set('tfdoc_af_ban', af.bancada_id); mudou(true); });
+  ligar('afUn', el => { af.unidade = el.value; mudou(true); });
+  ligar('afLr', el => { af.lacre_retirado = el.value.trim() || null; mudou(false); });
+  ligar('afLc', el => { af.lacre_colocado = el.value.trim() || null; mudou(true); });
+  ligar('afVal', el => { const x = n(el.value); if (x == null || x < 1 || x > 120){ U.toast('Validade de 1 a 120 meses.', 'err'); el.value = af.validade_meses; return; } af.validade_meses = Math.round(x); mudou(false); });
+  if (vv){
+    ligar('afAj', el => { af.ajuste = n(el.value); mudou(true); });
+    [0, 1, 2].forEach(k => ligar('afAb' + k, el => { af.leituras.aberturas[k] = n(el.value); mudou(true); }));
+    ligar('afAs', el => { af.leituras.assentamento = n(el.value); mudou(true); });
+  } else {
+    ligar('afIni', el => { af.faixa_ini = n(el.value); mudou(true); });
+    ligar('afFim', el => { af.faixa_fim = n(el.value); mudou(true); });
+    ligar('afRes', el => { af.resolucao = n(el.value); mudou(true); });
+    const pts = lista => {
+      const velhos = af.leituras.pontos || [];
+      af.leituras.pontos = lista.map(x => velhos.find(p => Number(p.nominal) === x) || { nominal:x, leituras:[] });
+      mudou(true);
+    };
+    ligar('afPts', el => { const l = el.value.split(/[\s;]+/).map(n).filter(x => x != null); pts([...new Set(l)].sort((p, q) => p - q)); });
+    ligar('afSug', () => { if (!(af.faixa_fim > (af.faixa_ini || 0))){ U.toast('Informe a faixa primeiro.', 'err'); return; } pts(sugerirPontos(af.faixa_ini || 0, af.faixa_fim)); }, 'click');
+    $('tela').querySelectorAll('[data-pp]').forEach(el => el.addEventListener('change', () => {
+      const p = af.leituras.pontos[Number(el.dataset.pp)], k = Number(el.dataset.n);
+      p.leituras = p.leituras || [];
+      for (let j = 0; j < 6; j++) if (!p.leituras[j]) p.leituras[j] = { sentido:j < 3 ? 'carga' : 'descarga', padrao:Number(p.nominal), indicado:null };
+      p.leituras[k][el.dataset.c] = n(el.value);
+      mudou(true);
+    }));
+  }
+}
+
 function novoAcess(v, base){
   const a = Object.assign({ tipo:'valvula_seguranca', situacao:null, camara_id:ativas(v).length === 1 ? ativas(v)[0].id : null, unidade_campo:unidadeDe(v) }, base || {},
     { id:uid(), ordem:acessDe(v).length + 1 });
@@ -1321,6 +1516,7 @@ function telaAcessorios(v){
       if (MEDIDORES.includes(a.tipo)) h += campoTexto('Escala', 'ac_esc_' + a.id, a.escala, 'data-k="escala" placeholder="Ex.: 0 a 16 bar"');
       if (cs.length > 1) h += '<label class="f">Câmara<select class="t" data-k="camara_id"><option value="">—</option>' +
         cs.map(c => '<option value="' + esc(c.id) + '"' + (c.id === a.camara_id ? ' selected' : '') + '>' + esc(c.nome) + '</option>').join('') + '</select></label>';
+      if (AFERIVEIS.includes(a.tipo)) h += blocoAfericao(v, a, pode);
       h += '<p style="margin:12px 0 0;font-size:13px;font-weight:600;color:var(--ink-2)">Foto do item</p>' + gradeFotos(v, 'acessorios', 3, null, a.id);
     }
     h += '</div>';
@@ -1348,6 +1544,7 @@ function telaAcessorios(v){
     seg.querySelectorAll('[data-s]').forEach(b => b.addEventListener('click', () => { mudou(a, 'situacao', b.dataset.s); pintar(); }));
     ligarPressao('ac_p_' + a.id, a.unidade_campo || unidadeDe(v), m => { mudou(a, 'pressao_ajuste_mpa', m); pintar(); });
   });
+  ligarBlocoAfericao(v, l, mudou);
   $('tela').querySelectorAll('[data-acrm]').forEach(b => b.addEventListener('click', () => {
     const a = l.find(x => x.id === b.dataset.acrm);
     if (a.origem_id){ U.toast('Este veio da inspeção anterior: se saiu do vaso, marque "retirado" (o laudo registra).', 'err'); return; }

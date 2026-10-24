@@ -29,7 +29,7 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H10-S85';   // S85 · TapDoc E5 e TapDoc 7 (406): o doc/ e o field/doc/ mudaram
+const VERSAO = 'H10-S86';   // S86 · TapDoc E6 e TapDoc 8 (407, R04a) e o motor R00.3: o doc/ e o field/doc/ mudaram
 const CACHE  = 'tapflow-hub-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -52,7 +52,7 @@ const ESSENCIAIS = [
   './fin/',
   // S77 · TapDoc do escritório (R02b1) e o motor de cálculo que ele usa
   './doc/',
-  './doc/motor-calculo-nr13.js?v=R00.2'
+  './doc/motor-calculo-nr13.js?v=R00.3'
 ];
 
 self.addEventListener('install', ev => {
