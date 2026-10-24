@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 4 · Financeiro</title>
+<title>TapFin 5 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2208,10 +2208,18 @@ th.num .tfThFixo{text-align:right}
 .nfBloco{border:1px solid var(--rule);border-radius:4px;padding:8px 10px;margin:0 0 10px;font-size:13.5px}
 .nfBloco b{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-bottom:2px}
 .nfRecusa{background:var(--crit-soft);color:var(--crit);padding:6px 9px;border-radius:4px;font-size:13px;margin:6px 0;word-break:break-word}
-.nfLin{display:flex;gap:10px;justify-content:space-between;align-items:flex-start;border-top:1px solid var(--rule);padding:9px 0}
+/* F5: o quadro "Notas fiscais" é sempre em coluna (dados em cima, botões embaixo):
+   lado a lado, o "Cancelar nota" saía da janela pela direita (1ª nota de teste, 23/10). */
+.nfLin{display:flex;flex-direction:column;gap:7px;border-top:1px solid var(--rule);padding:10px 0;min-width:0}
 .nfLin:first-child{border-top:none}
-.nfBot{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-@media (max-width:700px){ .nfLin{flex-direction:column} .nfBot{justify-content:flex-start} }
+.nfLin > div{min-width:0}
+.nfBot{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-start}
+.nfChave{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:4px 0 0;font-size:12px;color:var(--ink-3)}
+.nfChave code{font-family:var(--mono);font-size:11.5px;color:var(--ink-2,var(--ink));word-break:break-all;overflow-wrap:anywhere;min-width:0}
+.finMenu hr{border:0;border-top:1px solid var(--rule);margin:4px 0}
+.finMenu button.off{color:var(--ink-3);cursor:not-allowed}
+.finMenu button.off small{display:block;font-size:11px;color:var(--ink-3)}
+.finMenu button.perigo.topo{font-weight:600}
 /* ── F4 · H10 · a moldura do módulo (opção A do Bruno, 23/10) ─────────────────
    Só a moldura fica verde: menu lateral, o "Fin" do logo, a barra do item ativo e a
    faixa de 4 px no topo. Botões, links, "Entrou/Saiu/Resultado" e as cores de
@@ -2300,7 +2308,7 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'F4';   // TapFin 4 (F3 + moldura verde e menu "Trocar de módulo" do H10) — a versão do módulo; o S## da publicação é do central
+const APP_VERSION = 'F5';   // TapFin 5 (ajustes da NFS-e depois da 1ª nota de homologação) — o S## da publicação é do central — a versão do módulo; o S## da publicação é do central
 try{ document.getElementById('verBadge').textContent = 'FINANCEIRO · ' + APP_VERSION; }catch(e){}
 
 const esc               = (...a) => Nucleo.util.esc(...a);
@@ -5656,8 +5664,12 @@ function finMenuAbrir(botao, itens, escolher){
   if (!itens.length) return;
   const m = document.createElement('div');
   m.className = 'finMenu'; m.setAttribute('role', 'menu');
-  m.innerHTML = itens.map((it, i) => '<button type="button" role="menuitem" tabindex="-1" data-i="' + i + '"'
-    + (it.perigo ? ' class="perigo"' : '') + '>' + esc(it.rot) + '</button>').join('');
+  // F5: {sep:true} desenha um traço; {off:'motivo'} é item travado (fica à vista, explica e não executa)
+  m.innerHTML = itens.map((it, i) => it.sep ? '<hr role="separator">'
+    : '<button type="button" role="menuitem" tabindex="-1" data-i="' + i + '"'
+      + ' class="' + [it.perigo ? 'perigo' : '', it.off ? 'off' : '', it.cls || ''].filter(Boolean).join(' ') + '"'
+      + (it.off ? ' aria-disabled="true" title="' + esc(it.off) + '"' : '') + '>' + esc(it.rot)
+      + (it.off ? '<small>' + esc(it.off) + '</small>' : '') + '</button>').join('');
   document.body.appendChild(m);
   _finMenu = m; m._botao = botao;
   botao.setAttribute('aria-expanded', 'true');
@@ -5673,6 +5685,7 @@ function finMenuAbrir(botao, itens, escolher){
     const b = e.target.closest('[data-i]'); if (!b) return;
     const it = itens[Number(b.dataset.i)];
     finMenuFechar(false);
+    if (it.off){ toast(it.off, 'err'); return; }
     escolher(it);
   });
   m.addEventListener('keydown', e => {
@@ -5832,7 +5845,7 @@ function finreLinha(t, hoje, par){
     + '<span class="ccNome">' + esc(t.cliente_nome || '—') + '</span>'
     + '<span class="ccDesc">' + finDescHtml(t.descricao, ['Sem descrição', t.subcategoria_nome].filter(Boolean).join(' — '))
       + (t.os_codigo ? ' <small style="color:var(--ink-3)">· ' + esc(t.os_codigo) + '</small>' : '')
-      + (t.nf_numero ? ' <small style="color:var(--ink-3)">· NF ' + esc(t.nf_numero) + '</small>' : '')
+      + (t.nf_numero ? ' <small style="color:var(--ink-3)">· NF ' + esc(nfNumero({ numero: t.nf_numero })) + '</small>' : '')
       + (t.anulado && t.anulado_motivo ? ' <small style="color:var(--ink-3)">— anulado: ' + esc(t.anulado_motivo) + '</small>' : '') + '</span>'
     + '<span class="n v">' + esc(BRL(t.valor))
       + (finParcial(t) ? '<small class="finSaldo">falta ' + esc(BRL(t.saldo)) + '</small>' : '') + '</span>'
@@ -5857,21 +5870,28 @@ function finrePrimaria(t){
 
 function finreMenu(t){
   const p = finrePrimaria(t).acao;
-  const M = [{ acao:'editar', rot:'Editar' }];
+  const n = nfDe(t), viva = nfViva(t);
+  const M = [];
+  // F5: a nota emitida se cancela pelo topo do menu, em vermelho, longe do "Anular"
+  if (n && n.situacao === 'autorizada') M.push({ acao:'nfcancelar', rot:'Cancelar nota fiscal', perigo:true, cls:'topo' }, { sep:true });
+  M.push({ acao:'editar', rot:'Editar' });
   if (p !== 'baixar' && Number(t.saldo) > 0) M.push({ acao:'baixar', rot:'Baixar' });
   if (p !== 'baixas') M.push({ acao:'baixas', rot:'Baixas' });
   if (FINNF.ativo){
     if (t.etapa === 'a_faturar' && p !== 'faturar') M.push({ acao:'faturar', rot:'Preparar nota (manual, no portal)' });
     M.push({ acao:'pedido', rot:'Pedido de compra' });
-    if (nfDe(t)) M.push({ acao:'notas', rot:'Notas fiscais' });
+    if (n) M.push({ acao:'notas', rot:'Notas fiscais' });
   }
-  M.push({ acao:'anular', rot:'Anular', perigo:true });
+  M.push({ sep:true });
+  // F5: título com nota viva não se anula (o banco também recusa: 505)
+  M.push(viva ? { acao:'anular', rot:'Anular', off:'Cancele a nota primeiro' } : { acao:'anular', rot:'Anular', perigo:true });
   return M;
 }
 
 function finreAcao(a, t){
   if (a === 'emitir') return modalEmitirNota(t);
   if (a === 'notas') return modalNotasTitulo(t);
+  if (a === 'nfcancelar'){ const n = nfDe(t); if (n && n.situacao === 'autorizada') return modalCancelarNota(t, n); return; }
   if (a === 'pedido') return modalPedidoCompra(t);
   if (a === 'nfatualizar'){ const n = nfDe(t); if (n) return nfExecutar(() => nfFuncao({ acao: 'consultar', titulo_id: t.id, nfse_id: n.id }), 'consultar', 'Consultando a nota…'); return; }
   if (a === 'faturar') return modalPrepararNota(t);
@@ -5922,12 +5942,21 @@ async function nfCarregar(){
 
 /** A nota (a última) do título, se houver. */
 const nfDe = t => (FINNF.ativo && t && FINNF.sit[t.id]) || null;
+/** F5: nota que ainda vale (ou está a caminho): o título não pode ser anulado. */
+const nfViva = t => { const n = nfDe(t); return !!(n && ['emitindo', 'autorizada', 'cancelando'].includes(n.situacao)); };
+/** F5: a chave de acesso (50 dígitos) e o número curto da NFS-e. O Notaas devolve o Id do XML
+ *  ("NFS" + chave); o número de verdade está na chave, nas posições 24 a 36. O banco (505) já grava
+ *  o curto; isto aqui só protege a tela de uma nota antiga. */
+const nfChave = n => { const c = String((n && n.chave) || '').replace(/\D/g, ''); if (c.length === 50) return c;
+  const m = /^(?:NFS)?(\d{50})$/.exec(String((n && n.numero) || '')); return m ? m[1] : ''; };
+const nfNumero = n => { const c = nfChave(n); if (c) return String(Number(c.slice(23, 36)));
+  return (n && n.numero) ? String(n.numero) : ''; };
 
 function nfChip(t){
   const n = nfDe(t); if (!n) return '';
   const teste = n.ambiente === 'teste' ? ' (teste)' : '';
   let cls = '', txt = NF_SIT[n.situacao] || n.situacao;
-  if (n.situacao === 'autorizada'){ cls = ' fOk'; txt = 'NF ' + n.numero + teste; }
+  if (n.situacao === 'autorizada'){ cls = ' fOk'; txt = 'NFS-e ' + nfNumero(n) + teste; }
   else if (n.situacao === 'rejeitada'){ cls = ' fCrit'; }
   else if (n.situacao === 'emitindo' || n.situacao === 'cancelando'){ cls = ' fAtn'; }
   return ' <span class="chip' + cls + '" title="' + esc((n.motivo || n.cancel_resposta || txt)) + '">' + esc(txt) + '</span>'
@@ -5971,8 +6000,8 @@ async function nfFuncao(corpo){
 
 function nfResultado(j, verbo){
   const teste = j.ambiente === 'teste' ? ' (TESTE, sem valor fiscal)' : '';
-  if (j.situacao === 'autorizada' && verbo === 'emitir') toast('Nota ' + j.numero + ' emitida' + teste + '. O título foi faturado.', 'ok');
-  else if (j.situacao === 'cancelada') toast('Nota ' + (j.numero || '') + ' cancelada. O título voltou para "A faturar".', 'ok');
+  if (j.situacao === 'autorizada' && verbo === 'emitir') toast('NFS-e ' + nfNumero(j) + ' emitida' + teste + '. O título foi faturado.', 'ok');
+  else if (j.situacao === 'cancelada') toast('NFS-e ' + nfNumero(j) + ' cancelada. O título voltou para "A faturar".', 'ok');
   else if (j.situacao === 'rejeitada') nfAvisoRecusa(j.motivo);
   else if (j.situacao === 'autorizada' && j.cancel_resposta) nfAvisoRecusa('Cancelamento recusado: ' + j.cancel_resposta);
   else if (j.aviso) toast(j.aviso, 'err');
@@ -6002,7 +6031,10 @@ async function modalEmitirNota(t){
   const lista = (L, cls) => (L && L.length) ? '<ul class="' + cls + '">' + L.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '';
   abrirModal('Emitir nota — ' + finTituloRot(t),
       nfFaixaTeste(prep.ambiente)
-    + lista(prep.erros, 'nfErros') + lista(prep.avisos, 'nfAvisos')
+    + lista(prep.erros, 'nfErros')
+    + ((prep.erros || []).some(x => /Cadastros/.test(x)) && NO_SERVIDOR
+       ? '<p class="nota" style="margin:-4px 0 10px"><a href="../manager/?ir=cad" target="_blank" rel="noopener">Abrir Cadastros › Clientes</a> (em outra aba). Corrigido, feche esta janela e clique em "Emitir nota" de novo.</p>' : '')
+    + lista(prep.avisos, 'nfAvisos')
     + '<div class="nfBloco"><b>Tomador</b>'
     +   '<div>' + esc(r.cliente || '—') + ' · CNPJ ' + esc(finDocFmt(r.cnpj)) + '</div>'
     +   '<div class="nota" style="margin:2px 0 0">' + esc(r.endereco || 'Endereço não cadastrado') + '</div></div>'
@@ -6073,10 +6105,12 @@ async function modalNotasTitulo(t){
   try{ L = await rpc('tf_fin_nfse_listar', { p_titulo_id: t.id }); }
   catch(e){ toast(e.message, 'err'); return; }
   const linha = n => '<div class="nfLin">'
-    + '<div><b>' + esc(NF_SIT[n.situacao] || n.situacao) + (n.numero ? ' · nº ' + esc(n.numero) : '') + '</b>'
+    + '<div><b>' + esc(NF_SIT[n.situacao] || n.situacao) + (nfNumero(n) ? ' · NFS-e ' + esc(nfNumero(n)) : '') + '</b>'
     +   (n.ambiente === 'teste' ? ' <span class="chip fAtn">teste</span>' : '')
     +   '<div class="nota" style="margin:2px 0 0">' + esc(dataBR(n.emitida_em || n.criado_em)) + ' · ' + esc(n.criado_por || '—')
     +   (n.cancelado_em ? ' · cancelada em ' + esc(dataBR(n.cancelado_em)) + ' por ' + esc(n.cancelado_por || '—') : '') + '</div>'
+    +   (nfChave(n) ? '<div class="nfChave">Chave de acesso <code>' + esc(nfChave(n)) + '</code>'
+         + '<button class="btn mini" type="button" data-nfcopia="' + esc(nfChave(n)) + '">Copiar</button></div>' : '')
     +   (n.motivo ? '<div class="nfRecusa">' + esc(n.motivo) + '</div>' : '')
     +   (n.cancel_motivo ? '<div class="nota" style="margin:2px 0 0">Motivo do cancelamento: ' + esc(n.cancel_motivo) + '</div>' : '')
     +   (n.cancel_resposta ? '<div class="nfRecusa">Cancelamento recusado: ' + esc(n.cancel_resposta) + '</div>' : '')
@@ -6092,7 +6126,8 @@ async function modalNotasTitulo(t){
     (L.length ? L.map(linha).join('') : '<p class="nota">Nenhuma nota emitida pelo TapFin para este título.</p>'),
     [{ label: 'Fechar', pri: true, onClick: fecharModal }]);
   document.getElementById('mBody').addEventListener('click', e => {
-    const a = e.target.closest('[data-nfatual]'), c = e.target.closest('[data-nfcanc]');
+    const a = e.target.closest('[data-nfatual]'), c = e.target.closest('[data-nfcanc]'), k = e.target.closest('[data-nfcopia]');
+    if (k){ copiar(k.dataset.nfcopia, 'Chave de acesso copiada.'); return; }
     if (a) nfExecutar(() => nfFuncao({ acao: 'consultar', titulo_id: t.id, nfse_id: a.dataset.nfatual }), 'consultar', 'Consultando a nota…');
     if (c) modalCancelarNota(t, L.find(x => x.id === c.dataset.nfcanc));
   });
@@ -6100,7 +6135,7 @@ async function modalNotasTitulo(t){
 
 function modalCancelarNota(t, n){
   if (!n) return;
-  abrirModal('Cancelar a nota ' + (n.numero || ''),
+  abrirModal('Cancelar a NFS-e ' + nfNumero(n),
       nfFaixaTeste(n.ambiente)
     + '<p style="margin-top:0">A nota é cancelada no Emissor Nacional e o título volta para <b>A faturar</b> (dá para emitir outra depois).</p>'
     + '<div class="campo"><label for="nfMotivo">Motivo (de 15 a 255 letras, vai para o governo)</label>'
@@ -6110,6 +6145,12 @@ function modalCancelarNota(t, n){
      { label: 'Cancelar nota', cls: 'perigo', onClick: async () => {
         const motivo = document.getElementById('nfMotivo').value.trim();
         if (motivo.length < 15){ toast('O motivo precisa ter pelo menos 15 letras.', 'err'); return; }
+        // F5: confirma antes (o cancelamento vai ao governo e não se desfaz)
+        const ok = await confirmar('Cancelar a NFS-e ' + nfNumero(n) + '?',
+          nfFaixaTeste(n.ambiente)
+          + '<p style="margin-top:0">A nota é cancelada no Emissor Nacional, <b>sem volta</b>. O título volta para "A faturar" com o vencimento de antes da nota.</p>'
+          + '<p class="nota">Motivo: ' + esc(motivo) + '</p>', 'Cancelar a nota', true);
+        if (!ok){ modalCancelarNota(t, n); setTimeout(() => { const m = document.getElementById('nfMotivo'); if (m) m.value = motivo; }, 0); return; }
         await nfExecutar(() => nfFuncao({ acao: 'cancelar', titulo_id: t.id, nfse_id: n.id, motivo }), 'cancelar', 'Cancelando a nota…');
      }}]);
 }
@@ -7598,6 +7639,7 @@ function modalPrepararNota(t){
 }
 
 function modalAnularTitulo(t){
+  if (nfViva(t)){ toast('Cancele a nota primeiro: este título tem nota fiscal emitida (ou em andamento).', 'err'); return; }
   abrirModal('Anular — ' + finTituloRot(t),
       '<p class="nota" style="margin-top:0">O título não é apagado, fica marcado como anulado com o motivo. '
     + 'Para corrigir descrição, valor ou datas, use <b>Editar</b> (no menu ⋯). Anule só o título que não devia existir — ou para trocar o cliente, lançando outro depois.</p>'
