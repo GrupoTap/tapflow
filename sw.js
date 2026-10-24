@@ -29,7 +29,7 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H11-S88';   // S88 · Acessos P1: hub H11 com o link "Pessoas e acessos" e a página acessos/
+const VERSAO = 'H11-S89';   // S89 · Acessos A2: a aba Perfis completa; as telas do Manager pelo quadro (204)
 const CACHE  = 'tapflow-hub-' + VERSAO;
 
 const ESSENCIAIS = [
