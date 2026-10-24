@@ -143,6 +143,8 @@ textarea.t{min-height:72px;resize:vertical}
 .fl b{display:block}
 .fl .mot{color:var(--crit);font-size:12.5px}
 @media (min-width:900px){ main{padding:20px} .fotos{grid-template-columns:repeat(4,1fr)} }
+.faixa{background:#FBF3DB;border:1px solid #EAD9A6;border-radius:8px;padding:6px 10px;font-size:12.5px;margin-top:6px;color:#3D3416}
+.faixa[hidden]{display:none}
 </style>
 </head>
 <body>
@@ -159,7 +161,13 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 5';   // H10 · moldura na cor do TapDoc (S80 · R03b: ultrassom, geometria e prévia do cálculo)
+const VERSAO = 'TapDoc 6';   // S84 · 405: a faixa de resistência abaixo do material (TapDoc 5: moldura H10; S80 · R03b: ultrassom e prévia)
+// 405: uma linha curta com a faixa do material, para conferir com a plaqueta ou o certificado da chapa
+function linhaFaixa(m){
+  if (!m || m.resist_min_mpa == null) return '';
+  const f = m.resist_max_mpa != null ? fmt(m.resist_min_mpa, 0) + ' a ' + fmt(m.resist_max_mpa, 0) + ' MPa' : 'mín. ' + fmt(m.resist_min_mpa, 0) + ' MPa';
+  return 'Resistência ' + f + ' · S ' + fmt(m.s_mpa, 1) + ' MPa' + (m.conferido ? '' : ' · a conferir');
+}
 if (window.TapModulos) TapModulos.aplicar('tapdoc');
 const CFG = window.TF_CONFIG || {};
 const SUPA_URL = CFG.SUPABASE_URL || '', SUPA_ANON = CFG.SUPABASE_ANON_KEY || '';
@@ -805,6 +813,8 @@ function telaOperacao(v){
   h += campoNum('Circunferência medida (mm)', 'oCirc', v.circunferencia_mm, 'Com a trena, por fora do costado.');
   h += '<label class="f">Material do costado<select class="t" id="oMat"><option value="">não sei / ver no laudo</option>' +
     mats.map(m => '<option value="' + esc(m.id) + '"' + (m.id === v.material_id ? ' selected' : '') + '>' + esc(m.especificacao + (m.forma ? ' (' + m.forma + ')' : '')) + '</option>').join('') + '</select></label>';
+  const mSel = mats.find(m => m.id === v.material_id), lf = linhaFaixa(mSel);
+  h += '<div class="faixa" id="oFaixa"' + (lf ? '' : ' hidden') + '>' + esc(lf) + '</div>';
   h += '<p class="muted" style="margin-top:10px">A categoria é calculada (veja a prévia do cálculo no painel do vaso). Ninguém escolhe a categoria.</p></div>';
   cs.forEach(c => {
     const conhecido = FLUIDOS.some(f => f[0] === c.fluido);
@@ -832,7 +842,8 @@ function telaOperacao(v){
 
   $('oPos').querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => { mudouVaso(v, 'posicao', b.dataset.p); pintar(); }));
   ligar('oCirc', el => { const x = numOuAviso(el, 1, 100000, 'Circunferência'); if (x !== undefined) mudouVaso(v, 'circunferencia_mm', x); });
-  ligar('oMat', el => mudouVaso(v, 'material_id', el.value || null));
+  ligar('oMat', el => { mudouVaso(v, 'material_id', el.value || null);
+    const lf = linhaFaixa(mats.find(m => m.id === el.value)), cx = $('oFaixa'); if (cx){ cx.textContent = lf; cx.hidden = !lf; } });
   $('tela').querySelectorAll('[data-cam]').forEach(el => el.addEventListener('change', () => {
     const c = v.camaras.find(x => x.id === el.dataset.cam); if (!c) return;
     if (el.dataset.k === 'tipo'){ mudouCam(v, c, 'tipo', el.value); if (/^(Única|Casco|Tubos|Camisa)$/.test(c.nome)) mudouCam(v, c, 'nome', TIPOS_CAM[el.value]); pintar(); return; }

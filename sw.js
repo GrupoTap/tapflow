@@ -29,7 +29,7 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H10-S83';   // S83 · TapFin 5 (ajustes da NFS-e): o fin/ mudou — o cache velho do fin/ sai
+const VERSAO = 'H10-S84';   // S84 · TapDoc E4 e TapDoc 6 (405): o doc/ e o field/doc/ mudaram
 const CACHE  = 'tapflow-hub-' + VERSAO;
 
 const ESSENCIAIS = [

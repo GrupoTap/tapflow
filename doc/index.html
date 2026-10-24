@@ -122,6 +122,10 @@ details.op summary{font-weight:700;font-size:13.5px;cursor:pointer;color:var(--a
   table.tv td.acoes{grid-column:1/-1;text-align:left !important;margin-top:6px}
   table.vs th:nth-child(4),table.vs td:nth-child(4){display:none}
 }
+.faixa{background:#FBF3DB;border:1px solid #EAD9A6;border-radius:8px;padding:8px 10px;font-size:13px;line-height:1.5;margin-top:6px;color:#3D3416}
+.faixa b{font-weight:600}
+.sAviso{font-size:12.5px;margin-top:4px}
+.sAviso.ruim{color:#B42318}.sAviso.ok{color:#15803D}
 </style>
 </head>
 <body>
@@ -137,7 +141,31 @@ details.op summary{font-weight:700;font-size:13.5px;cursor:pointer;color:var(--a
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E3';   // E = escritório · E3 (H10): moldura dourada e o menu "Trocar de módulo"
+const VERSAO = 'TapDoc E4';   // E = escritório · E4 (S84 · 405): faixa de resistência do material e o S do ASME como teto (E3: moldura H10)
+// 405: a faixa de resistência (norma do material) e o S esperado pelo ASME (fator 3,5; 2/3 do escoamento; costura × 0,85)
+function faixaTxt(m){
+  if (!m || m.resist_min_mpa == null) return 'faixa de resistência não cadastrada';
+  return (m.resist_max_mpa != null ? fmt(m.resist_min_mpa, 0) + ' a ' + fmt(m.resist_max_mpa, 0) + ' MPa' : 'mínimo ' + fmt(m.resist_min_mpa, 0) + ' MPa (a norma não dá máximo)');
+}
+function sEsperado(rmin, esc, forma){
+  if (!(rmin > 0)) return null;
+  let s = rmin / 3.5; if (esc > 0) s = Math.min(s, esc * 2 / 3);
+  return /com costura/i.test(forma || '') ? s * 0.85 : s;
+}
+// a conta do S pela faixa, para o Túlio e o PLH conferirem (tolerância de 2%: o ASME arredonda em ksi)
+function contaS(rmin, resc, forma, s){
+  const e = sEsperado(rmin, resc, forma);
+  if (e == null) return '<p class="sAviso">Sem a resistência mínima: o sistema não confere o S.</p>';
+  const conta = fmt(rmin, 0) + ' ÷ 3,5' + (resc > 0 && resc * 2 / 3 < rmin / 3.5 ? ' (ou 2/3 do escoamento)' : '') + (/com costura/i.test(forma || '') ? ' × 0,85 (costura)' : '') + ' = ' + fmt(e, 1) + ' MPa';
+  if (!(s > 0)) return '<p class="sAviso">' + conta + '</p>';
+  const ok = Math.abs(s - e) <= e * 0.02;
+  return '<p class="sAviso ' + (ok ? 'ok' : 'ruim') + '">' + (ok ? '✓ Confere: ' : '⚠ Não confere: ') + conta + (ok ? '' : ' (cadastrado: ' + fmt(s, 1) + ' MPa)') + '</p>';
+}
+function quadroFaixa(m){
+  if (!m) return '';
+  return '<div class="faixa">Resistência <b>' + esc(faixaTxt(m)) + '</b>' + (m.escoamento_min_mpa != null ? '<br>Escoamento mín. ' + fmt(m.escoamento_min_mpa, 0) + ' MPa' : '')
+    + '<br>S do ASME: <b>' + fmt(m.s_mpa, 1) + ' MPa</b>' + (m.t_max_c != null ? ' até ' + fmt(m.t_max_c, 0) + ' °C' : '') + ' <span class="muted">(teto do cálculo)</span></div>';
+}
 // H10: a moldura (cabeçalho e barra da janela) na cor do card do TapDoc, e o menu de troca
 if (window.TapModulos){ TapModulos.aplicar('tapdoc'); TapModulos.trocador(document.getElementById('trocar'), 'tapdoc'); }
 else document.getElementById('trocar').addEventListener('click', () => { location.href = '../'; });
@@ -287,10 +315,11 @@ async function telaMateriais(){
   const L = await rpc('tf_insp_materiais_lista'), admin = !!(N.sessao() || {}).admin, nConf = L.filter(x => !x.conferido).length;
   let h = '<div class="card"><div class="linha" style="justify-content:space-between"><h3 style="margin:0">Materiais (tensão admissível)</h3>'
     + (admin ? '<button class="btn pri" id="matNovo">+ material</button>' : '') + '</div>'
-    + '<p class="muted">S da ASME II-D, Tabela 1A. A prévia do celular usa também os não conferidos (avisando). <b>O resultado do laudo só grava com material conferido pelo PLH.</b>'
+    + '<p class="muted">S da ASME II-D, Tabela 1A (edição atual, fator 3,5): é o <b>teto</b> do cálculo. A faixa de resistência é a da norma do material. A prévia do celular usa também os não conferidos (avisando). <b>O resultado do laudo só grava com material conferido pelo PLH.</b>'
     + (nConf ? ' Faltam conferir: <b>' + nConf + '</b>.' : '') + '</p>'
-    + (L.length ? '<table><tr><th>Especificação</th><th>Forma</th><th>S (MPa)</th><th>Até</th><th>Situação</th><th></th></tr>'
+    + (L.length ? '<table><tr><th>Especificação</th><th>Forma</th><th>Resistência (MPa)</th><th>S (MPa)</th><th>Até</th><th>Situação</th><th></th></tr>'
       + L.map(x => '<tr><td><b>' + esc(x.especificacao) + '</b>' + (x.tabela_asme ? ' <span class="muted">' + esc(x.tabela_asme) + '</span>' : '') + '</td><td>' + esc(x.forma || '—') + '</td><td>'
+        + (x.resist_min_mpa != null ? fmt(x.resist_min_mpa, 0) + (x.resist_max_mpa != null ? ' a ' + fmt(x.resist_max_mpa, 0) : ' (mín.)') : '<span class="muted">—</span>') + '</td><td>'
         + fmt(x.s_mpa, 1) + '</td><td>' + fmt(x.t_max_c, 0) + ' °C</td><td>'
         + (x.conferido ? '<span class="chip s-pronto">conferido' + (x.conferido_por ? ' · ' + esc(x.conferido_por) : '') + '</span>' : '<span class="chip s-em_conferencia">a conferir</span>')
         + '</td><td>' + (admin ? (x.conferido ? '' : '<button class="btn mini pri" data-mconf="' + esc(x.id) + '">Conferir</button> ') + '<button class="btn mini" data-med="' + esc(x.id) + '">Editar</button>' : '')
@@ -302,25 +331,35 @@ async function telaMateriais(){
   $('tela').querySelectorAll('[data-med]').forEach(b => b.addEventListener('click', () => editarMaterial(L.find(x => x.id === b.dataset.med))));
   $('tela').querySelectorAll('[data-mconf]').forEach(b => b.addEventListener('click', () => {
     const x = L.find(y => y.id === b.dataset.mconf);
-    janela('Conferir ' + x.especificacao, '<p><b>' + esc(x.especificacao) + '</b> · ' + esc(x.forma || '') + '<br>S = <b>' + fmt(x.s_mpa, 1) + ' MPa</b> até ' + fmt(x.t_max_c, 0) + ' °C</p>'
+    janela('Conferir ' + x.especificacao, '<p><b>' + esc(x.especificacao) + '</b> · ' + esc(x.forma || '') + '</p>' + quadroFaixa(x) + contaS(x.resist_min_mpa, x.escoamento_min_mpa, x.forma, x.s_mpa)
       + '<p class="muted">Fonte: ' + esc(x.fonte || '—') + '</p><p>Confere com a ASME II-D? Depois de conferido, o material entra no resultado do laudo.</p>',
       [{ rotulo:'Cancelar' }, { rotulo:'Conferido', classe:'pri', acao:async () => { try{ await rpc('tf_insp_material_gravar', { p_dados:{ id:x.id, conferir:true } }); U.toast('Conferido.', 'ok'); pintar(); }catch(e){ erro(e); return false; } } }]);
   }));
 }
 function editarMaterial(x){
   x = x || {};
+  setTimeout(() => {
+    const viva = () => { const c = $('mt_conta'); if (c) c.innerHTML = contaS(num($('mt_rmin').value), num($('mt_esc').value), $('mt_forma').value, num($('mt_s').value)); };
+    ['mt_rmin','mt_esc','mt_s','mt_forma'].forEach(id => { const e = $(id); if (e) e.addEventListener('input', viva); }); viva();
+  }, 0);
   janela(x.id ? 'Editar ' + x.especificacao : 'Novo material',
     '<label class="f">Especificação<input class="t" id="mt_esp" value="' + esc(x.especificacao || '') + '" placeholder="Ex.: SA-516 Gr. 70"></label>'
     + '<label class="f">Forma<input class="t" id="mt_forma" value="' + esc(x.forma || '') + '" placeholder="chapa, tubo sem costura…"></label>'
-    + '<label class="f">S (MPa)<input class="t" id="mt_s" inputmode="decimal" value="' + esc(fmt(x.s_mpa, 2)) + '"></label>'
+    + '<div class="g3"><label class="f">Resistência mín. (MPa)<input class="t" id="mt_rmin" inputmode="decimal" value="' + esc(fmt(x.resist_min_mpa, 0)) + '"></label>'
+    + '<label class="f">Resistência máx. (MPa)<input class="t" id="mt_rmax" inputmode="decimal" value="' + esc(fmt(x.resist_max_mpa, 0)) + '" placeholder="vazio se a norma não dá"></label>'
+    + '<label class="f">Escoamento mín. (MPa)<input class="t" id="mt_esc" inputmode="decimal" value="' + esc(fmt(x.escoamento_min_mpa, 0)) + '"></label></div>'
+    + '<label class="f">S (MPa)<input class="t" id="mt_s" inputmode="decimal" value="' + esc(fmt(x.s_mpa, 2)) + '"></label><div id="mt_conta"></div>'
     + '<label class="f">Vale até (°C)<input class="t" id="mt_t" inputmode="decimal" value="' + esc(fmt(x.t_max_c, 0) || '200') + '"></label>'
     + '<label class="f">Fonte<input class="t" id="mt_f" value="' + esc(x.fonte || 'ASME II-D, Tabela 1A') + '"></label>'
-    + '<p class="muted">Mudar o S apaga a conferência: o número novo ainda não foi visto pelo PLH.</p>',
+    + '<p class="muted">Mudar o S ou a faixa apaga a conferência: o número novo ainda não foi visto pelo PLH.</p>',
     (x.id ? [{ rotulo:'Desativar', acao:async () => { try{ await rpc('tf_insp_material_gravar', { p_dados:{ id:x.id, ativo:false } }); pintar(); }catch(e){ erro(e); return false; } } }] : [])
     .concat([{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
       const s = num($('mt_s').value), t = num($('mt_t').value);
       if (!$('mt_esp').value.trim() || !(s > 0)){ U.toast('Especificação e S são obrigatórios.', 'err'); return false; }
-      const d = { especificacao:$('mt_esp').value.trim(), forma:$('mt_forma').value.trim() || null, s_mpa:s, t_max_c:t || 200, fonte:$('mt_f').value.trim() || null, tabela_asme:'UCS-23' };
+      const rmin = num($('mt_rmin').value), rmax = num($('mt_rmax').value), resc = num($('mt_esc').value);
+      if (rmin != null && rmax != null && rmax < rmin){ U.toast('A faixa está invertida: o máximo é menor que o mínimo.', 'err'); return false; }
+      const d = { especificacao:$('mt_esp').value.trim(), forma:$('mt_forma').value.trim() || null, s_mpa:s, t_max_c:t || 200, fonte:$('mt_f').value.trim() || null, tabela_asme:'UCS-23',
+                  resist_min_mpa:rmin, resist_max_mpa:rmax, escoamento_min_mpa:resc };
       if (x.id) d.id = x.id;
       try{ await rpc('tf_insp_material_gravar', { p_dados:d }); U.toast('Gravado.', 'ok'); pintar(); }catch(e){ erro(e); return false; }
     } }]));
@@ -465,6 +504,7 @@ async function telaVaso(os, vid){
     + '<label class="f">Material<select class="t" id="material"><option value="">—</option>' + (PREP.materiais || []).map(m => '<option value="' + esc(m.id) + '" data-s="' + esc(m.s_mpa) + '"' + (D.material_id === m.id ? ' selected' : '') + '>'
         + esc(m.especificacao + (m.forma ? ' (' + m.forma + ')' : '')) + '</option>').join('') + '</select></label>'
     + '<label class="f">S usado no laudo (MPa)<input class="t" id="s_mpa" inputmode="decimal" value="' + v(D.s_mpa != null ? fmt(D.s_mpa) : '') + '"></label></div>'
+    + '<div id="matFaixa"></div>'
     + '<p class="muted" style="margin:12px 0 4px"><b>Componentes</b>: R = raio interno (costado, elíptico, cônico); L = raio da coroa (torisférico, hemisférico); d e C para plano e janela; E = eficiência de junta; t = menor espessura medida (mm).</p>'
     + '<table class="comp" id="comps"><tr><th>Tipo</th><th>Nome</th><th>R</th><th>L</th><th>d</th><th>C</th><th>α°</th><th>E</th><th>t mín</th><th></th></tr></table>'
     + '<button class="btn mini" id="maisComp" style="margin-top:6px">+ componente</button>'
@@ -491,7 +531,19 @@ async function telaVaso(os, vid){
   });
   $('vol_desc').addEventListener('change', () => { $('volume').disabled = $('vol_desc').checked; if ($('vol_desc').checked) $('volume').value = ''; });
   $('fluido').addEventListener('change', () => { const f = FLUIDOS.find(x => x[0] === $('fluido').value); if (f && !$('classe').value) $('classe').value = f[1]; });
-  $('material').addEventListener('change', () => { const o = $('material').selectedOptions[0]; if (o && o.dataset.s && !$('s_mpa').value) $('s_mpa').value = fmt(o.dataset.s); });
+  $('material').addEventListener('change', () => { const o = $('material').selectedOptions[0]; if (o && o.dataset.s && !$('s_mpa').value) $('s_mpa').value = fmt(o.dataset.s); pintaFaixa(); });
+  // 405: a faixa do material escolhido e o S do laudo contra o teto do ASME
+  const pintaFaixa = () => {
+    const m = (PREP.materiais || []).find(x => x.id === $('material').value), s = num($('s_mpa').value);
+    let h = quadroFaixa(m);
+    if (m && s > 0){
+      if (s > m.s_mpa + 0.05) h += '<p class="sAviso ruim">⚠ O S do laudo (' + fmt(s, 1) + ' MPa) está acima do S do ASME: a PMTA do laudo pode estar alta. A conferência marca como grave.</p>';
+      else if (s < m.s_mpa - 0.05) h += '<p class="sAviso">O S do laudo está abaixo do ASME: mais conservador (edição antiga, fator 4?). A conferência pede o motivo.</p>';
+      else h += '<p class="sAviso ok">✓ O S do laudo é o do ASME.</p>';
+    }
+    $('matFaixa').innerHTML = h;
+  };
+  $('s_mpa').addEventListener('input', pintaFaixa); pintaFaixa();
   (D.componentes || []).forEach(c => linhaComp(c));
   (D.valvulas || []).forEach(x => linhaValv(x));
   $('maisComp').addEventListener('click', () => linhaComp({ tipo:'costado', nome:'' }));

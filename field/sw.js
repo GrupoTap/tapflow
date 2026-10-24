@@ -24,7 +24,7 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S38-T5';   // S81: Field S38 (moldura, "Minha área", menu de troca), TapDoc 5 e nucleo/modulos.js
+const VERSAO = 'S38-T6';   // S84: TapDoc 6 (a faixa de resistência abaixo do material)
 const CACHE  = 'tapflow-field-' + VERSAO;
 
 const ESSENCIAIS = [
