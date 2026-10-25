@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 6 · Financeiro</title>
+<title>TapFin 7 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2308,7 +2308,7 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'F6';   // TapFin 6 (Acessos P2: o TapFin pelo quadro de acessos) — o S## da publicação é do central — a versão do módulo; o S## da publicação é do central
+const APP_VERSION = 'F7';   // TapFin 7 (contas que já têm nota) — o S## da publicação é do central
 try{ document.getElementById('verBadge').textContent = 'FINANCEIRO · ' + APP_VERSION; }catch(e){}
 
 const esc               = (...a) => Nucleo.util.esc(...a);
@@ -5863,6 +5863,7 @@ function finreLinha(t, hoje, par){
 function finrePrimaria(t){
   const n = nfDe(t);   // TapFin 3: nota em andamento pede "Atualizar"; a faturar, "Emitir nota"
   if (n && (n.situacao === 'emitindo' || n.situacao === 'cancelando')) return { acao:'nfatualizar', rot:'Atualizar nota' };
+  if (jfTemNota(t)) return { acao:'jafaturada', rot:'Já tem nota' };   // TapFin 7: a nota foi emitida fora
   if (t.etapa === 'a_faturar') return FINNF.ativo ? { acao:'emitir', rot:'Emitir nota' } : { acao:'faturar', rot:'Preparar nota' };
   if (Number(t.saldo) > 0) return { acao:'baixar', rot:'Baixar' };
   return { acao:'baixas', rot:'Baixas' };
@@ -5877,6 +5878,11 @@ function finreMenu(t){
   M.push({ acao:'editar', rot:'Editar' });
   if (p !== 'baixar' && Number(t.saldo) > 0) M.push({ acao:'baixar', rot:'Baixar' });
   if (p !== 'baixas') M.push({ acao:'baixas', rot:'Baixas' });
+  if (FINJF.ativo && !t.anulado){   // TapFin 7
+    if (t.etapa === 'a_faturar' && p !== 'jafaturada') M.push({ acao:'jafaturada', rot:'Já tem nota: marcar como faturada' });
+    if (p === 'jafaturada') M.push(FINNF.ativo ? { acao:'emitir', rot:'Emitir nota (nova)' } : { acao:'faturar', rot:'Preparar nota' });
+    if (FINJF.marcados.has(t.id)) M.push({ acao:'jadesfazer', rot:'Desfazer: voltar para A faturar' });
+  }
   if (FINNF.ativo){
     if (t.etapa === 'a_faturar' && p !== 'faturar') M.push({ acao:'faturar', rot:'Preparar nota (manual, no portal)' });
     M.push({ acao:'pedido', rot:'Pedido de compra' });
@@ -5889,6 +5895,8 @@ function finreMenu(t){
 }
 
 function finreAcao(a, t){
+  if (a === 'jafaturada') return modalJaFaturada(t);
+  if (a === 'jadesfazer') return jfDesfazer(t);
   if (a === 'emitir') return modalEmitirNota(t);
   if (a === 'notas') return modalNotasTitulo(t);
   if (a === 'nfcancelar'){ const n = nfDe(t); if (n && n.situacao === 'autorizada') return modalCancelarNota(t, n); return; }
@@ -5913,11 +5921,165 @@ async function pintarContasReceber(){
   if (nfb){ nfb.hidden = !FINNF.ativo; nfb.addEventListener('click', modalConfigNota); }
 }
 
-async function finreCarregar(){ await nfCarregar(); await finCarregarLista('finre', 'tf_fin_titulos_receber_listar', FINRE, 'as contas a receber'); }
+async function finreCarregar(){ await Promise.all([nfCarregar(), jfCarregar()]); await finCarregarLista('finre', 'tf_fin_titulos_receber_listar', FINRE, 'as contas a receber'); }
 
 function finreDesenhar(){ finDesenhar('finre'); }
 
 REPINTA.finre = finreDesenhar;
+// ════════════════════════════════════════════════════════════════════════════
+// TAPFIN 7 · CONTAS QUE JÁ TÊM NOTA (emitida fora do TapFin)
+// ----------------------------------------------------------------------------
+// Desenho: processos/tapfin-boleto-inter-desenho.md §9 (decisão 10 do Bruno, 25/10).
+// Banco: 507_tapfin_ja_faturados.sql + dados_tapfin7_notas_2026.sql (as notas lidas
+// dos XMLs da contabilidade). O Vinícius escreve "NF142-01" na descrição e deixa
+// "A faturar": aqui ele confere e marca como faturada, com o número, a data e o
+// valor da nota, SEM MUDAR O VENCIMENTO. Sem o 507 no banco, nada disto aparece
+// (a não ser o aviso vermelho no "Emitir nota", que só lê a descrição).
+// ════════════════════════════════════════════════════════════════════════════
+const FINJF = { ativo: false, itens: [], marcados: new Set(), notas: 0, notasAte: null };
+
+/** O número da nota escrito na descrição (o mesmo critério do banco: tf__fin_nf_ref). */
+function jfRef(t){
+  const m = /(^|[^\p{L}\p{N}])NF\s*(?:n?[º°o.:]?\s*)?0*([0-9]{1,6})(\s*[-/]\s*([0-9]{1,2}))?(?![0-9])/iu.exec((t && t.descricao) || '');
+  return m ? { numero: Number(m[2]), parcela: m[4] ? Number(m[4]) : null } : null;
+}
+/** Conta "A faturar" com NF na descrição: o botão principal vira "Já tem nota". */
+const jfTemNota = t => FINJF.ativo && !t.anulado && t.etapa === 'a_faturar' && !!jfRef(t);
+
+async function jfCarregar(){
+  try{
+    const j = await rpc('tf_fin_ja_faturados', {});
+    FINJF.ativo = true; FINJF.itens = j.itens || []; FINJF.marcados = new Set(j.marcados || []);
+    FINJF.notas = j.notas_carregadas || 0; FINJF.notasAte = j.notas_ate || null;
+  }catch(e){ FINJF.ativo = false; FINJF.itens = []; FINJF.marcados = new Set(); }
+  jfFaixa();
+}
+
+/** A faixa em Contas a Receber: quantas contas "A faturar" já têm o número da nota. */
+function jfFaixa(){
+  const topo = document.querySelector('.finTopo');
+  let el = document.getElementById('jfFaixa');
+  if (!topo || visao !== 'finre'){ if (el) el.remove(); return; }
+  if (!el){ el = document.createElement('div'); el.id = 'jfFaixa'; el.style.marginTop = '10px'; topo.after(el); }
+  const n = FINJF.ativo ? FINJF.itens.length : 0;
+  el.hidden = !n;
+  el.innerHTML = !n ? '' : '<div class="nfAvisos" style="padding:8px 10px;display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;margin:0">'
+    + '<span style="flex:1 1 260px"><b>' + n + (n === 1 ? ' conta “A faturar” já tem' : ' contas “A faturar” já têm') + ' o número da nota na descrição.</b> '
+    + 'Marque como faturadas antes de emitir notas pelo TapFin, para não sair nota em dobro.</span>'
+    + '<button class="btn pri" type="button" id="jfAbrir" style="margin:0">Conferir e marcar</button></div>';
+  const b = document.getElementById('jfAbrir'); if (b) b.addEventListener('click', modalJaFaturados);
+}
+
+const JF_SIT = {
+  ok:              ['fOk',   'confere'],
+  valor_diferente: ['fAtn',  'valor diferente'],
+  sem_nota:        ['fAtn',  'nota não encontrada'],
+  substituida:     ['fAtn',  'nota substituída'],
+  nota_do_tapfin:  ['fCrit', 'número do TapFin'],
+  clientes_diferentes: ['fCrit', 'clientes diferentes'],
+  sem_numero:      ['fAtn',  'sem número'],
+};
+const jfChip = s => { const x = JF_SIT[s] || ['', s]; return '<span class="chip ' + x[0] + '">' + esc(x[1]) + '</span>'; };
+
+/** A conferência de todas: marca as que conferem; as outras ficam para o Vinícius decidir. */
+async function modalJaFaturados(){
+  await jfCarregar();
+  const L = FINJF.itens;
+  if (!L.length){ toast('Nenhuma conta “A faturar” com número de nota na descrição.', 'ok'); return; }
+  const linha = (i, k) => {
+    const s = i.sugestao || {}, marcado = i.situacao === 'ok';
+    return '<div class="nfLin" data-jfi="' + k + '">'
+      + '<div><label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">'
+      +   '<input type="checkbox" data-jfc="' + k + '"' + (marcado ? ' checked' : '') + (i.situacao === 'nota_do_tapfin' ? ' disabled' : '') + ' style="margin-top:3px">'
+      +   '<span style="min-width:0"><b>' + esc(i.descricao || '—') + '</b> ' + jfChip(i.situacao)
+      +   '<span class="nota" style="display:block;margin:2px 0 0">' + esc(i.cliente || '') + ' · ' + esc(BRL(i.valor)) + ' · vence ' + esc(dataBR(i.vencimento))
+      +     (Number(i.saldo) <= 0 ? ' · já recebida' : '')
+      +     (i.nota ? ' · nota de ' + esc(BRL(i.nota.valor)) + ' em ' + esc(dataBR(i.nota.emitida_em)) : '') + '</span>'
+      +   (i.aviso ? '<span class="nota" style="display:block;margin:2px 0 0;color:#7A5A00">' + esc(i.aviso) + '</span>' : '')
+      +   '</span></label></div>'
+      + '<div class="dupla" style="margin:0">'
+      +   '<div class="campo" style="margin:0"><label for="jfN' + k + '">Nº da nota</label><input id="jfN' + k + '" type="number" min="1" inputmode="numeric" value="' + esc(s.numero != null ? String(s.numero) : '') + '"></div>'
+      +   '<div class="campo" style="margin:0"><label for="jfD' + k + '">Data da nota</label><input id="jfD' + k + '" type="date" value="' + esc(s.data || '') + '"></div></div>'
+      + '</div>';
+  };
+  const conta = () => document.querySelectorAll('[data-jfc]:checked').length;
+  abrirModal('Contas que já têm nota',
+      '<p class="nota" style="margin-top:0">A nota destas contas foi emitida fora do TapFin (o número está na descrição). '
+    + 'Marcar como faturada grava o número, a data e o valor da nota <b>sem mudar o vencimento</b> e tira a conta de “falta faturar”. '
+    + 'As que conferem já vêm marcadas; as outras, confira antes. Engano depois? No ⋯ da conta, “Desfazer: voltar para A faturar”.</p>'
+    + '<p class="nota">Notas lidas da contabilidade: ' + esc(String(FINJF.notas)) + (FINJF.notasAte ? ' (até ' + esc(dataBR(FINJF.notasAte)) + ')' : '') + '.</p>'
+    + L.map(linha).join(''),
+    [{ label: 'Cancelar', onClick: fecharModal },
+     { label: 'Marcar como faturadas', pri: true, onClick: async () => {
+        const itens = [];
+        for (const c of document.querySelectorAll('[data-jfc]:checked')){
+          const k = c.dataset.jfc, num = document.getElementById('jfN' + k).value.trim(), dia = document.getElementById('jfD' + k).value;
+          if (!num || !dia){ toast('Falta o número ou a data da nota em “' + (L[k].descricao || '') + '”.', 'err'); return; }
+          itens.push({ titulo_id: L[k].titulo_id, numero: Number(num), data: dia });
+        }
+        if (!itens.length){ toast('Marque ao menos uma conta.', 'err'); return; }
+        try{
+          const r = await rpc('tf_fin_marcar_faturados', { p_itens: itens });
+          fecharModal(); toast(r.marcados + (r.marcados === 1 ? ' conta marcada' : ' contas marcadas') + ' como faturada' + (r.marcados === 1 ? '' : 's') + '.', 'ok');
+          finreCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+  const rot = () => { const b = [...document.querySelectorAll('#mFoot .btn')].pop(); if (b){ const n = conta(); b.textContent = n ? 'Marcar ' + n + ' como faturada' + (n === 1 ? '' : 's') : 'Marcar como faturadas'; b.disabled = !n; } };
+  document.getElementById('mBody').addEventListener('change', e => { if (e.target.matches('[data-jfc]')) rot(); });
+  rot();
+}
+
+/** Uma conta só (botão "Já tem nota" ou ⋯ › "Já tem nota: marcar como faturada"). */
+async function modalJaFaturada(t){
+  let i;
+  try{ i = await rpc('tf_fin_ja_faturado_sugerir', { p_titulo_id: t.id }); }catch(e){ toast(e.message, 'err'); return; }
+  const s = i.sugestao || {};
+  abrirModal('Já tem nota — ' + finTituloRot(t),
+      (i.aviso ? '<div class="nfAvisos" style="padding:8px 10px">' + esc(i.aviso) + '</div>' : '')
+    + '<p class="nota" style="margin-top:0">A nota desta conta já foi emitida (no portal, fora do TapFin). '
+    + 'Grave o número e a data: a conta passa a “faturada” <b>e o vencimento continua ' + esc(dataBR(t.vencimento)) + '</b>.</p>'
+    + (i.nota ? '<div class="nfBloco"><b>Nota lida da contabilidade</b><div>NF' + esc(String(i.nota.numero)) + ' · ' + esc(BRL(i.nota.valor)) + ' · emitida em ' + esc(dataBR(i.nota.emitida_em)) + '</div>'
+         + (i.parcelas > 1 ? '<div class="nota" style="margin:2px 0 0">' + esc(String(i.parcelas)) + ' contas com esse número (parcelas) somam ' + esc(BRL(i.soma_parcelas)) + '.</div>' : '') + '</div>' : '')
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="jfNum">Nº da nota</label><input id="jfNum" type="number" min="1" inputmode="numeric" value="' + esc(s.numero != null ? String(s.numero) : '') + '"></div>'
+    +  '<div class="campo"><label for="jfData">Data da nota</label><input id="jfData" type="date" value="' + esc(s.data || '') + '"></div></div>'
+    + '<div class="campo"><label for="jfValor">Valor da nota</label><input id="jfValor" type="number" step="0.01" min="0.01" value="' + esc(String(s.valor != null ? s.valor : t.valor)) + '">'
+    +   '<small class="nota">Nota parcelada: o valor da nota inteira.</small></div>',
+    [{ label: 'Cancelar', onClick: fecharModal },
+     { label: 'Marcar como faturada', pri: true, onClick: async () => {
+        const num = document.getElementById('jfNum').value.trim(), dia = document.getElementById('jfData').value, val = document.getElementById('jfValor').value;
+        if (!num){ toast('Digite o número da nota.', 'err'); return; }
+        if (!dia){ toast('Digite a data da nota.', 'err'); return; }
+        try{
+          await rpc('tf_fin_marcar_faturado', { p_titulo_id: t.id, p_numero: Number(num), p_data: dia, p_valor: val ? Number(val) : null });
+          fecharModal(); toast('Conta marcada como faturada (NF' + num + '). O vencimento não mudou.', 'ok'); finreCarregar();
+        }catch(e){ toast(e.message, 'err'); }
+     }}]);
+}
+
+async function jfDesfazer(t){
+  const ok = await confirmar('Voltar para “A faturar”?',
+    '<p style="margin-top:0">Desfaz o “Já tem nota” de <b>' + esc(finTituloRot(t)) + '</b>: tira o número e a data da nota. O vencimento continua o mesmo.</p>', 'Desfazer');
+  if (!ok) return;
+  try{ await rpc('tf_fin_desmarcar_faturado', { p_titulo_id: t.id }); toast('A conta voltou para “A faturar”.', 'ok'); finreCarregar(); }
+  catch(e){ toast(e.message, 'err'); }
+}
+
+/** No "Emitir nota" e no "Preparar nota": vermelho quando a descrição já tem "NF…". */
+let JF_AVISO_T = null;
+function jfAvisoEmitir(t){
+  const r = jfRef(t); JF_AVISO_T = t;
+  if (!r) return '';
+  return '<div class="nfErros" style="padding:8px 10px"><b>Esta conta já tem a NF' + esc(String(r.numero)) + ' na descrição.</b> '
+    + 'Se essa nota já foi emitida, não emita outra: '
+    + (FINJF.ativo ? '<button class="btn mini" type="button" id="jfDoAviso" style="margin:4px 0 0">Marcar como faturada</button>' : 'marque a conta como faturada.')
+    + '</div>';
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('#jfDoAviso') || !JF_AVISO_T) return;
+  const t = JF_AVISO_T; fecharModal(); modalJaFaturada(t);
+});
+
 
 // ════════════════════════════════════════════════════════════════════════════
 // TAPFIN 3 · EMISSÃO DE NFS-e PELO TAPFIN (Notaas)
@@ -6031,6 +6193,7 @@ async function modalEmitirNota(t){
   const lista = (L, cls) => (L && L.length) ? '<ul class="' + cls + '">' + L.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '';
   abrirModal('Emitir nota — ' + finTituloRot(t),
       nfFaixaTeste(prep.ambiente)
+    + jfAvisoEmitir(t)
     + lista(prep.erros, 'nfErros')
     + ((prep.erros || []).some(x => /Cadastros/.test(x)) && NO_SERVIDOR
        ? '<p class="nota" style="margin:-4px 0 10px"><a href="../manager/?ir=cad" target="_blank" rel="noopener">Abrir Cadastros › Clientes</a> (em outra aba). Corrigido, feche esta janela e clique em "Emitir nota" de novo.</p>' : '')
@@ -7539,7 +7702,8 @@ function modalPrepararNota(t){
   // cliente) e pode ser corrigido aqui, só para esta nota.
   let prazo = 30, vencMao = false;
   abrirModal('Preparar nota — ' + finTituloRot(t),
-      '<p class="nota" style="margin-top:0">Dados pra copiar na emissão, no Emissor Nacional da NFS-e:</p>'
+      jfAvisoEmitir(t)
+    + '<p class="nota" style="margin-top:0">Dados pra copiar na emissão, no Emissor Nacional da NFS-e:</p>'
     + '<div class="campo"><label>Cliente</label><input type="text" value="' + esc(t.cliente_nome || '') + '" readonly></div>'
     + '<div class="campo"><label>Descrição do serviço</label><input type="text" value="' + esc(t.descricao) + '" readonly></div>'
     + '<div class="dupla">'
