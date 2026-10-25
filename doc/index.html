@@ -126,6 +126,18 @@ details.op summary{font-weight:700;font-size:13.5px;cursor:pointer;color:var(--a
 .faixa b{font-weight:600}
 .sAviso{font-size:12.5px;margin-top:4px}
 .sAviso.ruim{color:#B42318}.sAviso.ok{color:#15803D}
+.revcols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.revitem{border:1px solid var(--rule-2);border-radius:6px;padding:8px 10px;margin-top:8px;cursor:pointer}
+.revitem:hover{background:var(--surface-2)} .revitem.minha{border-color:var(--accent)}
+table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;border-radius:50%;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#fff}
+.cf.ok{background:var(--ok)} .cf.am{background:var(--warn)} .cf.vm{background:var(--crit)}
+.okrev{display:flex;gap:6px;align-items:center;font-weight:600;font-size:13px;color:var(--accent-ink)}
+.g2rev{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+.fotosrev{display:flex;flex-wrap:wrap;gap:6px} .fotorev{border:1px solid var(--rule);background:var(--surface-2);border-radius:4px;padding:3px 8px;font-size:12px}
+.visorrev{margin-top:8px;border:1px solid var(--rule-2);border-radius:6px;min-height:120px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.visorrev img{max-width:100%;max-height:360px} .visorrev iframe{width:100%;height:360px;border:0}
+.acoesrev{gap:10px;flex-wrap:wrap;align-items:center}
+@media(max-width:900px){.revcols,.g2rev{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -141,7 +153,7 @@ details.op summary{font-weight:700;font-size:13.5px;cursor:pointer;color:var(--a
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E6';   // E = escritório · E6 (S86 · 407, R04a): padrão com U/k, numeração M/V e as aferições da inspeção (E5: material de campo; E4: faixa)
+const VERSAO = 'TapDoc E8';   // E8 (S93 · 409, R05a): a revisão (A revisar: Revisão 1, Revisão 2 e a aprovação do PLH) ·   // E7 (S92 · 408, Acessos P3): entra quem tem o TapDoc; conferir e decidir é do PLH ·   // E = escritório · E6 (S86 · 407, R04a): padrão com U/k, numeração M/V e as aferições da inspeção (E5: material de campo; E4: faixa)
 // 405: a faixa de resistência (norma do material) e o S esperado pelo ASME (fator 3,5; 2/3 do escoamento; costura × 0,85)
 function faixaTxt(m){
   if (!m || m.resist_min_mpa == null) return 'faixa de resistência não cadastrada';
@@ -169,6 +181,7 @@ function quadroMaterialCampo(ins){
     + '<p>De <b>' + esc(mc.de || '—') + '</b> (escritório) para <b>' + esc(mc.para || 'nenhum') + '</b> (campo).</p>'
     + '<p class="muted">Motivo: ' + esc(mc.motivo || '') + (mc.por ? ' · ' + esc(mc.por) : '') + (quando ? ' · ' + quando : '') + '</p>';
   if (mc.decisao) h += '<p><span class="chip s-pronto">' + (mc.decisao === 'aceito' ? 'aceito: fica o de campo' : 'revertido: voltou o do escritório') + '</span>' + (mc.decidido_por ? ' <span class="muted">' + esc(mc.decidido_por) + '</span>' : '') + '</p>';
+  else if (!PLH) h += '<p class="muted">O cálculo oficial espera esta decisão. Quem decide é o PLH.</p>';
   else h += '<p class="muted">O cálculo oficial espera esta decisão.</p><div class="linha"><button class="btn pri" data-matdec="1">Aceitar o de campo</button><button class="btn" data-matdec="0">Voltar ao do escritório</button></div>';
   return h + '</div>';
 }
@@ -197,6 +210,8 @@ $('ver').textContent = VERSAO;
 if (!N){ $('tela').innerHTML = '<div class="card vazio">Sem o núcleo do TapFlow. Recarregue com sinal.</div>'; throw new Error('sem núcleo'); }
 const U = N.util, esc = U.esc;
 const rpc = (f, p) => N.api.rpc(f, p || {});
+// E7 (P3): quem tem o poder PLH ("Pessoas e acessos"). O banco é quem trava; aqui só esconde os botões.
+let PLH = false;
 
 // ── utilitários ────────────────────────────────────────────────────────────
 function uid(){ try{ if (crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
@@ -228,12 +243,13 @@ function janela(tit, html, bts){
 function erro(e){ U.toast(e && e.message ? e.message : String(e), 'err'); }
 
 // ── rotas: #os=<id>&v=<vaso>&aba=<a> ───────────────────────────────────────
-function rota(){ const h = new URLSearchParams(location.hash.replace(/^#/, '')); return { os:h.get('os'), v:h.get('v'), aba:h.get('aba') || 'os' }; }
+function rota(){ const h = new URLSearchParams(location.hash.replace(/^#/, '')); return { os:h.get('os'), v:h.get('v'), rev:h.get('rev'), aba:h.get('aba') || 'os' }; }
 function ir(r){ const p = new URLSearchParams(); if (r.os) p.set('os', r.os); if (r.v) p.set('v', r.v); if (r.aba && !r.os) p.set('aba', r.aba);
   location.hash = p.toString(); }
 window.addEventListener('hashchange', pintar);
 $('voltar').addEventListener('click', () => {
   const r = rota();
+  if (r.rev){ location.hash = 'aba=rev'; return; }   // E8
   if (r.v) ir({ os:r.os }); else if (r.os) ir({}); else location.href = '../';
 });
 function titulo(t, s){ $('tTit').textContent = t; $('tSub').textContent = s || ''; }
@@ -241,6 +257,7 @@ function titulo(t, s){ $('tTit').textContent = t; $('tSub').textContent = s || '
 async function pintar(){
   const r = rota();
   try{
+    if (r.rev) return await telaRevisao(r.rev);   // E8 · R05a
     if (r.os && r.v) return await telaVaso(r.os, r.v);
     if (r.os) return await telaOS(r.os);
     return await telaListas(r.aba);
@@ -257,10 +274,12 @@ async function telaListas(aba){
   $('tela').innerHTML = '<p class="muted">Carregando…</p>';
   LISTAS = await rpc('tf_insp_preparacao_lista');
   const L = LISTAS, nPlh = (L.plh || []).filter(x => !x.decisao).length;
-  const abas = [['os','A preparar', (L.os || []).length], ['conf','Laudos a conferir', (L.a_conferir || []).length], ['plh','Para o PLH', nPlh],
+  let nRev = 0; try{ nRev = (await rpc('tf_insp_revisao_lista')).filter(x => x.pode).length; }catch(e){}   // E8: as revisões que são suas
+  const abas = [['os','A preparar', (L.os || []).length], ['conf','Laudos a conferir', (L.a_conferir || []).length], ['plh','Para o PLH', nPlh], ['rev','A revisar', nRev],
                 ['inst','Instrumentos', 0], ['mat','Materiais', 0]];   // E2 (S80)
   let h = '<div class="abas">' + abas.map(([k, r, n]) => '<button data-a="' + k + '" class="' + (aba === k ? 'on' : '') + '">' + r
     + (n ? '<span class="bolha">' + n + '</span>' : '') + '</button>').join('') + '</div>';
+  if (aba === 'rev') return abaRevisao(h);   // E8 · R05a
   if (aba === 'inst' || aba === 'mat'){ $('tela').innerHTML = h + '<p class="muted">Carregando…</p>'; ligarAbas(); return aba === 'inst' ? telaInstrumentos() : telaMateriais(); }
   if (aba === 'conf'){
     h += '<div class="card"><h3>Laudos pegos em campo, a conferir</h3><p class="muted">A equipe que esteve no cliente digita e confere o laudo a partir das fotos.</p>'
@@ -269,7 +288,7 @@ async function telaListas(aba){
           + esc(x.cliente || '') + '</td><td>' + esc(x.os || '—') + '</td><td>' + (x.origem === 'pdf' ? 'PDF' : 'fotos do campo') + '</td></tr>').join('') + '</table>'
         : '<p class="vazio">Nenhum laudo esperando.</p>') + '</div>';
   } else if (aba === 'plh'){
-    const admin = !!(N.sessao() || {}).admin;
+    const admin = PLH;   // E7: a decisão é do PLH
     h += '<div class="card"><h3>Divergências graves</h3><p class="muted">PMTA recalculada mais de 5% abaixo da atribuída, ou válvula ajustada acima da PMTA. '
       + 'Não trava a visita; trava a liberação do laudo. Só o PLH é avisado.</p>'
       + ((L.plh || []).length ? '<table><tr><th>Vaso</th><th>Cliente</th><th>O que divergiu</th><th>Decisão do PLH</th></tr>'
@@ -380,7 +399,7 @@ async function cartaoAfericoes(ins){
       + (x.grave ? ' <span class="chip s-grave">grave</span>' : '') + ((x.avisos || []).length ? '<div class="muted" style="color:#B42318">' + x.avisos.map(esc).join('<br>') + '</div>' : '')
       + (x.cancelada_motivo ? '<div class="muted">' + esc(x.cancelada_motivo) + '</div>' : '') + '</td><td>' + esc(x.padrao || '—') + '</td><td>'
       + (x.tipo === 'manometro' ? (x.validade_meses || 24) + ' meses' + (x.validade_anterior ? '<div class="muted">antes: ' + x.validade_anterior + '</div>' : '')
-        + (x.cancelada_em ? '' : ' <button class="btn mini" data-afval="' + esc(x.id) + '">Mudar</button>') : '—') + '</td></tr>').join('') + '</table>';
+        + (x.cancelada_em || !PLH ? '' : ' <button class="btn mini" data-afval="' + esc(x.id) + '">Mudar</button>') : '—') + '</td></tr>').join('') + '</table>';
   cx.querySelectorAll('[data-afval]').forEach(b => b.addEventListener('click', () => {
     const x = L.find(y => y.id === b.dataset.afval);
     janela('Validade do relatório ' + (x.codigo || ''), '<label class="f">Meses<input class="t" id="avM" inputmode="numeric" value="' + (x.validade_meses || 24) + '"></label>'
@@ -392,7 +411,7 @@ async function cartaoAfericoes(ins){
   }));
 }
 async function telaMateriais(){
-  const L = await rpc('tf_insp_materiais_lista'), admin = !!(N.sessao() || {}).admin, nConf = L.filter(x => !x.conferido).length;
+  const L = await rpc('tf_insp_materiais_lista'), admin = PLH,   /* E7: gravar e conferir material é do PLH */ nConf = L.filter(x => !x.conferido).length;
   let h = '<div class="card"><div class="linha" style="justify-content:space-between"><h3 style="margin:0">Materiais (tensão admissível)</h3>'
     + (admin ? '<button class="btn pri" id="matNovo">+ material</button>' : '') + '</div>'
     + '<p class="muted">S da ASME II-D, Tabela 1A (edição atual, fator 3,5): é o <b>teto</b> do cálculo. A faixa de resistência é a da norma do material. A prévia do celular usa também os não conferidos (avisando). <b>O resultado do laudo só grava com material conferido pelo PLH.</b>'
@@ -785,6 +804,464 @@ async function previa(){
   }));
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// E8 (S93 · 409) · R05a · A REVISÃO: Revisão 1 (equipe), Revisão 2 (outra
+// pessoa com o TapDoc) e a aprovação do PLH, que grava o cálculo oficial.
+// Desenho: inspecao-nr13/rodadas/R05-revisao-desenho.md.
+// ════════════════════════════════════════════════════════════════════════════
+// O cálculo é o MESMO da prévia do celular (field/doc, TapDoc 8), copiado
+// para cá dentro de uma função, para os nomes não colidirem com os da página.
+const CALC = (() => {
+  let E = { materiais:[] };
+  function fmt(v, casas){
+    if (v == null || v === '' || !isFinite(Number(v))) return '';
+    const c = casas == null ? 4 : casas;
+    return String(Number(Number(v).toFixed(c))).replace('.', ',');
+  }
+const UNID = { 'bar':0.1, 'kgf/cm2':0.0980665, 'MPa':1, 'psi':0.00689476 };
+const UNID_ROT = { 'bar':'bar', 'kgf/cm2':'kgf/cm²', 'MPa':'MPa', 'psi':'psi' };
+const paraMPa = (v, u) => v == null ? null : Math.round(v * UNID[u] * 1e4) / 1e4;
+const deMPa = (v, u) => v == null ? null : v / UNID[u];
+
+const ativas = v => v.camaras.filter(c => c.ativo !== false);
+const compsAtivos = v => v.componentes.filter(c => c.ativo !== false);
+
+function unidadeDe(v){ const c = ativas(v)[0]; return (c && c.unidade_campo) || v._unid || 'bar'; }
+
+const GEO_CAMPOS = { costado:['R'], eliptico:['R'], conico:['R','alfaGraus'], torisferico:['L'], hemisferico:['L'], plano:['d','C'], janela:['d','C'] };
+const GEO_COL = { R:'r_mm', L:'l_mm', d:'d_mm', C:'fator_c', alfaGraus:'alfa_graus', E:'eficiencia_junta' };
+const GEO_ROT = { R:'R · raio (mm)', L:'L · raio da coroa (mm)', d:'d · diâmetro (mm)', C:'C · fator', alfaGraus:'α · semiângulo (°)' };
+function geoPadrao(v, c){
+  const rx = v.circunferencia_mm > 0 ? v.circunferencia_mm / (2 * Math.PI) : null;
+  const p = { E: (c.tipo === 'costado' || c.tipo === 'conico') ? 0.7 : 1 };
+  if (rx){
+    if (['costado','eliptico','conico'].indexOf(c.tipo) >= 0) p.R = rx;
+    if (c.tipo === 'torisferico') p.L = 2 * rx;
+    if (c.tipo === 'hemisferico') p.L = rx;
+    if (c.tipo === 'plano') p.d = 2 * rx;
+  }
+  if (c.tipo === 'plano' || c.tipo === 'janela') p.C = 0.33;
+  return p;
+}
+/** A geometria que o motor usa: o informado ou o padrão. `padrao` lista o que veio do padrão. */
+function geoDe(v, c){
+  const p = geoPadrao(v, c), g = { tipo:c.tipo, nome:c.nome, id:c.id, aparafusada:c.aparafusada === true, padrao:[] };
+  (GEO_CAMPOS[c.tipo] || []).concat(['E']).forEach(k => {
+    const x = c[GEO_COL[k]];
+    if (x != null && x !== '') g[k] = Number(x);
+    else if (p[k] != null){ g[k] = p[k]; g.padrao.push(k); }
+  });
+  return g;
+}
+
+const leiturasDe = (v, cid) => ((v.inspecao && v.inspecao.leituras) || []).filter(l => l.componente_id === cid);
+const semLeitura = v => (v.inspecao && v.inspecao.ultrassom_sem_leitura) || {};
+const compsMedir = v => compsAtivos(v).filter(c => !c.nao_medir).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+function estUltra(v){
+  const i = v.inspecao || {}, cs = compsMedir(v);
+  const feitos = cs.filter(c => leiturasDe(v, c.id).length || (semLeitura(v)[c.id] || '').trim()).length;
+  if (!i.medidor_id && !feitos) return 'vazia';
+  return i.medidor_id && feitos === cs.length ? 'ok' : 'inc';
+}
+function minimaDe(v, cid){
+  const l = leiturasDe(v, cid); if (!l.length) return null;
+  try{ return MotorNR13.minimaLeituras(l.map(x => x.valor_mm)); }catch(e){ return null; }
+}
+function materialDe(v, c){
+  const id = (c && c.material_id) || v.material_id;
+  return id ? (E.materiais || []).find(m => m.id === id) || null : null;
+}
+const camaraDe = (v, c) => v.camaras.find(k => k.id === c.camara_id) || ativas(v)[0] || null;
+
+/** Espessura mínima requerida (com o mínimo de 1,5 mm e a corrosão), ou o motivo de não dar. */
+function eMinDe(v, c){
+  const k = camaraDe(v, c), m = materialDe(v, c);
+  if (!k || k.p_operacao_max_mpa == null) return { erro:'sem a pressão de operação' };
+  if (k.pressao_externa || k.p_operacao_max_mpa <= 0) return { erro:'pressão externa: calculada no escritório' };
+  if (!m || !(m.s_mpa > 0)) return { erro:'sem o material' };
+  try{
+    const g = geoDe(v, c);
+    const e = MotorNR13.espessuraMinima(g, k.p_operacao_max_mpa, Number(m.s_mpa), g.E);
+    return { valor: Math.max(e, 1.5) + (Number(v.corrosao_mm) || 0), padrao:g.padrao };
+  }catch(e){ return { erro:e.message }; }
+}
+
+
+const RISCO = { A:4, B:3, C:2, D:1 };
+function previa(v){
+  const r = { camaras:[], vaso:null, avisos:[], detalhes:[] };
+  const cs = ativas(v), u = unidadeDe(v);
+  const m = materialDe(v, null);
+  if (!m) r.avisos.push('Prévia: sem o material do costado (Operação e câmaras), a PMTA não sai.');
+  else {
+    if (!m.conferido) r.avisos.push('O material ' + m.especificacao + ' é da lista provisória, ainda não conferida pelo Fernando: a prévia é indicativa.');
+    cs.forEach(k => { if (m.t_max_c != null && k.t_operacao_c != null && Number(k.t_operacao_c) > Number(m.t_max_c))
+      r.avisos.push('Temperatura de operação' + (cs.length > 1 ? ' (' + k.nome + ')' : '') + ' acima de ' + fmt(m.t_max_c, 0) + ' °C: o S do material não vale.'); });
+  }
+  const padrao = new Set();
+  cs.forEach(k => {
+    const ck = { cam:k, comps:[], governante:null, erro:null };
+    const P = k.p_operacao_max_mpa;
+    if (P == null) ck.erro = 'Sem a pressão de operação.';
+    else if (k.pressao_externa || P <= 0) ck.erro = 'Pressão externa (vácuo): a PMTA externa é do escritório (PLH).';
+    else if (!m) ck.erro = 'Sem o material.';
+    compsMedir(v).filter(c => camaraDe(v, c) === k).forEach(c => {
+      const t = minimaDe(v, c.id), x = { c, tMin:t, eMin:null, pmta:null, erro:null, abaixo:false };
+      if (!ck.erro){
+        try{
+          const g = geoDe(v, c), mc = materialDe(v, c);
+          const res = MotorNR13.calcularVaso({ pOperacaoMPa:P, S:Number(mc.s_mpa), corrosaoMm:Number(v.corrosao_mm) || 0,
+            componentes:[Object.assign({}, g, { leituras:leiturasDe(v, c.id).map(y => y.valor_mm) })] });
+          const rc = res.componentes[0];
+          x.eMin = rc.eMin; x.pmta = rc.pmtaMPa; x.abaixo = rc.abaixoDaMinima;
+          g.padrao.forEach(p => padrao.add(c.nome));
+        }catch(e){ x.erro = e.message; }
+      }
+      ck.comps.push(x);
+    });
+    const ok = ck.comps.filter(x => x.pmta != null);
+    if (ok.length) ck.governante = ok.reduce((a, b) => b.pmta < a.pmta ? b : a);
+    const nm = cs.length > 1 ? ' (' + k.nome + ')' : '';
+    if (ck.governante && ck.governante.pmta < P) r.avisos.push('PMTA calculada' + nm + ' de ' + fmt(deMPa(ck.governante.pmta, u), 2) + ' ' + UNID_ROT[u] + ', abaixo da pressão de operação (' + ck.governante.c.nome + ').');
+    ck.comps.filter(x => x.abaixo).forEach(x => r.avisos.push(x.c.nome + ': espessura medida abaixo da mínima requerida.'));
+    ck.comps.filter(x => x.erro).forEach(x => r.detalhes.push(x.c.nome + ': ' + x.erro));
+    r.camaras.push(ck);
+  });
+  if (padrao.size) r.detalhes.push('Geometria padrão (a validar pelo Fernando) em: ' + [...padrao].join(', ') + '.');
+  // a categoria do vaso pela conta única (pendência 20)
+  try{
+    if (!cs.length) throw new Error('Sem câmaras.');
+    if (cs.some(k => k.p_operacao_max_mpa == null || !k.classe_fluido)) throw new Error('Falta a pressão de operação ou a classe do fluido.');
+    if (cs.some(k => k.volume_desconhecido || !(k.volume_m3 > 0))) throw new Error('Volume desconhecido: o escritório informa o volume para a categoria.');
+    const kP = cs.reduce((a, b) => Math.abs(b.p_operacao_max_mpa) > Math.abs(a.p_operacao_max_mpa) ? b : a);
+    const V = cs.reduce((a, k) => a + Number(k.volume_m3), 0);
+    const classe = cs.map(k => String(k.classe_fluido).toUpperCase()).reduce((a, b) => RISCO[b] > RISCO[a] ? b : a);
+    const cat = MotorNR13.categoria(classe, kP.p_operacao_max_mpa, V);
+    const pr = MotorNR13.prazos(cat.categoria, { semCodigoConstrucao:!!v.sem_codigo_construcao, temperaturaAbaixoDeZeroSemDeterioracao:!!v.abaixo_zero_sem_deterioracao });
+    r.vaso = { P:kP.p_operacao_max_mpa, deCamara:kP, V, classe, pv:cat.pv, grupo:cat.grupo, categoria:cat.categoria, prazos:pr };
+  }catch(e){ r.vaso = { erro:e.message }; }
+  return r;
+}
+  return { usar:p => { E = p || { materiais:[] }; }, previa, minimaDe, eMinDe, compsMedir, ativas, materialDe, unidadeDe, deMPa, UNID_ROT };
+})();
+
+const REV_ITENS = [['dados','Dados contra as fotos'], ['recomendacoes','Anomalias e recomendações'], ['pmta','PMTA'], ['espessuras','Espessuras contra o laudo anterior']];
+const REV_ETAPA = { 1:'Revisão 1 · equipe', 2:'Revisão 2 · outra equipe', 3:'Aprovação do PLH' };
+const REV_CAMPOS_VASO = [['numero_serie','Nº de série'], ['modelo','Modelo'], ['ano_fabricacao','Ano de fabricação'], ['codigo_construcao','Código de construção'],
+                         ['codigo_edicao','Edição do código'], ['pmta_plaqueta_mpa','PMTA de plaqueta (MPa)'], ['pth_mpa','PTH (MPa)']];
+const REV_CAMPOS_AC = [['tag','TAG'], ['marca','Marca'], ['modelo','Modelo'], ['escala','Escala'], ['lacre_num','Lacre'], ['pressao_ajuste_mpa','Ajuste (MPa)']];
+const TIPO_REC = { seguranca:'Segurança', conservacao:'Conservação', geral:'Geral' };
+// sugestões fixas até a biblioteca (R05b)
+function sugestaoRec(item, anomalia){
+  const a = (anomalia || '').toLowerCase();
+  if (/corros/.test(a)) return 'Tratar a corrosão (' + (anomalia || '') + ') e refazer a pintura de proteção do item "' + item + '".';
+  if (/vazament/.test(a)) return 'Eliminar o vazamento no item "' + item + '" antes da próxima operação.';
+  if (/aterr/.test(item.toLowerCase())) return 'Refazer o aterramento do vaso e medir a continuidade.';
+  return 'Corrigir no item "' + item + '": ' + (anomalia || 'anomalia registrada em campo') + '.';
+}
+const quandoBR = t => t ? new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+const diasDesde = t => t ? Math.max(0, Math.floor((Date.now() - new Date(t).getTime()) / 864e5)) : null;
+const dataSP = t => t ? new Date(t).toLocaleDateString('sv-SE', { timeZone:'America/Sao_Paulo' }) : null;
+const somaAnos = (d, n) => { const [y, m, dd] = d.split('-').map(Number); const x = new Date(Date.UTC(y + n, m - 1, dd)); return x.toISOString().slice(0, 10); };
+
+// ── a lista ────────────────────────────────────────────────────────────────
+async function abaRevisao(h){
+  const L = await rpc('tf_insp_revisao_lista');
+  const col = e => L.filter(x => x.etapa === e);
+  h += '<div class="revcols">' + [1, 2, 3].map(e => '<div class="card"><h3>' + REV_ETAPA[e] + ' <span class="muted">(' + col(e).length + ')</span></h3>'
+    + (col(e).length ? col(e).map(x => '<div class="revitem' + (x.pode ? ' minha' : '') + '" data-rev="' + esc(x.id) + '"><b>' + esc(x.tag) + '</b> · ' + esc(x.cliente || '')
+        + '<div class="muted">OS ' + esc(x.os || '—') + ' · há ' + diasDesde(x.desde) + ' dia(s) · equipe: ' + esc((x.equipe || []).join(', ') || '—') + '</div>'
+        + (x.vermelhos ? '<span class="chip s-precisa_laudo">' + x.vermelhos + ' pendência(s)</span> ' : '<span class="chip s-pronto">sem pendência</span> ')
+        + (x.pode ? '<span class="chip s-provisorio">é sua</span>' : '')
+        + (x.devolvida && e < 3 ? '<div class="alerta falta" style="margin-top:6px">Devolvida: ' + esc(x.devolvida) + '</div>' : '') + '</div>').join('')
+      : '<p class="vazio">Nada aqui.</p>') + '</div>').join('') + '</div>'
+    + '<p class="muted">A Revisão 1 é de quem fez a inspeção. A Revisão 2 é de quem tem o TapDoc e não esteve nela. A aprovação é do PLH, que grava o cálculo oficial e libera para o laudo.</p>';
+  $('tela').innerHTML = h;
+  ligarAbas();
+  $('tela').querySelectorAll('[data-rev]').forEach(d => d.addEventListener('click', () => { location.hash = 'rev=' + d.dataset.rev; }));
+}
+
+// ── a tela da inspeção ─────────────────────────────────────────────────────
+let REV = null;
+async function telaRevisao(id){
+  titulo('Revisão', 'carregando…');
+  $('tela').innerHTML = '<p class="muted">Carregando…</p>';
+  const R = await rpc('tf_insp_revisao_ver', { p_id:id });
+  const P = await rpc('tf_insp_pacote_os', { p_os_id:R.inspecao.os_id });
+  const v = (P.vasos || []).find(x => x.inspecao && x.inspecao.id === id);
+  if (!v) throw new Error('O vaso desta inspeção não veio no pacote da OS.');
+  CALC.usar(P);
+  let prev; try{ prev = CALC.previa(v); }catch(e){ prev = { camaras:[], vaso:{ erro:e.message }, avisos:[e.message], detalhes:[] }; }
+  REV = { id, R, P, v, prev, volume:null, pmta:{} };
+  pintarRevisao();
+}
+function revOk(item){ const e = REV.R.inspecao.etapa; return ((REV.R.oks || {})[e] || []).indexOf(item) >= 0; }
+function pintarRevisao(){
+  const { R, v, prev } = REV, I = R.inspecao, eu = R.eu, e = I.etapa;
+  const u = CALC.unidadeDe(v), pr = x => x == null ? '—' : fmt(CALC.deMPa(x, u), 2) + ' ' + CALC.UNID_ROT[u];
+  titulo('Revisão · ' + (I.tag || ''), (I.cliente || '') + ' · OS ' + (I.os || '—'));
+  const podeMarcar = eu.pode && e < 3;
+  let h = '<div class="card"><div class="linha" style="justify-content:space-between"><div><b style="font-size:17px">' + esc(I.tag || '') + '</b> ' + esc(I.vaso || '')
+    + '<div class="muted">' + esc(I.cliente || '') + ' · OS ' + esc(I.os || '—') + ' · inspeção de ' + (I.termino ? dataBR(dataSP(I.termino)) : '—')
+    + ' · equipe: ' + esc((I.equipe || []).map(x => x.nome).join(', ') || '—') + '</div></div>'
+    + '<div><span class="chip ' + (e ? 's-em_conferencia' : 's-pronto') + '" id="revEtapa">' + (e ? REV_ETAPA[e] : esc(I.situacao)) + '</span></div></div>'
+    + '<div class="muted" style="margin-top:6px">' + [I.rev1 && I.rev1.nome ? 'Revisão 1: ' + esc(I.rev1.nome) + ' (' + quandoBR(I.rev1.em) + ')' : '',
+        I.rev2 && I.rev2.nome ? 'Revisão 2: ' + esc(I.rev2.nome) + ' (' + quandoBR(I.rev2.em) + ')' : ''].filter(Boolean).join(' · ') + '</div>'
+    + (!eu.pode && e ? '<p class="alerta" style="margin-top:8px">Você pode ver. ' + (e === 1 ? 'A Revisão 1 é de quem fez a inspeção.' : e === 2 ? 'A Revisão 2 é de quem não esteve na inspeção.' : 'A aprovação é do PLH.') + '</p>' : '');
+  const dev = (R.eventos || []).filter(x => x.acao === 'revisao_devolvida').pop();
+  if (dev && e && e < 3) h += '<div class="alerta falta" style="margin-top:8px"><b>Devolvida por ' + esc(dev.por || '') + ' (' + quandoBR(dev.em) + '):</b> ' + esc(dev.motivo || '') + '</div>';
+  h += '</div>';
+
+  // Parte 1 · o que o sistema confere
+  const conf = (R.conferencias || []).slice();
+  prev.camaras.forEach(ck => {
+    const nm = prev.camaras.length > 1 ? ' (' + ck.cam.nome + ')' : '';
+    if (ck.erro) conf.push({ chave:'calc', nivel:'vermelho', texto:'Cálculo' + nm, detalhe:ck.erro });
+    else if (ck.governante && ck.governante.pmta < ck.cam.p_operacao_max_mpa) conf.push({ chave:'pmta_op', nivel:'vermelho', texto:'PMTA calculada abaixo da pressão de operação' + nm, detalhe:'O PLH decide a PMTA (com justificativa) ou a redução da pressão.' });
+    ck.comps.filter(x => x.abaixo).forEach(x => conf.push({ chave:'abaixo', nivel:'vermelho', texto:x.c.nome + ': espessura abaixo da mínima requerida', detalhe:'O PLH decide a PMTA da câmara com justificativa, e entra uma recomendação de segurança.' }));
+    ck.comps.filter(x => x.erro).forEach(x => conf.push({ chave:'calc', nivel:'vermelho', texto:x.c.nome + ': sem cálculo', detalhe:x.erro }));
+  });
+  if (prev.vaso && prev.vaso.erro) conf.push({ chave:'vaso', nivel:/[Vv]olume/.test(prev.vaso.erro) ? 'amarelo' : 'vermelho', texto:'Categoria e prazos', detalhe:prev.vaso.erro });
+  (REV.vidas || []).filter(x => x.cor).forEach(x => conf.push({ chave:'vida', nivel:'amarelo', texto:x.nome + ': vida remanescente ' + (x.cor === 'vermelho' ? 'menor que o prazo até a próxima inspeção' : 'menor que 2× o prazo'), detalhe:'O PLH decide (reduzir o prazo ou a PMTA, ou recomendar reparo).' }));
+  const ico = n => n === 'ok' ? '<span class="cf ok">✓</span>' : n === 'amarelo' ? '<span class="cf am">!</span>' : '<span class="cf vm">✗</span>';
+  const nV = conf.filter(x => x.nivel === 'vermelho').length;
+  h += '<h2>1 · O que o sistema confere</h2><div class="card"><table class="conf">' + conf.sort((a, b) => ({ vermelho:0, amarelo:1, ok:2 }[a.nivel] - { vermelho:0, amarelo:1, ok:2 }[b.nivel]))
+    .map(x => '<tr class="n-' + x.nivel + '"><td style="width:26px">' + ico(x.nivel) + '</td><td><b>' + esc(x.texto) + '</b>' + (x.detalhe ? '<div class="muted">' + esc(x.detalhe) + '</div>' : '') + '</td></tr>').join('') + '</table>'
+    + '<p class="muted" style="margin:8px 0 0">' + (nV ? '<b style="color:var(--crit)">' + nV + ' pendência(s) em vermelho travam a aprovação.</b> ' : 'Nada em vermelho. ') + 'O amarelo só avisa.</p></div>';
+
+  // Parte 2 · as 4 conferências humanas
+  h += '<h2>2 · As 4 conferências' + (podeMarcar ? ' <span class="muted" style="text-transform:none;letter-spacing:0">· marque cada uma depois de olhar</span>' : '') + '</h2>';
+  const cab = (k, t) => '<div class="linha" style="justify-content:space-between"><h3 style="margin:0">' + t + '</h3>'
+    + (e && e < 3 ? '<label class="okrev"><input type="checkbox" data-ok="' + k + '"' + (revOk(k) ? ' checked' : '') + (podeMarcar ? '' : ' disabled') + '> conferido</label>' : '') + '</div>';
+  // 1 · dados × fotos
+  const fotos = (R.fotos || []);
+  h += '<div class="card">' + cab('dados', '1 · Dados contra as fotos')
+    + '<div class="g2rev"><div><table><tr><th>Plaqueta</th><th></th><th></th></tr>'
+    + [['fabricante','Fabricante']].concat(REV_CAMPOS_VASO).map(([k, r]) => '<tr><td class="muted">' + r + '</td><td><b>' + esc(R.vaso[k] == null ? '—' : String(R.vaso[k])) + '</b></td><td>'
+        + (eu.pode && k !== 'fabricante' ? '<button class="btn mini" data-corv="' + k + '">Corrigir</button>' : '') + '</td></tr>').join('') + '</table></div>'
+    + '<div><div class="muted" style="margin-bottom:4px">Fotos (' + fotos.length + ')</div><div class="fotosrev">' + fotos.map(f => '<button class="fotorev" data-foto="' + esc(f.path) + '" title="' + esc((f.secao || '') + (f.legenda ? ' · ' + f.legenda : '')) + '">' + esc(f.secao || 'foto') + '</button>').join('')
+    + '</div><div id="revVisor" class="visorrev"><p class="muted">Clique numa foto para ver.</p></div></div></div>'
+    + '<h3 style="margin-top:14px">Acessórios</h3>' + ((R.acessorios || []).length ? '<table><tr><th>Acessório</th><th>Marca / modelo</th><th>Lacre</th><th>Ajuste</th><th>Aferição</th><th></th></tr>'
+      + R.acessorios.map(a => '<tr><td><b>' + esc(a.tag || a.tipo) + '</b><div class="muted">' + esc(a.tipo) + (a.situacao ? ' · ' + esc(a.situacao) : '') + '</div></td><td>' + esc([a.marca, a.modelo].filter(Boolean).join(' · ') || '—')
+        + '</td><td>' + esc(a.lacre_num || '—') + '</td><td>' + (a.pressao_ajuste_mpa != null ? pr(a.pressao_ajuste_mpa) : '—') + '</td><td>'
+        + (a.afericao ? esc(a.afericao.codigo || 'sem número') + ' · ' + (a.afericao.resultado === 'aprovado' ? 'aprovado' : '<b style="color:var(--crit)">' + esc(a.afericao.resultado || '') + '</b>') + (a.afericao.grave ? ' <span class="chip s-grave">grave</span>' : '') : '<span class="muted">—</span>')
+        + '</td><td>' + (eu.pode ? '<button class="btn mini" data-cora="' + esc(a.id) + '">Corrigir</button>' : '') + '</td></tr>').join('') + '</table>' : '<p class="vazio">Nenhum acessório.</p>')
+    + '</div>';
+  // 2 · anomalias e recomendações
+  const recs = R.recomendacoes || [];
+  const anom = (R.visual || []).filter(x => x.conforme === false).map(x => ({ ref:'visual:' + x.item, titulo:x.item, texto:x.anomalia, sug:sugestaoRec(x.item, x.anomalia) }))
+    .concat((R.acessorios || []).filter(a => a.situacao === 'substituir' || (a.afericao && (a.afericao.grave || a.afericao.resultado === 'reprovado')))
+      .map(a => ({ ref:'acessorio:' + a.id, titulo:(a.tag || a.tipo), texto:a.situacao === 'substituir' ? 'a substituir' : 'aferição ' + (a.afericao.resultado || ''),
+                   sug:(a.tipo === 'valvula' || /válvula/i.test(a.tipo) ? 'Substituir ou reajustar a válvula ' : 'Substituir o ') + (a.tag || a.tipo) + '.' })));
+  h += '<div class="card">' + cab('recomendacoes', '2 · Anomalias e recomendações')
+    + (anom.length ? '<table><tr><th>Anomalia</th><th>Recomendação</th><th></th></tr>' + anom.map(x => {
+        const rr = recs.filter(r => r.ref === x.ref);
+        return '<tr><td><b>' + esc(x.titulo) + '</b><div class="muted">' + esc(x.texto || '') + '</div></td><td>' + (rr.length ? rr.map(r => '<div>' + esc(r.texto) + ' <span class="muted">(' + TIPO_REC[r.tipo] + (r.prazo ? ', até ' + dataBR(r.prazo) : '') + ')</span></div>').join('')
+          : '<span style="color:var(--crit);font-weight:600">sem recomendação</span>') + '</td><td>' + (eu.pode ? '<button class="btn mini" data-novarec="' + esc(x.ref) + '" data-sug="' + esc(x.sug) + '">' + (rr.length ? '+ outra' : 'Recomendar') + '</button>' : '') + '</td></tr>';
+      }).join('') + '</table>' : '<p class="muted">Nenhuma anomalia no visual e nenhum acessório reprovado.</p>')
+    + '<h3 style="margin-top:14px">Todas as recomendações (' + recs.length + ')</h3>' + (recs.length ? '<table>' + recs.map(r => '<tr><td>' + esc(r.texto) + '</td><td class="muted">' + TIPO_REC[r.tipo]
+        + (r.prazo ? ' · até ' + dataBR(r.prazo) : '') + (r.ref ? '' : ' · livre') + '</td><td>' + (eu.pode ? '<button class="btn mini" data-edrec="' + esc(r.id) + '">Editar</button> <button class="btn mini perigo" data-rmrec="' + esc(r.id) + '">Tirar</button>' : '') + '</td></tr>').join('') + '</table>' : '<p class="muted">Nenhuma.</p>')
+    + (eu.pode ? '<button class="btn mini" data-novarec="" data-sug="" style="margin-top:8px">+ recomendação livre</button>' : '') + '</div>';
+  // 3 · PMTA
+  const plhAprova = e === 3 && eu.pode;
+  h += '<div class="card">' + cab('pmta', '3 · PMTA') + '<table><tr><th>Câmara</th><th>Operação</th><th>Calculada</th><th>Anterior</th><th>Plaqueta</th><th>Adotada</th></tr>'
+    + prev.camaras.map(ck => {
+        const k = ck.cam, calc = ck.governante ? ck.governante.pmta : null, ant = k.pmta_vigente_mpa, sug = revRegra(ck);
+        const esc0 = REV.pmta[k.id] || { regra:sug.regra, valor:sug.valor, just:'' };
+        REV.pmta[k.id] = esc0;
+        return '<tr><td><b>' + esc(k.nome) + '</b>' + (ck.governante ? '<div class="muted">governante: ' + esc(ck.governante.c.nome) + '</div>' : '') + '</td><td>' + pr(k.p_operacao_max_mpa) + '</td><td>'
+          + (calc == null ? '<span style="color:var(--crit)">' + esc(ck.erro || 'sem cálculo') + '</span>' : '<b>' + pr(calc) + '</b>') + '</td><td>' + pr(ant) + '</td><td>' + pr(k.pmta_plaqueta_mpa) + '</td><td>'
+          + (plhAprova ? '<select class="t" data-regra="' + esc(k.id) + '"><option value="calculada"' + (esc0.regra === 'calculada' ? ' selected' : '') + '>a calculada</option>'
+              + (ant != null && calc != null && ant <= calc + 1e-4 ? '<option value="mantida_anterior"' + (esc0.regra === 'mantida_anterior' ? ' selected' : '') + '>manter a anterior</option>' : '')
+              + '<option value="plh"' + (esc0.regra === 'plh' ? ' selected' : '') + '>outra (PLH)</option></select>'
+              + '<div data-plhv="' + esc(k.id) + '"' + (esc0.regra === 'plh' ? '' : ' hidden') + '><input class="t" data-pval="' + esc(k.id) + '" placeholder="PMTA em ' + CALC.UNID_ROT[u] + '" value="' + (esc0.regra === 'plh' && esc0.valor != null ? fmt(CALC.deMPa(esc0.valor, u), 3) : '') + '">'
+              + '<input class="t" data-pjust="' + esc(k.id) + '" placeholder="justificativa" value="' + esc(esc0.just || '') + '"></div>'
+              + (k.pressao_externa ? '<div><input class="t" data-pext="' + esc(k.id) + '" placeholder="PMTA externa (vácuo), ' + CALC.UNID_ROT[u] + '"><input class="t" data-pextj="' + esc(k.id) + '" placeholder="justificativa da externa"></div>' : '')
+            : '<span class="muted">' + (sug.regra === 'mantida_anterior' ? 'sugerida: manter a anterior (' + pr(sug.valor) + ')' : sug.regra === 'calculada' ? 'sugerida: a calculada' : 'o PLH decide') + '</span>')
+          + '</td></tr>';
+      }).join('') + '</table>'
+    + (prev.vaso && !prev.vaso.erro ? '<p class="muted" style="margin:8px 0 0">P·V = ' + fmt(prev.vaso.pv, 3) + ' · grupo ' + prev.vaso.grupo + ' · <b>categoria ' + prev.vaso.categoria + '</b> · próximas: externa em ' + prev.vaso.prazos.externo
+        + ' ano(s), interna ' + (prev.vaso.prazos.interno == null ? 'a critério do PLH' : 'em ' + prev.vaso.prazos.interno + ' anos') + '</p>' : '')
+    + (prev.vaso && prev.vaso.erro && /[Vv]olume/.test(prev.vaso.erro) && plhAprova ? '<label class="f" style="max-width:260px">Volume total do vaso (m³)<input class="t" id="revVol" inputmode="decimal" value="' + (REV.volume != null ? fmt(REV.volume, 3) : '') + '"></label>' : '')
+    + (prev.detalhes.length ? '<ul class="muted" style="margin:8px 0 0;padding-left:18px">' + prev.detalhes.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '') + '</div>';
+  // 4 · espessuras × anterior
+  REV.vidas = revVidas();
+  h += '<div class="card">' + cab('espessuras', '4 · Espessuras contra o laudo anterior')
+    + (REV.vidas.length ? '<table><tr><th>Componente</th><th>Anterior</th><th>Atual</th><th>Requerida</th><th>Perda</th><th>Taxa</th><th>Vida remanescente</th></tr>'
+      + REV.vidas.map(x => '<tr' + (x.cor === 'vermelho' ? ' style="background:var(--crit-soft)"' : x.cor === 'amarelo' ? ' style="background:var(--warn-soft)"' : '') + '><td><b>' + esc(x.nome) + '</b></td><td>'
+        + (x.ant == null ? '<span class="muted">—</span>' : fmt(x.ant, 2) + ' mm<div class="muted">' + dataBR(x.dataAnt) + '</div>') + '</td><td>' + (x.atual == null ? '—' : fmt(x.atual, 2) + ' mm') + '</td><td>' + (x.req == null ? '—' : fmt(x.req, 2) + ' mm')
+        + '</td><td>' + (x.perda == null ? '—' : fmt(x.perda, 2) + ' mm') + '</td><td>' + (x.taxa == null ? '—' : x.semPerda ? '<span class="muted">sem perda mensurável</span>' : fmt(x.taxa, 3) + ' mm/ano')
+        + '</td><td>' + esc(x.vidaTxt) + '</td></tr>').join('') + '</table>'
+      + '<p class="muted" style="margin:8px 0 0">Base: ' + esc(REV.fonteAnt || 'sem espessura anterior (vaso sem laudo anterior ou sem as espessuras declaradas)') + '. Vermelho: vida menor que o prazo até a próxima inspeção; amarelo: menor que 2× o prazo. Nada é arredondado antes do fim.</p>'
+      : '<p class="muted">Sem componentes medidos.</p>') + '</div>';
+
+  // correções e histórico
+  if ((R.correcoes || []).length) h += '<h2>Correções feitas na revisão</h2><div class="card"><table><tr><th>Dado</th><th>Antes</th><th>Depois</th><th>Motivo</th><th>Quem</th></tr>'
+    + R.correcoes.map(c => '<tr><td>' + esc(c.rotulo || '') + '<div class="muted">R' + c.etapa + '</div></td><td>' + esc(c.antes == null ? '—' : c.antes) + '</td><td><b>' + esc(c.depois == null ? '—' : c.depois) + '</b></td><td>' + esc(c.motivo || '')
+      + '</td><td>' + esc(c.por || '') + '<div class="muted">' + quandoBR(c.em) + '</div></td></tr>').join('') + '</table></div>';
+  // ações
+  h += '<div class="card linha acoesrev">';
+  if (eu.pode && (e === 1 || e === 2)) h += '<button class="btn pri" id="revConcluir">Concluir a ' + (e === 1 ? 'Revisão 1' : 'Revisão 2') + '</button>';
+  if (eu.pode && e === 3) h += '<button class="btn pri" id="revAprovar"' + (nV ? ' disabled title="Há pendência em vermelho"' : '') + '>Aprovar e liberar para o laudo</button>';
+  if (eu.pode && (e === 2 || e === 3)) h += '<button class="btn" id="revDevolver">Devolver à ' + (e === 2 ? 'Revisão 1' : 'Revisão 2') + '</button>';
+  h += '<span class="muted">' + (e === 3 ? 'Aprovar grava o cálculo oficial e libera a inspeção para o laudo (R06).' : 'Para corrigir o que veio do campo, reabra a inspeção para a equipe (vaso › Reabrir).') + '</span></div>';
+  $('tela').innerHTML = h;
+  ligarRevisao();
+}
+// a regra sugerida: mantém a anterior quando ela cabe na calculada; senão, a calculada
+function revRegra(ck){
+  const calc = ck.governante ? ck.governante.pmta : null, ant = ck.cam.pmta_vigente_mpa;
+  if (calc == null) return { regra:'plh', valor:null };
+  if (ant != null && ant <= calc + 1e-4) return { regra:'mantida_anterior', valor:Number(ant) };
+  return { regra:'calculada', valor:calc };
+}
+// espessuras: taxa, vida remanescente e a cor (decisão de 20/10)
+function revVidas(){
+  const { R, v, prev } = REV, ants = R.espessuras_anteriores || [];
+  REV.fonteAnt = ants.length ? ants[0].fonte + (ants[0].data_ant ? ' de ' + dataBR(ants[0].data_ant) : '') : null;
+  const dataAtual = dataSP(R.inspecao.termino || R.inspecao.inicio);
+  const prazo = prev.vaso && prev.vaso.prazos ? (prev.vaso.prazos.interno != null ? prev.vaso.prazos.interno : prev.vaso.prazos.externo) : null;
+  const resol = 0.01;   // resolução do medidor de espessura (mm) para "sem perda mensurável"
+  const out = [];
+  prev.camaras.forEach(ck => ck.comps.forEach(x => {
+    const a = ants.find(y => y.componente_id === x.c.id);
+    const o = { nome:x.c.nome, atual:x.tMin, req:x.eMin, ant:a ? Number(a.t_ant) : null, dataAnt:a ? a.data_ant : null, perda:null, taxa:null, vida:null, vidaTxt:'—', cor:null, semPerda:false };
+    if (o.ant != null && o.atual != null && o.dataAnt && dataAtual){
+      const anos = (new Date(dataAtual) - new Date(o.dataAnt)) / (365.25 * 864e5);
+      o.perda = o.ant - o.atual;
+      if (anos > 0){
+        if (o.perda < resol){ o.semPerda = true; o.taxa = resol / anos;
+          if (o.req != null){ o.vida = (o.atual - o.req) / o.taxa; o.vidaTxt = o.vida > 0 ? 'maior que ' + fmt(o.vida, 0) + ' anos' : 'abaixo da requerida'; } }
+        else { o.taxa = o.perda / anos;
+          if (o.req != null){ o.vida = (o.atual - o.req) / o.taxa; o.vidaTxt = o.vida > 0 ? fmt(o.vida, 1) + ' anos' : 'abaixo da requerida'; } }
+        if (o.vida != null && prazo != null && !o.semPerda) o.cor = o.vida < prazo ? 'vermelho' : o.vida < 2 * prazo ? 'amarelo' : null;
+        if (o.vida != null && o.vida <= 0) o.cor = 'vermelho';
+      }
+    }
+    out.push(o);
+  }));
+  return out;
+}
+function revMontarResultado(){
+  const { R, v, prev } = REV, u = CALC.unidadeDe(v), m = CALC.materialDe(v, null);
+  if (!m) throw new Error('O vaso não tem material.');
+  let vaso = prev.vaso;
+  if (vaso && vaso.erro){
+    if (!/[Vv]olume/.test(vaso.erro)) throw new Error('Categoria: ' + vaso.erro);
+    const V = num(($('revVol') || {}).value || '');
+    if (!(V > 0)) throw new Error('Informe o volume total do vaso (m³).');
+    const cs = CALC.ativas(v), kP = cs.reduce((a, b) => Math.abs(b.p_operacao_max_mpa) > Math.abs(a.p_operacao_max_mpa) ? b : a);
+    const RIS = { A:4, B:3, C:2, D:1 }, classe = cs.map(k => String(k.classe_fluido).toUpperCase()).reduce((a, b) => RIS[b] > RIS[a] ? b : a);
+    const cat = M.categoria(classe, kP.p_operacao_max_mpa, V);
+    vaso = { V, grupo:cat.grupo, categoria:cat.categoria, prazos:M.prazos(cat.categoria, { semCodigoConstrucao:!!v.sem_codigo_construcao, temperaturaAbaixoDeZeroSemDeterioracao:!!v.abaixo_zero_sem_deterioracao }), informado:true };
+  }
+  const base = dataSP(R.inspecao.termino || R.inspecao.inicio);
+  if (!base) throw new Error('Falta a data da inspeção.');
+  const comps = [], cams = [];
+  prev.camaras.forEach(ck => {
+    if (ck.erro) throw new Error(ck.cam.nome + ': ' + ck.erro);
+    ck.comps.forEach(x => {
+      if (x.erro) throw new Error(x.c.nome + ': ' + x.erro);
+      if (x.tMin == null) throw new Error(x.c.nome + ': sem leitura de espessura.');
+      comps.push({ componente_id:x.c.id, t_min_mm:x.tMin, e_min_mm:x.eMin, pmta_mpa:x.pmta });
+    });
+    const k = ck.cam, esc0 = REV.pmta[k.id] || revRegra(ck), calc = ck.governante ? ck.governante.pmta : null;
+    let adot = esc0.regra === 'calculada' ? calc : esc0.regra === 'mantida_anterior' ? Number(k.pmta_vigente_mpa) : esc0.valor;
+    if (adot == null || !(adot > 0)) throw new Error(k.nome + ': informe a PMTA adotada.');
+    const c = { camara_id:k.id, pmta_adotada_mpa:adot, regra_pmta:esc0.regra };
+    if (esc0.regra === 'plh'){ if (!(esc0.just || '').trim()) throw new Error(k.nome + ': a PMTA escolhida pelo PLH precisa de justificativa.'); c.justificativa_pmta = esc0.just.trim(); }
+    if (k.pressao_externa){
+      const ex = num(($('tela').querySelector('[data-pext="' + k.id + '"]') || {}).value || ''), ej = (($('tela').querySelector('[data-pextj="' + k.id + '"]') || {}).value || '').trim();
+      if (!(ex > 0) || !ej) throw new Error(k.nome + ': informe a PMTA externa (vácuo) e a justificativa.');
+      c.pmta_externa_mpa = Math.round(ex * ({ 'bar':0.1, 'kgf/cm2':0.0980665, 'MPa':1, 'psi':0.00689476 })[u] * 1e4) / 1e4; c.justificativa_externa = ej;
+    }
+    cams.push(c);
+  });
+  const r = { motor_versao:M.versao || 'R00.3', material_id:m.id, s_mpa:Number(m.s_mpa), corrosao_mm:Number(v.corrosao_mm) || 0,
+    grupo:vaso.grupo, categoria:vaso.categoria, prazo_externo_anos:vaso.prazos.externo, prazo_interno_anos:vaso.prazos.interno,
+    proxima_externa:somaAnos(base, vaso.prazos.externo), proxima_interna:vaso.prazos.interno == null ? null : somaAnos(base, vaso.prazos.interno),
+    componentes:comps, camaras:cams };
+  if (vaso.informado) r.volume_m3 = vaso.V;
+  if (vaso.prazos.interno == null) throw new Error('Interno a critério do PLH (abaixo de 0 °C): ainda não tratado nesta tela.');
+  return r;
+}
+function ligarRevisao(){
+  const { R } = REV, id = REV.id, T = $('tela');
+  const recarregar = async () => { const y = window.scrollY; await telaRevisao(id); window.scrollTo(0, y); };
+  T.querySelectorAll('[data-ok]').forEach(c => c.addEventListener('change', async () => {
+    try{ await rpc('tf_insp_revisao_ok', { p_id:id, p_item:c.dataset.ok, p_ok:c.checked }); const e = R.inspecao.etapa; R.oks = R.oks || {}; R.oks[e] = (R.oks[e] || []).filter(x => x !== c.dataset.ok).concat(c.checked ? [c.dataset.ok] : []); }
+    catch(e){ c.checked = !c.checked; erro(e); }
+  }));
+  T.querySelectorAll('[data-foto]').forEach(b => b.addEventListener('click', () => mostrarArquivoEm($('revVisor'), { storage_path:b.dataset.foto })));
+  const corrigir = (alvo, ref, campos, atual) => {
+    janela('Corrigir', '<label class="f">Dado<select class="t" id="rcCampo">' + campos.map(([k, r]) => '<option value="' + k + '">' + r + '</option>').join('') + '</select></label>'
+      + '<label class="f">Valor certo<input class="t" id="rcValor"></label><label class="f">Motivo<input class="t" id="rcMotivo" placeholder="ex.: conforme a foto da plaqueta"></label>'
+      + '<p class="muted">Fica registrado o antes, o depois e o seu nome.</p>', [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
+        rpc('tf_insp_revisao_corrigir', { p_id:id, p_alvo:alvo, p_ref:ref, p_campo:$('rcCampo').value, p_valor:$('rcValor').value, p_motivo:$('rcMotivo').value })
+          .then(r => { U.toast(r && r.mudou ? 'Corrigido.' : 'Era o mesmo valor.', 'ok'); N.janela.fechar(); recarregar(); }, erro);
+        return false; } }]);
+    const sel = $('rcCampo'), pinta = () => { $('rcValor').value = atual(sel.value) == null ? '' : String(atual(sel.value)); };
+    sel.addEventListener('change', pinta); pinta();
+  };
+  T.querySelectorAll('[data-corv]').forEach(b => b.addEventListener('click', () => { corrigir('vaso', null, REV_CAMPOS_VASO, k => R.vaso[k]); $('rcCampo').value = b.dataset.corv; $('rcCampo').dispatchEvent(new Event('change')); }));
+  T.querySelectorAll('[data-cora]').forEach(b => b.addEventListener('click', () => { const a = R.acessorios.find(x => x.id === b.dataset.cora); corrigir('acessorio', a.id, REV_CAMPOS_AC, k => a[k]); }));
+  const formRec = (r, ref, sug) => {
+    r = r || { tipo:'geral', texto:sug || '', prazo:null, ref:ref || null };
+    janela(r.id ? 'Editar a recomendação' : 'Nova recomendação', '<label class="f">Tipo<select class="t" id="rTipo">' + Object.entries(TIPO_REC).map(([k, t]) => '<option value="' + k + '"' + (r.tipo === k ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></label>'
+      + '<label class="f">Recomendação<textarea class="t" id="rTxt" rows="3">' + esc(r.texto || '') + '</textarea></label><label class="f">Prazo (opcional)<input class="t" id="rPrazo" type="date" value="' + esc(r.prazo || '') + '"></label>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
+        rpc('tf_insp_recomendacao_gravar', { p_id:id, p_rec:{ id:r.id || null, tipo:$('rTipo').value, texto:$('rTxt').value, prazo:$('rPrazo').value || null, ref:r.ref } })
+          .then(() => { N.janela.fechar(); recarregar(); }, erro);
+        return false; } }]);
+  };
+  T.querySelectorAll('[data-novarec]').forEach(b => b.addEventListener('click', () => formRec(null, b.dataset.novarec || null, b.dataset.sug)));
+  T.querySelectorAll('[data-edrec]').forEach(b => b.addEventListener('click', () => formRec(R.recomendacoes.find(x => x.id === b.dataset.edrec))));
+  T.querySelectorAll('[data-rmrec]').forEach(b => b.addEventListener('click', async () => {
+    if (!await N.janela.confirmar('Tirar a recomendação?', '<p>' + esc((R.recomendacoes.find(x => x.id === b.dataset.rmrec) || {}).texto || '') + '</p>', 'Tirar', true)) return;
+    try{ await rpc('tf_insp_recomendacao_remover', { p_id:id, p_rec:b.dataset.rmrec }); recarregar(); }catch(e){ erro(e); }
+  }));
+  // PMTA (PLH)
+  const u = CALC.unidadeDe(REV.v), paraM = x => x == null ? null : Math.round(x * ({ 'bar':0.1, 'kgf/cm2':0.0980665, 'MPa':1, 'psi':0.00689476 })[u] * 1e4) / 1e4;
+  T.querySelectorAll('[data-regra]').forEach(s => s.addEventListener('change', () => {
+    const k = s.dataset.regra; REV.pmta[k] = REV.pmta[k] || {}; REV.pmta[k].regra = s.value;
+    T.querySelector('[data-plhv="' + k + '"]').hidden = s.value !== 'plh';
+  }));
+  T.querySelectorAll('[data-pval]').forEach(i => i.addEventListener('input', () => { REV.pmta[i.dataset.pval].valor = paraM(num(i.value)); }));
+  T.querySelectorAll('[data-pjust]').forEach(i => i.addEventListener('input', () => { REV.pmta[i.dataset.pjust].just = i.value; }));
+  const rv = $('revVol'); if (rv) rv.addEventListener('input', () => { REV.volume = num(rv.value); });
+  // ações
+  const bc = $('revConcluir'); if (bc) bc.addEventListener('click', () => U.semDuploEnvio(bc, async () => {
+    try{ await rpc('tf_insp_revisao_concluir', { p_id:id }); U.toast('Revisão concluída.', 'ok'); location.hash = 'aba=rev'; }catch(e){ erro(e); }
+  }));
+  const bd = $('revDevolver'); if (bd) bd.addEventListener('click', () => {
+    janela('Devolver', '<label class="f">O que precisa ser revisto<textarea class="t" id="dvTxt" rows="3"></textarea></label>', [{ rotulo:'Cancelar' }, { rotulo:'Devolver', classe:'pri', acao:() => {
+      rpc('tf_insp_revisao_devolver', { p_id:id, p_comentario:$('dvTxt').value }).then(() => { N.janela.fechar(); U.toast('Devolvida.', 'ok'); location.hash = 'aba=rev'; }, erro);
+      return false; } }]);
+  });
+  const ba = $('revAprovar'); if (ba) ba.addEventListener('click', () => U.semDuploEnvio(ba, async () => {
+    let r; try{ r = revMontarResultado(); }catch(e){ erro(e); return; }
+    if (!await N.janela.confirmar('Aprovar e liberar', '<p>Grava o cálculo oficial (categoria ' + esc(r.categoria) + ', próxima externa em ' + dataBR(r.proxima_externa) + ') e libera a inspeção para o laudo.</p>', 'Aprovar')) return;
+    try{ await rpc('tf_insp_revisao_aprovar', { p_id:id, p_r:r }); U.toast('Aprovada e liberada.', 'ok'); location.hash = 'aba=rev'; }catch(e){ erro(e); }
+  }));
+}
+// a foto (ou o PDF) num quadro: o mesmo jeito do laudo anterior
+async function mostrarArquivoEm(vis, a){
+  if (!vis || !a) return;
+  vis.innerHTML = '<p class="muted">Abrindo…</p>';
+  if (DEMO){ vis.innerHTML = '<p class="muted">Demonstração: sem o arquivo.</p>'; return; }
+  try{
+    if (!blobs[a.storage_path]){
+      const s = N.sessao();
+      const r = await fetch(SUPA_URL + '/storage/v1/object/authenticated/inspecoes/' + a.storage_path.split('/').map(encodeURIComponent).join('/'),
+        { headers:{ apikey:SUPA_ANON, Authorization:'Bearer ' + s.token } });
+      if (!r.ok) throw new Error('A foto não abriu (HTTP ' + r.status + ').');
+      blobs[a.storage_path] = URL.createObjectURL(await r.blob());
+    }
+    vis.innerHTML = /\.pdf$/i.test(a.storage_path) ? '<iframe title="Arquivo"></iframe>' : '<img alt="">';
+    vis.firstChild.src = blobs[a.storage_path];
+  }catch(e){ vis.innerHTML = '<p class="alerta crit"></p>'; vis.firstChild.textContent = e.message; }
+}
+
 // ── início ─────────────────────────────────────────────────────────────────
 (function boot(){
   $('barDemo').hidden = !DEMO;
@@ -794,7 +1271,8 @@ async function previa(){
   const g = N.porteiro({ app:'doc', demo:false, url:SUPA_URL, anon:SUPA_ANON });
   if (g === 'hub'){ location.href = '../'; return; }
   // o Esc fecha a janela do núcleo (a página não traz o próprio #modal)
-  pintar();
+  // E7: o poder PLH antes da primeira pintura (sem sinal ou erro: sem os botões do PLH)
+  rpc('tf_tem_poder', { p_poder:'plh' }).then(v => { PLH = !!v; }, () => { PLH = false; }).then(pintar);
 })();
 </script>
 </body>

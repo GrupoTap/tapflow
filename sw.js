@@ -29,7 +29,7 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H11-S91';   // S91 · Acessos A3: uma tela só (205)
+const VERSAO = 'H11-S93';   // S93 · R05a: a revisão no TapDoc do escritório (409, TapDoc E8)
 const CACHE  = 'tapflow-hub-' + VERSAO;
 
 const ESSENCIAIS = [
