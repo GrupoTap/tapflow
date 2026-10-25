@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S87</title>
+<title>TapFlow Manager · S90</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1079,6 +1079,7 @@ button.rhfdC:hover{filter:brightness(.96)}
 /* ── configurações ────────────────────────────────── */
 .cfgWrap{padding:18px;max-width:1100px}
 .cfgWrap .chips{margin-bottom:14px}
+.cfgWrap .cfgAcessos{margin:-6px 0 14px}
 .linhaU{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
   padding:11px 13px;border:1px solid var(--rule);border-radius:3px;margin-bottom:6px;background:var(--surface)}
 .linhaU.off{opacity:.55}
@@ -2319,7 +2320,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S87';
+const APP_VERSION = 'S90';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -11455,7 +11456,8 @@ function pintarMeuPerfil(){
     + '<button class="btn pri" type="button" id="euNome" style="width:100%">Corrigir meu nome</button>'
     + '<p class="nota">Para trocar e-mail, senha ou perfil — seu ou de outra pessoa — fale com o '
     + 'administrador'
-    + (sessao.admin ? ' (você é um: <b>Configurações › Usuários</b>).' : '.') + '</p>'
+    + (sessao.admin ? ' (você é um: <b>Configurações › Usuários</b>; o que cada pessoa vê, em '
+       + '<a href="../acessos/">Pessoas e acessos</a>).' : '.') + '</p>'
     // S45 · item 1: instalar o TapFlow neste aparelho
     + '<div class="secTit">O TapFlow como app</div>'
     + (appInstalado()
@@ -11892,13 +11894,18 @@ async function pintarConfig(){
   board.innerHTML = '<div class="cfgWrap">'
     + '<div id="cfgUso"></div>'
     + '<div class="chips" id="cfgTabs"></div>'
+    + '<p class="nota cfgAcessos">Perfis e acessos (o que cada pessoa vê) ficam em '
+    + '<a href="../acessos/">Pessoas e acessos</a> (no início, só o admin).</p>'
     + '<div id="cfgCorpo"></div></div>';
 
-  // S31: "Tarefas por perfil" fica ao LADO de Perfis, não dentro. São dois
-  // controles diferentes e o documento pediu que não se fundissem: "O que
-  // aparece na tela" decide por onde a pessoa navega; esta decide, tarefa por
-  // tarefa, quem pode executá-la.
-  const abas = [['usuarios','Usuários'],['perfis','Perfis'],['tarefas','Tarefas por perfil'],
+  // S31: "Tarefas por perfil" decide, tarefa por tarefa, quem pode executá-la.
+  // S90 (Bruno, 24/10 — "tirar essa tela toda e deixar só as pessoas e perfis"):
+  // a aba "Perfis" (o que aparece na tela) SAIU. O que cada pessoa vê mora em
+  // "Pessoas e acessos" (../acessos/, do central; no início só o admin); o banco
+  // traduz a matriz da pessoa nas mesmas palavras de módulo (204, tf_meu_acesso).
+  // Endereço/estado antigo com abaCfg = 'perfis' cai em Usuários.
+  if (abaCfg === 'perfis') abaCfg = 'usuarios';
+  const abas = [['usuarios','Usuários'],['tarefas','Tarefas por perfil'],
                 ['auto','Responsáveis automáticos'],
                 ['turno','Turno'],['planos','Planos'],['alertas','Alertas do menu'],
                 ['servneg','Serviços do negócio'],['feriados','Feriados'],
@@ -11914,7 +11921,6 @@ async function pintarConfig(){
 
   cfgUso();   // S59 · medidor do armazenamento, em toda aba
   if (abaCfg === 'usuarios') return cfgUsuarios();
-  if (abaCfg === 'perfis')   return cfgPerfis();
   if (abaCfg === 'tarefas')  return cfgTarefasPerfil();
   if (abaCfg === 'auto')     return cfgAutoDesig();   // S62
   if (abaCfg === 'docs')     return cfgDocumentos();
@@ -12473,6 +12479,8 @@ async function modalExcluirUsuario(id, nome, semPerfil){
 // O formulário grava o que está marcado; módulo que não aparece aqui não pode
 // ser marcado, e some do perfil no primeiro salvamento. Já aconteceu com
 // `documentos` entre o S10 e o S15.
+// S90: o formulário de perfil SAIU do Manager (a aba "Perfis"); a lista ficou só
+// como RÓTULO dos módulos (o resumo do "Igualar"). Ninguém grava por ela aqui.
 const MODULOS = [['os','OS e quadros'],['comercial','Comercial'],['compras','Compras'],
                  ['campo','Campo'],['tecadm','Técnico Administrativo'],
                  ['fornecimento','Fornecimento de Produtos'],
@@ -12483,112 +12491,10 @@ const MODULOS = [['os','OS e quadros'],['comercial','Comercial'],['compras','Com
                  // S53 (107_s53.sql): quem LANÇA férias, folga e atestado (ler é de todos, pela Agenda)
                  ['ausencias','Ausências']];
 
-// Quantas pessoas SEGURAM este perfil — ativas e desativadas. É diferente do
-// que a lista mostra (`pessoas`, só as ativas) e é o número que o banco usa
-// para recusar a exclusão. `pessoas_total` chega da v_perfis desde o S16; o
-// `??` cobre o caso de o app novo rodar contra um banco que ainda não recebeu
-// a migration — aí ele erra para o lado de não oferecer o botão.
-const _pessoasDoPerfil = p => (p && p.pessoas_total != null) ? p.pessoas_total : (p ? p.pessoas : 0);
 
-async function cfgPerfis(){
-  const c = document.getElementById('cfgCorpo');
-  let perfis = [];
-  try{ perfis = DEMO ? demoPerfis() : await get('v_perfis?select=*&order=id'); }
-  catch(e){
-    c.innerHTML = '<div class="painel"><h3>Perfis</h3>'
-      + '<div class="aviso"><b>Não deu para carregar os perfis.</b><br>' + esc(e.message) + '</div>'
-      + '<button class="btn" id="pRetry">Tentar de novo</button></div>';
-    document.getElementById('pRetry').addEventListener('click', cfgPerfis);
-    return;
-  }
-
-  let h = '<div class="cadWrap"><div class="painel"><h3>Perfis</h3>'
-    + '<p class="nota">Perfil é dado, não código: criar “Estagiário de campo” é preencher '
-    + 'este formulário. O perfil decide o que a pessoa vê e quais tarefas pode assumir.</p>';
-  perfis.forEach(p => {
-    h += '<button class="linhaCli' + (p.ativo?'':' off') + '" data-p="' + esc(p.id) + '">'
-      + '<b>' + esc(p.nome) + (p.is_admin ? ' <span class="tag adm">admin</span>' : '') + '</b>'
-      + '<small>' + esc(p.id) + ' · ' + ({campo:'campo',adm:'escritório',ambos:'campo e escritório'}[p.executa_em]||p.executa_em)
-      + ' · ' + p.pessoas + ' pessoa(s)' + (p.ativo?'':' · inativo') + '</small></button>';
-  });
-  h += '<button class="btn pri" id="pNovo" style="width:100%;margin-top:10px">Novo perfil</button>'
-    +  '</div><div class="painel" id="pDet"></div></div>';
-  c.innerHTML = h;
-
-  c.querySelectorAll('[data-p]').forEach(b => b.addEventListener('click',
-    () => formPerfil(perfis.find(x => x.id === b.dataset.p))));
-  document.getElementById('pNovo').addEventListener('click', () => formPerfil(null));
-  formPerfil(perfis[0]);
-}
-
-function formPerfil(p){
-  const d = document.getElementById('pDet');
-  if (!d) return;
-  const mods = (p && p.modulos) || [];
-  d.innerHTML = '<h3>' + (p ? esc(p.nome) : 'Novo perfil') + '</h3>'
-    + '<div class="dupla">'
-    +  '<div class="campo"><label for="pfId">Código</label><input id="pfId" type="text" value="'
-    +    esc(p?p.id:'') + '"' + (p?' disabled':'') + ' placeholder="ex.: estagiario"></div>'
-    +  '<div class="campo"><label for="pfNome">Nome</label><input id="pfNome" type="text" value="'
-    +    esc(p?p.nome:'') + '"></div></div>'
-    + '<div class="campo"><label for="pfEx">Onde executa</label><select id="pfEx">'
-    +  ['campo','adm','ambos'].map(v => '<option value="' + v + '"'
-        + (p && p.executa_em===v ? ' selected':'') + '>'
-        + ({campo:'Campo',adm:'Escritório',ambos:'Campo e escritório'}[v]) + '</option>').join('')
-    + '</select></div>'
-    + '<label class="chk"><input type="checkbox" id="pfAdm"' + (p&&p.is_admin?' checked':'')
-    +  '> É administrador (vê e faz tudo, inclusive esta tela)</label>'
-    + '<div class="secTit">O que aparece na tela</div><div class="grelha">'
-    + MODULOS.map(([v,l]) => '<label class="chk"><input type="checkbox" data-mod="' + v + '"'
-        + (mods.includes(v)?' checked':'') + '> ' + l + '</label>').join('')
-    + '</div>'
-    + '<label class="chk"><input type="checkbox" id="pfAtivo"' + (!p||p.ativo?' checked':'')
-    +  '> Perfil ativo</label>'
-    + '<div class="linhaBtns"><button class="btn pri" id="pfSalvar">'
-    +  (p?'Salvar':'Criar perfil') + '</button>'
-    +  (p ? '<button class="btn" id="pfExcluir">Excluir perfil</button>' : '')
-    + '</div>'
-    + (p ? '<p class="nota">Excluir só funciona com o perfil vazio. Enquanto houver gente '
-         + 'apontando para ele — inclusive gente desativada, que precisa dele para o histórico '
-         + 'continuar legível — o caminho é desmarcar “Perfil ativo”: ele some das listas de '
-         + 'escolha e continua existindo para quem já o tem.</p>' : '');
-
-  document.getElementById('pfSalvar').addEventListener('click', function(){
-    _semDuploEnvio_(this, async () => {
-      const id = document.getElementById('pfId').value.trim().toLowerCase().replace(/[^a-z0-9_]/g,'_');
-      const nome = document.getElementById('pfNome').value.trim();
-      if (!id || !nome){ toast('Código e nome são obrigatórios.','err'); return; }
-      try{
-        const dados = { p_id:id, p_nome:nome,
-          p_executa_em: document.getElementById('pfEx').value,
-          p_is_admin: document.getElementById('pfAdm').checked,
-          p_modulos: [...d.querySelectorAll('[data-mod]:checked')].map(x => x.dataset.mod),
-          p_ativo: document.getElementById('pfAtivo').checked };
-        if (DEMO) demoSalvarPerfil(dados); else await rpc('tf_salvar_perfil', dados);
-        toast('Perfil salvo.','ok'); cfgPerfis();
-      }catch(err){ toast(err.message,'err'); }
-    });
-  });
-
-  const bx = document.getElementById('pfExcluir');
-  if (bx) bx.addEventListener('click', () => {
-    abrirModal('Excluir o perfil “' + p.nome + '”?',
-      (_pessoasDoPerfil(p)
-        ? '<div class="aviso"><b>Este perfil tem ' + _pessoasDoPerfil(p) + ' pessoa(s)'
-          + (_pessoasDoPerfil(p) > (p.pessoas||0) ? ', contando as desativadas' : '') + '.</b> '
-          + 'Mova essas pessoas para outro perfil antes — ou desmarque “Perfil ativo”, '
-          + 'que tira ele das listas sem apagar nada.</div>'
-        : '<p class="nota">Nenhuma pessoa aponta para este perfil, então nada deixa de '
-          + 'funcionar. Isso não tem como desfazer.</p>'),
-      [{ label:'Cancelar', onClick: fecharModal }].concat(_pessoasDoPerfil(p) ? [] : [
-       { label:'Excluir perfil', pri:true, onClick: async () => {
-          try{
-            if (DEMO) demoExcluirPerfil(p.id); else await rpc('tf_excluir_perfil', { p_id:p.id });
-            fecharModal(); toast('Perfil excluído.','ok'); cfgPerfis();
-          }catch(e){ toast(e.message,'err'); }
-       }}]));
-  });
-}
+// S90: cfgPerfis() e formPerfil() (a aba "Perfis", que gravava perfis.modulos por
+// tf_salvar_perfil) SAÍRAM. O que cada pessoa vê é de "Pessoas e acessos" (../acessos/).
+// A função tf_salvar_perfil continua no banco, sem porta no Manager.
 
 // ── TAREFAS POR PERFIL (S31) ────────────────────────────────────────────────
 // ITEM 1 do documento de 17/09. O TapFlow sempre teve, por tarefa, a lista de
@@ -12618,9 +12524,9 @@ let _cfgPerfilSel = null;
 // 23/09 é outra: "estes dois perfis fazem a mesma coisa?" — e ela só se
 // responde vendo os perfis LADO A LADO. A matriz é a mesma lista de tarefas,
 // com um perfil por coluna; cada caixa grava pela MESMA função
-// (`tf_salvar_perfis_tarefa`), com o mesmo aviso de mudança de app. As telas
-// (módulos) aparecem em cima só para leitura — elas se editam em Perfis, que
-// grava o perfil inteiro de uma vez.
+// (`tf_salvar_perfis_tarefa`), com o mesmo aviso de mudança de app. S90: as
+// linhas das telas (módulos do perfil) SAÍRAM da matriz — o que cada pessoa vê
+// é de "Pessoas e acessos", e perfis.modulos já não diz isso para o escritório.
 let _tpModo = 'perfil';   // 'perfil' | 'matriz'
 let _tpPerfis = [];
 
@@ -12654,9 +12560,9 @@ async function cfgTarefasPerfil(){
     + '<button type="button" class="fchip' + (_tpModo === 'perfil' ? ' on' : '') + '" data-m="perfil">Um perfil por vez</button>'
     + '<button type="button" class="fchip' + (_tpModo === 'matriz' ? ' on' : '') + '" data-m="matriz">Todos lado a lado</button>'
     + '</div><button type="button" class="btn" id="tpIgualar">Igualar um perfil a outro…</button></div>'
-    + '<p class="nota">Esta lista é <b>diferente</b> do “O que aparece na tela”, ao lado em '
-    + '<b>Perfis</b>: lá se decide por onde a pessoa navega; aqui, tarefa por tarefa, quem pode '
-    + 'executá-la. Marcar vale <b>para sempre</b> — toda OS nova nasce com a regra — '
+    + '<p class="nota">Esta lista é <b>diferente</b> do que cada pessoa vê, que fica em '
+    + '<a href="../acessos/">Pessoas e acessos</a>: lá se decide por onde a pessoa navega; aqui, '
+    + 'tarefa por tarefa, quem pode executá-la. Marcar vale <b>para sempre</b> — toda OS nova nasce com a regra — '
     + '<b>e para as OS já abertas</b> cuja tarefa ainda não foi resolvida. O que já foi '
     + 'concluído fica como está: é histórico.</p>'
     + '<div class="chips" id="tpPerfis"></div>'
@@ -12732,16 +12638,7 @@ function tpPintarMatriz(perfis){
     if (!moldes.has(t.template_id)) moldes.set(t.template_id, { nome:t.template, itens:[] });
     moldes.get(t.template_id).itens.push(t);
   });
-  // conta de diferenças entre colunas: é a resposta rápida para "são iguais?"
-  const telas = MODULOS.map(([k, rot]) => '<tr><td class="tpMx1">' + esc(rot) + '</td>'
-      + cols.map(p => {
-          const m = p.modulos || [];
-          const tem = !m.length || m.indexOf(k) >= 0;   // sem módulo nenhum = vê tudo (regra do S10)
-          return '<td class="tpMxC">' + (tem ? '<span class="tpSim" aria-label="sim">✓</span>' : '<span class="tpNao" aria-label="não">—</span>') + '</td>';
-        }).join('') + '</tr>').join('');
   cx.innerHTML = '<div class="tpMatriz"><table class="tab tpTab tpMx"><thead><tr>' + cab + '</tr></thead><tbody>'
-    + '<tr class="tpMxSec"><td colspan="' + (cols.length + 1) + '">Telas que aparecem (só leitura — muda em <b>Perfis</b>)</td></tr>'
-    + telas
     + [...moldes.entries()].map(([id, m]) =>
         '<tr class="tpMxSec"><td colspan="' + (cols.length + 1) + '">' + esc(m.nome) + '</td></tr>'
       + m.itens.map(t => '<tr><td class="tpMx1"><b>' + esc(t.nome) + '</b> <span class="mono mini">' + esc(t.tarefa_id) + '</span>'
@@ -12753,7 +12650,8 @@ function tpPintarMatriz(perfis){
                 + ' aria-label="' + esc(p.nome + ' — ' + t.nome) + '"></td>';
             }).join('') + '</tr>').join('')).join('')
     + '</tbody></table></div>'
-    + '<p class="nota">O administrador não tem coluna: ele passa em tudo por definição.</p>';
+    + '<p class="nota">O administrador não tem coluna: ele passa em tudo por definição. '
+    + 'O que cada pessoa vê fica em <a href="../acessos/">Pessoas e acessos</a>.</p>';
   cx.querySelectorAll('[data-tp]').forEach(ck => ck.addEventListener('change', () => {
     const [tpl, tid] = ck.dataset.tp.split('|');
     tpAlternar(tpl, tid, ck, perfis, ck.dataset.pf);
@@ -12762,7 +12660,9 @@ function tpPintarMatriz(perfis){
 const tpRepintar = perfis => (_tpModo === 'matriz' ? tpPintarMatriz(perfis) : tpPintarTarefas(perfis));
 
 /** "Igualar um perfil a outro" (S36): tudo que a ORIGEM faz, o DESTINO passa a
- *  fazer também — tarefas e, se marcado, telas. Só ACRESCENTA. Cópia pontual:
+ *  fazer também — as tarefas. Só ACRESCENTA. S90: a opção "Telas que aparecem
+ *  (módulos)" SAIU (copiava perfis.modulos; o que cada pessoa vê é de "Pessoas
+ *  e acessos") — a chamada manda sempre p_modulos:false. Cópia pontual:
  *  tarefa criada depois marcando só um dos dois deixa o outro de fora, e a
  *  matriz é onde isso aparece. */
 function modalIgualarPerfis(escolhiveis){
@@ -12774,14 +12674,14 @@ function modalIgualarPerfis(escolhiveis){
     + opts((escolhiveis[0] || {}).id) + '</select></div>'
     + '<div class="campo"><label for="igD">…este passa a fazer também</label><select id="igD">'
     + opts((escolhiveis[1] || escolhiveis[0] || {}).id) + '</select></div></div>'
-    + '<label class="chk"><input type="checkbox" id="igT" checked> Tarefas (vale para OS nova e para as abertas não resolvidas)</label>'
-    + '<label class="chk"><input type="checkbox" id="igM"> Telas que aparecem (módulos)</label>'
-    + '<p class="nota">Só acrescenta: nada que o segundo perfil já faz é tirado. Antes de gravar, '
-    + 'o TapFlow mostra o que muda.</p><div id="igPrev"></div>',
+    + '<p class="nota">Copia as <b>tarefas</b> (vale para OS nova e para as abertas não resolvidas). '
+    + 'Só acrescenta: nada que o segundo perfil já faz é tirado. Antes de gravar, '
+    + 'o TapFlow mostra o que muda. O que cada pessoa vê fica em '
+    + '<a href="../acessos/">Pessoas e acessos</a>.</p><div id="igPrev"></div>',
     [{ label:'Cancelar', onClick: fecharModal },
      { label:'Ver o que muda', pri:true, onClick: async () => {
         const o = document.getElementById('igO').value, d = document.getElementById('igD').value;
-        const t = document.getElementById('igT').checked, m = document.getElementById('igM').checked;
+        const t = true, m = false;   // S90: só tarefas
         let r;
         try{ r = await rpc('tf_igualar_perfil', { p_origem:o, p_destino:d, p_tarefas:t, p_modulos:m, p_confirmado:false }); }
         catch(e){ return toast(e.message,'err'); }
@@ -13308,19 +13208,6 @@ function demoExcluirUsuario(id){
   if (demoHistoricoUsuario(id).length) throw new Error('Essa pessoa já trabalhou no sistema.');
   _demoU = _demoU.filter(x => x.id !== id);
   _demoPend = _demoPend.filter(x => x.auth_id !== id);
-}
-function demoSalvarPerfil(d){
-  const i = _demoP.findIndex(x => x.id === d.p_id);
-  const reg = { id:d.p_id, nome:d.p_nome, executa_em:d.p_executa_em, is_admin:d.p_is_admin,
-                modulos:d.p_modulos, ativo:d.p_ativo,
-                pessoas: i>=0 ? _demoP[i].pessoas : 0,
-                pessoas_total: i>=0 ? _demoP[i].pessoas_total : 0 };
-  if (i >= 0) _demoP[i] = reg; else _demoP.push(reg);
-  _demoU.forEach(u => { if (u.perfil_id === reg.id){ u.perfil = reg.nome; u.is_admin = reg.is_admin; } });
-}
-function demoExcluirPerfil(id){
-  if (_demoU.some(u => u.perfil_id === id)) throw new Error('Esse perfil tem gente dentro.');
-  _demoP = _demoP.filter(x => x.id !== id);
 }
 const demoDocs = () => ([
   {id:'d1',origem:'documento',tipo:'proposta',identificacao:'26005',url:'#',

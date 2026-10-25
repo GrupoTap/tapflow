@@ -29,7 +29,7 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H11-S89';   // S89 · Acessos A2: a aba Perfis completa; as telas do Manager pelo quadro (204)
+const VERSAO = 'H11-S90';   // S90 · Manager sem a aba Perfis (TapFlow, P4) e TapFin 6 pelo quadro (P2, 506)
 const CACHE  = 'tapflow-hub-' + VERSAO;
 
 const ESSENCIAIS = [
