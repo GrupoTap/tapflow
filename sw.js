@@ -29,7 +29,7 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H11-S93';   // S93 · R05a: a revisão no TapDoc do escritório (409, TapDoc E8)
+const VERSAO = 'H11-S94';   // S94 · R06a: o laudo em PDF no TapDoc do escritório (410, TapDoc E9) · S93 · R05a: a revisão (409, E8)
 const CACHE  = 'tapflow-hub-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -127,6 +127,20 @@ self.addEventListener('fetch', ev => {
   // Rede primeiro com 4 s e o cache como reserva: sem isto o Manager (que era um arquivo
   // só e abria sem sinal) abriria SEM o núcleo e quebraria — o .js/.css não era guardado.
   // S74: o mesmo vale para os .js/.css dos módulos que moram em pasta própria (fin/)
+  // S94 (R06a): as bibliotecas do PDF do laudo (doc/vendor/, ~2,8 MB, sempre com ?v=)
+  // vão do cache primeiro: com o prazo de 4 s do núcleo, num sinal fraco, o download
+  // grande cairia no "sem resposta" e o laudo não sairia.
+  if (resto.startsWith('doc/vendor/')) {
+    ev.respondWith((async () => {
+      const c = await caches.open(CACHE);
+      const guardado = await c.match(req);
+      if (guardado) return guardado;
+      const r = await fetch(req);
+      if (r && r.ok && r.type === 'basic') c.put(req, r.clone()).catch(() => {});
+      return r;
+    })());
+    return;
+  }
   if (resto.startsWith('nucleo/') || /^(fin|doc)\/.*\.(js|css)$/.test(resto)) {
     ev.respondWith((async () => {
       const c = await caches.open(CACHE);

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapDoc · Preparação</title>
+<title>TapDoc · Escritório</title>
 <link rel="icon" href="../field/icons/favicon-32.png">
 <link rel="stylesheet" href="../nucleo/nucleo.css?v=N2">
 <script src="../nucleo/config.js?v=N2"></script>
@@ -50,7 +50,8 @@ header .ver{font-size:11px;opacity:.8}
 main{flex:1;overflow-y:auto;padding:16px 16px 48px}
 .wrap{max-width:1180px;margin:0 auto}
 .abas{display:flex;gap:6px;background:var(--surface);border:1px solid var(--rule);border-radius:7px;padding:4px;margin-bottom:14px}
-.abas button{flex:1;border:0;background:none;padding:9px 6px;border-radius:5px;font-weight:600;color:var(--ink-2)}
+.abas{flex-wrap:wrap}
+.abas button{flex:1 1 auto;border:0;background:none;padding:9px 6px;border-radius:5px;font-weight:600;color:var(--ink-2)}
 .abas button.on{background:var(--accent);color:#fff}
 .abas .bolha{display:inline-block;min-width:20px;padding:0 6px;border-radius:10px;background:var(--crit);color:#fff;font-size:12px;margin-left:4px}
 .card{background:var(--surface);border:1px solid var(--rule);border-radius:7px;padding:14px 16px;box-shadow:var(--sh);margin-bottom:12px}
@@ -153,7 +154,7 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E8';   // E8 (S93 · 409, R05a): a revisão (A revisar: Revisão 1, Revisão 2 e a aprovação do PLH) ·   // E7 (S92 · 408, Acessos P3): entra quem tem o TapDoc; conferir e decidir é do PLH ·   // E = escritório · E6 (S86 · 407, R04a): padrão com U/k, numeração M/V e as aferições da inspeção (E5: material de campo; E4: faixa)
+const VERSAO = 'TapDoc E9';   // E9 (S94 · 410, R06a): o laudo em PDF (aba Laudos), a ART na preparação, o ambiente, o PDF do certificado dos instrumentos e as datas do PLH na aprovação ·   // E8 (S93 · 409, R05a): a revisão (A revisar: Revisão 1, Revisão 2 e a aprovação do PLH) ·   // E7 (S92 · 408, Acessos P3): entra quem tem o TapDoc; conferir e decidir é do PLH ·   // E = escritório · E6 (S86 · 407, R04a): padrão com U/k, numeração M/V e as aferições da inspeção (E5: material de campo; E4: faixa)
 // 405: a faixa de resistência (norma do material) e o S esperado pelo ASME (fator 3,5; 2/3 do escoamento; costura × 0,85)
 function faixaTxt(m){
   if (!m || m.resist_min_mpa == null) return 'faixa de resistência não cadastrada';
@@ -243,13 +244,14 @@ function janela(tit, html, bts){
 function erro(e){ U.toast(e && e.message ? e.message : String(e), 'err'); }
 
 // ── rotas: #os=<id>&v=<vaso>&aba=<a> ───────────────────────────────────────
-function rota(){ const h = new URLSearchParams(location.hash.replace(/^#/, '')); return { os:h.get('os'), v:h.get('v'), rev:h.get('rev'), aba:h.get('aba') || 'os' }; }
+function rota(){ const h = new URLSearchParams(location.hash.replace(/^#/, '')); return { os:h.get('os'), v:h.get('v'), rev:h.get('rev'), laudo:h.get('laudo'), aba:h.get('aba') || 'os' }; }
 function ir(r){ const p = new URLSearchParams(); if (r.os) p.set('os', r.os); if (r.v) p.set('v', r.v); if (r.aba && !r.os) p.set('aba', r.aba);
   location.hash = p.toString(); }
 window.addEventListener('hashchange', pintar);
 $('voltar').addEventListener('click', () => {
   const r = rota();
   if (r.rev){ location.hash = 'aba=rev'; return; }   // E8
+  if (r.laudo){ location.hash = 'aba=laudos'; return; }   // E9
   if (r.v) ir({ os:r.os }); else if (r.os) ir({}); else location.href = '../';
 });
 function titulo(t, s){ $('tTit').textContent = t; $('tSub').textContent = s || ''; }
@@ -258,6 +260,7 @@ async function pintar(){
   const r = rota();
   try{
     if (r.rev) return await telaRevisao(r.rev);   // E8 · R05a
+    if (r.laudo) return await telaLaudo(r.laudo);   // E9 · R06a
     if (r.os && r.v) return await telaVaso(r.os, r.v);
     if (r.os) return await telaOS(r.os);
     return await telaListas(r.aba);
@@ -275,11 +278,13 @@ async function telaListas(aba){
   LISTAS = await rpc('tf_insp_preparacao_lista');
   const L = LISTAS, nPlh = (L.plh || []).filter(x => !x.decisao).length;
   let nRev = 0; try{ nRev = (await rpc('tf_insp_revisao_lista')).filter(x => x.pode).length; }catch(e){}   // E8: as revisões que são suas
+  let nLaudo = 0; try{ nLaudo = (await rpc('tf_laudo_lista')).filter(x => x.situacao === 'liberada' && !(x.laudo && x.laudo.situacao !== 'substituido')).length; }catch(e){}   // E9: liberadas sem laudo
   const abas = [['os','A preparar', (L.os || []).length], ['conf','Laudos a conferir', (L.a_conferir || []).length], ['plh','Para o PLH', nPlh], ['rev','A revisar', nRev],
-                ['inst','Instrumentos', 0], ['mat','Materiais', 0]];   // E2 (S80)
+                ['laudos','Laudos', nLaudo], ['inst','Instrumentos', 0], ['mat','Materiais', 0]];   // E2 (S80) · E9 (Laudos)
   let h = '<div class="abas">' + abas.map(([k, r, n]) => '<button data-a="' + k + '" class="' + (aba === k ? 'on' : '') + '">' + r
     + (n ? '<span class="bolha">' + n + '</span>' : '') + '</button>').join('') + '</div>';
   if (aba === 'rev') return abaRevisao(h);   // E8 · R05a
+  if (aba === 'laudos') return abaLaudos(h);   // E9 · R06a
   if (aba === 'inst' || aba === 'mat'){ $('tela').innerHTML = h + '<p class="muted">Carregando…</p>'; ligarAbas(); return aba === 'inst' ? telaInstrumentos() : telaMateriais(); }
   if (aba === 'conf'){
     h += '<div class="card"><h3>Laudos pegos em campo, a conferir</h3><p class="muted">A equipe que esteve no cliente digita e confere o laudo a partir das fotos.</p>'
@@ -326,6 +331,8 @@ async function telaInstrumentos(){
     + (L.length ? '<table><tr><th>Tipo</th><th>Descrição</th><th>Nº de série</th><th>Certificado</th><th>Validade</th><th></th></tr>'
       + L.map(x => '<tr><td>' + esc(TIPOS_INST[x.tipo] || x.tipo) + '</td><td><b>' + esc(x.descricao || '') + '</b><div class="muted">' + esc([x.marca, x.modelo].filter(Boolean).join(' · ')) + '</div></td><td>'
         + esc(x.numero_serie || '—') + '</td><td>' + esc(x.certificado_num || '—') + (x.laboratorio ? '<div class="muted">' + esc(x.laboratorio) + '</div>' : '')
+        + (x.certificado_path ? '<div><a href="#" data-cert="' + esc(x.certificado_path) + '">PDF do certificado</a></div>'
+           : (x.tipo === 'medidor_espessura' || x.tipo === 'manometro_padrao' ? '<div><span class="chip s-grave">sem o PDF</span></div>' : ''))
         + (x.tipo === 'manometro_padrao' ? '<div class="muted">' + (x.u_expandida != null ? 'U ' + fmt(x.u_expandida, 4) + ' ' + esc(x.unidade || '') + ' (k = ' + fmt(x.k || 2, 2) + ')' : '<span class="chip s-grave">sem a U</span>') + '</div>' : '') + '</td><td>'
         + (x.validade ? (x.vencido ? '<span class="chip s-grave">vencido ' + dataBR(x.validade) + '</span>' : dataBR(x.validade)) : '<span class="muted">sem validade</span>')
         + '</td><td><button class="btn mini" data-inst="' + esc(x.id) + '">Editar</button></td></tr>').join('') + '</table>'
@@ -335,6 +342,10 @@ async function telaInstrumentos(){
   $('instNovo').addEventListener('click', () => editarInstrumento(null));
   cartaoNumeracao();
   $('tela').querySelectorAll('[data-inst]').forEach(b => b.addEventListener('click', () => editarInstrumento(L.find(x => x.id === b.dataset.inst))));
+  // E9: o PDF do certificado abre numa janela
+  $('tela').querySelectorAll('[data-cert]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault();
+    janela('Certificado', '<div id="certVis" class="visorrev" style="min-height:420px"></div>', [{ rotulo:'Fechar' }]);
+    setTimeout(() => mostrarArquivoEm($('certVis'), { storage_path: a.dataset.cert }), 0); }));
 }
 function editarInstrumento(x){
   x = x || { tipo:'medidor_espessura' };
@@ -349,7 +360,10 @@ function editarInstrumento(x){
     + '<label class="f">k<input class="t" id="in_k" inputmode="decimal" value="' + esc(fmt(x.k == null ? 2 : x.k, 2)) + '"></label>'
     + '<label class="f">Unidade<select class="t" id="in_un">' + ['kgf/cm2','bar','MPa','psi','kPa'].map(u => '<option value="' + u + '"' + ((x.unidade || 'kgf/cm2') === u ? ' selected' : '') + '>' + u.replace('cm2', 'cm²') + '</option>').join('') + '</select></label></div>'
     + '<div class="g3"><label class="f">Faixa máxima<input class="t" id="in_fx" inputmode="decimal" value="' + esc(fmt(x.faixa_max, 4)) + '"></label>'
-    + '<label class="f">Resolução<input class="t" id="in_res" inputmode="decimal" value="' + esc(fmt(x.resolucao, 5)) + '"></label></div></fieldset>',
+    + '<label class="f">Resolução<input class="t" id="in_res" inputmode="decimal" value="' + esc(fmt(x.resolucao, 5)) + '"></label></div></fieldset>'
+    // E9 (R06a): o PDF do certificado; o laudo anexa o do medidor escolhido em campo
+    + '<label class="f">PDF do certificado <small>' + (x.certificado_path ? '(já anexado; escolha outro para trocar)' : '(o laudo anexa o do medidor de espessura)') + '</small>'
+    + '<input class="t" id="in_cert" type="file" accept="application/pdf,image/*"></label>',
     (x.id ? [{ rotulo:'Desativar', acao:async () => { try{ await rpc('tf_insp_instrumento_gravar', { p_dados:{ id:x.id, ativo:false } }); U.toast('Desativado.', 'ok'); pintar(); }catch(e){ erro(e); return false; } } }] : [])
     .concat([{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
       const d = {}; ['descricao','marca','modelo','numero_serie','certificado_num','laboratorio','calibrado_em','validade'].forEach(k => { d[k] = ($('in_' + k).value || '').trim() || null; });
@@ -360,7 +374,19 @@ function editarInstrumento(x){
         d.u_expandida = nn('in_u'); d.k = nn('in_k') || 2; d.unidade = $('in_un').value; d.faixa_max = nn('in_fx'); d.resolucao = nn('in_res');
         if (d.u_expandida == null){ U.toast('O padrão precisa da U do certificado.', 'err'); return false; }
       }
-      try{ await rpc('tf_insp_instrumento_gravar', { p_dados:d }); U.toast('Gravado.', 'ok'); pintar(); }catch(e){ erro(e); return false; }
+      const arq = $('in_cert').files && $('in_cert').files[0];
+      if (arq && arq.size > 5242880){ U.toast('O certificado passa de 5 MB.', 'err'); return false; }
+      try{
+        const id = await rpc('tf_insp_instrumento_gravar', { p_dados:d });
+        if (arq){
+          const pdf = /pdf/i.test(arq.type) || /\.pdf$/i.test(arq.name);
+          const blob = pdf ? new Blob([arq], { type:'application/pdf' }) : await N.foto.reduzir(arq, { lado:2000, qualidade:0.9 });
+          const caminho = 'instrumentos/' + (id || x.id) + '/' + uid() + (pdf ? '.pdf' : '.jpg');
+          await N.storage.enviar('inspecoes', caminho, blob);
+          await rpc('tf_insp_instrumento_gravar', { p_dados:{ id: id || x.id, certificado_path: caminho } });
+        }
+        U.toast('Gravado.', 'ok'); pintar();
+      }catch(e){ erro(e); return false; }
     } }]));
 }
 // S86 · R04a: a numeração dos relatórios (M) e certificados (V)
@@ -489,6 +515,15 @@ async function telaOS(os){
     + (aberta ? '<button class="btn pri" id="concluir"' + ((P.falta || []).length ? ' disabled' : '') + '>Concluir a preparação</button>'
        : t05.status === 'completo' ? '<span class="chip s-pronto">T05 concluída</span>' : '<span class="chip">em teste</span>')
     + '</div></div>';
+  // E9 (R06a): a ART da OS (o número e o PDF), antes de o inspetor sair
+  const art = P.art || null;
+  h += '<div class="card" id="cxArt"><div class="linha" style="justify-content:space-between"><div><b>ART da OS</b>'
+    + (art ? ' nº <b>' + esc(art.numero) + '</b>' + (art.arquivo_path ? ' · <a href="#" id="artVer">ver o PDF</a>' : ' · <span style="color:var(--crit)">falta o PDF</span>')
+        + '<div class="muted">' + esc(art.por || '') + (art.gravado_em ? ' · ' + quandoBR(art.gravado_em) : '') + '</div>'
+      : ' <span style="color:var(--crit)">não informada</span><div class="muted">O número e o PDF da ART vão no laudo (cabeçalho e anexo).</div>')
+    + '</div><div class="linha"><input class="t" id="artNum" style="width:190px;margin:0" placeholder="Nº da ART" value="' + esc(art ? art.numero : '') + '">'
+    + '<button class="btn" id="artGravar">Gravar o número</button><button class="btn sec" id="artPdf">' + (art && art.arquivo_path ? 'Trocar o PDF' : 'Anexar o PDF') + '</button></div></div>'
+    + '<input type="file" id="artArq" accept="application/pdf" hidden><div id="artVisor"></div></div>';
   if ((P.falta || []).length) h += '<div class="alerta falta"><b>Falta para concluir:</b><ul>' + P.falta.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul></div>';
   else if (aberta) h += '<div class="alerta ok"><b>Preparação completa.</b> Pode concluir a T05.</div>';
   else if (!t05.trava && (P.vasos || []).length) h += '<div class="alerta ok"><b>Preparação completa.</b> A T05 continua no Manager (TapDoc em teste).</div>';
@@ -518,6 +553,29 @@ async function telaOS(os){
     try{ await rpc('tf_insp_vaso_confirmar', { p_equip: b.dataset.conf }); U.toast('Vaso confirmado no cadastro.', 'ok'); pintar(); }catch(e){ erro(e); }
   })));
   $('novo').addEventListener('click', () => novoVaso(os, P.os.cliente_id));
+  ligarArt(os, P);
+  $('tela').querySelectorAll('[data-amb]').forEach(sl => sl.addEventListener('change', async () => {
+    try{ await rpc('tf_insp_vaso_ambiente', { p_equip: sl.dataset.amb, p_ambiente: sl.value || null }); U.toast('Ambiente previsto gravado. O inspetor confirma no local.', 'ok'); }
+    catch(e){ erro(e); }
+  }));
+}
+// E9 (R06a): gravar a ART da OS (número e PDF, pasta art/<OS>/)
+function ligarArt(os, P){
+  const art = P.art || null;
+  $('artGravar').addEventListener('click', () => U.semDuploEnvio($('artGravar'), async () => {
+    try{ await rpc('tf_insp_art_gravar', { p_os: os, p_numero: $('artNum').value, p_path: null }); U.toast('Número da ART gravado.', 'ok'); pintar(); }catch(e){ erro(e); }
+  }));
+  $('artPdf').addEventListener('click', () => { if (!($('artNum').value || '').trim()){ U.toast('Escreva o número da ART antes.', 'err'); return; } $('artArq').value = ''; $('artArq').click(); });
+  $('artArq').addEventListener('change', async () => {
+    const f = $('artArq').files && $('artArq').files[0]; if (!f) return;
+    if (!/pdf/i.test(f.type) && !/\.pdf$/i.test(f.name)){ U.toast('A ART vai em PDF.', 'err'); return; }
+    if (f.size > 5242880){ U.toast('Arquivo acima de 5 MB.', 'err'); return; }
+    const caminho = 'art/' + os + '/' + uid() + '.pdf';
+    try{ U.toast('Enviando…'); await N.storage.enviar('inspecoes', caminho, new Blob([f], { type:'application/pdf' }));
+      await rpc('tf_insp_art_gravar', { p_os: os, p_numero: $('artNum').value, p_path: caminho }); U.toast('ART anexada.', 'ok'); pintar(); }
+    catch(e){ erro(e); }
+  });
+  const v = $('artVer'); if (v) v.addEventListener('click', ev => { ev.preventDefault(); $('artVisor').className = 'visorrev'; mostrarArquivoEm($('artVisor'), { storage_path: art.arquivo_path }); });
 }
 function tabelaVasos(lista, marcados){
   return '<table class="tv"><tr><th style="width:42px">Na OS</th><th>Vaso</th><th>Situação</th>' + (marcados ? '<th class="h-ins">Instruções para o campo</th>' : '') + '<th></th></tr>'
@@ -528,7 +586,10 @@ function tabelaVasos(lista, marcados){
         + '<td>' + (marcados ? chipSit(v.situacao) : '<span class="chip s-fora">fora desta OS</span>')
         + (emCampo ? '<div class="muted">em campo</div>' : '')
         + (ins && ins.material_campo && !ins.material_campo.decisao ? '<div><span class="chip s-grave">material alterado em campo</span></div>' : '') + '</td>'
-        + (marcados ? '<td class="h-ins"><textarea class="instr" data-instr="' + esc(v.id) + '" placeholder="Ex.: medir também o tampo inferior">' + esc(ins.instrucoes_campo || '') + '</textarea></td>' : '')
+        + (marcados ? '<td class="h-ins"><textarea class="instr" data-instr="' + esc(v.id) + '" placeholder="Ex.: medir também o tampo inferior">' + esc(ins.instrucoes_campo || '') + '</textarea>'
+            + '<label class="muted" style="display:flex;gap:6px;align-items:center;margin-top:4px">Ambiente previsto <select data-amb="' + esc(v.id) + '" style="padding:3px 6px;border:1px solid var(--rule);border-radius:4px">'
+            + [['', '—'], ['fechado', 'local fechado'], ['aberto', 'céu aberto']].map(([k, r]) => '<option value="' + k + '"' + ((v.ambiente || '') === k ? ' selected' : '') + '>' + r + '</option>').join('')
+            + '</select> <small>(o inspetor confirma)</small></label></td>' : '')
         + '<td class="acoes" style="text-align:right;white-space:nowrap">' + (v.provisorio ? '<button class="btn mini sec" data-conf="' + esc(v.id) + '">Confirmar cadastro</button> ' : '')
         + (marcados ? '<button class="btn mini" data-abre="' + esc(v.id) + '">Laudo anterior ›</button>' : '') + '</td></tr>';
     }).join('') + '</table>';
@@ -1082,6 +1143,7 @@ function pintarRevisao(){
       }).join('') + '</table>'
     + (prev.vaso && !prev.vaso.erro ? '<p class="muted" style="margin:8px 0 0">P·V = ' + fmt(prev.vaso.pv, 3) + ' · grupo ' + prev.vaso.grupo + ' · <b>categoria ' + prev.vaso.categoria + '</b> · próximas: externa em ' + prev.vaso.prazos.externo
         + ' ano(s), interna ' + (prev.vaso.prazos.interno == null ? 'a critério do PLH' : 'em ' + prev.vaso.prazos.interno + ' anos') + '</p>' : '')
+    + (plhAprova && prev.vaso && !prev.vaso.erro ? revDatasHtml(prev.vaso.prazos) : '')   // E9 (410): as datas do PLH
     + (prev.vaso && prev.vaso.erro && /[Vv]olume/.test(prev.vaso.erro) && plhAprova ? '<label class="f" style="max-width:260px">Volume total do vaso (m³)<input class="t" id="revVol" inputmode="decimal" value="' + (REV.volume != null ? fmt(REV.volume, 3) : '') + '"></label>' : '')
     + (prev.detalhes.length ? '<ul class="muted" style="margin:8px 0 0;padding-left:18px">' + prev.detalhes.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '') + '</div>';
   // 4 · espessuras × anterior
@@ -1107,6 +1169,20 @@ function pintarRevisao(){
   h += '<span class="muted">' + (e === 3 ? 'Aprovar grava o cálculo oficial e libera a inspeção para o laudo (R06).' : 'Para corrigir o que veio do campo, reabra a inspeção para a equipe (vaso › Reabrir).') + '</span></div>';
   $('tela').innerHTML = h;
   ligarRevisao();
+}
+// E9 (410): as próximas inspeções na aprovação. O PLH só ENCURTA (o banco confere);
+// abaixo de 0 °C o interno é a critério dele, então as datas são obrigatórias.
+function revDatasHtml(prz){
+  const base = dataSP(REV.R.inspecao.termino || REV.R.inspecao.inicio); if (!base) return '';
+  const nExt = somaAnos(base, prz.externo), nInt = prz.interno == null ? null : somaAnos(base, prz.interno), obrig = prz.interno == null;
+  const D = REV.datas = REV.datas || { ativo: obrig, ext: nExt, int: nInt, just: '' };
+  if (obrig) D.ativo = true;
+  return '<div style="margin-top:10px;border-top:1px solid var(--rule-2);padding-top:8px"><b>Próximas inspeções</b>'
+    + '<div class="muted">Pela NR-13: externa até <b>' + dataBR(nExt) + '</b>, interna ' + (nInt ? 'até <b>' + dataBR(nInt) + '</b>' : '<b>a critério do PLH</b> (abaixo de 0 °C)') + '.</div>'
+    + '<label class="okrev" style="margin-top:6px"><input type="checkbox" id="revDatas"' + (D.ativo ? ' checked' : '') + (obrig ? ' disabled' : '') + '> o PLH reduz os prazos (datas mais curtas, com o motivo)</label>'
+    + '<div id="revDatasCx"' + (D.ativo ? '' : ' hidden') + '><div class="g3"><label class="f">Próxima externa<input class="t" type="date" id="revExt" value="' + esc(D.ext || '') + '" max="' + nExt + '"></label>'
+    + '<label class="f">Próxima interna<input class="t" type="date" id="revInt" value="' + esc(D.int || '') + '"' + (nInt ? ' max="' + nInt + '"' : '') + '></label>'
+    + '<label class="f">Motivo<input class="t" id="revJust" value="' + esc(D.just || '') + '" placeholder="ex.: vaso horizontal em atmosfera agressiva"></label></div></div></div>';
 }
 // a regra sugerida: mantém a anterior quando ela cabe na calculada; senão, a calculada
 function revRegra(ck){
@@ -1182,7 +1258,16 @@ function revMontarResultado(){
     proxima_externa:somaAnos(base, vaso.prazos.externo), proxima_interna:vaso.prazos.interno == null ? null : somaAnos(base, vaso.prazos.interno),
     componentes:comps, camaras:cams };
   if (vaso.informado) r.volume_m3 = vaso.V;
-  if (vaso.prazos.interno == null) throw new Error('Interno a critério do PLH (abaixo de 0 °C): ainda não tratado nesta tela.');
+  // E9 (410): as datas do PLH (obrigatórias quando o interno é a critério dele)
+  const D = REV.datas || {};
+  if (D.ativo || vaso.prazos.interno == null){
+    if (!D.ext) throw new Error('Informe a data da próxima inspeção externa.');
+    if (D.ext > r.proxima_externa) throw new Error('O PLH reduz o prazo, não aumenta: a externa vai até ' + dataBR(r.proxima_externa) + '.');
+    if (vaso.prazos.interno == null && !D.int) throw new Error('Abaixo de 0 °C o interno é a critério do PLH: informe a data.');
+    if (vaso.prazos.interno != null && (!D.int || D.int > r.proxima_interna)) throw new Error('O PLH reduz o prazo, não aumenta: a interna vai até ' + dataBR(r.proxima_interna) + '.');
+    if (!(D.just || '').trim()) throw new Error('Escreva o motivo das datas.');
+    r.datas_pelo_plh = true; r.proxima_externa = D.ext; r.proxima_interna = D.int || null; r.justificativa_datas = D.just.trim();
+  }
   return r;
 }
 function ligarRevisao(){
@@ -1229,6 +1314,9 @@ function ligarRevisao(){
   T.querySelectorAll('[data-pval]').forEach(i => i.addEventListener('input', () => { REV.pmta[i.dataset.pval].valor = paraM(num(i.value)); }));
   T.querySelectorAll('[data-pjust]').forEach(i => i.addEventListener('input', () => { REV.pmta[i.dataset.pjust].just = i.value; }));
   const rv = $('revVol'); if (rv) rv.addEventListener('input', () => { REV.volume = num(rv.value); });
+  // E9 (410): as datas do PLH
+  const rd = $('revDatas'); if (rd) rd.addEventListener('change', () => { REV.datas.ativo = rd.checked; $('revDatasCx').hidden = !rd.checked; });
+  [['revExt', 'ext'], ['revInt', 'int'], ['revJust', 'just']].forEach(([id, k]) => { const el = $(id); if (el) el.addEventListener('input', () => { REV.datas[k] = el.value || null; }); });
   // ações
   const bc = $('revConcluir'); if (bc) bc.addEventListener('click', () => U.semDuploEnvio(bc, async () => {
     try{ await rpc('tf_insp_revisao_concluir', { p_id:id }); U.toast('Revisão concluída.', 'ok'); location.hash = 'aba=rev'; }catch(e){ erro(e); }
@@ -1240,10 +1328,248 @@ function ligarRevisao(){
   });
   const ba = $('revAprovar'); if (ba) ba.addEventListener('click', () => U.semDuploEnvio(ba, async () => {
     let r; try{ r = revMontarResultado(); }catch(e){ erro(e); return; }
-    if (!await N.janela.confirmar('Aprovar e liberar', '<p>Grava o cálculo oficial (categoria ' + esc(r.categoria) + ', próxima externa em ' + dataBR(r.proxima_externa) + ') e libera a inspeção para o laudo.</p>', 'Aprovar')) return;
+    if (!await N.janela.confirmar('Aprovar e liberar', '<p>Grava o cálculo oficial (categoria ' + esc(r.categoria) + ', próxima externa em ' + dataBR(r.proxima_externa)
+      + (r.datas_pelo_plh ? ', datas definidas pelo PLH' : '') + ') e libera a inspeção para o laudo.</p>', 'Aprovar')) return;
     try{ await rpc('tf_insp_revisao_aprovar', { p_id:id, p_r:r }); U.toast('Aprovada e liberada.', 'ok'); location.hash = 'aba=rev'; }catch(e){ erro(e); }
   }));
 }
+// ════════════════════════════════════════════════════════════════════════════
+// E9 (S94 · 410) · R06a · O LAUDO EM PDF
+// Desenho: inspecao-nr13/rodadas/R06-laudo-desenho.md. O gerador é o
+// laudo-pdf.js (puro); aqui: baixar as fotos e os anexos, montar o PDF
+// (pdfmake), juntar os anexos (pdf-lib), gravar e anexar o assinado.
+// Ciclo: rascunho → Emitir (PLH, reserva o número) → PDF assinado com o token
+// (a inspeção vai para "assinada") → reabrir gera a Rev. seguinte.
+// Durante o piloto (emissão oficial desligada pelo admin) só sai o rascunho.
+// ════════════════════════════════════════════════════════════════════════════
+let LIBS = null, LD = null;
+function carregarScript(src){
+  return new Promise((ok, falha) => { const s = document.createElement('script'); s.src = src; s.onload = ok;
+    s.onerror = () => falha(new Error('Não carregou ' + src.split('?')[0] + '. Confira o sinal e tente de novo.')); document.head.appendChild(s); });
+}
+/** As bibliotecas do PDF, sob demanda e ANTES do ato que gasta número (regra do CLAUDE.md §7). */
+function libsLaudo(){
+  if (!LIBS) LIBS = (async () => {
+    if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
+    if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
+    if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=R06a');
+    return true;
+  })().catch(e => { LIBS = null; throw e; });
+  return LIBS;
+}
+async function baixar(path){
+  const s = N.sessao();
+  const r = await fetch(SUPA_URL + '/storage/v1/object/authenticated/inspecoes/' + path.split('/').map(encodeURIComponent).join('/'),
+    { headers:{ apikey:SUPA_ANON, Authorization:'Bearer ' + s.token } });
+  if (!r.ok) throw new Error('Não abriu o arquivo ' + path.split('/').pop() + ' (HTTP ' + r.status + ').');
+  return new Uint8Array(await r.arrayBuffer());
+}
+const ehPdf = b => b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46;
+function dataURLDe(b){   // o tipo pelo conteúdo (o Storage pode devolver octet-stream)
+  const tipo = b[0] === 0x89 && b[1] === 0x50 ? 'image/png' : 'image/jpeg';
+  let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+  return 'data:' + tipo + ';base64,' + btoa(s);
+}
+const hexDe = buf => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
+/** Monta o PDF inteiro (laudo + anexos). opc vai para o LaudoPDF.montar. */
+async function gerarLaudo(d, opc, aviso){
+  aviso = aviso || (() => {});
+  await libsLaudo();
+  aviso('Baixando as fotos…');
+  const imagens = {}, semFoto = [];
+  for (const p of LaudoPDF.fotosDoLaudo(d)){ try{ imagens[p] = dataURLDe(await baixar(p)); }catch(e){ semFoto.push(p); } }
+  aviso('Montando o PDF…');
+  const def = LaudoPDF.montar(d, Object.assign({ imagens }, opc));
+  const base = await new Promise((ok, falha) => { try{ pdfMake.createPdf(def).getBuffer(b => ok(b)); }catch(e){ falha(e); } });
+  aviso('Juntando os anexos…');
+  const out = await PDFLib.PDFDocument.load(base);
+  const anexos = [['o certificado do medidor', d.medidor && d.medidor.certificado_path], ['a ART', d.art && d.art.path]];
+  const semAnexo = [];
+  for (const [nome, path] of anexos){
+    if (!path){ semAnexo.push(nome); continue; }
+    let b; try{ b = await baixar(path); }catch(e){ if (opc.exigirAnexos) throw new Error('Não abriu ' + nome + ': ' + e.message); semAnexo.push(nome); continue; }
+    if (ehPdf(b)){ const src = await PDFLib.PDFDocument.load(b, { ignoreEncryption:true }); (await out.copyPages(src, src.getPageIndices())).forEach(pg => out.addPage(pg)); }
+    else {
+      const im = b[0] === 0x89 ? await out.embedPng(b) : await out.embedJpg(b), pg = out.addPage([595.28, 841.89]);
+      const k = Math.min(515 / im.width, 760 / im.height, 1);
+      pg.drawImage(im, { x:(595.28 - im.width * k) / 2, y:(841.89 - im.height * k) / 2, width:im.width * k, height:im.height * k });
+    }
+  }
+  if (opc.exigirAnexos && semAnexo.length) throw new Error('Falta ' + semAnexo.join(' e ') + ' para emitir.');
+  out.setTitle(def.info.title); out.setAuthor(def.info.author); out.setCreator(def.info.creator); out.setProducer(def.info.producer); out.setSubject(def.info.subject);
+  const bytes = await out.save();
+  return { bytes, paginas: out.getPageCount(), sha: hexDe(await crypto.subtle.digest('SHA-256', bytes)), semFoto, semAnexo };
+}
+const nomeLaudo = (d, num) => 'Relatório de Inspeção ' + (d.vaso.tag || '') + ' ' + (num || 'rascunho') + '.pdf';
+function mostrarPdf(bytes, nome){
+  const cx = $('ldVisor'); if (!cx) return;
+  const url = URL.createObjectURL(new Blob([bytes], { type:'application/pdf' }));
+  cx.innerHTML = '<div class="linha" style="margin-bottom:6px"><a class="btn sec" id="ldBaixar">Baixar ' + esc(nome) + '</a></div><iframe title="Laudo" style="width:100%;height:78vh;border:1px solid var(--rule);border-radius:6px;background:#fff"></iframe>';
+  $('ldBaixar').href = url; $('ldBaixar').download = nome; cx.querySelector('iframe').src = url;
+}
+
+// ── a aba Laudos ───────────────────────────────────────────────────────────
+const SIT_LAUDO = { emitindo:['número reservado, PDF pendente','s-em_conferencia'], emitido:['emitido, falta a assinatura','s-pegar_cliente'],
+                    assinado:['assinado','s-pronto'], substituido:['substituído','s-sem_laudo'] };
+async function abaLaudos(h){
+  const [L, cfg] = await Promise.all([rpc('tf_laudo_lista'), rpc('tf_laudo_config_ver')]);
+  h += '<div class="card"><div class="linha" style="justify-content:space-between"><div><b>Emissão oficial: ' + (cfg.oficial ? 'ligada' : 'desligada') + '</b>'
+    + '<div class="muted">' + (cfg.oficial ? 'O PLH emite o laudo com número.' : 'Piloto: sai só o rascunho, marcado "PILOTO", sem gastar número. Compare com o PDF do TapDoc antigo.')
+    + ' Numeração de ' + String(cfg.mes).padStart(2, '0') + '/' + cfg.ano + ': ' + (cfg.proximo_codigo ? 'próximo <b>' + esc(cfg.proximo_codigo) + '</b>' : 'não informada') + '.</div></div>'
+    + (cfg.admin ? '<button class="btn" id="ldCfg">Configurar</button>' : '') + '</div></div>';
+  h += '<div class="card"><h3>Inspeções liberadas e laudos</h3>' + (L.length ? '<table class="vs"><tr><th>Vaso</th><th>Cliente</th><th>OS</th><th>Laudo</th><th>Antes de emitir</th></tr>'
+    + L.map(x => '<tr class="lin" data-ld="' + esc(x.id) + '"><td><b>' + esc(x.tag) + '</b><div class="muted">' + esc(x.situacao) + '</div></td><td>' + esc(x.cliente || '') + '</td><td>' + esc(x.os || '—') + '</td><td>'
+      + (x.laudo ? '<b>' + esc(x.laudo.numero) + (x.laudo.revisao ? ' Rev. ' + x.laudo.revisao : '') + '</b><div><span class="chip ' + (SIT_LAUDO[x.laudo.situacao] || ['', ''])[1] + '">' + esc((SIT_LAUDO[x.laudo.situacao] || [x.laudo.situacao])[0]) + '</span></div>'
+         : '<span class="muted">não emitido</span>') + '</td><td>'
+      + (x.faltas ? '<span class="chip s-precisa_laudo">' + x.faltas + ' pendência(s)</span>' : '<span class="chip s-pronto">ok</span>') + '</td></tr>').join('') + '</table>'
+    : '<p class="vazio">Nenhuma inspeção liberada ainda. A inspeção chega aqui depois da aprovação do PLH (aba A revisar).</p>') + '</div>';
+  $('tela').innerHTML = h;
+  ligarAbas();
+  $('tela').querySelectorAll('[data-ld]').forEach(t => t.addEventListener('click', () => { location.hash = 'laudo=' + t.dataset.ld; }));
+  const bc = $('ldCfg'); if (bc) bc.addEventListener('click', () => {
+    janela('Emissão do laudo', '<label class="okrev"><input type="checkbox" id="cfgOf"' + (cfg.oficial ? ' checked' : '') + '> o TapFlow emite os laudos oficiais (fim do piloto)</label>'
+      + '<label class="f">Próximo número R de ' + String(cfg.mes).padStart(2, '0') + '/' + cfg.ano + ' <small>(o último do TapDoc antigo + 1)</small><input class="t" id="cfgProx" inputmode="numeric" value="' + esc(cfg.proximo || '') + '" placeholder="ex.: 22"></label>'
+      + '<p class="muted">A numeração recomeça a cada mês (R + mês + ano − sequência, ex.: R1026-001). Número usado não volta.</p>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
+        const px = ($('cfgProx').value || '').trim(), n = px ? parseInt(px, 10) : null;
+        if (px && !(n >= 1 && n <= 999)){ U.toast('O número vai de 1 a 999.', 'err'); return false; }
+        try{ await rpc('tf_laudo_config', { p_oficial: $('cfgOf').checked, p_proximo: n }); U.toast('Gravado.', 'ok'); pintar(); }catch(e){ erro(e); return false; }
+      } }]);
+  });
+}
+
+// ── a tela do laudo de uma inspeção ────────────────────────────────────────
+async function telaLaudo(id){
+  titulo('Laudo', 'carregando…');
+  $('tela').innerHTML = '<p class="muted">Carregando…</p>';
+  LD = { id, d: await rpc('tf_laudo_dados', { p_id:id }) };
+  pintarLaudo();
+}
+function laudoAtual(d){ return (d.laudos || []).filter(l => l.situacao !== 'substituido').pop() || null; }
+function pintarLaudo(){
+  const d = LD.d, I = d.inspecao, eu = d.eu || {}, cfg = d.config || {}, atual = laudoAtual(d), fal = d.faltas || [];
+  const reaberta = atual && d.reabertura && new Date(d.reabertura.em) > new Date(atual.emitido_em);
+  titulo('Laudo · ' + (d.vaso.tag || ''), (d.empresa.nome_fantasia || d.empresa.razao_social || '') + ' · OS ' + ((d.os || {}).numero || '—'));
+  let h = '<div class="card"><div class="linha" style="justify-content:space-between"><div><b style="font-size:17px">' + esc(d.vaso.tag || '') + '</b> ' + esc(d.vaso.nome || '')
+    + '<div class="muted">' + esc(d.empresa.razao_social || '') + ' · OS ' + esc((d.os || {}).numero || '—') + ' · inspeção de ' + dataBR(dataSP(I.termino || I.inicio))
+    + (I.aprovado && I.aprovado.nome ? ' · aprovada por ' + esc(I.aprovado.nome) + ' (' + quandoBR(I.aprovado.em) + ')' : '') + '</div></div>'
+    + '<span class="chip ' + (I.situacao === 'assinada' ? 's-pronto' : 's-em_conferencia') + '">' + esc(I.situacao) + '</span></div></div>';
+  if (!cfg.oficial) h += '<div class="alerta falta"><b>Piloto:</b> o TapFlow ainda não emite o laudo oficial. Gere o rascunho e compare com o PDF do TapDoc antigo. Quem liga a emissão é o admin (aba Laudos › Configurar).</div>';
+  if (fal.length){
+    h += '<div class="alerta crit"><b>Antes de emitir:</b><ul>' + fal.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul>';
+    if (!I.ambiente && I.situacao === 'liberada') h += '<div class="linha" style="margin-top:6px">O vaso fica em <select id="ldAmb" class="t" style="width:auto;margin:0"><option value="">—</option><option value="fechado">local fechado</option><option value="aberto">céu aberto</option></select>'
+      + '<button class="btn mini" id="ldAmbGravar">Gravar</button><span class="muted">(confirmado com a equipe que esteve no local)</span></div>';
+    h += '</div>';
+  }
+  // as ações
+  h += '<div class="card linha acoesrev"><button class="btn" id="ldRascunho"' + (d.resultado ? '' : ' disabled') + '>Gerar o rascunho (PDF)</button>';
+  if (eu.plh && cfg.oficial){
+    if (atual && atual.situacao === 'emitindo') h += '<button class="btn pri" id="ldRefazer">Gerar e gravar o PDF do ' + esc(atual.numero) + (atual.revisao ? ' Rev. ' + atual.revisao : '') + '</button>';
+    else if (I.situacao === 'liberada' && (!atual || reaberta)) h += '<button class="btn pri" id="ldEmitir"' + (fal.length ? ' disabled title="Resolva as pendências"' : '') + '>' + (atual ? 'Emitir a revisão (Rev. ' + (atual.revisao + 1) + ')' : 'Emitir o laudo') + '</button>';
+    if (atual && atual.situacao === 'emitido' && !reaberta && I.situacao === 'liberada') h += '<button class="btn pri" id="ldAssinado">Anexar o PDF assinado</button><input type="file" id="ldArqAss" accept="application/pdf" hidden>';
+  }
+  if (['liberada','assinada'].indexOf(I.situacao) >= 0 && (eu.plh || !atual)) h += '<button class="btn" id="ldReabrir">Reabrir a inspeção</button>';
+  h += '<span class="muted" id="ldAviso"></span></div>';
+  // como o PLH assina
+  if (eu.plh) h += '<div class="card"><b>Você assina como:</b> ' + (d.plh ? esc(d.plh.nome) + (d.plh.titulo ? ' — ' + esc(d.plh.titulo) : '') + ' · ' + esc(d.plh.registro) : '<span style="color:var(--crit)">não cadastrado (nome e registro no CREA)</span>')
+    + ' <button class="btn mini" id="ldPlh">' + (d.plh ? 'Editar' : 'Cadastrar') + '</button></div>';
+  // os laudos desta inspeção
+  if ((d.laudos || []).length) h += '<h2>Laudos desta inspeção</h2><div class="card"><table><tr><th>Número</th><th>Situação</th><th>Emitido</th><th>PDF</th><th>Assinado</th></tr>'
+    + d.laudos.map(l => '<tr><td><b>' + esc(l.numero) + (l.revisao ? ' Rev. ' + l.revisao : '') + '</b>' + (l.motivo_rev ? '<div class="muted">' + esc(l.motivo_rev) + '</div>' : '') + '</td><td><span class="chip ' + (SIT_LAUDO[l.situacao] || ['', ''])[1] + '">'
+      + esc((SIT_LAUDO[l.situacao] || [l.situacao])[0]) + '</span></td><td>' + esc(l.emitido_por_nome || '') + '<div class="muted">' + quandoBR(l.emitido_em) + '</div></td><td>'
+      + (l.pdf_path ? '<button class="btn mini" data-ldpdf="' + esc(l.pdf_path) + '" data-ldnome="' + esc(nomeLaudo(d, l.numero + (l.revisao ? ' Rev ' + l.revisao : ''))) + '">Abrir</button><div class="muted">' + l.paginas + ' pág.</div>' : '—') + '</td><td>'
+      + (l.assinado_path ? '<button class="btn mini" data-ldpdf="' + esc(l.assinado_path) + '" data-ldnome="' + esc(nomeLaudo(d, l.numero + ' assinado')) + '">Abrir</button><div class="muted">' + esc(l.assinado_por_nome || '') + ' · ' + quandoBR(l.assinado_em) + '</div>' : '—')
+      + '</td></tr>').join('') + '</table></div>';
+  h += '<div id="ldVisor"></div>';
+  $('tela').innerHTML = h;
+  ligarLaudo();
+}
+function ligarLaudo(){
+  const d = LD.d, T = $('tela'), aviso = t => { const a = $('ldAviso'); if (a) a.textContent = t || ''; };
+  const recarregar = async () => { const y = window.scrollY; await telaLaudo(LD.id); window.scrollTo(0, y); };
+  const ba = $('ldAmbGravar'); if (ba) ba.addEventListener('click', () => U.semDuploEnvio(ba, async () => {
+    if (!$('ldAmb').value){ U.toast('Escolha o ambiente.', 'err'); return; }
+    try{ await rpc('tf_insp_ambiente_gravar', { p_id: LD.id, p_ambiente: $('ldAmb').value }); U.toast('Ambiente gravado.', 'ok'); recarregar(); }catch(e){ erro(e); }
+  }));
+  const br = $('ldRascunho'); if (br) br.addEventListener('click', () => U.semDuploEnvio(br, async () => {
+    try{
+      const oficial = (d.config || {}).oficial;
+      const g = await gerarLaudo(d, { marca: oficial ? 'RASCUNHO' : 'PILOTO — NÃO VALE COMO LAUDO' }, aviso);
+      aviso(g.semFoto.length || g.semAnexo.length ? 'Rascunho pronto. ' + [g.semFoto.length ? g.semFoto.length + ' foto(s) não abriram' : '', g.semAnexo.length ? 'sem ' + g.semAnexo.join(' e ') : ''].filter(Boolean).join('; ') + '.' : 'Rascunho pronto (' + g.paginas + ' páginas).');
+      mostrarPdf(g.bytes, nomeLaudo(d, oficial ? 'rascunho' : 'piloto'));
+    }catch(e){ aviso(''); erro(e); }
+  }));
+  // emitir: reserva o número (ou retoma) e grava o PDF feito da fotografia
+  const gravarPdf = async (laudoId) => {
+    const L = await rpc('tf_laudo_ver', { p_laudo: laudoId }), dd = L.dados;
+    const g = await gerarLaudo(dd, { numero: L.numero, revisao: L.revisao, emitidoEm: dd.emitido_em, motivoRev: L.motivo_rev, plh: dd.plh, exigirAnexos: true }, aviso);
+    aviso('Gravando o PDF…');
+    const caminho = L.inspecao_id + '/laudo-' + L.numero + (L.revisao ? '-rev' + L.revisao : '') + '-' + uid().slice(0, 8) + '.pdf';
+    await N.storage.enviar('inspecoes', caminho, new Blob([g.bytes], { type:'application/pdf' }));
+    await rpc('tf_laudo_pdf_gravar', { p_laudo: laudoId, p_path: caminho, p_sha: g.sha, p_paginas: g.paginas });
+    aviso('');
+    U.toast('Laudo ' + L.numero + (L.revisao ? ' Rev. ' + L.revisao : '') + ' emitido (' + g.paginas + ' páginas). Assine com o token e anexe.', 'ok');
+    await recarregar();
+    mostrarPdf(g.bytes, nomeLaudo(dd, L.numero + (L.revisao ? ' Rev ' + L.revisao : '')));
+  };
+  const be = $('ldEmitir'); if (be) be.addEventListener('click', () => U.semDuploEnvio(be, async () => {
+    const atual = laudoAtual(d);
+    if (!await N.janela.confirmar(atual ? 'Emitir a revisão' : 'Emitir o laudo', '<p>' + (atual ? 'Sai a <b>Rev. ' + (atual.revisao + 1) + '</b> do ' + esc(atual.numero) + ', com o motivo da reabertura. O anterior fica como substituído.'
+        : 'Reserva o próximo número do mês e grava o PDF.') + '</p><p class="muted">Depois de emitido, o laudo não muda: para corrigir, só reabrindo a inspeção (sai uma revisão).</p>', 'Emitir')) return;
+    try{ aviso('Carregando o gerador…'); await libsLaudo(); const r = await rpc('tf_laudo_emitir', { p_id: LD.id }); await gravarPdf(r.id); }
+    catch(e){ aviso(''); erro(e); recarregar(); }
+  }));
+  const bf = $('ldRefazer'); if (bf) bf.addEventListener('click', () => U.semDuploEnvio(bf, async () => {
+    try{ aviso('Carregando o gerador…'); await libsLaudo(); const r = await rpc('tf_laudo_emitir', { p_id: LD.id }); await gravarPdf(r.id); }
+    catch(e){ aviso(''); erro(e); }
+  }));
+  // o PDF assinado com o token
+  const bs = $('ldAssinado'); if (bs) bs.addEventListener('click', () => { $('ldArqAss').value = ''; $('ldArqAss').click(); });
+  const fa = $('ldArqAss'); if (fa) fa.addEventListener('change', async () => {
+    const f = fa.files && fa.files[0]; if (!f) return;
+    const atual = laudoAtual(d);
+    try{
+      aviso('Conferindo o PDF…'); await libsLaudo();
+      const b = new Uint8Array(await f.arrayBuffer());
+      if (!ehPdf(b)) throw new Error('O arquivo não é um PDF.');
+      let pags; try{ pags = (await PDFLib.PDFDocument.load(b, { ignoreEncryption:true, updateMetadata:false })).getPageCount(); }catch(e){ throw new Error('Não consegui ler o PDF assinado.'); }
+      const t = new TextDecoder('latin1').decode(b);
+      const assin = /\/ByteRange\s*\[/.test(t) && /\/Type\s*\/Sig\b|\/FT\s*\/Sig\b|adbe\.pkcs7|ETSI\.CAdES/.test(t);
+      if (!assin) throw new Error('Este PDF não tem assinatura digital. Assine com o token (certificado A3) e anexe o arquivo assinado.');
+      if (pags !== atual.paginas) throw new Error('O PDF assinado tem ' + pags + ' página(s); o emitido tem ' + atual.paginas + '. Confira se é o mesmo laudo.');
+      aviso('Enviando…');
+      const caminho = atual.inspecao_id + '/laudo-' + atual.numero + (atual.revisao ? '-rev' + atual.revisao : '') + '-assinado-' + uid().slice(0, 8) + '.pdf';
+      await N.storage.enviar('inspecoes', caminho, new Blob([b], { type:'application/pdf' }));
+      await rpc('tf_laudo_assinado', { p_laudo: atual.id, p_path: caminho, p_paginas: pags, p_assinatura: assin });
+      aviso(''); U.toast('Laudo assinado. A inspeção está concluída.', 'ok'); recarregar();
+    }catch(e){ aviso(''); erro(e); }
+  });
+  const bp = $('ldPlh'); if (bp) bp.addEventListener('click', () => {
+    const p = d.plh || { nome: (d.eu || {}).nome || '' };
+    janela('Como você assina o laudo', '<label class="f">Nome no laudo<input class="t" id="plNome" value="' + esc(p.nome || '') + '"></label>'
+      + '<label class="f">Título <small>(opcional)</small><input class="t" id="plTit" value="' + esc(p.titulo || '') + '" placeholder="ex.: Engenheiro Industrial Mecânico"></label>'
+      + '<label class="f">Registro no conselho<input class="t" id="plReg" value="' + esc(p.registro || '') + '" placeholder="ex.: CREA-MG 000000/D"></label>'
+      + '<p class="muted">Sai na seção 14 e no rodapé do laudo (NR-13, 13.5.4.11 "m").</p>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
+        try{ await rpc('tf_laudo_plh_assinatura', { p_nome: $('plNome').value, p_titulo: $('plTit').value, p_registro: $('plReg').value }); U.toast('Gravado.', 'ok'); recarregar(); }
+        catch(e){ erro(e); return false; } } }]);
+  });
+  const bre = $('ldReabrir'); if (bre) bre.addEventListener('click', () => {
+    janela('Reabrir a inspeção', '<label class="f">Para onde<select class="t" id="rbPara"><option value="em_revisao">Aprovação do PLH (o cálculo, a PMTA e as datas)</option>'
+      + '<option value="em_campo">O campo (a equipe corrige a coleta; a revisão recomeça)</option></select></label>'
+      + '<label class="f">Motivo <small>(vai na revisão do laudo)</small><textarea class="t" id="rbMot" rows="3"></textarea></label>'
+      + (laudoAtual(d) ? '<p class="muted">Esta inspeção já tem laudo: a próxima emissão sai como revisão, com o mesmo número.</p>' : ''),
+      [{ rotulo:'Cancelar' }, { rotulo:'Reabrir', classe:'pri', acao:async () => {
+        try{ await rpc('tf_insp_reabrir', { p_id: LD.id, p_para: $('rbPara').value, p_motivo: $('rbMot').value }); U.toast('Reaberta.', 'ok');
+          location.hash = $('rbPara').value === 'em_revisao' ? 'rev=' + LD.id : 'aba=laudos'; }
+        catch(e){ erro(e); return false; } } }]);
+  });
+  T.querySelectorAll('[data-ldpdf]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
+    try{ mostrarPdf(await baixar(b.dataset.ldpdf), b.dataset.ldnome); $('ldVisor').scrollIntoView({ behavior:'smooth' }); }catch(e){ erro(e); }
+  })));
+}
+
 // a foto (ou o PDF) num quadro: o mesmo jeito do laudo anterior
 async function mostrarArquivoEm(vis, a){
   if (!vis || !a) return;

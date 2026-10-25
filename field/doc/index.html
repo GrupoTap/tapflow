@@ -161,7 +161,7 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 8';   // S86 · 407 (R04a): aferição de manômetro e teste de válvula em campo (TapDoc 7: material do escritório; 6: faixa)
+const VERSAO = 'TapDoc 9';   // S94 · 410 (R06a): o ambiente do vaso (local fechado ou céu aberto) na Localização, obrigatório no envio ·   // S86 · 407 (R04a): aferição de manômetro e teste de válvula em campo (TapDoc 7: material do escritório; 6: faixa)
 // 405: uma linha curta com a faixa do material, para conferir com a plaqueta ou o certificado da chapa
 function linhaFaixa(m){
   if (!m || m.resist_min_mpa == null) return '';
@@ -434,7 +434,7 @@ function estOperacao(v){
   return est(itens);
 }
 function estComp(v){ const cs = compsAtivos(v); return cs.length ? (cs.every(c => c.camara_id) ? 'ok' : 'inc') : 'vazia'; }
-function estLocal(v){ return est([!!v.localizacao, v.latitude != null, fotosDe(v, 'localizacao').length > 0]); }
+function estLocal(v){ return est([!!v.localizacao, v.latitude != null, fotosDe(v, 'localizacao').length > 0, !!(v.inspecao && v.inspecao.ambiente)]); }
 function estLaudo(v){
   const s = v.laudo_anterior && v.laudo_anterior.situacao;
   if (['em_conferencia','cliente_nao_tem','sem_laudo','conferido'].indexOf(s) >= 0) return 'ok';
@@ -1016,6 +1016,11 @@ function telaLocal(v){
   titulo('Localização', v.tag);
   const mapa = linkMapa(v);
   let h = '<div class="card">' + '<label class="f">Local de instalação<small>Ex.: casa de compressores, ao lado do portão 2.</small><textarea class="t" id="lLoc">' + esc(v.localizacao || '') + '</textarea></label>';
+  // S94 · 410 (R06a): o ambiente muda o item da NR-13 citado no laudo (13.5.2.2 × 13.5.2.3) e só se confirma aqui
+  const amb = (v.inspecao || {}).ambiente || null;
+  h += '<p style="margin:14px 0 0;font-weight:600;font-size:13px;color:var(--ink-2)">O vaso fica em</p><div class="seg" id="lAmb">'
+    + [['fechado', 'Local fechado'], ['aberto', 'Céu aberto']].map(([k, r]) => '<button data-amb="' + k + '" class="' + (amb === k ? 'on' : '') + '">' + r + '</button>').join('') + '</div>'
+    + '<p class="muted" style="margin:4px 0 0">' + (amb ? 'Confirmado.' : v.ambiente ? 'O escritório indicou: ' + (v.ambiente === 'fechado' ? 'local fechado' : 'céu aberto') + '. Confirme olhando o local.' : 'Galpão, sala ou casa de compressores = local fechado.') + '</p>';
   h += '<p style="margin:14px 0 0;font-weight:600;font-size:13px;color:var(--ink-2)">GPS</p>';
   h += v.latitude != null ? '<p class="info" style="margin:2px 0 0">' + fmt(v.latitude, 6) + ', ' + fmt(v.longitude, 6) +
        (v.gps_precisao_m != null ? ' · precisão ' + Math.round(v.gps_precisao_m) + ' m' : '') + (mapa ? ' · <a href="' + mapa + '" target="_blank" rel="noopener">mapa</a>' : '') + '</p>'
@@ -1024,6 +1029,11 @@ function telaLocal(v){
   h += '<div class="card"><b>Fotos do vaso</b><p class="muted" style="margin:2px 0 0">Até 3: o vaso inteiro e o acesso. Servem para achar o vaso na próxima visita.</p>' + gradeFotos(v, 'localizacao', 3) + '</div>';
   $('tela').innerHTML = h;
   ligar('lLoc', el => mudouVaso(v, 'localizacao', el.value.trim() || null));
+  $('lAmb').querySelectorAll('[data-amb]').forEach(b => b.addEventListener('click', () => {
+    v.inspecao.ambiente = b.dataset.amb; salvar();
+    enfileirar(v, 'amb', 'ambiente', { funcao:'tf_insp_ambiente_gravar', payload:{ p_id:v.inspecao.id, p_ambiente:b.dataset.amb } });
+    pintar();
+  }));
   ligarFotos(v, 'localizacao');
   $('lGps').addEventListener('click', () => {
     const b = $('lGps');
@@ -1187,6 +1197,7 @@ function faltasEnvio(v){
   if (!testeValido(i.teste)) f.push('Teste de pressão sem resposta.');
   else if (i.teste.resultado === 'reprovado' && !fotosDe(v, 'teste').length) f.push('Teste de pressão reprovado sem foto.');
   fAf.forEach(x => f.push(x));   // S86 · R04a (mesma ordem do servidor: antes da capa)
+  if (!i.ambiente) f.push('Localização: diga se o vaso fica em local fechado ou a céu aberto.');   // S94 · 410 (mesma ordem do servidor)
   if (!fotosDe(v, 'capa').length) f.push('Falta a foto de capa.');
   return f;
 }
