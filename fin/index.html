@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 7 · Financeiro</title>
+<title>TapFin 8 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2308,7 +2308,7 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'F7';   // TapFin 7 (contas que já têm nota) — o S## da publicação é do central
+const APP_VERSION = 'F8';   // TapFin 8 (descrição do serviço editável na nota) — o S## da publicação é do central
 try{ document.getElementById('verBadge').textContent = 'FINANCEIRO · ' + APP_VERSION; }catch(e){}
 
 const esc               = (...a) => Nucleo.util.esc(...a);
@@ -6184,11 +6184,16 @@ const nfFaixaTeste = amb => amb === 'teste'
   ? '<div class="nfTeste">TESTE: nota sem valor fiscal (ambiente de homologação do Notaas)</div>' : '';
 
 /** A conferência da nota, antes de emitir. */
+const NF_RASC = {};   // 511: a descrição escrita volta se a confirmação for cancelada
 async function modalEmitirNota(t){
-  let prep;
+  let prep, sugs = [];
   try{ prep = await rpc('tf_fin_nfse_preparar', { p_titulo_id: t.id, p_opcoes: {} }); }
   catch(e){ toast(e.message, 'err'); return; }
+  try{ sugs = await rpc('tf_fin_nfse_descricoes', {}); }catch(e){ sugs = []; }   // sem o 511, sem sugestões
   const r = prep.resumo, infoAuto = r.info_complementar || '';
+  const descIni = (NF_RASC[t.id] && NF_RASC[t.id].desc != null) ? NF_RASC[t.id].desc : (r.descricao || '');
+  // o que trava só por falta da descrição se resolve escrevendo-a aqui (o banco confere de novo ao emitir)
+  const soDesc = !prep.pode_emitir && (prep.erros || []).every(x => /descrição do serviço/i.test(x));
   let infoMexeu = false;
   const lista = (L, cls) => (L && L.length) ? '<ul class="' + cls + '">' + L.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '';
   abrirModal('Emitir nota — ' + finTituloRot(t),
@@ -6203,8 +6208,13 @@ async function modalEmitirNota(t){
     +   '<div class="nota" style="margin:2px 0 0">' + esc(r.endereco || 'Endereço não cadastrado') + '</div></div>'
     + '<div class="campo"><label for="nfEmail">E-mail que recebe a nota (fica gravado no cliente)</label>'
     +   '<input id="nfEmail" type="email" autocomplete="off" value="' + esc(r.email || '') + '" placeholder="financeiro@cliente.com.br"></div>'
-    + '<div class="nfBloco"><b>Serviço</b>'
-    +   '<div>' + esc(r.descricao) + '</div>'
+    + '<div class="campo"><label for="nfDesc">Descrição do serviço (sai na nota)</label>'
+    +   '<textarea id="nfDesc" rows="2" maxlength="2000">' + esc(descIni) + '</textarea>'
+    +   (sugs && sugs.length ? '<select id="nfDescSug" style="margin-top:6px"><option value="">Usar uma descrição de nota anterior…</option>'
+         + sugs.map(x => '<option value="' + esc(x) + '">' + esc(x.length > 90 ? x.slice(0, 88) + '…' : x) + '</option>').join('') + '</select>' : '')
+    +   '<small class="nota" style="display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap"><span>'
+    +     (r.descricao_conta != null ? 'Na conta: “' + esc(r.descricao_conta || '(sem descrição)') + '” (não muda).' : '') + '</span>'
+    +     '<span id="nfDescN">' + descIni.length + '/2000</span></small>'
     +   '<div class="nota" style="margin:2px 0 0">Código 14.01.01 · Simples Nacional: ISS pelo DAS · sem retenções · competência ' + esc(dataBR(r.competencia)) + '</div></div>'
     + '<div class="dupla">'
     +  '<div class="campo"><label>Valor</label><input type="text" value="' + esc(BRL(r.valor)) + '" readonly></div>'
@@ -6222,25 +6232,38 @@ async function modalEmitirNota(t){
     +   '<small class="nota">Montado com o pedido de compra e a proposta da OS' + (r.proposta ? ' (' + esc(r.proposta) + ')' : '') + '. Pode editar.</small></div>',
     [{ label: 'Cancelar', onClick: fecharModal },
      { label: 'Emitir nota', pri: true, onClick: async () => {
-        if (!prep.pode_emitir){ toast((prep.erros || []).join(' '), 'err'); return; }
         const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+        const desc = v('nfDesc');
+        if (!desc){ toast('Escreva a descrição do serviço (é o texto que sai na nota).', 'err'); return; }
+        if (!prep.pode_emitir && !soDesc){ toast((prep.erros || []).join(' '), 'err'); return; }
         const email = v('nfEmail'), pedido = v('nfPedido');
         try{
           if (email !== (r.email || '')) await rpc('tf_fin_cliente_nf_gravar', { p_cliente_id: t.cliente_id, p_email: email });
           if (pedido !== (r.pedido_compra || '')) await rpc('tf_fin_titulo_pedido_compra', { p_titulo_id: t.id, p_pedido: pedido });
         }catch(e){ toast(e.message, 'err'); return; }
-        const opcoes = { info_complementar: v('nfInfo'), local_cidade: v('nfCid'), local_uf: v('nfUf').toUpperCase() };
+        const opcoes = { info_complementar: v('nfInfo'), local_cidade: v('nfCid'), local_uf: v('nfUf').toUpperCase(), descricao: desc };
+        NF_RASC[t.id] = { desc };
         if (document.getElementById('nfIndOp')) opcoes.ind_op = v('nfIndOp');
         const ok = await confirmar('Emitir a nota?',
           nfFaixaTeste(prep.ambiente)
           + '<p style="margin-top:0">Nota de <b>' + esc(BRL(r.valor)) + '</b> para <b>' + esc(r.cliente) + '</b>.</p>'
+          + '<p style="margin:0 0 8px">Serviço: “' + esc(desc) + '”</p>'
           + '<p class="nota">Depois de emitida, a nota só se desfaz por cancelamento.</p>', 'Emitir');
         if (!ok){ modalEmitirNota(t); return; }
+        delete NF_RASC[t.id];
         await nfExecutar(() => nfFuncao({ acao: 'emitir', titulo_id: t.id, opcoes }), 'emitir', 'Emitindo a nota…');
      }}]);
-  if (!prep.pode_emitir){
-    const b = [...document.querySelectorAll('#mFoot .btn')].pop(); if (b){ b.disabled = true; b.title = 'Corrija o que está em vermelho'; }
-  }
+  const bEmitir = [...document.querySelectorAll('#mFoot .btn')].pop(), dEl = document.getElementById('nfDesc');
+  const travar = () => {
+    const n = dEl.value.length, vazio = !dEl.value.trim();
+    document.getElementById('nfDescN').textContent = n + '/2000';
+    if (!bEmitir) return;
+    bEmitir.disabled = (!prep.pode_emitir && !soDesc) || vazio;
+    bEmitir.title = bEmitir.disabled ? (vazio ? 'Escreva a descrição do serviço' : 'Corrija o que está em vermelho') : '';
+  };
+  dEl.addEventListener('input', travar); travar();
+  const sug = document.getElementById('nfDescSug');
+  if (sug) sug.addEventListener('change', () => { if (sug.value){ dEl.value = sug.value; sug.value = ''; travar(); dEl.focus(); } });
   // o texto das informações complementares acompanha o pedido, enquanto ninguém o editou à mão
   const info = document.getElementById('nfInfo'), ped = document.getElementById('nfPedido');
   info.addEventListener('input', () => { infoMexeu = true; });
@@ -6272,6 +6295,7 @@ async function modalNotasTitulo(t){
     +   (n.ambiente === 'teste' ? ' <span class="chip fAtn">teste</span>' : '')
     +   '<div class="nota" style="margin:2px 0 0">' + esc(dataBR(n.emitida_em || n.criado_em)) + ' · ' + esc(n.criado_por || '—')
     +   (n.cancelado_em ? ' · cancelada em ' + esc(dataBR(n.cancelado_em)) + ' por ' + esc(n.cancelado_por || '—') : '') + '</div>'
+    +   (n.descricao ? '<div class="nota" style="margin:2px 0 0">Serviço: ' + esc(n.descricao) + '</div>' : '')
     +   (nfChave(n) ? '<div class="nfChave">Chave de acesso <code>' + esc(nfChave(n)) + '</code>'
          + '<button class="btn mini" type="button" data-nfcopia="' + esc(nfChave(n)) + '">Copiar</button></div>' : '')
     +   (n.motivo ? '<div class="nfRecusa">' + esc(n.motivo) + '</div>' : '')
@@ -6349,7 +6373,10 @@ async function modalConfigNota(){
     +    '<input id="nfPct" type="number" step="0.01" min="0" max="33" value="' + esc(c.pct_simples == null ? '' : c.pct_simples) + '"></div>'
     +  '<div class="campo"><label for="nfPctMes">Mês</label><input id="nfPctMes" type="month" value="' + esc(c.pct_simples_mes || mes) + '"></div></div>'
     + '<p class="nota">A alíquota efetiva do Simples do mês: o DAS do mês anterior ÷ a receita do mês anterior '
-    +   '(em setembro/2026 deu 11,99%; para outubro, perto de 12,05%). Atualize quando o DAS chegar.</p>'
+    +   '(em setembro/2026 deu 11,99%; para outubro, perto de 12,05%). Atualize quando o DAS chegar. '
+    +   '<b>Em produção, sem o % do mês a nota não sai.</b></p>'
+    +   '<p class="nota">O e-mail e o telefone da Engetap que saem na nota vêm do cadastro do projeto no Notaas '
+    +   '(a API dele não tem campo para isso), não daqui.</p>'
     + '<div class="campo"><label for="nfTxt">Texto que vai no fim de toda nota (opcional)</label>'
     +   '<input id="nfTxt" type="text" maxlength="300" value="' + esc(c.texto_padrao || '') + '"></div>'
     + '<p class="nota">Fixo nesta versão: código 14.01.01 · Simples Nacional (ISS pelo DAS) · sem retenções · NBS 1.2001.50.00 '
