@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 8 · Financeiro</title>
+<title>TapFin 9 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2308,7 +2308,7 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'F8';   // TapFin 8 (descrição do serviço editável na nota) — o S## da publicação é do central
+const APP_VERSION = 'F9';   // TapFin 9 (boleto com Pix pelo Inter) — o S## da publicação é do central
 try{ document.getElementById('verBadge').textContent = 'FINANCEIRO · ' + APP_VERSION; }catch(e){}
 
 const esc               = (...a) => Nucleo.util.esc(...a);
@@ -5854,7 +5854,7 @@ function finreLinha(t, hoje, par){
       + ' ' + finChipPrazo(t, hoje)
       + (t.nf_pdf_url ? ' <a href="' + esc(t.nf_pdf_url) + '" target="_blank" rel="noopener" style="font-size:11px">PDF</a>' : '')
       + (t.nf_xml_url ? ' <a href="' + esc(t.nf_xml_url) + '" target="_blank" rel="noopener" style="font-size:11px">XML</a>' : '')
-      + nfChip(t)
+      + nfChip(t) + boChip(t)
       + '</span>'
     + (t.anulado ? '<span class="a"></span>' : finAcoesHtml(t, p, t.cliente_nome || t.descricao))
     + '</div>';
@@ -5864,15 +5864,20 @@ function finrePrimaria(t){
   const n = nfDe(t);   // TapFin 3: nota em andamento pede "Atualizar"; a faturar, "Emitir nota"
   if (n && (n.situacao === 'emitindo' || n.situacao === 'cancelando')) return { acao:'nfatualizar', rot:'Atualizar nota' };
   if (jfTemNota(t)) return { acao:'jafaturada', rot:'Já tem nota' };   // TapFin 7: a nota foi emitida fora
+  const bo = boDe(t);   // boleto: emitindo pede "Atualizar"; faturado, com saldo, previsto em boleto e sem boleto valendo: "Emitir boleto"
+  if (bo && bo.situacao === 'emitindo') return { acao:'boatualizar', rot:'Atualizar boleto' };
   if (t.etapa === 'a_faturar') return FINNF.ativo ? { acao:'emitir', rot:'Emitir nota' } : { acao:'faturar', rot:'Preparar nota' };
+  if (FINBO.ativo && Number(t.saldo) >= 2.5 && !boVivo(t) && t.forma_prevista === 'Boleto') return { acao:'boemitir', rot:'Emitir boleto' };
   if (Number(t.saldo) > 0) return { acao:'baixar', rot:'Baixar' };
   return { acao:'baixas', rot:'Baixas' };
 }
 
 function finreMenu(t){
   const p = finrePrimaria(t).acao;
-  const n = nfDe(t), viva = nfViva(t);
+  const n = nfDe(t), viva = nfViva(t), bo = boDe(t), bv = boVivo(t);
   const M = [];
+  // o boleto valendo se cancela pelo topo do menu, em vermelho (só com o clique: o TapFin nunca cancela sozinho)
+  if (bv && bo.codigo) M.push({ acao:'bocancelar', rot:'Cancelar boleto', perigo:true, cls:'topo' }, { sep:true });
   // F5: a nota emitida se cancela pelo topo do menu, em vermelho, longe do "Anular"
   if (n && n.situacao === 'autorizada') M.push({ acao:'nfcancelar', rot:'Cancelar nota fiscal', perigo:true, cls:'topo' }, { sep:true });
   M.push({ acao:'editar', rot:'Editar' });
@@ -5888,9 +5893,15 @@ function finreMenu(t){
     M.push({ acao:'pedido', rot:'Pedido de compra' });
     if (n) M.push({ acao:'notas', rot:'Notas fiscais' });
   }
+  if (FINBO.ativo){
+    if (p !== 'boemitir' && !bv && Number(t.saldo) >= 2.5) M.push({ acao:'boemitir', rot:'Emitir boleto' });
+    if (bv && bo.linha_digitavel) M.push({ acao:'bolinha', rot:'Copiar linha digitável' }, { acao:'bopix', rot:'Copiar Pix copia-e-cola' });
+    if (bo) M.push({ acao:'boletos', rot:'Boletos' });
+  }
   M.push({ sep:true });
   // F5: título com nota viva não se anula (o banco também recusa: 505)
-  M.push(viva ? { acao:'anular', rot:'Anular', off:'Cancele a nota primeiro' } : { acao:'anular', rot:'Anular', perigo:true });
+  M.push(viva ? { acao:'anular', rot:'Anular', off:'Cancele a nota primeiro' }
+       : bv ? { acao:'anular', rot:'Anular', off:'Cancele o boleto primeiro' } : { acao:'anular', rot:'Anular', perigo:true });
   return M;
 }
 
@@ -5903,7 +5914,13 @@ function finreAcao(a, t){
   if (a === 'pedido') return modalPedidoCompra(t);
   if (a === 'nfatualizar'){ const n = nfDe(t); if (n) return nfExecutar(() => nfFuncao({ acao: 'consultar', titulo_id: t.id, nfse_id: n.id }), 'consultar', 'Consultando a nota…'); return; }
   if (a === 'faturar') return modalPrepararNota(t);
-  if (a === 'baixar') return modalBaixarTitulo(t, finreCarregar);
+  if (a === 'boemitir') return modalEmitirBoleto(t);
+  if (a === 'boletos') return modalBoletosTitulo(t);
+  if (a === 'bocancelar'){ const b = boDe(t); if (b) return modalCancelarBoleto(t, b); return; }
+  if (a === 'boatualizar'){ const b = boDe(t); if (b) return boExecutar(() => boFuncao({ acao: 'consultar', boleto_id: b.id }), 'Consultando o boleto no Inter…', boResultado); return; }
+  if (a === 'bolinha'){ const b = boDe(t); if (b) copiar(b.linha_digitavel, 'Linha digitável copiada.'); return; }
+  if (a === 'bopix'){ const b = boDe(t); if (b) copiar(b.pix_copia_cola, 'Pix copia-e-cola copiado.'); return; }
+  if (a === 'baixar'){ if (boVivo(t)) return boAntesDaBaixa(t).then(ok => ok && modalBaixarTitulo(t, finreCarregar)); return modalBaixarTitulo(t, finreCarregar); }
   if (a === 'baixas') return modalVerBaixas(t, finreCarregar);
   if (a === 'anular') return modalAnularTitulo(t);
   if (a === 'editar') return modalTituloReceber(t);
@@ -5914,18 +5931,340 @@ async function pintarContasReceber(){
   await finAbrirTela('finre', 'Contas a Receber',
     '“A faturar” é uma estimativa; ao faturar, o vencimento é recalculado pela data da nota + prazo do cliente.',
     '<button class="btn pri" type="button" id="finreNovo">+ Nova conta a receber</button>'
-    + ' <button class="btn" type="button" id="finreNfCfg" hidden title="Configuração da nota fiscal">Nota fiscal ⚙</button>');
+    + ' <button class="btn" type="button" id="finreNfCfg" hidden title="Configuração da nota fiscal">Nota fiscal ⚙</button>'
+    + ' <button class="btn" type="button" id="finreBoCfg" hidden title="Boleto com Pix pelo Inter">Boleto ⚙</button>'
+    + '<div id="boFaixas" hidden style="margin-top:10px"></div>');
   document.getElementById('finreNovo').addEventListener('click', () => modalTituloReceber());
   await finreCarregar();
   const nfb = document.getElementById('finreNfCfg');
   if (nfb){ nfb.hidden = !FINNF.ativo; nfb.addEventListener('click', modalConfigNota); }
+  const bob = document.getElementById('finreBoCfg');
+  if (bob){ bob.hidden = !FINBO.ativo; bob.addEventListener('click', modalConfigBoleto); }
+  boFaixas();
 }
 
-async function finreCarregar(){ await Promise.all([nfCarregar(), jfCarregar()]); await finCarregarLista('finre', 'tf_fin_titulos_receber_listar', FINRE, 'as contas a receber'); }
+async function finreCarregar(){ await Promise.all([nfCarregar(), jfCarregar(), boCarregar()]); boFaixas(); await finCarregarLista('finre', 'tf_fin_titulos_receber_listar', FINRE, 'as contas a receber'); }
 
 function finreDesenhar(){ finDesenhar('finre'); }
 
 REPINTA.finre = finreDesenhar;
+
+// ════════════════════════════════════════════════════════════════════════════
+// TAPFIN · BOLETO COM PIX PELO BANCO INTER
+// ----------------------------------------------------------------------------
+// Desenho: processos/tapfin-boleto-inter-desenho.md. Banco: 508_tapfin_boleto.sql.
+// Servidor: supabase/functions/fin-boleto (o certificado e o Secret do Inter nunca
+// passam por aqui). A tela só pede "emita/consulte/cancele o boleto do título X";
+// os valores saem do banco (tf_fin_boleto_preparar).
+// O pagamento dá baixa SOZINHO (webhook do Inter ou a conferência diária).
+// O TapFin NUNCA cancela boleto sozinho: cancelar é sempre um clique, com motivo.
+// Sem o 508 no banco, nada disto aparece.
+// ════════════════════════════════════════════════════════════════════════════
+const FINBO = { ativo: false, sit: {}, cfg: null, pend: null };
+const BO_SIT = { emitindo: 'Emitindo boleto…', a_receber: 'Boleto', atrasado: 'Boleto vencido', recebido: 'Recebido',
+                 marcado_recebido: 'Marcado como recebido no app', cancelado: 'Boleto cancelado', expirado: 'Boleto encerrado pelo banco', falha: 'Boleto recusado' };
+
+async function boCarregar(){
+  try{
+    const [sit, cfg] = await Promise.all([rpc('tf_fin_boleto_situacoes', {}), rpc('tf_fin_boleto_config', {})]);
+    FINBO.sit = sit || {}; FINBO.cfg = cfg; FINBO.ativo = true;
+  }catch(e){ FINBO.ativo = false; FINBO.sit = {}; }   // banco sem o 508: o boleto não aparece
+}
+/** O último boleto do título, se houver. */
+const boDe = t => (FINBO.ativo && t && FINBO.sit[t.id]) || null;
+/** Boleto que ainda vale no banco (o cliente pode pagar). */
+const boVivo = t => { const b = boDe(t); return !!(b && ['emitindo', 'a_receber', 'atrasado'].includes(b.situacao)); };
+const boFaixaTeste = amb => amb === 'sandbox'
+  ? '<div class="nfTeste">TESTE (sandbox do Inter): boleto sem valor</div>' : '';
+
+function boChip(t){
+  const b = boDe(t); if (!b) return '';
+  const teste = b.ambiente === 'sandbox' ? ' (teste)' : '';
+  let cls = '', txt = BO_SIT[b.situacao] || b.situacao;
+  if (b.situacao === 'a_receber') txt = 'Boleto · vence ' + dataBR(b.vencimento).slice(0, 5) + teste;
+  else if (b.situacao === 'atrasado'){ cls = ' fCrit'; txt = 'Boleto vencido' + teste; }
+  else if (b.situacao === 'recebido'){ cls = ' fOk'; txt = 'Recebido · ' + (b.recebido_origem === 'PIX' ? 'Pix' : 'boleto') + ' em ' + dataBR(b.recebido_em).slice(0, 5) + teste; }
+  else if (b.situacao === 'emitindo'){ cls = ' fAtn'; }
+  else if (b.situacao === 'falha' || b.situacao === 'marcado_recebido'){ cls = ' fAtn'; }
+  else return '';                                     // cancelado/encerrado: só no quadro "Boletos"
+  if (b.aviso === 'titulo_ja_baixado'){ cls = ' fAtn'; txt = 'Boleto pago — conferir: título já estava baixado'; }
+  const vivo = ['a_receber', 'atrasado'].includes(b.situacao);
+  return ' <span class="chip' + cls + '" title="' + esc(b.motivo || txt) + '">' + esc(txt) + '</span>'
+    + (vivo && b.linha_digitavel ? ' <a href="#" data-bocopia="linha" data-id="' + esc(t.id) + '" style="font-size:11px">Linha</a>' : '')
+    + (vivo && b.pix_copia_cola ? ' <a href="#" data-bocopia="pix" data-id="' + esc(t.id) + '" style="font-size:11px">Pix</a>' : '')
+    + (vivo || b.situacao === 'recebido' ? ' <a href="#" data-bopdf="' + esc(b.id) + '" style="font-size:11px">PDF boleto</a>' : '');
+}
+document.addEventListener('click', e => {
+  const c = e.target.closest('[data-bocopia]'), p = e.target.closest('[data-bopdf]');
+  if (c){ e.preventDefault(); const b = FINBO.sit[c.dataset.id]; if (!b) return;
+    if (c.dataset.bocopia === 'pix') copiar(b.pix_copia_cola, 'Pix copia-e-cola copiado.'); else copiar(b.linha_digitavel, 'Linha digitável copiada.'); }
+  if (p){ e.preventDefault(); boAbrirPdf(p.dataset.bopdf); }
+});
+
+/** O PDF do boleto, do compartimento privado (com o token de quem clicou). Sem PDF guardado, pede ao Inter. */
+async function boAbrirPdf(boletoId, caminho){
+  const janela = window.open('', '_blank');
+  try{
+    if (!caminho){ const b = Object.values(FINBO.sit).find(x => x.id === boletoId); caminho = b && b.pdf_path; }
+    if (!caminho){ const j = await boFuncao({ acao: 'pdf', boleto_id: boletoId }); caminho = j.pdf_path; }
+    const r = await rhfdFetch(SUPABASE_URL + '/storage/v1/object/fin-boleto/' + String(caminho).split('/').map(encodeURIComponent).join('/'), {});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const url = URL.createObjectURL(await r.blob());
+    janela.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }catch(e){ if (janela) janela.close(); toast('Não abriu o PDF do boleto: ' + e.message, 'err'); }
+}
+
+/** Chama a função do servidor. Token vencido: renova uma vez pelo núcleo e repete. */
+async function boFuncao(corpo){
+  const vai = () => fetch(SUPABASE_URL + '/functions/v1/fin-boleto', { method: 'POST',
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + sessao.token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(corpo), signal: AbortSignal.timeout ? AbortSignal.timeout(90000) : undefined });
+  let r;
+  try{ r = await vai(); }
+  catch(e){ throw new Error('O servidor não respondeu. Use "Atualizar boleto" antes de tentar de novo — ele pode ter saído.'); }
+  if (r.status === 401 && sessao.refresh){
+    try{ await Nucleo.api.rpc('tf_fin_autorizado', {}); }catch(e){}
+    r = await vai();
+  }
+  let j = null; try{ j = await r.json(); }catch(e){}
+  if (!r.ok || !j || !j.ok) throw new Error((j && j.erro) || ('Erro ' + r.status + ' no boleto.'));
+  return j;
+}
+async function boExecutar(fn, rotulo, depois){
+  abrirModal(rotulo, '<p style="margin:6px 0">' + esc(rotulo) + ' Isso leva alguns segundos; não feche a página.</p>', []);
+  let j = null;
+  try{ j = await fn(); }
+  catch(e){ fecharModal(); toast(e.message, 'err'); await finreCarregar(); return null; }
+  fecharModal(); await finreCarregar();
+  if (j.aviso) toast(j.aviso, 'err');
+  else if (depois) depois(j);
+  return j;
+}
+function boResultado(j){
+  const teste = j.ambiente === 'sandbox' ? ' (TESTE)' : '';
+  if (j.situacao === 'a_receber' || j.situacao === 'atrasado'){
+    abrirModal('Boleto emitido' + teste,
+      boFaixaTeste(j.ambiente)
+      + '<p style="margin-top:0">Boleto de <b>' + esc(BRL(j.valor)) + '</b>, vence em <b>' + esc(dataBR(j.vencimento)) + '</b>. O cliente paga pelo boleto ou pelo Pix; a baixa sai sozinha.</p>'
+      + '<div class="nfChave">Linha digitável <code>' + esc(j.linha_digitavel || '—') + '</code></div>',
+      [{ label: 'Copiar linha', onClick: () => copiar(j.linha_digitavel, 'Linha digitável copiada.') },
+       { label: 'Copiar Pix', onClick: () => copiar(j.pix_copia_cola, 'Pix copia-e-cola copiado.') },
+       { label: 'PDF', onClick: () => boAbrirPdf(j.boleto_id, j.pdf_path) },
+       { label: 'Fechar', pri: true, onClick: fecharModal }]);
+  } else if (j.situacao === 'falha'){
+    abrirModal('Boleto não emitido', '<p style="margin-top:0">O Inter recusou:</p><p class="nfRecusa">' + esc(j.motivo || 'sem detalhe') + '</p>'
+      + '<p class="nota">Corrija o que a mensagem pede (no título ou no cadastro do cliente) e emita de novo.</p>',
+      [{ label: 'Fechar', pri: true, onClick: fecharModal }]);
+  } else if (j.situacao === 'cancelado') toast('Boleto cancelado no Inter. O título continua em aberto.', 'ok');
+  else if (j.situacao === 'recebido') toast('Boleto pago' + (j.recebido_em ? ' em ' + dataBR(j.recebido_em) : '') + '. A baixa foi lançada.', 'ok');
+  else toast('Boleto atualizado.', 'ok');
+}
+
+/** A conferência do boleto, antes de emitir. */
+async function modalEmitirBoleto(t, opcoes){
+  let prep;
+  try{ prep = await rpc('tf_fin_boleto_preparar', { p_titulo_id: t.id, p_opcoes: opcoes || {} }); }
+  catch(e){ toast(e.message, 'err'); return; }
+  const r = prep.resumo;
+  const lista = (L, cls) => (L && L.length) ? '<ul class="' + cls + '">' + L.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '';
+  const vencido = (prep.erros || []).some(x => /já passou/.test(x));
+  abrirModal('Emitir boleto — ' + finTituloRot(t),
+      boFaixaTeste(prep.ambiente)
+    + lista(prep.erros, 'nfErros')
+    + ((prep.erros || []).some(x => /Cadastros/.test(x)) && NO_SERVIDOR
+       ? '<p class="nota" style="margin:-4px 0 10px"><a href="../manager/?ir=cad" target="_blank" rel="noopener">Abrir Cadastros › Clientes</a> (em outra aba).</p>' : '')
+    + lista(prep.avisos, 'nfAvisos')
+    + '<div class="nfBloco"><b>Pagador</b>'
+    +   '<div>' + esc(r.cliente || '—') + ' · ' + esc(finDocFmt(r.doc)) + '</div>'
+    +   '<div class="nota" style="margin:2px 0 0">' + esc(r.endereco || 'Endereço não cadastrado') + '</div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label>Valor (o saldo do título)</label><input type="text" value="' + esc(BRL(r.valor)) + '" readonly></div>'
+    +  '<div class="campo"><label for="boVenc">Vencimento</label><input id="boVenc" type="date" value="' + esc(String(r.vencimento || '').slice(0, 10)) + '"></div></div>'
+    + '<div class="nota" style="margin:0 0 10px">Cód. de controle <b>' + esc(r.seu_numero) + '</b> · multa ' + esc(String(r.multa_pct)) + '% · juros ' + esc(String(r.juros_mes_pct)) + '% ao mês'
+    +   (Number(r.desconto_pct) > 0 ? ' · desconto ' + esc(String(r.desconto_pct)) + '%' : '') + ' · pagável até ' + esc(String(r.dias_agenda)) + ' dias depois do vencimento · boleto + Pix · entra na conta ' + esc(r.conta || '—') + '</div>'
+    + '<div class="campo"><label for="boL1">Mensagem no boleto (linha 1)</label><input id="boL1" type="text" maxlength="78" value="' + esc((r.mensagem && r.mensagem.linha1) || '') + '"></div>'
+    + '<div class="campo"><label for="boL2">Linha 2</label><input id="boL2" type="text" maxlength="78" value="' + esc((r.mensagem && r.mensagem.linha2) || '') + '"></div>',
+    [{ label: 'Cancelar', onClick: fecharModal },
+     { label: vencido ? 'Conferir com a data nova' : 'Emitir boleto', pri: true, onClick: async () => {
+        const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+        const op = { vencimento: v('boVenc'), linha1: v('boL1'), linha2: v('boL2') };
+        if (vencido || op.vencimento !== String(r.vencimento || '').slice(0, 10)){ modalEmitirBoleto(t, op); return; }
+        if (!prep.pode_emitir){ toast((prep.erros || []).join(' '), 'err'); return; }
+        const ok = await confirmar('Emitir o boleto?', boFaixaTeste(prep.ambiente)
+          + '<p style="margin-top:0">Boleto de <b>' + esc(BRL(r.valor)) + '</b> para <b>' + esc(r.cliente) + '</b>, vencendo em <b>' + esc(dataBR(op.vencimento)) + '</b>.</p>'
+          + '<p class="nota">Depois de emitido, o boleto só se desfaz por cancelamento (no ⋯).</p>', 'Emitir');
+        if (!ok){ modalEmitirBoleto(t, op); return; }
+        await boExecutar(() => boFuncao({ acao: 'emitir', titulo_id: t.id, opcoes: op }), 'Emitindo o boleto…', boResultado);
+     }}]);
+  if (!prep.pode_emitir && !vencido){
+    const b = [...document.querySelectorAll('#mFoot .btn')].pop(); if (b){ b.disabled = true; b.title = 'Corrija o que está em vermelho'; }
+  }
+}
+
+/** O histórico de boletos do título. */
+async function modalBoletosTitulo(t){
+  let L;
+  try{ L = await rpc('tf_fin_boleto_listar', { p_titulo_id: t.id }); }catch(e){ toast(e.message, 'err'); return; }
+  const linha = b => '<div class="nfLin">'
+    + '<div><b>' + esc(BO_SIT[b.situacao] || b.situacao) + '</b> · ' + esc(BRL(b.valor)) + ' · vence ' + esc(dataBR(b.vencimento))
+    +   (b.ambiente === 'sandbox' ? ' <span class="chip fAtn">teste</span>' : '') + (b.origem === 'app' ? ' <span class="chip">emitido no app</span>' : '')
+    +   '<div class="nota" style="margin:2px 0 0">Cód. ' + esc(b.seu_numero) + ' · ' + esc(dataBR(b.criado_em)) + ' · ' + esc(b.criado_por || '—')
+    +   (b.recebido_em ? ' · pago em ' + esc(dataBR(b.recebido_em)) + ' (' + esc(BRL(b.recebido_valor)) + (b.recebido_origem === 'PIX' ? ', Pix' : ', boleto') + ')' : '')
+    +   (b.cancelado_em ? ' · cancelado em ' + esc(dataBR(b.cancelado_em)) + ' por ' + esc(b.cancelado_por || '—') : '') + '</div>'
+    +   (b.linha_digitavel && ['a_receber', 'atrasado'].includes(b.situacao) ? '<div class="nfChave">Linha digitável <code>' + esc(b.linha_digitavel) + '</code></div>' : '')
+    +   (b.motivo ? '<div class="nfRecusa">' + esc(b.motivo) + '</div>' : '')
+    +   (b.cancel_motivo ? '<div class="nota" style="margin:2px 0 0">Motivo do cancelamento: ' + esc(b.cancel_motivo) + '</div>' : '')
+    +   (b.aviso === 'titulo_ja_baixado' ? '<div class="nfRecusa">Pago no banco, mas o título já estava baixado: confira se o cliente pagou duas vezes.</div>' : '')
+    +   (b.aviso === 'marcado_recebido' ? '<div class="nfAvisos" style="padding:6px 9px">Marcado como recebido à mão no app do Inter: a baixa não é automática.</div>' : '')
+    + '</div><div class="nfBot">'
+    +   (['a_receber', 'atrasado'].includes(b.situacao) ? '<button class="btn mini" type="button" data-bocop="' + esc(b.linha_digitavel || '') + '" data-rot="Linha digitável">Copiar linha</button>'
+         + '<button class="btn mini" type="button" data-bocop="' + esc(b.pix_copia_cola || '') + '" data-rot="Pix copia-e-cola">Copiar Pix</button>' : '')
+    +   (['a_receber', 'atrasado', 'recebido'].includes(b.situacao) ? '<button class="btn mini" type="button" data-bopdfx="' + esc(b.id) + '" data-path="' + esc(b.pdf_path || '') + '">PDF</button>' : '')
+    +   (['emitindo', 'a_receber', 'atrasado'].includes(b.situacao) ? '<button class="btn mini" type="button" data-boatual="' + esc(b.id) + '">Atualizar</button>' : '')
+    +   (['a_receber', 'atrasado'].includes(b.situacao) && b.codigo ? '<button class="btn mini perigo" type="button" data-bocanc="' + esc(b.id) + '">Cancelar boleto</button>' : '')
+    + '</div></div>';
+  abrirModal('Boletos — ' + finTituloRot(t),
+    (L.length ? L.map(linha).join('') : '<p class="nota">Nenhum boleto para este título.</p>'),
+    [{ label: 'Fechar', pri: true, onClick: fecharModal }]);
+  document.getElementById('mBody').addEventListener('click', e => {
+    const c = e.target.closest('[data-bocop]'), p = e.target.closest('[data-bopdfx]'), a = e.target.closest('[data-boatual]'), x = e.target.closest('[data-bocanc]');
+    if (c) copiar(c.dataset.bocop, c.dataset.rot + ' copiada.');
+    if (p) boAbrirPdf(p.dataset.bopdfx, p.dataset.path || null);
+    if (a) boExecutar(() => boFuncao({ acao: 'consultar', boleto_id: a.dataset.boatual }), 'Consultando o boleto no Inter…', boResultado);
+    if (x) modalCancelarBoleto(t, L.find(b => b.id === x.dataset.bocanc));
+  });
+}
+
+/** Cancelar: só com o clique, com motivo e confirmação (o TapFin nunca cancela sozinho). */
+function modalCancelarBoleto(t, b){
+  if (!b) return;
+  abrirModal('Cancelar o boleto ' + (b.seu_numero || ''),
+      boFaixaTeste(b.ambiente)
+    + '<p style="margin-top:0">O boleto é cancelado no Inter e o cliente <b>não consegue mais pagá-lo</b> (nem pelo Pix). O título continua em aberto.</p>'
+    + '<div class="campo"><label for="boMotivo">Motivo (de 5 a 50 letras, vai para o Inter)</label>'
+    + '<input id="boMotivo" type="text" maxlength="50" placeholder="Ex.: Cliente pagou por TED"></div>',
+    [{ label: 'Voltar', onClick: fecharModal },
+     { label: 'Cancelar boleto', cls: 'perigo', onClick: async () => {
+        const motivo = document.getElementById('boMotivo').value.trim();
+        if (motivo.length < 5){ toast('O motivo precisa ter pelo menos 5 letras.', 'err'); return; }
+        const ok = await confirmar('Cancelar o boleto ' + (b.seu_numero || '') + '?', boFaixaTeste(b.ambiente)
+          + '<p style="margin-top:0">O cancelamento vai ao Inter, <b>sem volta</b>.</p><p class="nota">Motivo: ' + esc(motivo) + '</p>', 'Cancelar o boleto', true);
+        if (!ok){ modalCancelarBoleto(t, b); return; }
+        await boExecutar(() => boFuncao({ acao: 'cancelar', boleto_id: b.id, motivo }), 'Cancelando o boleto…', boResultado);
+     }}]);
+}
+
+/** Baixa manual com boleto valendo: avisa antes (o cliente ainda pode pagar o boleto). */
+async function boAntesDaBaixa(t){
+  const b = boDe(t);
+  return await new Promise(ok => abrirModal('Este título tem boleto valendo',
+    '<p style="margin-top:0">O boleto <b>' + esc(b.seu_numero || '') + '</b> continua valendo no banco: o cliente ainda pode pagá-lo. Se o pagamento chegou por outro meio, cancele o boleto também.</p>',
+    [{ label: 'Voltar', onClick: () => { fecharModal(); ok(false); } },
+     { label: 'Cancelar o boleto primeiro', onClick: () => { fecharModal(); ok(false); modalCancelarBoleto(t, { ...b, id: b.id }); } },
+     { label: 'Seguir para a baixa', pri: true, onClick: () => { fecharModal(); ok(true); } }]));
+}
+
+/** "Trazer os boletos do Inter": liga os emitidos pelo app aos títulos (o Vinícius confirma cada um). */
+async function modalTrazerInter(){
+  let j;
+  abrirModal('Trazer os boletos do Inter', '<p style="margin:6px 0">Buscando os boletos em aberto no Inter…</p>', []);
+  try{ j = await boFuncao({ acao: 'listar_inter' }); }catch(e){ fecharModal(); toast(e.message, 'err'); return; }
+  const L = j.cobrancas || [];
+  const linha = (c, i) => {
+    const opts = (c.candidatos || []).map(x => '<option value="' + esc(x.titulo_id) + '"' + (c.sugestao && c.sugestao.titulo_id === x.titulo_id ? ' selected' : '') + '>'
+      + esc((x.cliente || '') + ' · ' + (x.descricao || '') + ' · ' + BRL(x.valor) + ' · ' + dataBR(x.vencimento)) + '</option>').join('');
+    return '<div class="nfLin"><div><b>' + esc(c.seu_numero || '—') + '</b> · ' + esc(c.pagador || '') + ' · ' + esc(BRL(c.valor)) + ' · vence ' + esc(dataBR(c.vencimento))
+      + (c.situacao === 'ATRASADO' ? ' <span class="chip fCrit">vencido</span>' : '')
+      + '<div class="campo" style="margin:6px 0 0"><select data-boi="' + i + '"><option value="">' + (opts ? '— escolha o título —' : 'Nenhum título combina') + '</option>' + opts + '</select></div>'
+      + (c.sugestao ? '<div class="nota" style="margin:2px 0 0">Sugerido pelo cód. de controle, valor e vencimento.</div>' : '')
+      + '</div><div class="nfBot"><button class="btn mini" type="button" data-boligar="' + i + '"' + (opts ? '' : ' disabled') + '>Ligar</button></div></div>';
+  };
+  abrirModal('Trazer os boletos do Inter',
+    boFaixaTeste(j.ambiente)
+    + '<p class="nota" style="margin-top:0">' + esc(String(j.total_inter)) + ' boleto(s) em aberto no Inter; ' + esc(String(L.length)) + ' ainda sem título no TapFin. '
+    + 'Ligado, o título mostra o boleto, não oferece outro, e o pagamento dá baixa sozinho.</p>'
+    + (L.length ? L.map(linha).join('') : '<p class="nota">Nada a ligar: todos os boletos do Inter já estão nos títulos.</p>'),
+    [{ label: 'Fechar', pri: true, onClick: () => { fecharModal(); finreCarregar(); } }]);
+  document.getElementById('mBody').addEventListener('click', async e => {
+    const b = e.target.closest('[data-boligar]'); if (!b) return;
+    const i = Number(b.dataset.boligar), sel = document.querySelector('[data-boi="' + i + '"]');
+    if (!sel || !sel.value){ toast('Escolha o título.', 'err'); return; }
+    b.disabled = true;
+    try{ await boFuncao({ acao: 'vincular', titulo_id: sel.value, codigo_solicitacao: L[i].codigo_solicitacao });
+         b.textContent = 'Ligado ✓'; sel.disabled = true; toast('Boleto ' + (L[i].seu_numero || '') + ' ligado ao título.', 'ok'); }
+    catch(err){ b.disabled = false; toast(err.message, 'err'); }
+  });
+}
+
+/** "Boleto ⚙": padrões, conta e ambiente (admin), certificado, webhook, conferência e pendências. */
+async function modalConfigBoleto(rasc){   // 512: rasc = o que foi escrito, quando a confirmação é cancelada
+  let c, p;
+  try{ [c, p] = await Promise.all([rpc('tf_fin_boleto_config', {}), rpc('tf_fin_boleto_pendencias', {})]); }catch(e){ toast(e.message, 'err'); return; }
+  const adm = !!c.pode_admin, dis = adm ? '' : ' disabled';
+  if (rasc instanceof Event) rasc = null;   // aberta pelo botão: o clique não é rascunho
+  const d = Object.assign({}, c, rasc || {});   // o que aparece nos campos (o gravado, ou o rascunho)
+  const conf = c.conferido_em ? dataBR(c.conferido_em) + ' ' + new Date(c.conferido_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    + (c.conferido_resumo ? ' · ' + c.conferido_resumo.boletos + ' boleto(s) · ' + c.conferido_resumo.pagos + ' pago(s)' : '') : 'nunca';
+  abrirModal('Boleto com Pix (Banco Inter)',
+      boFaixaTeste(c.ambiente)
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="boAmb">Ambiente</label><select id="boAmb"' + dis + '>'
+    +    '<option value="sandbox"' + (d.ambiente === 'sandbox' ? ' selected' : '') + '>Teste (sandbox do Inter)</option>'
+    +    '<option value="producao"' + (d.ambiente === 'producao' ? ' selected' : '') + '>Produção (boleto de verdade)</option></select></div>'
+    +  '<div class="campo"><label for="boConta">Conta onde o dinheiro entra</label><select id="boConta"' + dis + '><option value="">—</option>'
+    +    (c.contas || []).map(x => '<option value="' + esc(x.id) + '"' + (x.id === d.conta_id ? ' selected' : '') + '>' + esc(x.nome) + '</option>').join('') + '</select></div></div>'
+    + (adm ? '' : '<p class="nota" style="margin:-6px 0 8px">Ambiente, conta e certificado: só o administrador.</p>')
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="boMulta">Multa (%)</label><input id="boMulta" type="number" step="0.01" min="0" max="10" value="' + esc(String(d.multa_pct)) + '"></div>'
+    +  '<div class="campo"><label for="boJuros">Juros ao mês (%)</label><input id="boJuros" type="number" step="0.01" min="0" max="10" value="' + esc(String(d.juros_mes_pct)) + '"></div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="boDesc">Desconto (%)</label><input id="boDesc" type="number" step="0.01" min="0" max="50" value="' + esc(String(d.desconto_pct)) + '"></div>'
+    +  '<div class="campo"><label for="boDias">Pagável até (dias depois do vencimento)</label><input id="boDias" type="number" min="0" max="60" value="' + esc(String(d.dias_agenda)) + '"></div></div>'
+    + '<div class="campo"><label for="boMsg">Texto que vai em todo boleto (opcional, até 78 letras)</label><input id="boMsg" type="text" maxlength="78" value="' + esc(d.mensagem || '') + '"></div>'
+    + '<div class="campo"><label for="boCert">O certificado do Inter vence em</label><input id="boCert" type="date" value="' + esc(d.cert_vence_em || '') + '"' + dis + '></div>'
+    + '<div class="nfBloco"><b>Avisos de pagamento</b>'
+    +   '<div class="nota" style="margin:2px 0 0">Webhook: ' + (c.webhook_em ? (c.webhook_ok ? 'cadastrado em ' + esc(dataBR(c.webhook_em)) : 'recusado pelo Inter em ' + esc(dataBR(c.webhook_em)) + ' (vale a conferência a cada 30 minutos)') : 'não cadastrado') + '</div>'
+    +   '<div class="nota" style="margin:2px 0 0">Última conferência: ' + esc(conf) + (c.conferencia_atrasada ? ' <span class="chip fCrit">atrasada</span>' : '') + (c.conferido_erro ? ' · erro: ' + esc(c.conferido_erro) : '') + '</div></div>'
+    + '<div class="nfBloco"><b>Pendências</b>'
+    +   ((p.clientes_sem_endereco || []).length ? '<div class="nota" style="margin:2px 0 0">Clientes com título em aberto sem endereço completo (o boleto não sai):</div><ul class="nfAvisos">'
+         + p.clientes_sem_endereco.map(x => '<li>' + esc(x.cliente) + ' — falta ' + esc(x.falta) + '</li>').join('') + '</ul>' : '<div class="nota" style="margin:2px 0 0">Nenhum cliente com endereço incompleto.</div>')
+    +   ((p.orfaos || []).length ? '<div class="nota" style="margin:4px 0 0">Avisos do Inter de boletos sem título no TapFin:</div><ul class="nfAvisos">'
+         + p.orfaos.map(x => '<li>' + esc(x.seu_numero || '—') + ' · ' + esc(x.pagador || '') + ' · ' + esc(BRL(x.valor)) + ' · ' + esc(x.situacao || '') + '</li>').join('') + '</ul>' : '')
+    + '</div>',
+    [{ label: 'Trazer os boletos do Inter', onClick: () => { fecharModal(); modalTrazerInter(); } }]
+      .concat(adm ? [{ label: 'Cadastrar o webhook', onClick: async () => {
+          fecharModal(); await boExecutar(() => boFuncao({ acao: 'webhook' }), 'Cadastrando o webhook no Inter…', () => toast('Webhook cadastrado: o Inter passa a avisar os pagamentos.', 'ok')); } }] : [])
+      .concat([{ label: 'Cancelar', onClick: fecharModal },
+       { label: 'Gravar', pri: true, onClick: async () => {
+          // 512: tudo é lido AQUI, antes da confirmação (ela fecha esta janela)
+          const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+          const g = { multa_pct: Number(v('boMulta')), juros_mes_pct: Number(v('boJuros')), desconto_pct: Number(v('boDesc')), dias_agenda: Number(v('boDias')), mensagem: v('boMsg') };
+          if (adm){
+            const amb = v('boAmb'), conta = v('boConta'), cert = v('boCert');
+            g.ambiente = amb || c.ambiente; if (conta) g.conta_id = conta; if (cert) g.cert_vence_em = cert;
+            if (g.ambiente !== c.ambiente){
+              const nome = a => a === 'producao' ? 'produção' : 'teste (sandbox)';
+              const ok = await confirmar('Trocar o ambiente do boleto?', '<p>De <b>' + esc(nome(c.ambiente)) + '</b> para <b>' + esc(nome(g.ambiente)) + '</b>. Em produção, o boleto é de verdade.</p>', 'Trocar');
+              if (!ok){ toast('Nada foi gravado.'); return modalConfigBoleto(g); }
+            }
+          }
+          try{ await rpc('tf_fin_boleto_config_gravar', { p: g }); fecharModal(); toast('Configuração do boleto gravada.', 'ok'); await finreCarregar(); }
+          catch(e){ toast(e.message, 'err'); }
+       }}]));
+}
+
+/** As faixas de aviso no topo de Contas a Receber: certificado e conferência atrasada. */
+function boFaixas(){
+  const el = document.getElementById('boFaixas'); if (!el) return;
+  const c = FINBO.cfg; let h = '';
+  if (FINBO.ativo && c){
+    if (c.cert_dias != null && c.cert_dias < 0) h += '<div class="nfErros" style="padding:8px 10px">O certificado do Inter <b>venceu</b> em ' + esc(dataBR(c.cert_vence_em)) + '. O boleto está parado: gere outro certificado no Inter Empresas e troque no Supabase.</div>';
+    else if (c.cert_dias != null && c.cert_dias <= 60) h += '<div class="nfAvisos" style="padding:8px 10px">O certificado do Inter vence em ' + esc(dataBR(c.cert_vence_em)) + ' (' + esc(String(c.cert_dias)) + ' dias). Gere outro no Inter Empresas e troque no Supabase.</div>';
+    if (c.pode_admin && c.conferencia_atrasada && c.conferido_em) h += '<div class="nfAvisos" style="padding:8px 10px">A conferência dos boletos não roda desde ' + esc(dataBR(c.conferido_em)) + '. Veja "Boleto ⚙".</div>';
+  }
+  el.innerHTML = h; el.hidden = !h;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // TAPFIN 7 · CONTAS QUE JÁ TÊM NOTA (emitida fora do TapFin)
 // ----------------------------------------------------------------------------
@@ -6100,6 +6439,30 @@ async function nfCarregar(){
     const [sit, cfg] = await Promise.all([rpc('tf_fin_nfse_situacoes', {}), FINNF.cfg ? FINNF.cfg : rpc('tf_fin_nfse_config', {})]);
     FINNF.sit = sit || {}; FINNF.cfg = cfg; FINNF.ativo = true;
   }catch(e){ FINNF.ativo = false; FINNF.sit = {}; }   // banco sem o 504: a emissão não aparece
+  nfBuscarAtrasados();
+}
+
+/** 512: nota autorizada sem o PDF (ou o XML) — o Notaas às vezes só o tem minutos depois da emissão.
+ *  Busca em segundo plano, uma vez por nota a cada abertura da página (até 5 por vez, dos últimos
+ *  30 dias), sem janela nem aviso; se algum chegar, a lista se atualiza. "Atualizar" continua valendo. */
+const NF_BUSCADOS = new Set();
+function nfBuscarAtrasados(){
+  if (!FINNF.ativo) return;
+  const limite = Date.now() - 30 * 86400000;
+  const falta = Object.entries(FINNF.sit || {}).filter(([, n]) => n && n.id && n.situacao === 'autorizada' && (!n.pdf || !n.xml)
+      && !NF_BUSCADOS.has(n.id) && (!n.criado_em || new Date(n.criado_em).getTime() >= limite)).slice(0, 5);
+  if (!falta.length) return;
+  falta.forEach(([, n]) => NF_BUSCADOS.add(n.id));
+  (async () => {
+    let chegou = false;
+    for (const [tid, n] of falta){
+      try{ const j = await nfFuncao({ acao: 'consultar', titulo_id: tid, nfse_id: n.id }); if (j && ((j.pdf && !n.pdf) || (j.xml && !n.xml))) chegou = true; }
+      catch(e){ /* fica para a próxima abertura, ou para o "Atualizar" */ }
+    }
+    if (!chegou) return;
+    try{ FINNF.sit = (await rpc('tf_fin_nfse_situacoes', {})) || FINNF.sit; }catch(e){ return; }
+    if (typeof REPINTA !== 'undefined' && REPINTA.finre && document.getElementById('finreLista')) REPINTA.finre();
+  })();
 }
 
 /** A nota (a última) do título, se houver. */
@@ -6358,37 +6721,43 @@ async function modalPedidoCompra(t){
 }
 
 /** Configuração da nota: % do Simples do mês (financeiro) e o ambiente (admin). */
-async function modalConfigNota(){
+async function modalConfigNota(rasc){   // 512: rasc = o que foi escrito, quando a confirmação é cancelada
   let c;
   try{ c = await rpc('tf_fin_nfse_config', {}); }catch(e){ toast(e.message, 'err'); return; }
   const mes = new Date().toISOString().slice(0, 7);
+  if (rasc instanceof Event) rasc = null;   // aberta pelo botão: o clique não é rascunho
+  const d = Object.assign({}, c, rasc || {});   // o que aparece nos campos (o gravado, ou o rascunho)
   abrirModal('Configuração da nota fiscal',
       nfFaixaTeste(c.ambiente)
     + '<div class="campo"><label for="nfAmb">Ambiente</label><select id="nfAmb"' + (c.pode_trocar_ambiente ? '' : ' disabled') + '>'
-    +   '<option value="teste"' + (c.ambiente === 'teste' ? ' selected' : '') + '>Teste (homologação — sem valor fiscal)</option>'
-    +   '<option value="producao"' + (c.ambiente === 'producao' ? ' selected' : '') + '>Produção (nota de verdade)</option></select>'
+    +   '<option value="teste"' + (d.ambiente === 'teste' ? ' selected' : '') + '>Teste (homologação — sem valor fiscal)</option>'
+    +   '<option value="producao"' + (d.ambiente === 'producao' ? ' selected' : '') + '>Produção (nota de verdade)</option></select>'
     +   (c.pode_trocar_ambiente ? '' : '<small class="nota">Só o administrador troca o ambiente.</small>') + '</div>'
     + '<div class="dupla">'
     +  '<div class="campo"><label for="nfPct">% do Simples do mês (tributos aproximados)</label>'
-    +    '<input id="nfPct" type="number" step="0.01" min="0" max="33" value="' + esc(c.pct_simples == null ? '' : c.pct_simples) + '"></div>'
-    +  '<div class="campo"><label for="nfPctMes">Mês</label><input id="nfPctMes" type="month" value="' + esc(c.pct_simples_mes || mes) + '"></div></div>'
+    +    '<input id="nfPct" type="number" step="0.01" min="0" max="33" value="' + esc(d.pct_simples == null ? '' : d.pct_simples) + '"></div>'
+    +  '<div class="campo"><label for="nfPctMes">Mês</label><input id="nfPctMes" type="month" value="' + esc(d.pct_simples_mes || mes) + '"></div></div>'
     + '<p class="nota">A alíquota efetiva do Simples do mês: o DAS do mês anterior ÷ a receita do mês anterior '
     +   '(em setembro/2026 deu 11,99%; para outubro, perto de 12,05%). Atualize quando o DAS chegar. '
     +   '<b>Em produção, sem o % do mês a nota não sai.</b></p>'
     +   '<p class="nota">O e-mail e o telefone da Engetap que saem na nota vêm do cadastro do projeto no Notaas '
     +   '(a API dele não tem campo para isso), não daqui.</p>'
     + '<div class="campo"><label for="nfTxt">Texto que vai no fim de toda nota (opcional)</label>'
-    +   '<input id="nfTxt" type="text" maxlength="300" value="' + esc(c.texto_padrao || '') + '"></div>'
+    +   '<input id="nfTxt" type="text" maxlength="300" value="' + esc(d.texto_padrao || '') + '"></div>'
     + '<p class="nota">Fixo nesta versão: código 14.01.01 · Simples Nacional (ISS pelo DAS) · sem retenções · NBS 1.2001.50.00 '
     +   '· IBS/CBS a partir de ' + esc(dataBR(c.ibscbs_desde)) + ' com local da operação 05.01.01 (troca por nota).</p>',
     [{ label: 'Cancelar', onClick: fecharModal },
      { label: 'Gravar', pri: true, onClick: async () => {
-        const v = id => document.getElementById(id).value.trim();
+        // 512: tudo é lido AQUI, antes da confirmação (ela fecha esta janela)
+        const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+        const amb = v('nfAmb');
         const p = { pct_simples: v('nfPct') === '' ? null : Number(v('nfPct')), pct_simples_mes: v('nfPctMes') || null, texto_padrao: v('nfTxt') };
-        if (c.pode_trocar_ambiente && v('nfAmb') !== c.ambiente){
-          if (v('nfAmb') === 'producao' && !(await confirmar('Passar para PRODUÇÃO?',
-              '<p style="margin-top:0">A partir de agora, "Emitir nota" emite <b>nota de verdade</b>, com valor fiscal.</p>', 'Passar para produção', true))) return;
-          p.ambiente = v('nfAmb');
+        if (c.pode_trocar_ambiente && amb && amb !== c.ambiente){
+          p.ambiente = amb;
+          if (amb === 'producao' && !(await confirmar('Passar para PRODUÇÃO?',
+              '<p style="margin-top:0">A partir de agora, "Emitir nota" emite <b>nota de verdade</b>, com valor fiscal.</p>', 'Passar para produção', true))){
+            toast('Nada foi gravado.'); return modalConfigNota(p);
+          }
         }
         try{ FINNF.cfg = await rpc('tf_fin_nfse_config_gravar', { p }); fecharModal(); toast('Configuração gravada.', 'ok'); await finreCarregar(); }
         catch(e){ toast(e.message, 'err'); }
@@ -7831,6 +8200,7 @@ function modalPrepararNota(t){
 
 function modalAnularTitulo(t){
   if (nfViva(t)){ toast('Cancele a nota primeiro: este título tem nota fiscal emitida (ou em andamento).', 'err'); return; }
+  if (boVivo(t)){ toast('Cancele o boleto primeiro: este título tem boleto valendo no banco.', 'err'); return; }
   abrirModal('Anular — ' + finTituloRot(t),
       '<p class="nota" style="margin-top:0">O título não é apagado, fica marcado como anulado com o motivo. '
     + 'Para corrigir descrição, valor ou datas, use <b>Editar</b> (no menu ⋯). Anule só o título que não devia existir — ou para trocar o cliente, lançando outro depois.</p>'

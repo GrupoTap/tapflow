@@ -29,7 +29,7 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H11-S96';   // S96 · TapFin F8: descrição da nota editável e os ajustes do teste de 26/10 (511) · S95 · TapFin 7: contas que já têm nota (507, fin F7) · S94 · R06a: o laudo em PDF no TapDoc do escritório (410, TapDoc E9) · S93 · R05a: a revisão (409, E8)
+const VERSAO = 'H11-S97';   // S97 · TapFin F9: boleto com Pix pelo Inter (508, 508b, fin-boleto) e as correções da 512 · S96 · TapFin F8: descrição da nota editável e os ajustes do teste de 26/10 (511) · S95 · TapFin 7: contas que já têm nota (507, fin F7) · S94 · R06a: o laudo em PDF no TapDoc do escritório (410, TapDoc E9) · S93 · R05a: a revisão (409, E8)
 const CACHE  = 'tapflow-hub-' + VERSAO;
 
 const ESSENCIAIS = [
