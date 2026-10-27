@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S90</title>
+<title>TapFlow Manager · S101</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -556,6 +556,18 @@ body.emQuadro .board:not(.livre){height:100%}
 .dupTab td.num{font-family:'JetBrains Mono',monospace;text-align:right}
 .dupTab tr.vazio td{color:var(--ink-3)}
 .dupAcoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+/* S101 · Duplicados: os já revisados numa seção recolhida */
+.dupArq{margin-top:18px;border-top:1px solid var(--rule);padding-top:12px}
+.dupArq>summary{cursor:pointer;font-weight:600;font-size:13.5px;color:var(--ink-2);list-style:none;padding:4px 0}
+.dupArq>summary::-webkit-details-marker{display:none}
+.dupArq>summary::before{content:'▸ ';color:var(--ink-3)}
+.dupArq[open]>summary::before{content:'▾ '}
+.dupArq>.sub{font-size:12px;color:var(--ink-3);margin:4px 0 12px}
+.dupMotivo{font-size:12px;color:var(--ink-3);margin:-4px 0 10px}
+/* S101 · ficha do cliente e item do catálogo para quem é de campo: só leitura.
+   Esconder os botões é a tela não OFERECER o que o banco recusa (RLS: escritório). */
+#cadDet.soLeitura button,#catDet.soLeitura button,#cadDet.soLeitura input[type=file],#catDet.soLeitura input[type=file]{display:none!important}
+#cadDet.soLeitura input,#cadDet.soLeitura select,#cadDet.soLeitura textarea,#catDet.soLeitura input,#catDet.soLeitura select,#catDet.soLeitura textarea{pointer-events:none}
 .opcoes{display:flex;flex-direction:column;gap:2px}
 .linhaOpc{display:flex;gap:9px;align-items:flex-start;padding:8px 9px;border-radius:3px;
   font-size:13px;line-height:1.4;cursor:pointer;border:1px solid transparent}
@@ -2320,7 +2332,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S90';
+const APP_VERSION = 'S101';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -13510,6 +13522,15 @@ function formCatalogo(item){
   catEdit = item;
   const d = document.getElementById('catDet');
   if (!d) return;
+  // S101 · gravar no catálogo é do escritório (RLS `tf_pode_escritorio()`):
+  // quem é de campo vê o item escolhido, sem botões; sem item, só o aviso.
+  d.classList.toggle('soLeitura', !podeEscritorio());
+  if (!podeEscritorio() && !item){
+    d.innerHTML = '<div class="aviso" style="margin-bottom:12px">Só leitura: o catálogo é '
+      + 'mantido pelo escritório. Seu perfil executa em campo — o banco não aceitaria a gravação.</div>'
+      + '<p class="nota">Escolha um item à esquerda para ver os dados dele.</p>';
+    return;
+  }
 
   const famId = item ? item.familia_id : (catFamSel || (CAT_FAM[0]||{}).id);
   const fam = CAT_FAM.find(f => f.id === famId) || { campos: [] };
@@ -13990,6 +14011,25 @@ function desenharVazios(erro){
   const q = BUSCA.dup || '';
   const lista = !q ? VAZIOS : VAZIOS.filter(v => casa(v.razao_social + ' ' + (v.nome_fantasia||'') + ' ' + (v.cidade||''), q));
   const marcados = VAZIOS.filter(v => VAZIOS_MARCADOS.has(v.id)).length;
+  // S101 · excluir em lote é do admin (`tf_is_admin()` na função): para os
+  // outros a lista é só de leitura — sem caixinha e sem botão que o banco recusa.
+  if (!(DEMO || sessao.admin)){
+    cx.innerHTML =
+        '<div class="dupGrupo" style="margin-bottom:16px">'
+      + '<h4>Cadastros vazios <span class="selo seguro">' + VAZIOS.length + '</span></h4>'
+      + '<p class="sub">Só leitura: a exclusão destes cadastros é do administrador.</p>'
+      + '<div style="max-height:340px;overflow:auto;border:1px solid var(--rule);border-radius:6px">'
+      + '<table class="dupTab"><thead><tr><th>Cadastro</th>'
+      +   '<th>Cidade</th><th class="num">Criado há</th></tr></thead><tbody>'
+      + lista.map(v => '<tr><td>' + esc(nomeCliente(v)) + '</td><td>' + esc(v.cidade || '—') + '</td>'
+        + '<td class="num">' + (v.dias != null ? v.dias + ' d' : '—') + '</td></tr>').join('')
+      + '</tbody></table></div>'
+      + '<div class="dupAcoes"><button class="btn" type="button" id="vzFechar">Fechar a lista</button></div></div>';
+    document.getElementById('vzFechar').addEventListener('click', () => {
+      vaziosAberto = false; desenharVazios();
+    });
+    return;
+  }
 
   cx.innerHTML =
       '<div class="dupGrupo" style="margin-bottom:16px">'
@@ -14071,45 +14111,73 @@ function excluirVazios(){
       { label:'Cancelar', onClick: () => fecharModal() } ]);
 }
 
+// S101 (pedido do central, 27/10): PENDENTE é o grupo que ainda pede decisão —
+// não revisado e não filial, o mesmo critério do contador do menu. O resto
+// (marcados como "não é duplicado" e as filiais) fica numa seção recolhida.
+// O critério é calculado a cada abertura: um grupo que deixa de ser filial
+// volta sozinho para os pendentes.
+const dupPendente = g => !g.dispensado && g.classe !== 'filial';
+let dupArqAberto = false;     // a seção "Já revisados" lembra se foi aberta
+const plural = (n, um, varios) => n + ' ' + (n === 1 ? um : varios);
+
 function desenharDuplicados(){
   const corpo = document.getElementById('dupCorpo');
   if (!corpo) return;                      // trocou de tela durante a carga
   const q = BUSCA.dup || '';
-  const lista = !q ? DUPS : DUPS.filter(g => casa(
-    (g.registros_json || []).map(r => r.razao_social + ' ' + (r.nome_fantasia || '') + ' ' + (r.cnpj || '')).join(' '), q));
+  const casaG = g => casa(
+    (g.registros_json || []).map(r => r.razao_social + ' ' + (r.nome_fantasia || '') + ' ' + (r.cnpj || '')).join(' '), q);
+  const pend = DUPS.filter(dupPendente), arq = DUPS.filter(g => !dupPendente(g));
+  const pendL = q ? pend.filter(casaG) : pend, arqL = q ? arq.filter(casaG) : arq;
 
-  contador('nDup', DUPS.filter(g => !g.dispensado && g.classe !== 'filial').length);
+  contador('nDup', pend.length);
   const cab = document.getElementById('dupConta');
-  if (cab) cab.textContent = q ? lista.length + ' de ' + DUPS.length + ' grupos'
-                               : DUPS.length + ' grupo(s)';
+  if (cab) cab.textContent = q
+    ? pendL.length + ' de ' + plural(pend.length, 'pendente', 'pendentes') + ' · '
+      + arqL.length + ' de ' + plural(arq.length, 'arquivado', 'arquivados')
+    : plural(pend.length, 'pendente', 'pendentes') + ' · ' + plural(arq.length, 'arquivado', 'arquivados');
 
   if (!DUPS.length){
     corpo.innerHTML = '<p class="nota">Nenhum nome repetido no cadastro. '
       + 'O aviso na hora de cadastrar é o que mantém assim.</p>';
     return;
   }
-  if (!lista.length){
-    corpo.innerHTML = '<p class="nota">Nenhum grupo casa com essa busca.</p>';
-    return;
-  }
 
-  // O resumo por classe fica no topo porque é ele que diz onde começar: 
-  // os grupos `seguro` são a faxina de meia hora, o resto é decisão.
-  const conta = c => DUPS.filter(g => g.classe === c).length;
+  // O resumo por classe fica no topo porque é ele que diz onde começar: os
+  // grupos `seguro` são a faxina de meia hora, o resto é decisão. S101: conta
+  // só os PENDENTES — o que já foi decidido não é "onde começar".
+  const conta = c => pend.filter(g => g.classe === c).length;
+  const resumo = ['seguro','raizes_divergentes','doc_nao_confiavel']
+    .filter(c => conta(c))
+    .map(c => '<div class="parecidoLinha" style="cursor:default">'
+         + '<span class="selo ' + DUP_CLASSE[c].selo + '">' + conta(c) + ' · '
+         + esc(DUP_CLASSE[c].rot) + '</span>'
+         + '<span class="pd" style="flex:1">' + esc(DUP_CLASSE[c].txt) + '</span></div>')
+    .join('');
+
+  const abrirArq = q ? arqL.length > 0 : dupArqAberto;
   corpo.innerHTML =
-      '<div class="parecidos" style="margin-bottom:14px">'
-    + ['seguro','raizes_divergentes','doc_nao_confiavel','filial']
-        .filter(c => conta(c))
-        .map(c => '<div class="parecidoLinha" style="cursor:default">'
-             + '<span class="selo ' + DUP_CLASSE[c].selo + '">' + conta(c) + ' · '
-             + esc(DUP_CLASSE[c].rot) + '</span>'
-             + '<span class="pd" style="flex:1">' + esc(DUP_CLASSE[c].txt) + '</span></div>')
-        .join('')
-    + '</div>'
-    + '<div id="dupGrupos"></div>';
+      (!pend.length
+        ? '<p class="nota" id="dupNenhum">Nenhum duplicado pendente.</p>'
+        : !pendL.length
+          ? '<p class="nota" id="dupNenhum">Nenhum pendente casa com essa busca.</p>'
+          : '<div class="parecidos" style="margin-bottom:14px">' + resumo + '</div>')
+    + '<div id="dupGrupos"></div>'
+    + (!arq.length ? ''
+        : '<details class="dupArq" id="dupArq"' + (abrirArq ? ' open' : '') + '>'
+          + '<summary>Já revisados (' + (q ? arqL.length + ' de ' + arq.length : arq.length) + ')</summary>'
+          + '<p class="sub">Os grupos marcados como “não é duplicado” e as filiais da mesma '
+          + 'empresa (estabelecimentos distintos, que não se mesclam). Ficam aqui para consulta; '
+          + '“Voltar a revisar” devolve um grupo marcado aos pendentes.</p>'
+          + '<div id="dupArqGrupos">' + (q && !arqL.length
+              ? '<p class="nota">Nenhum revisado casa com essa busca.</p>' : '') + '</div>'
+          + '</details>');
 
   const alvo = document.getElementById('dupGrupos');
-  lista.forEach(g => alvo.appendChild(cartaoDuplicado(g)));
+  pendL.forEach(g => alvo.appendChild(cartaoDuplicado(g)));
+  const alvoArq = document.getElementById('dupArqGrupos');
+  if (alvoArq) arqL.forEach(g => alvoArq.appendChild(cartaoDuplicado(g)));
+  const det = document.getElementById('dupArq');
+  if (det) det.addEventListener('toggle', () => { if (!(BUSCA.dup || '')) dupArqAberto = det.open; });
 }
 
 function cartaoDuplicado(g){
@@ -14138,18 +14206,26 @@ function cartaoDuplicado(g){
     +   ' <span class="selo ' + meta.selo + '">' + esc(meta.rot) + '</span>'
     +   (g.dispensado ? ' <span class="chip">já revisado</span>' : '') + '</h4>'
     + '<p class="sub">' + g.registros + ' cadastros · ' + esc(meta.txt) + '</p>'
+    + (g.dispensado && g.dispensado_motivo
+        ? '<p class="dupMotivo">Motivo da revisão: ' + esc(g.dispensado_motivo) + '</p>' : '')
     + '<div style="overflow-x:auto"><table class="dupTab"><thead><tr>'
     +   '<th>Cadastro</th><th>CNPJ</th><th>Cidade</th>'
     +   '<th>Cont.</th><th>Equip.</th><th>Histórico</th><th></th>'
     + '</tr></thead><tbody>' + regs.map(linha).join('') + '</tbody></table></div>'
-    + '<div class="dupAcoes">'
-    +   (g.classe === 'filial' ? ''
-        : '<button class="btn' + (g.classe === 'seguro' ? ' pri' : '') + '" '
-          + 'data-mesclar="1" type="button">Mesclar…</button>')
-    +   (g.dispensado
-        ? '<button class="btn" data-reabrir="1" type="button">Voltar a revisar</button>'
-        : '<button class="btn" data-dispensar="1" type="button">Não é duplicado</button>')
-    + '</div>';
+    // S101 · mesclar, "Não é duplicado" e "Voltar a revisar" são do escritório
+    // (`tf_pode_escritorio()` nas três funções): quem é de campo não vê os
+    // botões. "Voltar a revisar" vale também na filial revisada (Bruno, 27/10);
+    // a filial que ninguém marcou continua sem botão.
+    + (!podeEscritorio() ? ''
+      : '<div class="dupAcoes">'
+      +   (g.classe === 'filial' ? ''
+          : '<button class="btn' + (g.classe === 'seguro' && !g.dispensado ? ' pri' : '') + '" '
+            + 'data-mesclar="1" type="button">Mesclar…</button>')
+      +   (g.dispensado
+          ? '<button class="btn" data-reabrir="1" type="button">Voltar a revisar</button>'
+          : g.classe === 'filial' ? ''
+          : '<button class="btn" data-dispensar="1" type="button">Não é duplicado</button>')
+      + '</div>');
 
   el.querySelectorAll('[data-abrir]').forEach(b =>
     b.addEventListener('click', async () => {
@@ -14329,7 +14405,18 @@ async function pintarCadastros(){
     '<label class="chk" style="margin-bottom:12px"><input type="checkbox" id="cArq"' +
     (_cadArquivados ? ' checked' : '') + '> mostrar os arquivados</label>';
 
-  document.getElementById('cAdd').addEventListener('click', async (e) => {
+  // S101 · CADASTROS abre para todos; gravar cliente continua do escritório
+  // (RLS `tf_pode_escritorio()`). Para quem é de campo, no lugar do formulário
+  // de novo cliente, o aviso — e a caixinha dos arquivados, que só filtra.
+  if (!podeEscritorio()){
+    const f = document.getElementById('cadForm');
+    f.innerHTML = '<div class="aviso" style="margin-bottom:12px">Só leitura: o cadastro de '
+      + 'clientes é do escritório. Seu perfil executa em campo — o banco não aceitaria a gravação.</div>'
+      + '<label class="chk" style="margin-bottom:12px"><input type="checkbox" id="cArq"'
+      + (_cadArquivados ? ' checked' : '') + '> mostrar os arquivados</label>';
+  }
+  const cAdd = document.getElementById('cAdd');
+  if (cAdd) cAdd.addEventListener('click', async (e) => {
     const nome = document.getElementById('cN').value.trim();
     if (!nome){ toast('Informe a razão social do cliente.','err'); return; }
     const cnpj = document.getElementById('cC').value.trim() || null;
@@ -14569,6 +14656,13 @@ async function detalheCliente(c){
           + 'funciona em cadastro sem nenhum histórico'
           + (sessao.admin ? '' : ' (e é do administrador)') + '.')
     + '</p>';
+
+  // S101 · quem é de campo vê a ficha inteira (contatos e equipamentos
+  // inclusive) e não tem botão de gravar: o CSS `.soLeitura` esconde os botões,
+  // inclusive os que as seções de contatos/equipamentos desenham depois.
+  const soLer = !podeEscritorio();
+  d.classList.toggle('soLeitura', soLer);
+  if (soLer){ avisoSoLeitura(d); travarSoLeitura(d); }
 
   // ── gravar a ficha ──
   document.getElementById('clSalvar').addEventListener('click', function(){
@@ -16153,11 +16247,17 @@ const NAV = [
     { v:'rhdp', rot:'Demonstrativo de Pagamento',ico:'recibo',   mod:'demonstrativo', estrito:true, cont:'nRecibo' },
     { v:'rhd',  rot:'Documentos do Funcionário', ico:'pasta',    rh:true },
   ]},
+  // S101 (Bruno, 27/10): CADASTROS em TODOS os módulos e para TODOS ("Pode
+  // deixar disponível a todos"), na ordem do Bruno. Sem `mod` e sem área (ver
+  // AREA_DO_GRUPO): aparece em qualquer área, como "Meu perfil", e a tela abre
+  // na cor do módulo de onde se veio. O que cada um pode FAZER continua sendo
+  // do banco, e a tela esconde o que ele recusaria (campo: só leitura;
+  // mesclar/revisar: escritório; excluir vazios: admin; Fornecedores: TapFin).
   { id:'cadastros', rot:'CADASTROS', itens:[
-    { v:'cad',  rot:'Clientes',     ico:'predio', mod:'cadastros' },
-    { v:'dup',  rot:'Duplicados',   ico:'duplo',  cont:'nDup', mod:'cadastros' },
-    { v:'cat',  rot:'Catálogo',     ico:'tag',    mod:'cadastros' },
-    { v:'ffor', rot:'Fornecedores', ico:'predio', fin:true },
+    { v:'cad',  rot:'Clientes',     ico:'predio' },
+    { v:'cat',  rot:'Catálogo',     ico:'tag' },
+    { v:'ffor', rot:'Fornecedores', ico:'predio' },
+    { v:'dup',  rot:'Duplicados',   ico:'duplo',  cont:'nDup' },
   ]},
   { id:'sistema', rot:'SISTEMA', fim:true, itens:[
     // ITEM 3 (S32): sem `mod` de propósito — "Meu perfil" é de quem estiver
@@ -16273,11 +16373,19 @@ NAV.forEach(g => g.itens.forEach(i => { GRUPO_DE[i.v] = g.rot; }));
 // S87 (Bruno, 24/10): os quadros das OS (Administrativa, Inspeção, Técnico
 // Administrativa, Fornecimento) são o fluxo da OS: passam para o TapFlow. A
 // Gestão fica com os Relatórios; a Equipe Comercial é do TapCRM.
-const AREA_DO_GRUPO = { quadros:'tapflow', analise:'gestao', operacao:'tapflow', rh:'taprh', cadastros:'cadastros' };
+// S101: CADASTROS saiu desta tabela — o grupo não tem área, aparece em todas.
+const AREA_DO_GRUPO = { quadros:'tapflow', analise:'gestao', operacao:'tapflow', rh:'taprh' };
 const AREA_DA_TELA  = { com:'tapcrm', rhs:'tapseg' };   // as que fogem do grupo
 const AREA = {};
 NAV.forEach(g => g.itens.forEach(i => { const a = AREA_DA_TELA[i.v] || AREA_DO_GRUPO[g.id]; if (a) AREA[i.v] = a; }));
-let AREA_ATUAL = 'tapflow';   // Meu perfil e Configurações ficam na área de onde se veio
+let AREA_ATUAL = 'tapflow';   // Meu perfil, Configurações e CADASTROS ficam na área de onde se veio
+// S101 · quem chega numa tela de CADASTROS por endereço (`?ir=cad&area=tapfin`,
+// o menu de outro módulo) abre na cor dele. As chaves são as do nucleo/modulos.js
+// (a cor vem de lá); chave desconhecida ou ausente abre na cor de Cadastros
+// (o card "Cadastros" do hub manda só `?ir=cad`). Campo e "Minha área" ficam
+// de fora: Cadastros é só de computador (H10).
+const TELAS_CADASTROS = ['cad','cat','ffor','dup'];
+const AREAS_DA_URL = ['tapflow','tapcrm','tapfin','taprh','tapseg','tapdoc','cadastros','gestao'];
 function aplicarArea(v){
   if (AREA[v]) AREA_ATUAL = AREA[v];
   try{ if (window.TapModulos) TapModulos.aplicar(AREA_ATUAL); }catch(e){}
@@ -22336,6 +22444,18 @@ function finpCardMes(titulo, cor, realizado, previsto, comparativos){
 async function pintarFornecedores(){
   visao = 'ffor';
   const board = document.getElementById('board');
+  // S101 · o item aparece para todos (CADASTROS em todos os módulos), mas as
+  // tabelas `fin_*` são do TapFin (desde a 506): sem o TapFin, a tela diz onde
+  // está e não oferece botão. A leitura para todos depende do TapFin abrir uma
+  // view/função com nome, CNPJ, cidade e contato (pedido registrado na FILA).
+  if (!FIN_AUT){
+    board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Fornecedores</h2>'
+      + '<p>Quem recebe nas contas a pagar.</p></div>'
+      + '<div class="aviso" id="fforSemFin">A lista de fornecedores é mantida no TapFin. '
+      + 'A consulta para todos (nome, CNPJ, cidade e contato) chega numa próxima rodada; '
+      + 'até lá, ela abre só para quem tem o TapFin.</div></div>';
+    return;
+  }
   board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Fornecedores</h2>'
     + '<p>Quem recebe nas contas a pagar — inclusive categorias sem fornecedor único, como "Funcionários (folha)".</p></div>'
     + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="fforNovo">+ Novo fornecedor</button></div>'
@@ -28504,12 +28624,14 @@ async function iniciar(){
   // N1b: o botão do hub leva a uma tela daqui (`?ir=`). Só vale se a tela existir no
   // menu; se a pessoa não puder vê-la, o irPara abre a primeira que ela pode.
   try{
-    const ir = new URLSearchParams(location.search).get('ir');
+    const sp = new URLSearchParams(location.search);
+    const ir = sp.get('ir'), area = sp.get('area');
     if (ir && FIN_SAIU.includes(ir) && irParaFin(ir)) return;   // S82 · endereço antigo do Financeiro
-    if (ir){
-      if (NAV.some(g => (g.itens || []).some(i => i.v === ir))) visao = ir;
-      history.replaceState(null, '', location.pathname);
-    }
+    if (ir && NAV.some(g => (g.itens || []).some(i => i.v === ir))) visao = ir;
+    // S101 · CADASTROS abre na cor do módulo que mandou (`area=`), ou na de Cadastros
+    if (ir && TELAS_CADASTROS.includes(visao))
+      AREA_ATUAL = AREAS_DA_URL.includes(area) ? area : 'cadastros';
+    if (ir || area) history.replaceState(null, '', location.pathname);
   }catch(e){}
   aplicarArea(visao);   // S82 · a moldura já na cor certa enquanto carrega
   carregar().catch(()=>{}).finally(() => {
