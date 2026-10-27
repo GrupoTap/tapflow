@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 9 · Financeiro</title>
+<title>TapFin 10 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2308,7 +2308,7 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'F9';   // TapFin 9 (boleto com Pix pelo Inter) — o S## da publicação é do central
+const APP_VERSION = 'F10';   // TapFin 10 (boleto: duas linhas fixas; nota cancelada no portal nacional) — o S## da publicação é do central
 try{ document.getElementById('verBadge').textContent = 'FINANCEIRO · ' + APP_VERSION; }catch(e){}
 
 const esc               = (...a) => Nucleo.util.esc(...a);
@@ -6027,7 +6027,11 @@ async function boFuncao(corpo){
     r = await vai();
   }
   let j = null; try{ j = await r.json(); }catch(e){}
-  if (!r.ok || !j || !j.ok) throw new Error((j && j.erro) || ('Erro ' + r.status + ' no boleto.'));
+  if (!r.ok || !j || !j.ok){
+    const m = (j && j.erro) || ('Erro ' + r.status + ' no boleto.');
+    // 514/F10: o Inter limitando chamadas (429) vira a frase clara, venha de onde vier
+    throw new Error(r.status === 429 || /HTTP 429|\b429\b/.test(m) ? 'O Inter pediu para esperar. Tente de novo em 1 minuto.' : m);
+  }
   return j;
 }
 async function boExecutar(fn, rotulo, depois){
@@ -6083,7 +6087,14 @@ async function modalEmitirBoleto(t, opcoes){
     + '<div class="nota" style="margin:0 0 10px">Cód. de controle <b>' + esc(r.seu_numero) + '</b> · multa ' + esc(String(r.multa_pct)) + '% · juros ' + esc(String(r.juros_mes_pct)) + '% ao mês'
     +   (Number(r.desconto_pct) > 0 ? ' · desconto ' + esc(String(r.desconto_pct)) + '%' : '') + ' · pagável até ' + esc(String(r.dias_agenda)) + ' dias depois do vencimento · boleto + Pix · entra na conta ' + esc(r.conta || '—') + '</div>'
     + '<div class="campo"><label for="boL1">Mensagem no boleto (linha 1)</label><input id="boL1" type="text" maxlength="78" value="' + esc((r.mensagem && r.mensagem.linha1) || '') + '"></div>'
-    + '<div class="campo"><label for="boL2">Linha 2</label><input id="boL2" type="text" maxlength="78" value="' + esc((r.mensagem && r.mensagem.linha2) || '') + '"></div>',
+    + '<div class="campo"><label for="boL2">Linha 2</label><input id="boL2" type="text" maxlength="78" value="' + esc((r.mensagem && r.mensagem.linha2) || '') + '"></div>'
+    // 513: as linhas fixas (de "Boleto ⚙"), para ver o boleto inteiro antes de emitir
+    + ((r.mensagem && (r.mensagem.linha3 || r.mensagem.linha4))
+       ? '<div class="nfBloco" id="boFixas"><b>Linhas 3 e 4 (fixas, vão em todo boleto)</b>'
+         + (r.mensagem.linha3 ? '<div>' + esc(r.mensagem.linha3) + '</div>' : '')
+         + (r.mensagem.linha4 ? '<div>' + esc(r.mensagem.linha4) + '</div>' : '')
+         + '<div class="nota" style="margin:2px 0 0">Já saem no boleto: não repita nas linhas 1 e 2. Para mudar, "Boleto ⚙".</div></div>'
+       : ''),
     [{ label: 'Cancelar', onClick: fecharModal },
      { label: vencido ? 'Conferir com a data nova' : 'Emitir boleto', pri: true, onClick: async () => {
         const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
@@ -6092,6 +6103,9 @@ async function modalEmitirBoleto(t, opcoes){
         if (!prep.pode_emitir){ toast((prep.erros || []).join(' '), 'err'); return; }
         const ok = await confirmar('Emitir o boleto?', boFaixaTeste(prep.ambiente)
           + '<p style="margin-top:0">Boleto de <b>' + esc(BRL(r.valor)) + '</b> para <b>' + esc(r.cliente) + '</b>, vencendo em <b>' + esc(dataBR(op.vencimento)) + '</b>.</p>'
+          + '<div class="nfBloco" id="boMsgConf"><b>Mensagem no boleto</b>'
+          +   [op.linha1 || (r.mensagem && r.mensagem.linha1), op.linha2 || (r.mensagem && r.mensagem.linha2), r.mensagem && r.mensagem.linha3, r.mensagem && r.mensagem.linha4]
+                .filter(Boolean).map(x => '<div>' + esc(x) + '</div>').join('') + '</div>'
           + '<p class="nota">Depois de emitido, o boleto só se desfaz por cancelamento (no ⋯).</p>', 'Emitir');
         if (!ok){ modalEmitirBoleto(t, op); return; }
         await boExecutar(() => boFuncao({ acao: 'emitir', titulo_id: t.id, opcoes: op }), 'Emitindo o boleto…', boResultado);
@@ -6220,7 +6234,9 @@ async function modalConfigBoleto(rasc){   // 512: rasc = o que foi escrito, quan
     + '<div class="dupla">'
     +  '<div class="campo"><label for="boDesc">Desconto (%)</label><input id="boDesc" type="number" step="0.01" min="0" max="50" value="' + esc(String(d.desconto_pct)) + '"></div>'
     +  '<div class="campo"><label for="boDias">Pagável até (dias depois do vencimento)</label><input id="boDias" type="number" min="0" max="60" value="' + esc(String(d.dias_agenda)) + '"></div></div>'
-    + '<div class="campo"><label for="boMsg">Texto que vai em todo boleto (opcional, até 78 letras)</label><input id="boMsg" type="text" maxlength="78" value="' + esc(d.mensagem || '') + '"></div>'
+    + '<div class="campo"><label for="boMsg">Texto fixo, linha 3 (opcional, até 78 letras)</label><input id="boMsg" type="text" maxlength="78" value="' + esc(d.mensagem || '') + '"></div>'
+    + '<div class="campo"><label for="boMsg4">Texto fixo, linha 4 (opcional, até 78 letras)</label><input id="boMsg4" type="text" maxlength="78" value="' + esc(d.mensagem_l4 || '') + '"></div>'
+    + '<p class="nota" style="margin:-4px 0 10px">Vão em todo boleto, depois das linhas 1 e 2 ("Referente a …" e "Pedido de compra nº …", que se editam na emissão).</p>'
     + '<div class="campo"><label for="boCert">O certificado do Inter vence em</label><input id="boCert" type="date" value="' + esc(d.cert_vence_em || '') + '"' + dis + '></div>'
     + '<div class="nfBloco"><b>Avisos de pagamento</b>'
     +   '<div class="nota" style="margin:2px 0 0">Webhook: ' + (c.webhook_em ? (c.webhook_ok ? 'cadastrado em ' + esc(dataBR(c.webhook_em)) : 'recusado pelo Inter em ' + esc(dataBR(c.webhook_em)) + ' (vale a conferência a cada 30 minutos)') : 'não cadastrado') + '</div>'
@@ -6238,7 +6254,7 @@ async function modalConfigBoleto(rasc){   // 512: rasc = o que foi escrito, quan
        { label: 'Gravar', pri: true, onClick: async () => {
           // 512: tudo é lido AQUI, antes da confirmação (ela fecha esta janela)
           const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
-          const g = { multa_pct: Number(v('boMulta')), juros_mes_pct: Number(v('boJuros')), desconto_pct: Number(v('boDesc')), dias_agenda: Number(v('boDias')), mensagem: v('boMsg') };
+          const g = { multa_pct: Number(v('boMulta')), juros_mes_pct: Number(v('boJuros')), desconto_pct: Number(v('boDesc')), dias_agenda: Number(v('boDias')), mensagem: v('boMsg'), mensagem_l4: v('boMsg4') };
           if (adm){
             const amb = v('boAmb'), conta = v('boConta'), cert = v('boCert');
             g.ambiente = amb || c.ambiente; if (conta) g.conta_id = conta; if (cert) g.cert_vence_em = cert;
@@ -6649,6 +6665,7 @@ async function nfExecutar(fn, verbo, rotulo){
 }
 
 /** O histórico de notas do título, com Atualizar / Cancelar / PDF / XML. */
+const NF_PORTAL = 'https://www.nfse.gov.br/ConsultaPublica';   // 513: a consulta pública da NFS-e
 async function modalNotasTitulo(t){
   let L;
   try{ L = await rpc('tf_fin_nfse_listar', { p_titulo_id: t.id }); }
@@ -6664,8 +6681,16 @@ async function modalNotasTitulo(t){
     +   (n.motivo ? '<div class="nfRecusa">' + esc(n.motivo) + '</div>' : '')
     +   (n.cancel_motivo ? '<div class="nota" style="margin:2px 0 0">Motivo do cancelamento: ' + esc(n.cancel_motivo) + '</div>' : '')
     +   (n.cancel_resposta ? '<div class="nfRecusa">Cancelamento recusado: ' + esc(n.cancel_resposta) + '</div>' : '')
+    +   (n.situacao === 'cancelada'
+         ? '<div class="nota nfPortal" style="margin:2px 0 0">' + (n.ambiente === 'teste'
+             ? 'Nota de teste: não aparece no portal nacional.'
+             : 'O PDF é o da emissão e não mostra o cancelamento. A situação "Cancelada" aparece no portal nacional: '
+               + '"Ver no portal nacional" copia a chave; cole-a lá e clique em Consultar.') + '</div>' : '')
     + '</div><div class="nfBot">'
-    +   (n.pdf_path ? '<button class="btn mini" type="button" data-nfdoc="pdf" data-nfpath="' + esc(n.pdf_path) + '">PDF</button>' : '')
+    +   (n.pdf_path ? '<button class="btn mini" type="button" data-nfdoc="pdf" data-nfpath="' + esc(n.pdf_path) + '">'
+         + (n.situacao === 'cancelada' ? 'PDF (da emissão)' : 'PDF') + '</button>' : '')
+    +   (n.situacao === 'cancelada' && nfChave(n) && n.ambiente !== 'teste'
+         ? '<button class="btn mini" type="button" data-nfportal="' + esc(nfChave(n)) + '" title="Copia a chave de acesso e abre a consulta pública">Ver no portal nacional</button>' : '')
     +   (n.xml_path ? '<button class="btn mini" type="button" data-nfdoc="xml" data-nfpath="' + esc(n.xml_path) + '">XML</button>' : '')
     +   (n.xml_cancel_path ? '<button class="btn mini" type="button" data-nfdoc="xml" data-nfpath="' + esc(n.xml_cancel_path) + '">XML do cancelamento</button>' : '')
     +   (['emitindo', 'cancelando'].includes(n.situacao) || (n.situacao === 'autorizada' && (!n.pdf_path || !n.xml_path))
@@ -6678,6 +6703,8 @@ async function modalNotasTitulo(t){
   document.getElementById('mBody').addEventListener('click', e => {
     const a = e.target.closest('[data-nfatual]'), c = e.target.closest('[data-nfcanc]'), k = e.target.closest('[data-nfcopia]');
     if (k){ copiar(k.dataset.nfcopia, 'Chave de acesso copiada.'); return; }
+    const pt = e.target.closest('[data-nfportal]');   // 513: abre a consulta pública já com a chave copiada
+    if (pt){ copiar(pt.dataset.nfportal, 'Chave copiada: cole no portal nacional e clique em Consultar.'); window.open(NF_PORTAL, '_blank', 'noopener'); return; }   // copia antes: a aba nova tira o foco
     if (a) nfExecutar(() => nfFuncao({ acao: 'consultar', titulo_id: t.id, nfse_id: a.dataset.nfatual }), 'consultar', 'Consultando a nota…');
     if (c) modalCancelarNota(t, L.find(x => x.id === c.dataset.nfcanc));
   });
