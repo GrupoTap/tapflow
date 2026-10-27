@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S101</title>
+<title>TapFlow Manager · S102</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2332,7 +2332,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S101';
+const APP_VERSION = 'S102';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -3373,6 +3373,8 @@ function pintarDrawer(){
       // S78 · a T05 "Preparar a inspeção" aberta fora da tarefa atual: em vez
       // do "concluir" (que o banco recusaria), o caminho para a preparação
       if (!eAtual && podePreparar(t)) d.appendChild(botaoPreparacao(card.os_id, true));
+      // S102 · a T16 aberta fora da tarefa atual: o caminho para o TapFin
+      if (!eAtual && podeFaturar(t)) d.appendChild(botaoFaturar(card.os_id, true));
       if (!podeTrocar && !eAtual && possoAssumir(t)){
         const ba = document.createElement('button');
         ba.className = 'btn mini'; ba.type = 'button'; ba.textContent = 'assumir';
@@ -3833,6 +3835,16 @@ function pintarAcoes_(){
       + 'estiver completa. Use "abrir a preparação" na linha dela, acima.';
     cx.appendChild(hp);
   }
+  // S102 · T16 atual: "Faturar no TapFin" para quem tem o TapFin, mesmo que a
+  // tarefa seja de outro perfil (quem fatura é quem tem o TapFin). O botão
+  // vem antes do "Concluir", que não muda.
+  if (podeFaturar(t)){
+    row.appendChild(botaoFaturar(card.os_id, false));
+    const hf = document.createElement('div');
+    hf.className = 'hint paralela'; hf.id = 'hintFaturar';
+    hf.textContent = 'A nota fiscal e o boleto saem no TapFin. Depois de faturar, a tarefa continua sendo concluída por aqui.';
+    cx.appendChild(hf);
+  }
 
   if (!podeAgir){
     hint.textContent = 'Esta tarefa é de ' + t.perfis_responsaveis.join(' ou ')
@@ -4275,6 +4287,33 @@ function botaoPreparacao(osId, mini){
   a.addEventListener('click', ev => {
     ev.stopPropagation();
     if (DEMO){ ev.preventDefault(); toast('Modo demonstração: a preparação abre no TapDoc (doc/) com o banco ligado.', 'err'); }
+  });
+  return a;
+}
+// ── S102 · "FATURAR NO TAPFIN" NA T16 (opção B do Bruno, recado do central 27/10) ──
+// A nota e o boleto saem no TapFin (`fin/`). Na T16 "Emitir boleto / nota fiscal"
+// o Manager leva até lá, com a OS e a tarefa no endereço; o "concluir" da T16
+// continua como está (a conclusão automática é a opção C, rodada futura).
+// Quem vê: só quem tem o TapFin — `FIN_AUT` vem de `tf_fin_autorizado()`, que
+// desde a 506 é `tf_tem_modulo('tapfin')`, lido uma vez na entrada (sessão).
+// Qual T16: o código sozinho não basta (no molde dos acessórios a T16 é
+// "Encerrar OS"), então vale a T16 cujo nome fala de boleto ou nota fiscal —
+// a da inspeção hoje e a do molde de contrato quando ele vier.
+const ehT16Faturar = t => !!(t && t.tarefa_id === 'T16' && /boleto|nota fiscal/i.test(t.nome || ''));
+const linkFaturar = osId => '../fin/?os=' + encodeURIComponent(osId) + '&t=T16';
+function podeFaturar(t){
+  return FIN_AUT && ehT16Faturar(t) && (t.status === 'pendente' || t.status === 'em_andamento');
+}
+function botaoFaturar(osId, mini){
+  const a = document.createElement('a');
+  a.className = mini ? 'btn mini' : 'btn';
+  a.href = linkFaturar(osId);            // na mesma aba (recado do central)
+  a.textContent = mini ? 'faturar no TapFin' : 'Faturar no TapFin';
+  a.title = 'Abre esta OS no TapFin para emitir a nota fiscal e o boleto.';
+  a.dataset.faturar = osId;
+  a.addEventListener('click', ev => {
+    ev.stopPropagation();
+    if (DEMO){ ev.preventDefault(); toast('Modo demonstração: o faturamento abre no TapFin (fin/) com o banco ligado.', 'err'); }
   });
   return a;
 }

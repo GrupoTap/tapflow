@@ -29,7 +29,7 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H11-S101';   // S101 · Manager S101: o grupo CADASTROS em todos os módulos (com a cor de onde se veio, ?area=) e os Duplicados com pendentes no topo e "Já revisados" recolhido · S99 · TapFin F10: duas linhas fixas no boleto e "Ver no portal nacional" (513) · S98 · token do Inter no banco (514, só função) · S97 · TapFin F9: boleto com Pix pelo Inter (508, 508b, fin-boleto) e as correções da 512 · S96 · TapFin F8: descrição da nota editável e os ajustes do teste de 26/10 (511) · S95 · TapFin 7: contas que já têm nota (507, fin F7) · S94 · R06a: o laudo em PDF no TapDoc do escritório (410, TapDoc E9) · S93 · R05a: a revisão (409, E8)
+const VERSAO = 'H11-S102';   // S102 · Faturar a partir da OS: o botão "Faturar no TapFin" na T16 (Manager S102) e o painel da OS no TapFin F11 (515); Fornecedores com cidade, UF e contato · S101 · Manager S101: o grupo CADASTROS em todos os módulos (com a cor de onde se veio, ?area=) e os Duplicados com pendentes no topo e "Já revisados" recolhido · S99 · TapFin F10: duas linhas fixas no boleto e "Ver no portal nacional" (513) · S98 · token do Inter no banco (514, só função) · S97 · TapFin F9: boleto com Pix pelo Inter (508, 508b, fin-boleto) e as correções da 512 · S96 · TapFin F8: descrição da nota editável e os ajustes do teste de 26/10 (511) · S95 · TapFin 7: contas que já têm nota (507, fin F7) · S94 · R06a: o laudo em PDF no TapDoc do escritório (410, TapDoc E9) · S93 · R05a: a revisão (409, E8)
 const CACHE  = 'tapflow-hub-' + VERSAO;
 
 const ESSENCIAIS = [

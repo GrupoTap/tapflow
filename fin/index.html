@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 10 · Financeiro</title>
+<title>TapFin 11 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2308,7 +2308,7 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'F10';   // TapFin 10 (boleto: duas linhas fixas; nota cancelada no portal nacional) — o S## da publicação é do central
+const APP_VERSION = 'F11';   // TapFin 11 (faturar a partir da OS; Cadastros do Manager) — o S## da publicação é do central
 try{ document.getElementById('verBadge').textContent = 'FINANCEIRO · ' + APP_VERSION; }catch(e){}
 
 const esc               = (...a) => Nucleo.util.esc(...a);
@@ -3004,7 +3004,11 @@ const NAV = [
     { v:'ccp',   rot:'Conta corrente Proper', ico:'moeda',   cc:true },
   ]},
   { id:'cadastros', rot:'CADASTROS', itens:[
-    { v:'ffor', rot:'Fornecedores', ico:'predio', fin:true },
+    // F11 · os cadastros comuns abrem no Manager, na cor do TapFin (Manager S101: ?ir=…&area=tapfin)
+    { v:'mcad', rot:'Clientes',     ico:'pessoas', fin:true, link:'cad' },
+    { v:'mcat', rot:'Catálogo',     ico:'caixa',   fin:true, link:'cat' },
+    { v:'ffor', rot:'Fornecedores', ico:'predio',  fin:true },
+    { v:'mdup', rot:'Duplicados',   ico:'duplo',   fin:true, link:'dup' },
   ]},
   { id:'sistema', rot:'SISTEMA', fim:true, itens:[
     { v:'hub',  rot:'Trocar de módulo', ico:'modulos' },
@@ -3090,6 +3094,7 @@ function montarNav(){
         + (i.cont ? '<span class="nav-n" id="' + i.cont + '"></span>' : '');
       // F4 · H10: no servidor, o "Trocar de módulo" do menu abre o menu de módulos do núcleo
       if (i.v === 'hub' && window.TapModulos && NO_SERVIDOR && !DEMO) TapModulos.trocador(b, 'tapfin');
+      else if (i.link) b.addEventListener('click', () => { location.href = finLinkManager(i.link); });
       else b.addEventListener('click', () => irPara(i.v));
       d.appendChild(b);
     });
@@ -3107,8 +3112,13 @@ const GRUPO_DE = {};
 NAV.forEach(g => g.itens.forEach(i => { GRUPO_DE[i.v] = g.rot; }));
 
 /** O único caminho para trocar de tela. */
+/** F11 · as telas de Cadastros do Manager, na cor do TapFin. */
+const finLinkManager = ir => '../manager/?ir=' + encodeURIComponent(ir) + '&area=tapfin';
+
 function irPara(v){
   if (v === 'sair'){ sairDaConta(); return; }
+  const lk = NAV.reduce((a, g) => a.concat(g.itens || []), []).find(i => i.v === v && i.link);
+  if (lk){ location.href = finLinkManager(lk.link); return; }
   if (v === 'hub'){ location.href = NO_SERVIDOR ? '../' : '#'; return; }
   // tela que a pessoa não abre (ou endereço colado): cai na primeira que ela abre
   const visiveis = navVisivel().reduce((a,g) => a.concat(g.itens), []).filter(i => i.v !== 'hub' && i.v !== 'sair');
@@ -4726,13 +4736,15 @@ async function fforCarregar(){
 function fforDesenhar(){
   const el = document.getElementById('fforLista'); if (!el) return;
   const q = BUSCA.ffor || '';
-  const L = (FFOR.lista || []).filter(f => casa([f.nome, f.cnpj_cpf].join(' '), q));
+  const L = (FFOR.lista || []).filter(f => casa([f.nome, f.cnpj_cpf, f.cidade, f.uf, f.contato].join(' '), q));
   if (!L.length){
     el.innerHTML = '<p class="nota" style="padding:12px">Nenhum fornecedor ainda' + (q ? ' com essa busca' : '') + '.</p>';
     return;
   }
   el.innerHTML = '<div class="ccLin cab"><span>Nome</span><span>CNPJ/CPF</span><span></span></div>'
-    + L.map(f => '<div class="ccLin"><span>' + esc(f.nome) + '</span>'
+    + L.map(f => '<div class="ccLin"><span>' + esc(f.nome)
+      + ((f.cidade || f.uf || f.contato) ? '<small class="fforMais" style="display:block;color:var(--ink-3)">'
+          + esc([[f.cidade, f.uf].filter(Boolean).join('/'), f.contato].filter(Boolean).join(' · ')) + '</small>' : '') + '</span>'
       + '<span>' + esc(f.cnpj_cpf || '—') + '</span>'
       + '<span class="a"><button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editar="'
       + esc(f.id) + '">Editar</button></span></div>').join('');
@@ -4749,13 +4761,20 @@ function modalFornecedor(f){
       '<div class="campo"><label for="ffN">Nome</label><input id="ffN" type="text" value="'
     +   esc(f ? f.nome : '') + '" autocomplete="off"></div>'
     + '<div class="campo"><label for="ffD">CNPJ ou CPF (opcional)</label><input id="ffD" type="text" value="'
-    +   esc(f ? f.cnpj_cpf : '') + '" autocomplete="off"></div>',
+    +   esc(f ? f.cnpj_cpf : '') + '" autocomplete="off"></div>'
+    + '<div class="dupla"><div class="campo"><label for="ffC">Cidade (opcional)</label><input id="ffC" type="text" maxlength="80" value="'
+    +   esc(f && f.cidade || '') + '" autocomplete="off"></div>'
+    + '<div class="campo"><label for="ffU">UF</label><input id="ffU" type="text" maxlength="2" value="' + esc(f && f.uf || '') + '" autocomplete="off"></div></div>'
+    + '<div class="campo"><label for="ffK">Contato (opcional: nome, telefone, e-mail)</label><input id="ffK" type="text" maxlength="300" value="'
+    +   esc(f && f.contato || '') + '" autocomplete="off"></div>'
+    + '<p class="nota">Nome, CNPJ/CPF, cidade e contato aparecem para toda a equipe em Cadastros › Fornecedores (só leitura).</p>',
     [{ label:'Cancelar', onClick: fecharModal },
      { label: f ? 'Salvar' : 'Adicionar', pri:true, onClick: async () => {
         const v = id => (document.getElementById(id) || {}).value.trim();
         if (!v('ffN')){ toast('O nome do fornecedor é obrigatório.', 'err'); return; }
         try{
-          await rpc('tf_fin_fornecedor_gravar', { p_id: f ? f.id : null, p_nome: v('ffN'), p_cnpj_cpf: v('ffD') || null });
+          await rpc('tf_fin_fornecedor_gravar', { p_id: f ? f.id : null, p_nome: v('ffN'), p_cnpj_cpf: v('ffD') || null,
+            p_cidade: v('ffC') || null, p_uf: v('ffU') || null, p_contato: v('ffK') || null });
           fecharModal(); toast('Fornecedor salvo.', 'ok'); await fforCarregar();
         }catch(e){ toast(e.message, 'err'); }
      }}]);
@@ -5411,6 +5430,7 @@ function finLigar(tela){
   $('Tags').addEventListener('click', e => {
     const b = e.target.closest('[data-tira]'); if (!b) return;
     const k = b.dataset.tira;
+    if ((k === 'os' || k === 'tudo') && tela === 'finre' && FINOS.id){ osSair(); if (k === 'os') return; }
     if (k === 'tudo') finLimpar(tela);
     else if (k === 'busca'){ BUSCA[tela] = ''; const tb = document.getElementById('tbBusca'); if (tb) tb.value = ''; }
     else if (k === 'per') st.per = null;
@@ -5481,6 +5501,7 @@ function finOpcoes(tela){
 }
 
 function finCasaBase(cfg, st, t, q){
+  if (cfg === FIN_CFG.finre && FINOS.id && FINOS.ids && !FINOS.ids.includes(t.id)) return false;   // F11 · só as contas da OS
   if (cfg.hist && !finHistCasa(t, st.hist)) return false;
   if (q && !casa(cfg.busca(t), q)) return false;
   if (st.per){
@@ -5558,6 +5579,7 @@ function finDesenhar(tela){
   // etiquetas: ninguém pode achar que a lista está vazia por um filtro esquecido
   const tags = [];
   const rotSel = (id) => { const s = document.getElementById(id); return s && s.selectedIndex >= 0 ? s.options[s.selectedIndex].textContent.trim() : ''; };
+  if (tela === 'finre' && FINOS.id) tags.push(['os', 'OS: ' + osRot()]);
   if (q) tags.push(['busca', 'Busca: “' + q + '”']);
   if (st.sit !== 'todas') tags.push(['sit', 'Situação: ' + rotSel(tela + 'Sit').replace(/\s*\(\d+\)$/, '')]);
   if (st.per) tags.push(['per', finPerTexto(st.per, cfg.campos)]);
@@ -5933,7 +5955,8 @@ async function pintarContasReceber(){
     '<button class="btn pri" type="button" id="finreNovo">+ Nova conta a receber</button>'
     + ' <button class="btn" type="button" id="finreNfCfg" hidden title="Configuração da nota fiscal">Nota fiscal ⚙</button>'
     + ' <button class="btn" type="button" id="finreBoCfg" hidden title="Boleto com Pix pelo Inter">Boleto ⚙</button>'
-    + '<div id="boFaixas" hidden style="margin-top:10px"></div>');
+    + '<div id="boFaixas" hidden style="margin-top:10px"></div>'
+    + '<div id="finreOs" hidden style="margin-top:10px"></div>');
   document.getElementById('finreNovo').addEventListener('click', () => modalTituloReceber());
   await finreCarregar();
   const nfb = document.getElementById('finreNfCfg');
@@ -5943,11 +5966,166 @@ async function pintarContasReceber(){
   boFaixas();
 }
 
-async function finreCarregar(){ await Promise.all([nfCarregar(), jfCarregar(), boCarregar()]); boFaixas(); await finCarregarLista('finre', 'tf_fin_titulos_receber_listar', FINRE, 'as contas a receber'); }
+async function finreCarregar(){ await Promise.all([nfCarregar(), jfCarregar(), boCarregar(), osCarregar()]); boFaixas(); osDesenhar(); await finCarregarLista('finre', 'tf_fin_titulos_receber_listar', FINRE, 'as contas a receber'); }
 
 function finreDesenhar(){ finDesenhar('finre'); }
 
 REPINTA.finre = finreDesenhar;
+// ════════════════════════════════════════════════════════════════════════════
+// TAPFIN · FATURAR A PARTIR DA OS (F11 · 515)
+// ----------------------------------------------------------------------------
+// O card da T16 "Emitir boleto / nota fiscal" abre fin/?os=<id>(&t=T16). Contas a Receber
+// mostra o painel da OS (aprovado, já tem conta, falta) e só as contas dela, com os botões de
+// sempre. Falta valor: "Criar conta a receber desta OS" (o banco cria, com o cliente da OS).
+// Banco: 515_tapfin_faturar_pela_os.sql (tf_fin_os_faturar_ver / _criar_conta / _ligar_conta).
+// ════════════════════════════════════════════════════════════════════════════
+const FINOS = { id: null, t: null, ver: null, ids: null, erro: null, sitPosta: false };
+
+/** Lê o ?os= da entrada (chamada pelo iniciar, antes do primeiro desenho). */
+function osDaEntrada(params){
+  const id = (params.get('os') || '').trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return false;
+  FINOS.id = id.toLowerCase(); FINOS.t = (params.get('t') || '').trim().toUpperCase() || null;
+  FINOS.ver = null; FINOS.ids = null; FINOS.erro = null; FINOS.sitPosta = false;
+  BUSCA.finre = '';
+  return true;
+}
+
+async function osCarregar(){
+  if (!FINOS.id) return;
+  try{
+    FINOS.ver = await rpc('tf_fin_os_faturar_ver', { p_os_id: FINOS.id });
+    FINOS.ids = (FINOS.ver.contas || []).map(c => c.id); FINOS.erro = null;
+  }catch(e){
+    FINOS.ver = null; FINOS.ids = []; FINOS.erro = e.message;
+  }
+  // a OS mostra todas as contas dela (recebidas também), não só as em aberto
+  if (!FINOS.sitPosta && FINF.finre){ FINF.finre.sit = 'todas'; FINOS.sitPosta = true; }
+}
+
+function osSair(){
+  FINOS.id = null; FINOS.ver = null; FINOS.ids = null; FINOS.erro = null; FINOS.t = null;
+  if (FINF.finre) FINF.finre.sit = FIN_CFG.finre.sitPadrao || 'todas';
+  osDesenhar();
+  if (typeof finDesenhar === 'function') finDesenhar('finre');
+}
+
+const osRot = () => (FINOS.ver && FINOS.ver.os && FINOS.ver.os.numero) || 'OS';
+
+function osDesenhar(){
+  const el = document.getElementById('finreOs'); if (!el) return;
+  if (!FINOS.id){ el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  const sair = '<button class="btn" type="button" id="osSair" title="Voltar a todas as contas a receber">Ver todas as contas</button>';
+  if (FINOS.erro || !FINOS.ver){
+    el.innerHTML = '<div class="nfBloco osPainel"><b>OS</b><div class="nfErros" style="margin:6px 0">'
+      + esc(FINOS.erro || 'Não consegui abrir a OS.') + '</div>' + sair + '</div>';
+    document.getElementById('osSair').addEventListener('click', osSair);
+    return;
+  }
+  const v = FINOS.ver, o = v.os || {}, c = v.cliente || {};
+  const aprov = Number(v.aprovado) || 0, ja = Number(v.ja_tem) || 0, falta = Number(v.falta) || 0;
+  const nC = (v.contas || []).length;
+  const props = (v.propostas || []).map(p => esc(p.rotulo)).join(', ');
+  const podeCriar = v.pode_criar && (aprov <= 0 || falta > 0.009);
+  const situ = o.status === 'cancelada' ? ' <span class="chip fCrit">cancelada</span>'
+             : o.status === 'concluida' ? ' <span class="chip">concluída</span>' : '';
+  let msg;
+  if (o.status === 'cancelada') msg = 'A OS está cancelada: não se cria conta para ela.';
+  else if (aprov <= 0) msg = nC ? 'A OS não tem proposta aprovada. Já tem ' + (nC === 1 ? 'uma conta' : nC + ' contas') + ' ligada' + (nC === 1 ? '' : 's') + ' (abaixo).'
+                              : 'A OS não tem proposta aprovada. Dá para criar a conta confirmando o valor.';
+  else if (falta <= 0.009) msg = 'Esta OS já tem conta a receber de todo o valor aprovado: confira abaixo e use “Emitir nota” e “Emitir boleto” na linha.';
+  else if (nC) msg = 'Já tem conta de ' + BRL(ja) + '; falta ' + BRL(falta) + '.';
+  else msg = 'Esta OS ainda não tem conta a receber.';
+  const citam = (v.citam || []);
+  el.innerHTML = '<div class="nfBloco osPainel">'
+    + '<div style="display:flex;gap:8px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap">'
+    +   '<div><div class="osTit" style="font-weight:700;font-size:15px;color:var(--ink)">' + esc(o.numero || 'OS') + ' · ' + esc(c.nome || '—') + situ + '</div>'
+    +     (FINOS.t === 'T16' ? '<div class="nota" style="margin:2px 0 0">Vindo da tarefa T16 · Emitir boleto / nota fiscal</div>' : '') + '</div>'
+    +   sair + '</div>'
+    + '<div class="osNums" style="display:flex;gap:18px;flex-wrap:wrap;margin:8px 0 4px">'
+    +   '<span>Proposta aprovada: <span id="osAprov" style="font-weight:700">' + esc(BRL(aprov)) + '</span>' + (props ? ' <small style="color:var(--ink-3)">(' + ((v.propostas || []).length > 1 ? 'propostas ' : 'proposta ') + props + ')</small>' : '') + '</span>'
+    +   '<span>Já tem conta: <span id="osJa" style="font-weight:700">' + esc(BRL(ja)) + '</span>' + (nC ? ' <small style="color:var(--ink-3)">(' + (nC === 1 ? '1 conta' : nC + ' contas') + ')</small>' : '') + '</span>'
+    +   '<span>Falta: <span id="osFalta" style="font-weight:700">' + esc(BRL(falta)) + '</span></span></div>'
+    + '<p class="nota" id="osMsg" style="margin:4px 0 8px">' + esc(msg) + '</p>'
+    + (podeCriar ? '<button class="btn pri" type="button" id="osCriar">Criar conta a receber desta OS</button>' : '')
+    + (citam.length
+        ? '<div style="margin-top:10px"><div class="nota" style="margin:0 0 4px">Estas contas citam a OS, mas não estão ligadas a ela:</div><ul class="nfAvisos" id="osCitam">'
+          + citam.map(x => '<li>' + esc(x.descricao || '—') + ' · ' + esc(BRL(x.valor))
+              + (x.ligada_a ? ' · <small>ligada à ' + esc(x.ligada_a) + '</small>' : '')
+              + (x.mesmo_cliente
+                  ? ' <button class="btn mini" type="button" data-osligar="' + esc(x.id) + '">Ligar a esta OS</button>'
+                  : ' · <small>outro cliente</small>') + '</li>').join('') + '</ul></div>'
+        : '')
+    + '</div>';
+  document.getElementById('osSair').addEventListener('click', osSair);
+  const bc = document.getElementById('osCriar'); if (bc) bc.addEventListener('click', modalCriarContaOs);
+  el.querySelectorAll('[data-osligar]').forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true;
+    try{ await rpc('tf_fin_os_ligar_conta', { p_titulo_id: b.dataset.osligar, p_os_id: FINOS.id }); toast('Conta ligada à ' + osRot() + '.', 'ok'); await finreCarregar(); }
+    catch(e){ b.disabled = false; toast(e.message, 'err'); }
+  }));
+}
+
+function modalCriarContaOs(rasc){
+  if (rasc instanceof Event) rasc = null;
+  const v = FINOS.ver; if (!v) return;
+  const aprov = Number(v.aprovado) || 0, falta = Number(v.falta) || 0;
+  const c = v.cliente || {}, o = v.os || {};
+  const props = (v.propostas || []).map(p => p.rotulo).join(', ');
+  const d = Object.assign({
+    desc: o.numero + (props ? ((v.propostas || []).length > 1 ? ' · Propostas ' : ' · Proposta ') + props : ''),
+    valor: aprov > 0 ? falta.toFixed(2) : '',
+    parc: '1', comp: isoHoje().slice(0, 7), venc: finSomaDias(isoHoje(), Number(c.prazo_dias) || 30), forma: '', conf: false,
+    uid: (crypto.randomUUID && crypto.randomUUID()) || ('os-' + Date.now() + '-' + Math.random().toString(16).slice(2))
+  }, rasc || {});
+  abrirModal('Criar conta a receber — ' + (o.numero || 'OS'),
+      '<div class="campo"><label>Cliente (da OS)</label><input type="text" value="' + esc(c.razao_social || c.nome || '—') + '" disabled></div>'
+    + (aprov > 0
+        ? '<p class="nota" style="margin:-4px 0 10px">Aprovado ' + esc(BRL(aprov)) + ' · já tem conta ' + esc(BRL(Number(v.ja_tem) || 0)) + ' · falta <b>' + esc(BRL(falta)) + '</b>.</p>'
+        : '<div class="nfAvisos" style="padding:8px 10px;margin-bottom:10px">A OS não tem proposta aprovada. Confira o valor com a OS antes de criar.'
+          + '<label style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="osConf"' + (d.conf ? ' checked' : '') + '> Confirmo o valor sem proposta aprovada</label></div>')
+    + '<div class="campo"><label for="osDesc">Descrição</label><input id="osDesc" type="text" maxlength="300" value="' + esc(d.desc) + '" autocomplete="off"></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="osValor">Valor</label><input id="osValor" type="number" step="0.01" min="0.01" value="' + esc(d.valor) + '"></div>'
+    +  '<div class="campo"><label for="osParc">Parcelas</label><select id="osParc">'
+    +    Array.from({ length: 12 }, (_, i) => '<option value="' + (i + 1) + '"' + (String(i + 1) === String(d.parc) ? ' selected' : '') + '>' + (i + 1) + (i ? ' (uma por mês)' : '') + '</option>').join('')
+    +  '</select></div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="osComp">Competência (mês do serviço)</label><input id="osComp" type="month" value="' + esc(d.comp) + '"></div>'
+    +  '<div class="campo"><label for="osVenc">Vencimento (estimativa, 1ª parcela)</label><input id="osVenc" type="date" value="' + esc(d.venc) + '"></div></div>'
+    + '<div class="campo"><label for="osForma">Forma prevista (opcional)</label><select id="osForma"><option value="">—</option>'
+    +   FORMA_PREVISTA_FIN.map(f => '<option value="' + esc(f) + '"' + (d.forma === f ? ' selected' : '') + '>' + esc(f) + '</option>').join('') + '</select></div>'
+    + '<p class="nota">A conta nasce “A faturar”, ligada à ' + esc(o.numero || 'OS') + '. Depois, na linha dela: “Emitir nota” e “Emitir boleto”.</p>',
+    [{ label: 'Cancelar', onClick: fecharModal },
+     { label: 'Criar', pri: true, onClick: async () => {
+        // tudo lido aqui, antes de qualquer outra janela
+        const val = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+        const r = { desc: val('osDesc'), valor: val('osValor'), parc: val('osParc') || '1', comp: val('osComp'), venc: val('osVenc'),
+                    forma: val('osForma'), conf: !!(document.getElementById('osConf') || {}).checked, uid: d.uid };
+        const valor = Number(r.valor);
+        if (!r.desc){ toast('A descrição é obrigatória.', 'err'); return; }
+        if (!(valor > 0)){ toast('Informe um valor maior que zero.', 'err'); return; }
+        if (aprov > 0 && valor > falta + 0.009){ toast('Passa do que falta da OS (' + BRL(falta) + ').', 'err'); return; }
+        if (aprov <= 0 && !r.conf){ toast('Marque a confirmação: a OS não tem proposta aprovada.', 'err'); return; }
+        if (!r.comp || !r.venc){ toast('Informe a competência e o vencimento.', 'err'); return; }
+        const b = [...document.querySelectorAll('#mFoot .btn')].pop(); if (b) b.disabled = true;
+        try{
+          const res = await rpc('tf_fin_os_criar_conta', {
+            p_os_id: FINOS.id, p_valor: valor, p_parcelas: Number(r.parc), p_descricao: r.desc,
+            p_competencia: r.comp + '-01', p_vencimento: r.venc, p_forma_prevista: r.forma || null,
+            p_subcategoria_id: null, p_confirmar_sem_aprovado: aprov <= 0 && r.conf, p_client_uid: r.uid });
+          fecharModal();
+          const n = (res && res.titulos ? res.titulos.length : 1);
+          toast(n > 1 ? n + ' parcelas criadas para a ' + osRot() + '.' : 'Conta a receber criada para a ' + osRot() + '.', 'ok');
+          await finreCarregar();
+        }catch(e){
+          toast(e.message, 'err');
+          modalCriarContaOs(r);   // volta com o que foi escrito (a mesma chave: não cria em dobro)
+        }
+     }}]);
+}
+
 
 // ════════════════════════════════════════════════════════════════════════════
 // TAPFIN · BOLETO COM PIX PELO BANCO INTER
@@ -6076,7 +6254,7 @@ async function modalEmitirBoleto(t, opcoes){
       boFaixaTeste(prep.ambiente)
     + lista(prep.erros, 'nfErros')
     + ((prep.erros || []).some(x => /Cadastros/.test(x)) && NO_SERVIDOR
-       ? '<p class="nota" style="margin:-4px 0 10px"><a href="../manager/?ir=cad" target="_blank" rel="noopener">Abrir Cadastros › Clientes</a> (em outra aba).</p>' : '')
+       ? '<p class="nota" style="margin:-4px 0 10px"><a href="../manager/?ir=cad&area=tapfin" target="_blank" rel="noopener">Abrir Cadastros › Clientes</a> (em outra aba).</p>' : '')
     + lista(prep.avisos, 'nfAvisos')
     + '<div class="nfBloco"><b>Pagador</b>'
     +   '<div>' + esc(r.cliente || '—') + ' · ' + esc(finDocFmt(r.doc)) + '</div>'
@@ -6580,7 +6758,7 @@ async function modalEmitirNota(t){
     + jfAvisoEmitir(t)
     + lista(prep.erros, 'nfErros')
     + ((prep.erros || []).some(x => /Cadastros/.test(x)) && NO_SERVIDOR
-       ? '<p class="nota" style="margin:-4px 0 10px"><a href="../manager/?ir=cad" target="_blank" rel="noopener">Abrir Cadastros › Clientes</a> (em outra aba). Corrigido, feche esta janela e clique em "Emitir nota" de novo.</p>' : '')
+       ? '<p class="nota" style="margin:-4px 0 10px"><a href="../manager/?ir=cad&area=tapfin" target="_blank" rel="noopener">Abrir Cadastros › Clientes</a> (em outra aba). Corrigido, feche esta janela e clique em "Emitir nota" de novo.</p>' : '')
     + lista(prep.avisos, 'nfAvisos')
     + '<div class="nfBloco"><b>Tomador</b>'
     +   '<div>' + esc(r.cliente || '—') + ' · CNPJ ' + esc(finDocFmt(r.cnpj)) + '</div>'
@@ -8650,9 +8828,15 @@ async function iniciar(){
   await carregarEquipe();
   // o hub (ou um link) abre uma tela daqui com `?ir=`
   try{
-    const ir = new URLSearchParams(location.search).get('ir');
+    const prm = new URLSearchParams(location.search);
+    const ir = prm.get('ir');
     if (ir){
-      if (NAV.some(g => (g.itens || []).some(i => i.v === ir))) visao = ir;
+      if (NAV.some(g => (g.itens || []).some(i => i.v === ir && !i.link))) visao = ir;
+      history.replaceState(null, '', location.pathname);
+    }
+    // F11 · o card da T16 abre fin/?os=<id>(&t=T16): Contas a Receber com o painel da OS
+    if (prm.get('os')){
+      if (osDaEntrada(prm)) visao = 'finre';
       history.replaceState(null, '', location.pathname);
     }
   }catch(e){}
