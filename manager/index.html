@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S104</title>
+<title>TapFlow Manager · S105</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1448,6 +1448,10 @@ button.mini{padding:6px 12px;font-weight:600}
 .tk .st{flex:0 0 17px;text-align:center;font-size:13px;line-height:1.4}
 .tk .nm{flex:1;font-size:13.5px;line-height:1.35}
 .tk .nm small{display:block;color:var(--ink-3);font-size:11.5px;margin-top:2px}
+/* S105 · a T16 que o TapFin concluiu ou reabriu */
+.tk .nm .tkSis{display:inline-block;margin-top:3px;font-size:11.5px;padding:1px 7px;border-radius:9px;
+  background:var(--ok-soft, #E7F5EC);color:var(--ok, #1E7B45);font-weight:600}
+.tk .nm .tkSis.reab{background:var(--warn-soft, #FFF4DB);color:var(--warn, #8A5A00)}
 .tk.res .nm{color:var(--ink-3)}
 .tk.res .nm b{font-weight:400}
 .tk.atual{background:var(--accent-soft);margin:0 -8px;padding:8px 6px;border-radius:5px;
@@ -2341,7 +2345,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S104';
+const APP_VERSION = 'S105';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -3244,7 +3248,7 @@ async function abrirOS(c){
     tarefas = DEMO ? demoTarefas(c.os_id)
       : await get('pipeline_tarefas?select=tarefa_id,nome,tipo,fase,fase_ordem,ordem,status,opcoes,'
                   + 'perfis_responsaveis,lock_por,lock_expira,executor,usuario_designado,data_prevista,'
-                  + 'tempo_estimado_min,acao_terminal,apoios,requisitos,id,hora_inicio,usa_fds'
+                  + 'tempo_estimado_min,acao_terminal,apoios,requisitos,id,hora_inicio,usa_fds,' + SEL_MARCA_SISTEMA
                   + '&os_id=eq.' + c.os_id + '&ativo=eq.SIM&order=camada,fase_ordem,ordem');
   }catch(e){ document.getElementById('dBody').innerHTML = '<p style="color:var(--crit);font-size:13px"></p>';
              document.getElementById('dBody').querySelector('p').textContent = e.message; return; }
@@ -3304,6 +3308,14 @@ function pintarDrawer(){
     el.querySelector('small').textContent =
       t.status + (t.perfis_responsaveis && t.perfis_responsaveis.length
         ? ' · quem faz: ' + t.perfis_responsaveis.join(', ') : '');
+    // S105 · a T16 concluída ou reaberta pelo TapFin diz isso na própria linha
+    const seloSis = seloT16Sistema(t);
+    if (seloSis){
+      const sp = document.createElement('span');
+      sp.className = seloSis.cls; sp.textContent = seloSis.txt;
+      sp.title = 'Automático: o TapFin conclui a T16 quando todo o valor aprovado da OS tem nota, e a reabre se uma nota for cancelada.';
+      el.querySelector('.nm').appendChild(sp);
+    }
     // ── ITEM 9 (S27): DESFAZER UMA CONCLUSÃO FEITA POR ENGANO ───────────
     // Até o S26 a tarefa concluída aparecia só com o "✓" e não havia nada a
     // clicar — nem para admin. O Bruno concluiu "Anexar pedido de compra" por
@@ -4311,6 +4323,29 @@ function botaoPreparacao(osId, mini){
 // "Encerrar OS"), então vale a T16 cujo nome fala de boleto ou nota fiscal —
 // a da inspeção hoje e a do molde de contrato quando ele vier.
 const ehT16Faturar = t => !!(t && t.tarefa_id === 'T16' && /boleto|nota fiscal/i.test(t.nome || ''));
+// ── S105 · A T16 FECHA E REABRE SOZINHA (opção C do Bruno; 302 do TapFlow + 516 do TapFin) ──
+// O TapFin conclui a T16 quando todo o aprovado da OS tem nota e a reabre quando uma nota
+// cai, pelas funções de sistema da 302. A marca fica na tarefa (`respostas.origem`,
+// `respostas.nfs`, `respostas.reaberta`); a tela só lê as três chaves, não o `respostas`
+// inteiro. O "Faturar no TapFin" continua e some com a T16 concluída (`podeFaturar`).
+const SEL_MARCA_SISTEMA = 'sis_origem:respostas->>origem,sis_nfs:respostas->nfs,sis_reaberta:respostas->reaberta';
+const _nfsTxt = l => (Array.isArray(l) ? l : []).filter(Boolean).map(n => 'NF ' + n).join(', ');
+/** O selo da linha da T16: "concluída pelo TapFin · NF 147, NF 148" ou "reaberta: NF 148 cancelada". */
+function seloT16Sistema(t){
+  if (!ehT16Faturar(t)) return null;
+  if (t.status === 'completo' && t.sis_origem === 'tapfin'){
+    const nfs = _nfsTxt(t.sis_nfs);
+    return { cls: 'tkSis', txt: 'concluída pelo TapFin' + (nfs ? ' · ' + nfs : '') };
+  }
+  const r = t.sis_reaberta;
+  if ((t.status === 'pendente' || t.status === 'em_andamento') && r && r.origem === 'tapfin'){
+    const canc = Array.isArray(r.nfs_canceladas) ? r.nfs_canceladas.filter(Boolean) : [];
+    return { cls: 'tkSis reab', txt: canc.length
+      ? 'reaberta: ' + _nfsTxt(canc) + (canc.length > 1 ? ' canceladas' : ' cancelada')
+      : 'reaberta pelo TapFin: o faturamento da OS mudou' };
+  }
+  return null;
+}
 const linkFaturar = osId => '../fin/?os=' + encodeURIComponent(osId) + '&t=T16';
 function podeFaturar(t){
   return FIN_AUT && ehT16Faturar(t) && (t.status === 'pendente' || t.status === 'em_andamento');
@@ -5636,7 +5671,7 @@ async function pintarItens(){
         osAberta.tarefas = await get('pipeline_tarefas?select=tarefa_id,nome,tipo,fase,'
           + 'fase_ordem,ordem,status,opcoes,perfis_responsaveis,lock_por,executor,'
           + 'usuario_designado,data_prevista,tempo_estimado_min,acao_terminal,apoios,'
-          + 'requisitos,id,hora_inicio,usa_fds'
+          + 'requisitos,id,hora_inicio,usa_fds,' + SEL_MARCA_SISTEMA
           + '&os_id=eq.' + card.os_id + '&ativo=eq.SIM&order=camada,fase_ordem,ordem');
         await qdCarregarAte(osAberta.tarefas);
       }catch(e){}
