@@ -161,7 +161,7 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 9';   // S94 · 410 (R06a): o ambiente do vaso (local fechado ou céu aberto) na Localização, obrigatório no envio ·   // S86 · 407 (R04a): aferição de manômetro e teste de válvula em campo (TapDoc 7: material do escritório; 6: faixa)
+const VERSAO = 'TapDoc 10';   // S107 · 412: as leituras não travam o envio (o CSV do medidor entra no escritório) ·   // S94 · 410 (R06a): o ambiente do vaso (local fechado ou céu aberto) na Localização, obrigatório no envio ·   // S86 · 407 (R04a): aferição de manômetro e teste de válvula em campo (TapDoc 7: material do escritório; 6: faixa)
 // 405: uma linha curta com a faixa do material, para conferir com a plaqueta ou o certificado da chapa
 function linhaFaixa(m){
   if (!m || m.resist_min_mpa == null) return '';
@@ -1190,8 +1190,7 @@ function faltasEnvio(v){
   const fAf = faltasAfericao(v);
   // S80 · R03b: o ultrassom (mesma ordem e texto do servidor)
   if (!i.medidor_id) f.push('Ultrassom: escolha o medidor de espessura.');
-  compsAtivos(v).filter(c => !c.nao_medir && !leiturasDe(v, c.id).length && !((i.ultrassom_sem_leitura || {})[c.id] || '').trim())
-    .sort((a, b) => (a.ordem || 0) - (b.ordem || 0)).forEach(c => f.push('Ultrassom: "' + c.nome + '" sem leitura nem motivo.'));
+  // S107 · 412: as leituras não travam o envio — o CSV do medidor é anexado no escritório
   if (!boroValida(i.boroscopia)) f.push('Boroscopia sem resposta.');
   else if (i.boroscopia.resultado === 'com_anomalia' && !fotosDe(v, 'boroscopia').length) f.push('Boroscopia com anomalia sem foto.');
   if (!testeValido(i.teste)) f.push('Teste de pressão sem resposta.');
@@ -1719,7 +1718,7 @@ function estUltra(v){
   const i = v.inspecao || {}, cs = compsMedir(v);
   const feitos = cs.filter(c => leiturasDe(v, c.id).length || (semLeitura(v)[c.id] || '').trim()).length;
   if (!i.medidor_id && !feitos) return 'vazia';
-  return i.medidor_id && feitos === cs.length ? 'ok' : 'inc';
+  return i.medidor_id ? 'ok' : 'inc';   // S107 · 412: as leituras são opcionais aqui (o CSV entra no escritório)
 }
 function minimaDe(v, cid){
   const l = leiturasDe(v, cid); if (!l.length) return null;
@@ -1816,6 +1815,7 @@ function telaUltrassom(v){
     h += '</div>';
   });
   h += '<p class="muted">Até 4 leituras por ponto, em mm. Vale a menor de todas. Em vermelho: abaixo da espessura requerida (prévia; o oficial sai na revisão).</p>';
+  h += '<p class="info">As leituras aqui são <b>opcionais</b>: o CSV do medidor é anexado no escritório (T07), antes da revisão. No campo, basta escolher o medidor usado.</p>';
   $('tela').innerHTML = h;
   cs.forEach(c => pintarMin(v, c));
   if (!pode){ $('tela').querySelectorAll('select, #usPasta, #usCsv').forEach(el => { el.disabled = true; }); return; }

@@ -154,7 +154,7 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E9';   // E9 (S94 · 410, R06a): o laudo em PDF (aba Laudos), a ART na preparação, o ambiente, o PDF do certificado dos instrumentos e as datas do PLH na aprovação ·   // E8 (S93 · 409, R05a): a revisão (A revisar: Revisão 1, Revisão 2 e a aprovação do PLH) ·   // E7 (S92 · 408, Acessos P3): entra quem tem o TapDoc; conferir e decidir é do PLH ·   // E = escritório · E6 (S86 · 407, R04a): padrão com U/k, numeração M/V e as aferições da inspeção (E5: material de campo; E4: faixa)
+const VERSAO = 'TapDoc E10';   // E10 (S107 · 412): o CSV do medidor anexado na revisão (Espessuras do medidor); a revisão exige as espessuras ·   // E9 (S94 · 410, R06a): o laudo em PDF (aba Laudos), a ART na preparação, o ambiente, o PDF do certificado dos instrumentos e as datas do PLH na aprovação ·   // E8 (S93 · 409, R05a): a revisão (A revisar: Revisão 1, Revisão 2 e a aprovação do PLH) ·   // E7 (S92 · 408, Acessos P3): entra quem tem o TapDoc; conferir e decidir é do PLH ·   // E = escritório · E6 (S86 · 407, R04a): padrão com U/k, numeração M/V e as aferições da inspeção (E5: material de campo; E4: faixa)
 // 405: a faixa de resistência (norma do material) e o S esperado pelo ASME (fator 3,5; 2/3 do escoamento; costura × 0,85)
 function faixaTxt(m){
   if (!m || m.resist_min_mpa == null) return 'faixa de resistência não cadastrada';
@@ -1073,6 +1073,8 @@ function pintarRevisao(){
   if (dev && e && e < 3) h += '<div class="alerta falta" style="margin-top:8px"><b>Devolvida por ' + esc(dev.por || '') + ' (' + quandoBR(dev.em) + '):</b> ' + esc(dev.motivo || '') + '</div>';
   h += '</div>';
 
+  h += espHtml();   // E10 (S107 · 412): as espessuras do medidor (o CSV)
+
   // Parte 1 · o que o sistema confere
   const conf = (R.conferencias || []).slice();
   prev.camaras.forEach(ck => {
@@ -1273,6 +1275,7 @@ function revMontarResultado(){
 function ligarRevisao(){
   const { R } = REV, id = REV.id, T = $('tela');
   const recarregar = async () => { const y = window.scrollY; await telaRevisao(id); window.scrollTo(0, y); };
+  ligarEsp(recarregar);   // E10
   T.querySelectorAll('[data-ok]').forEach(c => c.addEventListener('change', async () => {
     try{ await rpc('tf_insp_revisao_ok', { p_id:id, p_item:c.dataset.ok, p_ok:c.checked }); const e = R.inspecao.etapa; R.oks = R.oks || {}; R.oks[e] = (R.oks[e] || []).filter(x => x !== c.dataset.ok).concat(c.checked ? [c.dataset.ok] : []); }
     catch(e){ c.checked = !c.checked; erro(e); }
@@ -1331,6 +1334,156 @@ function ligarRevisao(){
     if (!await N.janela.confirmar('Aprovar e liberar', '<p>Grava o cálculo oficial (categoria ' + esc(r.categoria) + ', próxima externa em ' + dataBR(r.proxima_externa)
       + (r.datas_pelo_plh ? ', datas definidas pelo PLH' : '') + ') e libera a inspeção para o laudo.</p>', 'Aprovar')) return;
     try{ await rpc('tf_insp_revisao_aprovar', { p_id:id, p_r:r }); U.toast('Aprovada e liberada.', 'ok'); location.hash = 'aba=rev'; }catch(e){ erro(e); }
+  }));
+}
+// ════════════════════════════════════════════════════════════════════════════
+// E10 (S107 · 412) · AS ESPESSURAS DO MEDIDOR NO ESCRITÓRIO
+// Quem mede é o medidor de espessura; o CSV sai dele no computador e entra
+// aqui, na revisão (T07 · Extrair e tratar o CSV). O campo só diz qual medidor
+// usou. Colunas do arquivo: Spot_No, Reading_No e Reading (o padrão do VAIT-10).
+// Grava tudo de uma vez (tf_insp_espessuras_escritorio): ou todas as faixas
+// entram, ou nenhuma. Gravar derruba os "ok" de PMTA e Espessuras da etapa.
+// ════════════════════════════════════════════════════════════════════════════
+const ESP_MAX_PONTOS = 60;
+const ESP_MOTIVOS = ['Sem acesso ao componente.', 'Isolamento térmico no componente.', 'Revestimento ou pintura impede a leitura.'];
+const espLeit = (v, cid) => ((v.inspecao && v.inspecao.leituras) || []).filter(l => l.componente_id === cid);
+const espSem = v => (v.inspecao && v.inspecao.ultrassom_sem_leitura) || {};
+function espPode(){
+  const I = REV.R.inspecao, e = I.etapa;
+  return (I.situacao === 'enviada' || I.situacao === 'em_revisao') && (e !== 3 || REV.R.eu.plh);
+}
+function espHtml(){
+  const { v, P } = REV, cs = CALC.compsMedir(v), pode = espPode(), i = v.inspecao || {};
+  const med = (P.medidores || []).find(m => m.id === i.medidor_id);
+  const falta = cs.filter(c => !espLeit(v, c.id).length && !(espSem(v)[c.id] || '').trim());
+  let h = '<h2 id="espTopo">Espessuras do medidor</h2><div class="card">'
+    + '<div class="linha" style="justify-content:space-between;align-items:flex-start"><div class="muted">Medidor usado em campo: <b>'
+    + (med ? esc([med.descricao, med.marca, med.modelo].filter(Boolean).join(' · ') + (med.numero_serie ? ' · nº ' + med.numero_serie : '')) : (i.medidor_id ? 'escolhido (certificado vencido ou desativado)' : '<span style="color:var(--crit)">não informado</span>'))
+    + '</b>' + (i.ultrassom_pasta ? ' · pasta no medidor: <b>' + esc(i.ultrassom_pasta) + '</b>' : '') + '</div>'
+    + (pode && cs.length ? '<button class="btn pri" id="espCsv">Anexar o CSV do medidor</button>' : '') + '</div>';
+  if (!cs.length) return h + '<p class="muted">Este vaso não tem componente a medir.</p></div>';
+  h += '<table style="margin-top:10px"><tr><th>Componente</th><th>Pontos</th><th>Leituras</th><th>Menor</th><th>Requerida</th><th>Origem</th><th></th></tr>';
+  cs.forEach(c => {
+    const l = espLeit(v, c.id), mot = (espSem(v)[c.id] || '').trim();
+    const mn = CALC.minimaDe(v, c.id), req = CALC.eMinDe(v, c), baixo = mn != null && req.valor != null && mn < req.valor;
+    const org = [...new Set(l.map(x => x.origem))].map(o => o === 'csv' ? 'CSV' : 'digitado').join(' + ');
+    h += '<tr' + (baixo ? ' style="background:var(--crit-soft)"' : '') + '><td><b>' + esc(c.nome) + '</b></td>';
+    if (mot) h += '<td colspan="5"><span class="chip s-sem_laudo">sem leitura</span> ' + esc(mot) + '</td>';
+    else if (!l.length) h += '<td colspan="5"><span style="color:var(--crit);font-weight:600">sem leitura</span></td>';
+    else h += '<td>' + new Set(l.map(x => x.ponto)).size + '</td><td>' + l.length + '</td><td><b' + (baixo ? ' style="color:var(--crit)"' : '') + '>' + fmt(mn, 2) + ' mm</b></td><td>'
+      + (req.valor != null ? fmt(req.valor, 2) + ' mm' : '<span class="muted">' + esc(req.erro || '—') + '</span>') + '</td><td class="muted">' + org + '</td>';
+    h += '<td>' + (pode ? (mot ? '<button class="btn mini" data-espvolta="' + esc(c.id) + '">Medir</button>'
+                             : '<button class="btn mini" data-espsem="' + esc(c.id) + '">Não deu para medir</button>') : '') + '</td></tr>';
+  });
+  h += '</table>';
+  h += falta.length ? '<p class="alerta crit" style="margin:10px 0 0">Faltam as espessuras de: <b>' + esc(falta.map(c => c.nome).join(', ')) + '</b>. Sem elas a revisão não conclui e o PLH não aprova.</p>'
+                    : '<p class="muted" style="margin:8px 0 0">Vale a menor leitura de cada componente. Em vermelho: abaixo da espessura requerida.</p>';
+  if (!pode) h += '<p class="muted" style="margin:6px 0 0">' + (REV.R.inspecao.etapa === 3 ? 'Na aprovação, só o PLH mexe nas espessuras.' : 'Só dá para anexar com a inspeção enviada ou em revisão.') + '</p>';
+  return h + '</div>';
+}
+function espLerCsv(txt){
+  const linhas = String(txt).replace(/^﻿/, '').split(/\r?\n/).filter(x => x.trim());
+  if (!linhas.length) throw new Error('Arquivo vazio.');
+  const sep = [';', '\t', ','].find(c => linhas[0].indexOf(c) >= 0) || ',';
+  const cab = linhas[0].split(sep).map(x => x.trim().replace(/^"|"$/g, '').toLowerCase());
+  const iS = cab.indexOf('spot_no'), iN = cab.indexOf('reading_no'), iR = cab.indexOf('reading');
+  if (iS < 0 || iR < 0) throw new Error('O arquivo não tem as colunas Spot_No e Reading (o padrão do medidor).');
+  const spots = [], por = {};
+  linhas.slice(1).forEach((ln, n) => {
+    const c = ln.split(sep).map(x => x.trim().replace(/^"|"$/g, ''));
+    const sp = c[iS], val = num(c[iR]);
+    if (!sp) return;
+    if (val == null || Number.isNaN(val) || val <= 0 || val > 300) throw new Error('Linha ' + (n + 2) + ': leitura inválida (' + (c[iR] || 'vazia') + ').');
+    if (!por[sp]){ por[sp] = []; spots.push(sp); }
+    por[sp].push({ n: iN >= 0 ? Number(c[iN]) || por[sp].length + 1 : por[sp].length + 1, val });
+  });
+  if (!spots.length) throw new Error('Nenhuma leitura no arquivo.');
+  spots.forEach(sp => por[sp].sort((a, b) => a.n - b.n));
+  return { spots, por };
+}
+function espDistribuir(d, nome, recarregar){
+  const v = REV.v, cs = CALC.compsMedir(v).filter(c => !(espSem(v)[c.id] || '').trim()), n = d.spots.length;
+  if (!cs.length){ U.toast('Todos os componentes estão como "não deu para medir".', 'err'); return; }
+  const passo = Math.max(1, Math.floor(n / cs.length));
+  let h = '<p style="margin-top:0">O arquivo <b>' + esc(nome) + '</b> tem <b>' + n + ' ponto' + (n > 1 ? 's' : '') + '</b> (do ' + esc(d.spots[0]) + ' ao ' + esc(d.spots[n - 1])
+    + '). Diga quais pontos (pela ordem no arquivo, 1 a ' + n + ') são de cada componente. Componente em branco fica como está.</p>'
+    + '<p class="muted">Substitui as leituras que o componente já tinha.</p><table><tr><th>Componente</th><th>de</th><th>até</th></tr>';
+  cs.forEach((c, k) => {
+    const de = k * passo + 1, ate = k === cs.length - 1 ? n : Math.min(n, (k + 1) * passo);
+    h += '<tr><td><b>' + esc(c.nome) + '</b>' + (espLeit(v, c.id).length ? '<div class="muted">já tem ' + espLeit(v, c.id).length + ' leitura(s)</div>' : '') + '</td>'
+      + '<td><input class="t" style="width:80px" inputmode="numeric" id="ed_' + esc(c.id) + '" value="' + (de <= n ? de : '') + '"></td>'
+      + '<td><input class="t" style="width:80px" inputmode="numeric" id="ea_' + esc(c.id) + '" value="' + (de <= n ? ate : '') + '"></td></tr>';
+  });
+  h += '</table>';
+  janela('Anexar o CSV do medidor', h, [{ rotulo:'Cancelar' }, { rotulo:'Conferir', classe:'pri', acao:() => {
+    const usados = new Set(), plano = [];
+    for (const c of cs){
+      const de = num($('ed_' + c.id).value), ate = num($('ea_' + c.id).value);
+      if (de == null && ate == null) continue;
+      if (!(Number.isInteger(de) && Number.isInteger(ate) && de >= 1 && ate >= de && ate <= n)){ U.toast(c.nome + ': faixa inválida (1 a ' + n + ').', 'err'); return false; }
+      if (ate - de + 1 > ESP_MAX_PONTOS){ U.toast(c.nome + ': no máximo ' + ESP_MAX_PONTOS + ' pontos.', 'err'); return false; }
+      for (let q = de; q <= ate; q++){ if (usados.has(q)){ U.toast('O ponto ' + q + ' do arquivo está em dois componentes.', 'err'); return false; } usados.add(q); }
+      plano.push({ c, de, ate });
+    }
+    if (!plano.length){ U.toast('Nenhuma faixa preenchida.', 'err'); return false; }
+    setTimeout(() => espConferir(d, nome, plano, recarregar), 0);
+  } }]);
+}
+function espConferir(d, nome, plano, recarregar){
+  const v = REV.v; let corte = 0;
+  const lotes = plano.map(({ c, de, ate }) => {
+    const l = [];
+    for (let q = de; q <= ate; q++){
+      const rs = d.por[d.spots[q - 1]];
+      if (rs.length > 4) corte++;
+      rs.slice(0, 4).forEach((r, k) => l.push({ ponto:q - de + 1, leitura:k + 1, valor:Math.round(r.val * 100) / 100 }));
+    }
+    return { c, l };
+  });
+  let h = '<table><tr><th>Componente</th><th>Pontos do arquivo</th><th>Leituras</th><th>Menor</th><th>Requerida</th></tr>';
+  lotes.forEach(({ c, l }) => {
+    const pl = plano.find(x => x.c === c), mn = MotorNR13.minimaLeituras(l.map(x => x.valor)), req = CALC.eMinDe(v, c), baixo = req.valor != null && mn < req.valor;
+    h += '<tr' + (baixo ? ' style="background:var(--crit-soft)"' : '') + '><td><b>' + esc(c.nome) + '</b></td><td>' + esc(d.spots[pl.de - 1]) + ' a ' + esc(d.spots[pl.ate - 1]) + '</td><td>' + l.length
+      + '</td><td><b' + (baixo ? ' style="color:var(--crit)"' : '') + '>' + fmt(mn, 2) + ' mm</b></td><td>' + (req.valor != null ? fmt(req.valor, 2) + ' mm' : '<span class="muted">' + esc(req.erro || '—') + '</span>') + '</td></tr>';
+  });
+  h += '</table>' + (corte ? '<p class="alerta falta" style="margin-top:8px">' + corte + ' ponto(s) com mais de 4 leituras: ficaram as 4 primeiras.</p>' : '')
+    + (lotes.some(({ c, l }) => { const r = CALC.eMinDe(v, c); return r.valor != null && MotorNR13.minimaLeituras(l.map(x => x.valor)) < r.valor; })
+        ? '<p class="alerta crit" style="margin-top:8px">Há componente abaixo da espessura requerida. Confira se a faixa está certa antes de gravar.</p>' : '')
+    + '<p class="muted">Gravar derruba os "conferido" de PMTA e de Espessuras desta etapa: quem revisa olha de novo.</p>';
+  janela('Conferir antes de gravar', h, [{ rotulo:'Voltar', acao:() => { setTimeout(() => espDistribuir(d, nome, recarregar), 0); } }, { rotulo:'Gravar', classe:'pri', acao:async () => {
+    try{
+      const r = await rpc('tf_insp_espessuras_escritorio', { p_id:REV.id, p_lotes:lotes.map(({ c, l }) => ({ componente_id:c.id, leituras:l })), p_sem:null, p_arquivo:nome });
+      U.toast(r.gravadas + ' leitura(s) gravada(s)' + (r.faltam && r.faltam.length ? '. Ainda faltam: ' + r.faltam.join(', ') : '.'), 'ok');
+      recarregar();
+    }catch(e){ erro(e); return false; }
+  } }]);
+}
+function ligarEsp(recarregar){
+  const b = $('espCsv');
+  if (b) b.addEventListener('click', () => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.csv,text/csv,text/plain';
+    inp.addEventListener('change', () => {
+      const f = inp.files && inp.files[0]; if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => { try{ espDistribuir(espLerCsv(rd.result), f.name, recarregar); }catch(e){ U.toast(e.message, 'err'); } };
+      rd.readAsText(f);
+    });
+    inp.click();
+  });
+  $('tela').querySelectorAll('[data-espsem]').forEach(bt => bt.addEventListener('click', () => {
+    const c = REV.v.componentes.find(x => x.id === bt.dataset.espsem), tem = espLeit(REV.v, c.id).length;
+    janela('Sem leitura · ' + c.nome, '<label class="f">Motivo<select class="t" id="esSel"><option value="">—</option>' + ESP_MOTIVOS.map(m => '<option>' + esc(m) + '</option>').join('')
+      + '<option value="+">Outro…</option></select></label><label class="f">Detalhe<small>Obrigatório em "Outro".</small><textarea class="t" id="esTx"></textarea></label>'
+      + (tem ? '<p class="alerta falta">O componente tem ' + tem + ' leitura(s). Elas serão apagadas.</p>' : ''),
+      [{ rotulo:'Cancelar' }, { rotulo:'Confirmar', classe:'pri', acao:async () => {
+        const s = $('esSel').value, tx = ($('esTx').value || '').trim(), m = s && s !== '+' ? (tx ? s + ' ' + tx : s) : tx;
+        if (!m){ U.toast('Informe o motivo.', 'err'); return false; }
+        try{ await rpc('tf_insp_espessuras_escritorio', { p_id:REV.id, p_lotes:null, p_sem:{ [c.id]:m }, p_arquivo:null }); recarregar(); }catch(e){ erro(e); return false; }
+      } }]);
+  }));
+  $('tela').querySelectorAll('[data-espvolta]').forEach(bt => bt.addEventListener('click', async () => {
+    try{ await rpc('tf_insp_espessuras_escritorio', { p_id:REV.id, p_lotes:null, p_sem:{ [bt.dataset.espvolta]:'' }, p_arquivo:null });
+         U.toast('Motivo tirado. Anexe o CSV com as leituras deste componente.', 'ok'); recarregar(); }catch(e){ erro(e); }
   }));
 }
 // ════════════════════════════════════════════════════════════════════════════
