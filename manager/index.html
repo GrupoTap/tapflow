@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S103</title>
+<title>TapFlow Manager · S104</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1495,6 +1495,7 @@ button.mini{padding:6px 12px;font-weight:600}
 .tbl td.venc{background:#FFF176;color:#3A3000;font-weight:600}
 .anexoPrev{margin:0 0 14px}
 /* S103 · proposta agrupada: as linhas de subtotal/desconto e a vista "Como o cliente vê" */
+.blocoLocal .faltaCid{color:var(--ink-3);font-size:12.5px}   /* S104 */
 .tbl tr.agSub td{color:var(--ink-3);border-bottom:0}
 .tbl tr.agDesc td{color:var(--ink-3)}
 .tbl tr.agTot td{font-weight:700;font-size:13.5px}
@@ -2340,7 +2341,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S103';
+const APP_VERSION = 'S104';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -3593,7 +3594,7 @@ async function pintarClienteOS(){
       contatos = demoContatos(card.cliente_id);
     } else {
       const [f, ct] = await Promise.all([
-        get('clientes?select=id,razao_social,nome_fantasia,cnpj,endereco,cidade,uf,localizacao,tem_logo&id=eq.' + card.cliente_id),
+        get('clientes?select=id,razao_social,nome_fantasia,cnpj,endereco,numero,complemento,bairro,cidade,uf,cep,localizacao,tem_logo&id=eq.' + card.cliente_id),
         get('contatos?select=id,nome,telefone,email,papeis&cliente_id=eq.' + card.cliente_id
             + '&ativo=eq.true&order=nome')
       ]);
@@ -3617,7 +3618,9 @@ async function pintarClienteOS(){
     +     (cli.nome_fantasia ? '<p class="nota" style="margin:0 0 2px">' + esc(cli.nome_fantasia) + '</p>' : '')
     +     '<p class="nota" style="margin:0">' + esc([cli.cnpj, cli.cidade, cli.uf].filter(Boolean).join(' · ') || 'sem CNPJ') + '</p>'
     +   '</div></div>'
-    + blocoLocal({ endereco: cli.endereco, localizacao: cli.localizacao, contato_agenda: agendaTxt })
+    + blocoLocal({ endereco: cli.endereco, numero: cli.numero, complemento: cli.complemento, bairro: cli.bairro,
+                   cidade: cli.cidade, uf: cli.uf, cep: cli.cep, localizacao: cli.localizacao,
+                   contato_agenda: agendaTxt })   // S104 · o endereço completo
     + '<div id="osCliEdit"></div>';
   body.querySelector('h3').textContent = cli.razao_social;
   carregarLogos([cli.id]);
@@ -9130,19 +9133,44 @@ async function ligarLogoEditavel(lado, clienteId, nome, temLogo){
 // Aparece no card do negócio e na gaveta da OS. É o mesmo desenho nos dois
 // lugares de propósito: quem procura o endereço não deveria ter que aprender
 // duas telas.
+/* ── S104 · O ENDEREÇO COMPLETO (pedido do Bruno, recado do central 27/10) ──
+   Até o S103 a linha mostrava só a rua (`endereco`), e o número, o bairro e a
+   cidade ficavam no cadastro, fora da vista de quem vai a campo. Agora junta
+   tudo, na ordem de um envelope, pulando o que está vazio:
+   "Rua Rio Grande do Sul, 87 · Santo Antônio · Carmópolis de Minas/MG · CEP 35534-000". */
+const _tx = v => String(v == null ? '' : v).trim();
+function cepBR(v){
+  const d = _tx(v).replace(/\D/g, '');
+  return d.length === 8 ? d.slice(0, 5) + '-' + d.slice(5) : _tx(v);
+}
+function enderecoCompleto(d){
+  d = d || {};
+  const rua = [_tx(d.endereco), _tx(d.numero)].filter(Boolean).join(', ');
+  const cid = _tx(d.cidade) ? _tx(d.cidade) + (_tx(d.uf) ? '/' + _tx(d.uf) : '') : _tx(d.uf);
+  return [rua, _tx(d.complemento), _tx(d.bairro), cid, _tx(d.cep) ? 'CEP ' + cepBR(d.cep) : '']
+    .filter(Boolean).join(' · ');
+}
+const linkMapaBusca = txt => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(txt);
 function blocoLocal(d){
-  const linha = (rot, val, href) => '<div class="lin"><span class="rot">' + rot + '</span>'
+  const linha = (rot, val, href, extra) => '<div class="lin"><span class="rot">' + rot + '</span>'
     + (val
         ? (href ? '<a href="' + esc(href) + '" target="_blank" rel="noopener">' + esc(val) + '</a>'
                 : '<span>' + esc(val) + '</span>')
-        : '<i class="falta">não preenchido</i>') + '</div>';
+        : '<i class="falta">não preenchido</i>') + (extra || '') + '</div>';
   const mapa = d.localizacao || '';
+  const completo = enderecoCompleto(d);
+  // sem cidade, o fim da linha diz o que falta (o endereço sem cidade não leva ninguém a lugar nenhum)
+  const faltaCid = completo && !_tx(d.cidade) ? ' <span class="faltaCid">· falta a cidade</span>' : '';
+  // "No mapa": a localização gravada vale; sem ela, a busca pelo endereço completo
+  const hrefMapa = mapa ? (/^https?:/i.test(mapa) ? mapa : null) : (completo ? linkMapaBusca(completo) : null);
   return '<div class="blocoLocal">'
-    + linha('Endereço', d.endereco)
-    + linha('No mapa', mapa ? 'abrir no mapa' : '', /^https?:/i.test(mapa) ? mapa : null)
+    + linha('Endereço', completo, null, faltaCid)
+    + linha('No mapa', (mapa || completo) ? 'abrir no mapa' : '', hrefMapa)
     + linha('Agendar com', d.contato_agenda)
     + '</div>';
 }
+/** Falta algo do que o campo procura no dia? (a rua, a cidade ou com quem agendar) */
+const localIncompleto = d => !_tx(d.endereco) || !_tx(d.cidade) || !_tx(d.contato_agenda);
 
 /* ── ITEM 6 (S37): DIAS SEM INTERAÇÃO EM TODO CARD EM ANDAMENTO ───────────
    O número já existia (`dias_parado`, da view) e aparecia só a partir de 7
@@ -10519,8 +10547,10 @@ async function montarProposta(n, props){
   }
   _propLimpa = false;
 
-  alvo.innerHTML =
-      (equip.length
+  // S104: a montagem (equipamentos, acrescentar, número, validade, Registrar)
+  // fica em dois blocos, que somem para quem o banco recusa
+  alvo.innerHTML = '<div id="npMontagem">'
+    + (equip.length
         ? blocoEquipamentosProposta(equip)
         : '<div class="aviso">Este cliente não tem equipamento cadastrado. Dá para montar '
           + 'a proposta com linhas digitadas — e vale cadastrar os equipamentos em '
@@ -10558,6 +10588,7 @@ async function montarProposta(n, props){
     + '<button class="btn" id="npAddPlano" type="button" style="width:100%;margin-bottom:16px" '
     + 'title="Texto do Plano Padrão + faixa + trecho comum, como está em Configurações › Planos">'
     + 'Acrescentar a linha do plano (Padrão) no topo</button>'
+    + '</div>'   // fim de #npMontagem
     + '<div class="secTit">A proposta</div>'
     + (carregada
         ? '<div class="aviso ok" id="npCarregada">Esta é a proposta <b>' + esc(carregada.numero_exibicao || carregada.numero)
@@ -10584,6 +10615,7 @@ async function montarProposta(n, props){
     // `montarDescontoGeral`. Depois de aplicado, cada linha continua
     // editável na coluna "Desc. %".
     + '<div id="npDescBox"></div>'
+    + '<div id="npFecho">'
     + '<div class="dupla"><div class="campo"><label for="npNum">Número da proposta</label>'
     + '<input id="npNum" type="text" placeholder="deixe vazio para o TapFlow numerar" '
     + 'autocomplete="off" name="npn_nofill">'
@@ -10598,7 +10630,8 @@ async function montarProposta(n, props){
     + 'Digite um número novo só quando for <b>outra</b> proposta, de outro escopo.</div></div>'
     + '<div class="campo"><label for="npVal">Validade</label><input id="npVal" type="date"></div></div>'
     + '<button class="btn pri" id="npGravar" style="width:100%">'
-    + (carregada ? 'Registrar a revisão de ' + esc(carregada.numero) : 'Registrar proposta') + '</button>';
+    + (carregada ? 'Registrar a revisão de ' + esc(carregada.numero) : 'Registrar proposta') + '</button>'
+    + '</div>';   // fim de #npFecho
 
   const bLimpa = document.getElementById('npLimpar');
   if (bLimpa) bLimpa.addEventListener('click', () => {
@@ -10756,6 +10789,17 @@ async function montarProposta(n, props){
     });
   });
 
+  // S104 (recado do central, 27/10): quem não monta proposta não vê o que o banco
+  // recusaria — marcar equipamentos, "Acrescentar…", número, validade e
+  // "Registrar". Fica a proposta nas duas vistas, só para leitura (S103).
+  if (!podeEditarPropostaNeg()){
+    ['npMontagem', 'npFecho', 'npCarregada', 'npDescBox'].forEach(id => {
+      const x = document.getElementById(id); if (x) x.hidden = true; });
+    const av = document.createElement('p');
+    av.className = 'nota'; av.id = 'npSoLeitura';
+    av.textContent = 'Só leitura: quem monta proposta é o comercial, compras, o técnico administrativo ou o admin.';
+    alvo.insertBefore(av, alvo.firstChild);
+  }
   pintarItensProposta();
 }
 
@@ -10861,7 +10905,9 @@ function pintarItensProposta(){
   const dBox = document.getElementById('npDescBox');
   if (dBox) dBox.hidden = vista === 'cliente' || !podeEditarPropostaNeg();
   if (!_propItens.length){
-    el.innerHTML = '<p class="nota">Nada ainda. Marque equipamentos ou acrescente uma linha.</p>';
+    el.innerHTML = '<p class="nota">' + (podeEditarPropostaNeg()
+      ? 'Nada ainda. Marque equipamentos ou acrescente uma linha.'
+      : 'Nenhuma proposta em montagem.') + '</p>';
     return;
   }
   if (vista === 'cliente') return pintarPropostaCliente(el);
@@ -11275,21 +11321,31 @@ async function negCliente(n, b){
     return;
   }
 
+  // S104 · o endereço completo: a `v_negocios_kanban` só traz a rua (`cliente_endereco`),
+  // então o cliente é lido ao abrir a aba (sem SQL). Falhou a leitura, fica o da view.
+  let loc = { endereco: n.cliente_endereco, localizacao: n.cliente_localizacao };
+  try{
+    const c = DEMO ? (demoClientes().find(x => x.id === n.cliente_id) || null)
+      : ((await get('clientes?select=endereco,numero,complemento,bairro,cidade,uf,cep,localizacao&id=eq.'
+                    + n.cliente_id)) || [])[0];
+    if (c) loc = c;
+  }catch(e){ /* fica o que a view trouxe */ }
+  loc = Object.assign({}, loc, { contato_agenda: n.contato_agenda });
+  if (!negAberto || negAberto.id !== n.id || abaNeg !== 'cliente') return;   // trocou de card ou de aba durante a leitura
+
   b.innerHTML = '<div class="fichaTopo">'
     + '<div class="lado">' + logoHTML(n.cliente_id, n.cliente_nome, 'logoFicha') + '</div>'
     + '<div class="campos"><h3 style="margin:0 0 4px"></h3>'
     + '<p class="nota" style="margin:0">' + esc(n.numero) + ' · ' + esc(n.coluna) + '</p></div></div>'
-    + blocoLocal({ endereco:n.cliente_endereco, localizacao:n.cliente_localizacao,
-                   contato_agenda:n.contato_agenda })
+    + blocoLocal(loc)   // S104 · o endereço completo
     + blocoIdentNegocio(n)   // S41 · itens 6 e 8, junto do "Agendar com"
-    + ((!n.cliente_endereco || !n.contato_agenda)
+    + (localIncompleto(loc)   // S104: a cidade também conta
         ? '<p class="nota">O que está em branco não impede nada — mas é o que o campo vai '
           + 'procurar no dia da visita. Vale preencher antes de virar OS.</p>' : '')
-    // ⚠ Só quem tem o módulo: o perfil comercial não tem Cadastros, e um botão
-    //   que leva a uma tela que não existe naquele menu deixa a pessoa em branco.
-    + (podeVer('cadastros')
-        ? '<button class="btn" id="ngCad" style="width:100%">Abrir no cadastro de clientes</button>'
-        : '')
+    // S104: desde o S101 CADASTROS abre para todos (o menu mostra Clientes em
+    // qualquer módulo), então o botão também é de todos. O que cada um grava lá
+    // continua sendo do banco (campo vê só leitura).
+    + '<button class="btn" id="ngCad" style="width:100%">Abrir no cadastro de clientes</button>'
     + blocoTrocarCliente(n);
   b.querySelector('h3').textContent = n.cliente_nome;
   carregarLogos([n.cliente_id]);
