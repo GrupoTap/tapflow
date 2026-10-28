@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S105</title>
+<title>TapFlow Manager · S106</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2100,6 +2100,11 @@ th.num .tfThFixo{text-align:right}
 /* item 11 */
 .papeisGrade{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0 12px}
 .papeisGrade .chk{margin-bottom:8px}
+/* S106 · o contato novo cadastrado na própria janela */
+.ctNovo{border-left:3px solid var(--rule);padding:2px 0 2px 12px;margin:-4px 0 14px}
+.ctNovo[hidden]{display:none}
+.ctNovo .ctDup .aviso{margin-top:6px}
+.ctDupBotoes{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 /* ── S60 · CARTÕES ───────────────────────────────────────────────────────── */
 .carTela .agRibbon{margin-top:12px}
 .carBarra{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:4px 0 12px}
@@ -2345,7 +2350,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S105';
+const APP_VERSION = 'S106';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -3659,13 +3664,15 @@ async function pintarClienteOS(){
           ? '<div class="campo"><label for="ocLoc">Localização no mapa</label><input id="ocLoc" type="text"'
             + ' value="' + (sobrescrever ? esc(cli.localizacao||'') : '') + '"'
             + ' placeholder="Cole o link do Google Maps" autocomplete="off" name="ocl_nofill"></div>' : '')
-      + (contatos.length
+      + (contatos.length || podeContatoNovo()
           ? '<div class="campo"><label for="ocCt">Quem se procura para agendar</label>'
             + '<select id="ocCt"><option value="">— não mexer —</option>'
             + contatos.map(x => '<option value="' + esc(x.id) + '"'
                 + (agenda && agenda.id === x.id ? ' selected' : '') + '>' + esc(x.nome)
                 + (x.telefone ? ' · ' + esc(x.telefone) : '') + '</option>').join('')
+            + (podeContatoNovo() ? optContatoNovo() : '')   // S106
             + '</select></div>'
+            + (podeContatoNovo() ? htmlContatoNovo('ocCt', 'agenda', true) : '')
           : '<p class="nota">Este cliente ainda não tem contato cadastrado — quem cadastra é o '
             + 'escritório, em Cadastros → Clientes.</p>')
       + '<button class="btn pri" id="ocSalvar" style="width:100%">Gravar</button>'
@@ -3673,19 +3680,27 @@ async function pintarClienteOS(){
 
     const bc = document.getElementById('ocCorrigir');
     if (bc) bc.addEventListener('click', () => desenharForm(true));
+    ligarContatoNovo(document.getElementById('ocCt'), 'ocCt');   // S106
 
     document.getElementById('ocSalvar').addEventListener('click', function(){
       _semDuploEnvio_(this, async () => {
         const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
         const end = v('ocEnd'), loc = v('ocLoc'), ct = v('ocCt');
         if (!end && !loc && !ct){ toast('Não há nada para gravar.','err'); return; }
-        try{
-          if (!DEMO) await rpc('tf_completar_dados_cliente', {
-            p_os_id: card.os_id, p_endereco: end || null, p_localizacao: loc || null,
-            p_contato_agenda_id: ct || null, p_sobrescrever: !!sobrescrever });
-          toast('Dados do cliente atualizados.','ok');
-          pintarClienteOS();
-        }catch(e){ toast(e.message,'err'); }
+        // S106 · com o contato da lista, a de sempre; com o novo, a 303 grava os dois juntos
+        await gravarComContato('ocCt', contatos, document.getElementById('ocCt'),
+          (ctId, novo) => DEMO ? Promise.resolve({})
+            : novo
+              ? rpc('tf_completar_dados_cliente_contato_novo', {
+                  p_os_id: card.os_id, p_endereco: end || null, p_localizacao: loc || null,
+                  p_contato: novo, p_sobrescrever: !!sobrescrever })
+              : rpc('tf_completar_dados_cliente', {
+                  p_os_id: card.os_id, p_endereco: end || null, p_localizacao: loc || null,
+                  p_contato_agenda_id: ctId || null, p_sobrescrever: !!sobrescrever }),
+          async () => {
+            toast('Dados do cliente atualizados.','ok');
+            pintarClienteOS();
+          });
       });
     });
   };
@@ -3705,6 +3720,7 @@ const HIST_ROT = {
   levantamento:'Levantamento', execucao:'Execução', proposta:'Proposta',
   pedido_compra:'Pedido de compra', pipeline_instanciado:'Pipeline criado',
   anotacao_anulada:'Anotação anulada', tarefa_reaberta:'Tarefa reaberta',
+  tarefa_rebloqueada:'Voltou a esperar', tarefa_concluida_sistema:'Tarefa concluída (automático)',
   documento_gerado:'Documento gerado', numero_reservado:'Número reservado',
   tarefa_status:'Tarefa', os_concluida:'OS concluída', proposta_corrigida:'Proposta corrigida',
   item_retirado:'Item tirado da OS', item_devolvido:'Item devolvido à OS',
@@ -3865,7 +3881,8 @@ function pintarAcoes_(){
     row.appendChild(botaoFaturar(card.os_id, false));
     const hf = document.createElement('div');
     hf.className = 'hint paralela'; hf.id = 'hintFaturar';
-    hf.textContent = 'A nota fiscal e o boleto saem no TapFin. Depois de faturar, a tarefa continua sendo concluída por aqui.';
+    // S106 · desde o S105 a tarefa se conclui sozinha (o texto antigo dizia o contrário)
+    hf.textContent = 'A nota fiscal e o boleto saem no TapFin. Quando todo o valor aprovado tiver nota, esta tarefa se conclui sozinha.';
     cx.appendChild(hf);
   }
 
@@ -4507,8 +4524,9 @@ function confirmarAssumir(t, quem, forcar){
  *  sem evidência tinha até o S18 — o card anda e ninguém sabe por quê. */
 function modalReabrir(card, t){
   abrirModal('Reabrir "' + t.nome + '"',
-      '<div class="aviso">Isto devolve a tarefa para <b>pendente</b>. O que já foi feito '
-    + 'por causa dela não é desfeito — só a tarefa volta a pedir conclusão.</div>'
+      '<div class="aviso">Isto devolve a tarefa para <b>pendente</b>. As tarefas seguintes que '
+    + 'ainda estão abertas voltam a esperar por ela (mesmo as já começadas); o que já foi '
+    + 'concluído não é desfeito.</div>'
     + '<div class="campo"><label for="rbMot">Por que está reabrindo?</label>'
     + '<textarea id="rbMot" rows="3" placeholder="ex.: marquei como concluída sem ter anexado o pedido"></textarea>'
     + '<div class="dica">Fica registrado no histórico, com o seu nome e a hora.</div></div>'
@@ -4519,10 +4537,13 @@ function modalReabrir(card, t){
         const msg = document.getElementById('rbMsg');
         if (mot.length < 5){ msg.textContent = 'Escreva o motivo — ele fica no histórico.'; return; }
         try{
-          await rpc('tf_reabrir_tarefa',
+          const rr = await rpc('tf_reabrir_tarefa',
                     { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id, p_motivo: mot });
           fecharModal();
-          toast('"' + t.nome + '" foi reaberta.', 'ok');
+          // S106 (303) · o que ela tinha liberado volta a esperar
+          const volta = ((rr && rr.voltaram_a_esperar) || []).map(x => '"' + x.nome + '"');
+          toast('"' + t.nome + '" foi reaberta.'
+            + (volta.length ? ' Voltou a esperar: ' + volta.join(', ') + '.' : ''), 'ok');
           await carregar({silencioso:true});
           const novo = cards.find(x => x.os_id === card.os_id) || card;
           await abrirOS(novo);
@@ -7333,6 +7354,116 @@ function propostaEmJogo(props){
   return vivas.sort((a,b) => (b.versao||0) - (a.versao||0))[0];
 }
 
+// ── S106 · CADASTRAR CONTATO SEM SAIR DA TELA ──────────────────────────────
+// Recado do central (28/10), decisões do Bruno. Nos três lugares em que se
+// escolhe contato numa lista — "Quem respondeu" (Resposta do cliente), "Para
+// quem" (Registrar envio) e "Quem se procura para agendar" (aba Cliente da OS) —
+// a última opção é "+ Cadastrar outra pessoa…". O contato e a outra coisa vão
+// ao banco numa função só (303: tudo ou nada). Duplicado (e-mail, telefone ou
+// nome iguais aos de um contato ativo do cliente) → "Já existe: X. Usar esse
+// contato?"; com o nome igual dá para cadastrar assim mesmo (homônimo). O banco
+// confere de novo. Quem não grava contato (campo) não vê a opção.
+const CT_NOVO = '__ct_novo__';
+const podeContatoNovo = () => !DEMO && podeEscritorio();
+const podeContatoNovoProposta = () => podeContatoNovo() && podeEditarPropostaNeg();
+const optContatoNovo = () => '<option value="' + CT_NOVO + '">+ Cadastrar outra pessoa…</option>';
+const _ctFone = t => { let d = String(t || '').replace(/\D/g, '');
+  if (d.length >= 12 && d.startsWith('55')) d = d.slice(2); return d.replace(/^0+/, ''); };
+const _ctNome = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .toLowerCase().replace(/\s+/g, '');
+/** Os campos do contato novo, escondidos até escolherem "+ Cadastrar outra pessoa…".
+ *  `papel` vem marcado; `travado` = não dá para desmarcar (o "Agendar com"). */
+function htmlContatoNovo(pre, papel, travado){
+  const campo = (id, rot, tipo, ph) => '<div class="campo"><label for="' + pre + id + '">' + rot + '</label>'
+    + '<input id="' + pre + id + '" type="' + tipo + '" maxlength="160" autocomplete="off" name="'
+    + pre.toLowerCase() + id.toLowerCase() + '_nofill"' + (ph ? ' placeholder="' + ph + '"' : '') + '></div>';
+  return '<div class="ctNovo" id="' + pre + 'Novo" hidden>'
+    + '<div class="secTit" style="margin-top:0">Contato novo deste cliente</div>'
+    + campo('NN', 'Nome', 'text', '') + campo('NC', 'Cargo (opcional)', 'text', '')
+    + '<div class="dupla">' + campo('NE', 'E-mail', 'email', '') + campo('NT', 'Telefone', 'tel', '(37) 99999-0000') + '</div>'
+    + '<p class="nota" style="margin:-4px 0 10px">Pelo menos o e-mail ou o telefone.</p>'
+    + '<div class="papeisGrade">' + PAPEIS_CONTATO.map(([k, rot]) =>
+        '<label class="chk"><input type="checkbox" data-ctnovo="' + k + '"'
+        + (k === papel ? ' checked' : '') + (k === papel && travado ? ' disabled' : '') + '> '
+        + esc(rot) + '</label>').join('') + '</div>'
+    + (travado ? '<p class="nota">Escolhido aqui, ele passa a ser o responsável pelo agendamento deste '
+               + 'cliente (quem era perde o papel).</p>' : '')
+    + '<div class="ctDup" id="' + pre + 'Dup"></div>'
+    + '</div>';
+}
+function ligarContatoNovo(sel, pre){
+  const box = document.getElementById(pre + 'Novo');
+  if (!sel || !box) return;
+  const mostrar = () => {
+    box.hidden = sel.value !== CT_NOVO;
+    const d = document.getElementById(pre + 'Dup'); if (d) d.innerHTML = '';
+    if (!box.hidden){ const n = document.getElementById(pre + 'NN'); if (n) n.focus(); }
+  };
+  sel.addEventListener('change', mostrar);
+  // o aviso de duplicado vale para o que estava escrito: mexeu, ele sai
+  box.addEventListener('input', () => { const d = document.getElementById(pre + 'Dup'); if (d) d.innerHTML = ''; });
+  mostrar();
+}
+function lerContatoNovo(pre){
+  const v = id => ((document.getElementById(pre + id) || {}).value || '').trim();
+  return { nome: v('NN'), cargo: v('NC') || null, email: v('NE') || null, telefone: v('NT') || null,
+    papeis: [...document.querySelectorAll('#' + pre + 'Novo [data-ctnovo]:checked')].map(x => x.dataset.ctnovo) };
+}
+function conferirContatoNovo(c){
+  if (!c.nome) return 'Escreva o nome do contato novo.';
+  if (!c.email && !c.telefone) return 'Informe o e-mail ou o telefone do contato novo (pelo menos um dos dois).';
+  if (c.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(c.email)) return 'E-mail inválido: confira a digitação.';
+  if (c.telefone && _ctFone(c.telefone).length < 8) return 'Telefone incompleto: confira os números (com o DDD).';
+  return null;
+}
+/** Já existe? O mesmo critério da 303, sobre a lista da tela (que só traz os ativos). */
+function contatoIgual(lista, c){
+  const e = (c.email || '').toLowerCase(), f = _ctFone(c.telefone), n = _ctNome(c.nome);
+  const peso = { email:1, telefone:2, nome:3 };
+  let achou = null;
+  (lista || []).forEach(x => {
+    const por = e && String(x.email || '').trim().toLowerCase() === e ? 'email'
+      : f.length >= 8 && _ctFone(x.telefone) === f ? 'telefone'
+      : n && _ctNome(x.nome) === n ? 'nome' : null;
+    if (por && (!achou || peso[por] < peso[achou.por])) achou = { id: x.id, nome: x.nome, por };
+  });
+  return achou;
+}
+/** Grava com o contato escolhido na lista ou com o novo.
+ *  `chamar(ctId, novo)` faz a chamada ao banco; `depois(r)` é o "deu certo" da tela.
+ *  Duplicado: o aviso aparece dentro do próprio formulário, com "Usar X". */
+async function gravarComContato(pre, lista, sel, chamar, depois){
+  const ir = async (ctId, novo) => {
+    let r;
+    try{ r = await chamar(ctId, novo); }catch(e){ toast(e.message, 'err'); return; }
+    if (r && r.ok === false && r.duplicado){ avisar(r.duplicado); return; }
+    try{ await depois(r); }catch(e){ toast(e.message, 'err'); }
+  };
+  const avisar = d => {
+    const alvo = document.getElementById(pre + 'Dup');
+    if (!alvo){ toast('Já existe: ' + d.nome + '. Escolha esse contato na lista.', 'err'); return; }
+    const pq = { email:'o mesmo e-mail', telefone:'o mesmo telefone', nome:'o mesmo nome' }[d.por] || 'os mesmos dados';
+    alvo.innerHTML = '<div class="aviso"><b>Já existe: ' + esc(d.nome) + '</b> (' + pq + '). Usar esse contato?'
+      + '<div class="ctDupBotoes"><button type="button" class="btn mini pri" data-ctdup="usar">Usar '
+      + esc(d.nome) + '</button>'
+      + (d.por === 'nome' ? '<button type="button" class="btn mini" data-ctdup="novo">Cadastrar assim mesmo (é outra pessoa)</button>' : '')
+      + '</div></div>';
+    alvo.querySelector('[data-ctdup="usar"]').addEventListener('click', function(){
+      _semDuploEnvio_(this, () => ir(d.id, null)); });
+    const bn = alvo.querySelector('[data-ctdup="novo"]');
+    if (bn) bn.addEventListener('click', function(){
+      _semDuploEnvio_(this, () => ir(null, Object.assign(lerContatoNovo(pre), { mesmo_nome_ok: true }))); });
+    alvo.scrollIntoView({ block:'nearest' });
+  };
+  if (!sel || sel.value !== CT_NOVO) return ir(sel ? sel.value : null, null);
+  const novo = lerContatoNovo(pre);
+  const erro = conferirContatoNovo(novo);
+  if (erro){ toast(erro, 'err'); return; }
+  const d = contatoIgual(lista, novo);
+  if (d){ avisar(d); return; }
+  return ir(null, novo);
+}
+
 async function modalAprovacao(ctx, tipoInicial, prForcada){
   if (DEMO){
     abrirModal('Registrar resposta do cliente',
@@ -7420,11 +7551,14 @@ async function modalAprovacao(ctx, tipoInicial, prForcada){
     + '</div>'
     + '<p class="nota" style="margin:-2px 0 14px">Aprovou só uma parte? Registre a revisão da proposta '
     + 'com o que ficou e responda <b>Aprovado</b> nela.</p>'
-    + (ordenados.length
+    + (ordenados.length || podeContatoNovoProposta()
         ? '<div class="campo"><label for="apCt">Quem respondeu</label><select id="apCt">'
           + ordenados.map(x => '<option value="' + esc(x.id) + '">' + esc(x.nome)
               + ((x.papeis||[]).includes('aprova') ? ' · aprova propostas' : '')
-              + '</option>').join('') + '</select></div>'
+              + '</option>').join('')
+          + (podeContatoNovoProposta() ? optContatoNovo() : '')   // S106
+          + '</select></div>'
+          + (podeContatoNovoProposta() ? htmlContatoNovo('apCt', 'aprova', false) : '')
         : '<div class="aviso"><b>Este cliente não tem contato cadastrado.</b> A resposta '
           + 'precisa ter um nome — cadastre o contato em Cadastros → Clientes antes.</div>')
     + '<div class="dupla">'
@@ -7461,13 +7595,17 @@ async function modalAprovacao(ctx, tipoInicial, prForcada){
           motivo = (document.getElementById('apMot')||{}).value;
           if (!motivo){ toast('Escolha o motivo da perda.','err'); return; }
         }
-        try{
-          const r = await rpc('tf_aprovar_proposta', { p_proposta_id: pr.id, p_tipo: tipo,
-            p_contato_id: ct, p_canal: document.getElementById('apCanal').value,
-            p_decidido_em: data, p_itens_aprovados: null,
-            p_motivo_perda: motivo,
+        // S106 · com o contato da lista, a de sempre; com o novo, a 303 grava os dois juntos
+        const base = { p_proposta_id: pr.id, p_tipo: tipo,
+            p_canal: document.getElementById('apCanal').value,
+            p_decidido_em: data, p_motivo_perda: motivo,
             p_evidencia_url: (document.getElementById('apEv')||{}).value.trim() || null,
-            p_observacao: (document.getElementById('apObs')||{}).value.trim() || null });
+            p_observacao: (document.getElementById('apObs')||{}).value.trim() || null };
+        await gravarComContato('apCt', ordenados, document.getElementById('apCt'),
+          (ctId, novo) => novo
+            ? rpc('tf_aprovar_proposta_contato_novo', Object.assign({}, base, { p_contato: novo }))
+            : rpc('tf_aprovar_proposta', Object.assign({}, base, { p_contato_id: ctId, p_itens_aprovados: null })),
+          async r => {
           fecharModal();
           // "o card andou" só é verdade quando andou. A função devolve o que
           // aconteceu com o pipeline; sem OS ainda, nada andou — a OS nasce
@@ -7487,8 +7625,9 @@ async function modalAprovacao(ctx, tipoInicial, prForcada){
             await carregar();
             fecharDrawer();
           }
-        }catch(e){ toast(e.message,'err'); }
+          });
      }}]);
+  ligarContatoNovo(document.getElementById('apCt'), 'apCt');   // S106
 
   // ── o motivo só aparece para "Não aprovado" ──
   // S29: a escolha item a item ("o que o cliente aprovou") saiu junto com a
@@ -7519,11 +7658,13 @@ async function modalAprovacao(ctx, tipoInicial, prForcada){
 // e o formulário é o mesmo. O que ele precisa saber é de qual CLIENTE são os
 // contatos — não de qual OS.
 function modalEnvioProposta(ctx, pr){
+  let ctsEnvio = [];   // S106 · a lista, para o aviso de duplicado
   abrirModal('Registrar envio de ' + rotuloProposta(pr.numero, pr.versao),
       '<p class="nota">Isto não envia nada — registra que VOCÊ enviou, para o '
     + 'quadro comercial andar e o follow-up começar a contar.</p>'
     + '<div class="campo"><label for="epC">Para quem</label>'
     + '<select id="epC"><option value="">carregando…</option></select></div>'
+    + (podeContatoNovoProposta() ? htmlContatoNovo('epC', 'aprova', false) : '')   // S106
     + '<div class="campo"><label for="epK">Por onde</label><select id="epK">'
     +   ['email','whatsapp','telefone','presencial','outro'].map(k =>
         '<option value="' + k + '">' + ({email:'E-mail',whatsapp:'WhatsApp',
@@ -7533,12 +7674,17 @@ function modalEnvioProposta(ctx, pr){
     +   isoHoje() + '"></div>',
     [{ label:'Cancelar', onClick: fecharModal },
      { label:'Registrar envio', pri:true, onClick: async () => {
-        const ct = document.getElementById('epC').value;
+        const selC = document.getElementById('epC');
+        const ct = selC.value;
         if (!ct){ toast('Escolha para quem a proposta foi.','err'); return; }
-        try{
-          await rpc('tf_registrar_envio_proposta', { p_proposta_id: pr.id,
-            p_contato_id: ct, p_canal: document.getElementById('epK').value,
-            p_quando: document.getElementById('epD').value || null });
+        // S106 · com o contato da lista, a de sempre; com o novo, a 303 grava os dois juntos
+        const base = { p_proposta_id: pr.id, p_canal: document.getElementById('epK').value,
+            p_quando: document.getElementById('epD').value || null };
+        await gravarComContato('epC', ctsEnvio, selC,
+          (ctId, novo) => novo
+            ? rpc('tf_registrar_envio_contato_novo', Object.assign({}, base, { p_contato: novo }))
+            : rpc('tf_registrar_envio_proposta', Object.assign({}, base, { p_contato_id: ctId })),
+          async () => {
           fecharModal(); toast('Envio registrado.','ok');
           // ⚠ Este modal é chamado de DOIS lugares: da aba Proposta da OS e da
           //   gaveta do NEGÓCIO. Até o S22 ele repintava sempre a aba da OS e
@@ -7553,7 +7699,7 @@ function modalEnvioProposta(ctx, pr){
           } else {
             pintarProposta(); carregar({silencioso:true});
           }
-        }catch(e){ toast(e.message,'err'); }
+          });
      }}]);
 
   // os contatos chegam depois; o modal já está na tela
@@ -7561,12 +7707,16 @@ function modalEnvioProposta(ctx, pr){
       + '&ativo=eq.true&order=nome').then(cts => {
     const sel = document.getElementById('epC');
     if (!sel) return;
+    ctsEnvio = cts || [];
+    const novo = podeContatoNovoProposta() ? optContatoNovo() : '';   // S106
     if (!cts || !cts.length){
-      sel.innerHTML = '<option value="">— este cliente não tem contato cadastrado —</option>';
+      sel.innerHTML = novo || '<option value="">— este cliente não tem contato cadastrado —</option>';
+      ligarContatoNovo(sel, 'epC');
       return;
     }
     sel.innerHTML = cts.map(x => '<option value="' + esc(x.id) + '">' + esc(x.nome)
-      + (x.email || x.telefone ? ' · ' + esc(x.email || x.telefone) : '') + '</option>').join('');
+      + (x.email || x.telefone ? ' · ' + esc(x.email || x.telefone) : '') + '</option>').join('') + novo;
+    ligarContatoNovo(sel, 'epC');
   }).catch(e => {
     const sel = document.getElementById('epC');
     if (sel) sel.innerHTML = '<option value="">não deu para carregar os contatos</option>';

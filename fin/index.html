@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 11 · Financeiro</title>
+<title>TapFin 12 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2308,7 +2308,7 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'F11';   // TapFin 11 (faturar a partir da OS; Cadastros do Manager) — o S## da publicação é do central
+const APP_VERSION = 'F12';   // TapFin 12 (comprovante do cancelamento da NFS-e) — o S## da publicação é do central
 try{ document.getElementById('verBadge').textContent = 'FINANCEIRO · ' + APP_VERSION; }catch(e){}
 
 const esc               = (...a) => Nucleo.util.esc(...a);
@@ -6645,6 +6645,7 @@ function nfBuscarAtrasados(){
   const limite = Date.now() - 30 * 86400000;
   const falta = Object.entries(FINNF.sit || {}).filter(([, n]) => n && n.id && n.situacao === 'autorizada' && (!n.pdf || !n.xml)
       && !NF_BUSCADOS.has(n.id) && (!n.criado_em || new Date(n.criado_em).getTime() >= limite)).slice(0, 5);
+  nfBuscarComprovantes();   // F12 · 517
   if (!falta.length) return;
   falta.forEach(([, n]) => NF_BUSCADOS.add(n.id));
   (async () => {
@@ -6657,6 +6658,26 @@ function nfBuscarAtrasados(){
     try{ FINNF.sit = (await rpc('tf_fin_nfse_situacoes', {})) || FINNF.sit; }catch(e){ return; }
     if (typeof REPINTA !== 'undefined' && REPINTA.finre && document.getElementById('finreLista')) REPINTA.finre();
   })();
+}
+
+/** F12 · 517: o XML do cancelamento que o Notaas ainda não tinha (inclui as canceladas antes do F12).
+ *  Até 5 por abertura, a mais nova primeiro, uma vez por nota, sem janela nem aviso. Sem o 517, nada. */
+async function nfBuscarComprovantes(){
+  let L;
+  try{ L = await rpc('tf_fin_nfse_sem_comprovante', {}); }catch(e){ return; }
+  const falta = (L || []).filter(x => x && x.nfse_id && !NF_BUSCADOS.has(x.nfse_id));
+  if (!falta.length) return;
+  falta.forEach(x => NF_BUSCADOS.add(x.nfse_id));
+  for (const x of falta){
+    try{ await nfFuncao({ acao: 'consultar', titulo_id: x.titulo_id, nfse_id: x.nfse_id }); }
+    catch(e){ /* fica para a próxima abertura, ou para o "Buscar comprovante" */ }
+  }
+  let depois;
+  try{ depois = await rpc('tf_fin_nfse_sem_comprovante', {}); }catch(e){ return; }
+  const ainda = new Set((depois || []).map(x => x.nfse_id));
+  if (!falta.some(x => !ainda.has(x.nfse_id))) return;   // nenhum chegou
+  try{ FINNF.sit = (await rpc('tf_fin_nfse_situacoes', {})) || FINNF.sit; }catch(e){ return; }
+  if (typeof REPINTA !== 'undefined' && REPINTA.finre && document.getElementById('finreLista')) REPINTA.finre();
 }
 
 /** A nota (a última) do título, se houver. */
@@ -6680,7 +6701,10 @@ function nfChip(t){
   else if (n.situacao === 'emitindo' || n.situacao === 'cancelando'){ cls = ' fAtn'; }
   return ' <span class="chip' + cls + '" title="' + esc((n.motivo || n.cancel_resposta || txt)) + '">' + esc(txt) + '</span>'
     + (n.situacao === 'autorizada' && n.pdf ? ' <a href="#" data-nfdoc="pdf" data-nfpath="' + esc(n.pdf_path) + '" style="font-size:11px">PDF</a>' : '')
-    + (n.situacao === 'autorizada' && n.xml ? ' <a href="#" data-nfdoc="xml" data-nfpath="' + esc(n.xml_path) + '" style="font-size:11px">XML</a>' : '');
+    + (n.situacao === 'autorizada' && n.xml ? ' <a href="#" data-nfdoc="xml" data-nfpath="' + esc(n.xml_path) + '" style="font-size:11px">XML</a>' : '')
+    // F12 · 517: o comprovante do cancelamento é o XML do evento (o Notaas não fornece PDF dele)
+    + (n.situacao === 'cancelada' && n.xml_cancel && n.xml_cancel_path ? ' <a href="#" data-nfdoc="xml" data-nfpath="' + esc(n.xml_cancel_path)
+         + '" style="font-size:11px;white-space:nowrap" title="O comprovante do cancelamento (XML do evento). O PDF com a situação Cancelada fica no portal nacional.">Cancelamento (XML)</a>' : '');
 }
 
 /** Abre o PDF / baixa o XML do compartimento privado (com o token de quem clicou). */
@@ -6862,7 +6886,8 @@ async function modalNotasTitulo(t){
     +   (n.situacao === 'cancelada'
          ? '<div class="nota nfPortal" style="margin:2px 0 0">' + (n.ambiente === 'teste'
              ? 'Nota de teste: não aparece no portal nacional.'
-             : 'O PDF é o da emissão e não mostra o cancelamento. A situação "Cancelada" aparece no portal nacional: '
+             : 'O comprovante do cancelamento é o XML do evento ("Cancelamento (XML)"): o Notaas não fornece PDF dele. '
+               + 'O PDF é o da emissão e não mostra o cancelamento. O PDF com a situação "Cancelada" fica no portal nacional: '
                + '"Ver no portal nacional" copia a chave; cole-a lá e clique em Consultar.') + '</div>' : '')
     + '</div><div class="nfBot">'
     +   (n.pdf_path ? '<button class="btn mini" type="button" data-nfdoc="pdf" data-nfpath="' + esc(n.pdf_path) + '">'
@@ -6870,7 +6895,9 @@ async function modalNotasTitulo(t){
     +   (n.situacao === 'cancelada' && nfChave(n) && n.ambiente !== 'teste'
          ? '<button class="btn mini" type="button" data-nfportal="' + esc(nfChave(n)) + '" title="Copia a chave de acesso e abre a consulta pública">Ver no portal nacional</button>' : '')
     +   (n.xml_path ? '<button class="btn mini" type="button" data-nfdoc="xml" data-nfpath="' + esc(n.xml_path) + '">XML</button>' : '')
-    +   (n.xml_cancel_path ? '<button class="btn mini" type="button" data-nfdoc="xml" data-nfpath="' + esc(n.xml_cancel_path) + '">XML do cancelamento</button>' : '')
+    +   (n.xml_cancel_path ? '<button class="btn mini" type="button" data-nfdoc="xml" data-nfpath="' + esc(n.xml_cancel_path) + '" title="O comprovante do cancelamento (XML do evento)">Cancelamento (XML)</button>' : '')
+    +   (n.situacao === 'cancelada' && !n.xml_cancel_path   // F12 · 517: o Notaas ainda não tinha o comprovante
+         ? '<button class="btn mini" type="button" data-nfcomprov="' + esc(n.id) + '">Buscar comprovante</button>' : '')
     +   (['emitindo', 'cancelando'].includes(n.situacao) || (n.situacao === 'autorizada' && (!n.pdf_path || !n.xml_path))
          ? '<button class="btn mini" type="button" data-nfatual="' + esc(n.id) + '">Atualizar</button>' : '')
     +   (n.situacao === 'autorizada' ? '<button class="btn mini perigo" type="button" data-nfcanc="' + esc(n.id) + '">Cancelar nota</button>' : '')
@@ -6885,7 +6912,25 @@ async function modalNotasTitulo(t){
     if (pt){ copiar(pt.dataset.nfportal, 'Chave copiada: cole no portal nacional e clique em Consultar.'); window.open(NF_PORTAL, '_blank', 'noopener'); return; }   // copia antes: a aba nova tira o foco
     if (a) nfExecutar(() => nfFuncao({ acao: 'consultar', titulo_id: t.id, nfse_id: a.dataset.nfatual }), 'consultar', 'Consultando a nota…');
     if (c) modalCancelarNota(t, L.find(x => x.id === c.dataset.nfcanc));
+    const cp = e.target.closest('[data-nfcomprov]');
+    if (cp) nfBuscarComprovante(t, cp.dataset.nfcomprov);
   });
+}
+
+/** F12 · 517: pede à fin-nfse o XML do cancelamento ("consultar" busca e guarda) e reabre o histórico. */
+async function nfBuscarComprovante(t, nfseId){
+  abrirModal('Buscar comprovante', '<p style="margin:6px 0">Buscando o comprovante do cancelamento no Notaas… Isso leva alguns segundos.</p>', []);
+  let tem = false;
+  try{
+    await nfFuncao({ acao: 'consultar', titulo_id: t.id, nfse_id: nfseId });
+    const L = await rpc('tf_fin_nfse_listar', { p_titulo_id: t.id });
+    tem = !!((L || []).find(x => x.id === nfseId) || {}).xml_cancel_path;
+  }catch(e){ fecharModal(); toast(e.message, 'err'); return; }
+  fecharModal();
+  toast(tem ? 'Comprovante do cancelamento guardado: "Cancelamento (XML)".'
+            : 'O Notaas ainda não tem o comprovante. O TapFin tenta de novo na próxima abertura; o "Ver no portal nacional" continua valendo.', tem ? 'ok' : 'err');
+  await finreCarregar();
+  modalNotasTitulo(t);
 }
 
 function modalCancelarNota(t, n){
