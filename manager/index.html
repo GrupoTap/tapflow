@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S102</title>
+<title>TapFlow Manager · S103</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1494,6 +1494,14 @@ button.mini{padding:6px 12px;font-weight:600}
 /* S38 · item 2: a prévia do anexo por vaso pinta a célula vencida como o Word vai pintar */
 .tbl td.venc{background:#FFF176;color:#3A3000;font-weight:600}
 .anexoPrev{margin:0 0 14px}
+/* S103 · proposta agrupada: as linhas de subtotal/desconto e a vista "Como o cliente vê" */
+.tbl tr.agSub td{color:var(--ink-3);border-bottom:0}
+.tbl tr.agDesc td{color:var(--ink-3)}
+.tbl tr.agTot td{font-weight:700;font-size:13.5px}
+.tbl td .agTags{display:block;font-size:11.5px;color:var(--ink-3);margin-top:1px}
+.vistaProp{margin:0 0 10px}
+.vistaProp button{min-width:0}
+.agVasosT{font-size:12px;font-weight:700;color:var(--ink-2);margin:14px 0 4px}
 .anexoPrev .tbl{font-size:12px}
 .anexoPrev .tbl th,.anexoPrev .tbl td{white-space:nowrap}
 .tbl input{width:100%;padding:6px 7px;border:1px solid var(--rule);border-radius:3px;
@@ -2332,7 +2340,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S102';
+const APP_VERSION = 'S103';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -6040,6 +6048,9 @@ function acharTabelaItens(xml){
       if (dados.length && _tags(dados[dados.length-1],'w:tc').length < 5){
         linhaTotal = dados[dados.length-1];
         linhasItem = dados.slice(0,-1);
+        // S103: o pé pode ter Subtotal e Desconto antes do Total (tabela já escrita)
+        while (linhasItem.length && _tags(linhasItem[linhasItem.length-1],'w:tc').length < 5)
+          linhasItem = linhasItem.slice(0,-1);
       }
       if (!linhasItem.length) continue;
       return {
@@ -6181,6 +6192,172 @@ async function carregarPlanos(forcar){
   }catch(e){ PLANOS = null; }
   return PLANOS;
 }
+// ════════════════════════════════════════════════════════════════════════════
+// S103 · A PROPOSTA COMO O CLIENTE VÊ (decisões do Bruno, 27/10 — 1b, 2a, 3a)
+// ----------------------------------------------------------------------------
+// O card continua POR VASO (é o que a OS leva ao campo). O documento, e a vista
+// "Como o cliente vê" do card, juntam as linhas: mesmo serviço (o texto antes de
+// " — <TAG>") com o mesmo preço unitário vira uma linha, com a quantidade somada
+// e o nome no plural. Preço diferente fica separado. Linha digitada (sem vaso)
+// fica como está. Deslocamento sai 1 × o valor total, sem km. As linhas levam o
+// preço CHEIO; o desconto vira uma linha no fim (Subtotal · Desconto X% · Total
+// Geral). O total é a soma dos totais das linhas do card — bate ao centavo.
+// Uma função só, para o papel e a tela não discordarem.
+const _r2 = v => Math.round((Number(v) || 0) * 100) / 100;
+const _PLURAL_SERV = {
+  'inspecao interna': 'Inspeções Internas', 'inspecao externa': 'Inspeções Externas',
+  'inspecao interna e externa': 'Inspeções Internas e Externas', 'inspecao nr-13': 'Inspeções NR-13',
+  'calibracao de manometro': 'Calibração de Manômetros', 'calibracao de valvula': 'Calibração de Válvulas' };
+/** O plural do nome do serviço: os conhecidos pela tabela; o resto, pela última palavra. */
+function pluralServico(serv){
+  const t = String(serv || '').trim();
+  const k = norm(t).replace(/\s+/g, ' ');
+  if (_PLURAL_SERV[k]) return _PLURAL_SERV[k];
+  return t.replace(/(\S+)$/, w => /ão$/.test(w) ? w.slice(0, -2) + 'ões'
+    : /[aeiouáéíóúâêô]$/i.test(w) ? w + 's' : /[rz]$/i.test(w) ? w + 'es' : w);
+}
+const ehDeslocamento = d => /^(mobilizacao\s*(\/|e)\s*)?desloca/.test(norm(String(d || '')).trim());
+/** "Deslocamento (214 km × R$ 2,50/km)" → "Deslocamento": o papel não fala de km. */
+function limparKm(d){
+  return String(d || '')
+    .replace(/\s*\([^)]*\bkm\b[^)]*\)/gi, '')
+    .replace(/\s*[—–-]\s*[\d.,]+\s*km\b.*$/i, '')
+    .replace(/\s*[\d.,]+\s*km\b(\s*[x×]\s*R?\$?\s*[\d.,]+(\s*\/\s*km)?)?/gi, '')
+    .replace(/\s*R\$\s*\/\s*km\b/gi, '')
+    .replace(/[\s,;:·—–-]+$/, '').trim();
+}
+const _qtdTxt = q => Number.isInteger(Number(q)) ? String(Number(q))
+  : Number(q).toLocaleString('pt-BR', { maximumFractionDigits: 4 });
+const pctTxt = p => String(Math.round(Number(p) * 100) / 100).replace('.', ',') + '%';
+/**
+ * Entra: as linhas por vaso [{descricao, qtd, preco, desc, total, equip}] (total =
+ * o da linha, já com o desconto dela; sem ele, a tela calcula como o banco).
+ * Sai: { linhas: [{descricao, qtd, unit, cheio, venda, origens, grupo, tags}],
+ *        subtotal, desconto, pct, total }.
+ */
+function agruparParaCliente(entrada){
+  const out = [], idx = {};
+  (entrada || []).forEach((l, i) => {
+    const qtd = Number(l.qtd) || 0, preco = Number(l.preco) || 0;
+    const cheio = _r2(qtd * preco);
+    const venda = l.total != null && l.total !== '' ? Number(l.total)
+      : _r2(cheio * (1 - (Number(l.desc) || 0) / 100));
+    const d = String(l.descricao || '');
+    const k = d.indexOf(' — ');
+    if (l.equip && k > 0){
+      const serv = d.slice(0, k).trim();
+      const ch = 's|' + norm(serv) + '|' + Math.round(preco * 100);
+      if (idx[ch] == null){ idx[ch] = out.length;
+        out.push({ grupo: 'vaso', servico: serv, qtd: 0, unit: preco, cheio: 0, venda: 0, origens: [], tags: [] }); }
+      const g = out[idx[ch]];
+      g.qtd += qtd; g.cheio += cheio; g.venda += venda; g.origens.push(i); g.tags.push(d.slice(k + 3).trim());
+    } else if (ehDeslocamento(d)){
+      const nome = limparKm(d) || 'Deslocamento';
+      const ch = 'd|' + norm(nome);
+      if (idx[ch] == null){ idx[ch] = out.length;
+        out.push({ grupo: 'deslocamento', descricao: nome, qtd: 1, cheio: 0, venda: 0, origens: [] }); }
+      const g = out[idx[ch]];
+      g.cheio += cheio; g.venda += venda; g.origens.push(i);
+    } else {
+      out.push({ grupo: null, descricao: d, qtd, unit: preco, cheio, venda, origens: [i] });
+    }
+  });
+  out.forEach(g => {
+    g.cheio = _r2(g.cheio); g.venda = _r2(g.venda);
+    if (g.grupo === 'vaso') g.descricao = g.qtd > 1 ? pluralServico(g.servico) : g.servico;
+    if (g.grupo === 'deslocamento') g.unit = g.cheio;
+  });
+  const subtotal = _r2(out.reduce((a, g) => a + g.cheio, 0));
+  const total = _r2(out.reduce((a, g) => a + g.venda, 0));
+  const desconto = _r2(subtotal - total);
+  return { linhas: out, subtotal, total, desconto, pct: subtotal > 0 ? desconto / subtotal * 100 : 0 };
+}
+/** As linhas no formato que a tabela do .docx (e o registro do documento) usa. */
+function linhasDoc(ag){
+  return ag.linhas.map(g => ({ descricao: g.descricao, qtd: _qtdTxt(g.qtd), unitario: _brlDoc(g.unit),
+    total: _brlDoc(g.cheio), qtd_num: g.qtd, unitario_num: g.unit, valor_total_num: g.cheio,
+    venda_num: g.venda, desconto_pct: g.cheio > 0 ? _r2((1 - g.venda / g.cheio) * 100) : 0 }));
+}
+/** O resumo do pé da tabela (o que reescreverTabela escreve). */
+const resumoDoc = ag => ({ subtotal: ag.subtotal, desconto: ag.desconto, pct: ag.pct, total: ag.total });
+/** Lê as linhas por vaso de uma OS (as que o tf_itens_proposta lê, sem juntar). */
+async function linhasPorVasoOS(osId){
+  const r = await get('os_itens?select=descricao,quantidade,preco_unitario,desconto_pct,total_venda,'
+    + 'equipamento_id,ordem&os_id=eq.' + osId + '&elegivel=is.true&aprovado=not.is.false&order=ordem,id');
+  return (r || []).map(i => ({ descricao: i.descricao, qtd: i.quantidade, preco: i.preco_unitario,
+    desc: i.desconto_pct, total: i.total_venda, equip: i.equipamento_id }));
+}
+/** …e de uma proposta registrada (as que o tf_itens_proposta_doc lê, sem juntar). */
+async function linhasPorVasoProposta(propId){
+  const base = 'proposta_itens?select=descricao,quantidade,preco_unitario,desconto_pct,total,equipamento_id,ordem,os_item_id';
+  const fim = '&proposta_id=eq.' + propId + '&order=ordem.nullslast,id';
+  // a linha que veio da OS (fornecimento) leva a descrição e o vaso de lá; se o
+  // embed não responder, vale o que a própria linha da proposta tem
+  let r;
+  try{ r = await get(base + ',os_itens(descricao,equipamento_id,aprovado)' + fim); }
+  catch(e){ r = await get(base + fim); }
+  return (r || []).filter(i => !(i.os_itens && i.os_itens.aprovado === false)).map(i => ({
+    descricao: i.descricao || (i.os_itens && i.os_itens.descricao), qtd: i.quantidade, preco: i.preco_unitario,
+    desc: i.desconto_pct, total: i.total, equip: i.equipamento_id || (i.os_itens && i.os_itens.equipamento_id) }));
+}
+/** A prévia da tabela do papel (gerador da OS e do negócio, e a vista do card). */
+function htmlTabelaCliente(ag, o){
+  o = o || {};
+  const edita = o.editavel ? g => g.grupo === 'vaso' : () => false;
+  return '<div style="overflow-x:auto;margin:0 0 ' + (o.margem == null ? 14 : o.margem) + 'px"><table class="tbl agTbl"><thead><tr>'
+    + '<th>#</th><th>Item</th><th class="num">Qtd</th><th class="num">Unitário</th><th class="num">Total</th>'
+    + '</tr></thead><tbody>'
+    + ag.linhas.map((g, k) => '<tr><td class="mono">' + (k + 1) + '</td><td>' + esc(g.descricao)
+        + (o.tags && g.grupo === 'vaso' && g.tags.length ? '<span class="agTags">' + esc(g.tags.join(' · ')) + '</span>' : '')
+        + '</td><td class="num">' + esc(_qtdTxt(g.qtd)) + '</td>'
+        + '<td class="num">' + (edita(g)
+            ? '<input class="mini" style="width:96px;text-align:right" type="number" step="0.01" min="0" '
+              + 'inputmode="decimal" data-gpreco="' + k + '" value="' + (g.unit || '') + '" '
+              + 'title="Preço de cada um: vale para as ' + g.origens.length + ' linhas do grupo">'
+            : esc(BRL(g.unit))) + '</td>'
+        + '<td class="num">' + esc(BRL(g.cheio)) + '</td></tr>').join('')
+    + '</tbody><tfoot>'
+    + (ag.desconto > 0
+        ? '<tr class="agSub"><td colspan="4" class="num">Subtotal</td><td class="num">' + esc(BRL(ag.subtotal)) + '</td></tr>'
+          + '<tr class="agDesc"><td colspan="4" class="num">Desconto ' + esc(pctTxt(ag.pct)) + '</td>'
+          + '<td class="num">−' + esc(BRL(ag.desconto)) + '</td></tr>' : '')
+    + '<tr class="agTot"><td colspan="4" class="num">Total Geral</td><td class="num" data-agtot>'
+    + esc(BRL(ag.total)) + '</td></tr></tfoot></table></div>';
+}
+/** A tabela de vasos (mesmas colunas e amarelo do papel), para as prévias. */
+function htmlVasosCliente(a){
+  const ls = (a && a.linhas) || [];
+  if (!ls.length) return '';
+  return '<div class="agVasosT">' + esc(tituloVasos(a)) + '</div>'
+    + '<div class="anexoPrev"><div style="overflow-x:auto"><table class="tbl"><thead><tr>'
+    + ANEXO_COLS.map(c => '<th>' + esc(c[1]) + '</th>').join('') + '</tr></thead><tbody>'
+    + ls.map(l => '<tr>' + ANEXO_COLS.map(([k]) => '<td' + (l.venc && l.venc[k] ? ' class="venc"' : '') + '>'
+        + esc(l[k] || '') + '</td>').join('') + '</tr>').join('')
+    + '</tbody></table></div></div>';
+}
+const tituloVasos = a => 'Situação dos vasos (TapWeb' + (a && a.tapweb_em ? ', atualizado em ' + a.tapweb_em : '') + ')';
+/** A mesma conta do `tf_anexo_vasos`, para a proposta que ainda está sendo
+ *  montada (sem registro, não há o que perguntar ao banco). */
+function anexoDosEquip(equip, ids){
+  const hoje = isoHoje(), br = d => d ? dataBR(String(d).slice(0, 10)) : '';
+  const set = new Set((ids || []).filter(Boolean));
+  const es = (equip || []).filter(e => set.has(e.equipamento_id));
+  const tem = e => !!(e.tapweb_em || e.tapweb_desativado_em || e.venc_insp_externa || e.venc_insp_interna
+                      || e.venc_calib_manometro || e.venc_calib_valvula);
+  if (!es.some(tem)) return { linhas: [] };
+  const vence = (e, c) => !e.tapweb_desativado_em && !!e[c] && String(e[c]).slice(0, 10) <= hoje;
+  let ult = null;
+  es.forEach(e => { if (e.tapweb_em && (!ult || String(e.tapweb_em) > ult)) ult = String(e.tapweb_em); });
+  const linhas = es.slice().sort((a, b) => String(a.tag || '').toUpperCase().localeCompare(String(b.tag || '').toUpperCase()))
+    .map(e => { const v = { externa: vence(e, 'venc_insp_externa'), interna: vence(e, 'venc_insp_interna'),
+                            manometro: vence(e, 'venc_calib_manometro'), valvula: vence(e, 'venc_calib_valvula') };
+      return { tag: e.tag, status: !tem(e) ? 'Sem dados do TapWeb' : e.tapweb_desativado_em ? 'Desativado'
+               : (v.externa || v.interna || v.manometro || v.valvula) ? 'Vencido' : 'Em dia',
+               desativado: br(e.tapweb_desativado_em), externa: br(e.venc_insp_externa), interna: br(e.venc_insp_interna),
+               manometro: br(e.venc_calib_manometro), valvula: br(e.venc_calib_valvula), venc: v }; });
+  return { linhas, tapweb_em: ult ? br(ult) : null, hoje: dataBR(hoje) };
+}
+
 /** A descrição da linha do plano como ela vai para o banco (a do Padrão). */
 const descricaoLinhaPlano = pl => [pl.padrao_texto, pl.padrao_faixa, pl.trecho_comum]
   .map(x => String(x || '').trim()).filter(Boolean).join(' ');
@@ -6197,18 +6374,27 @@ function montarPlanos(itens, idx, pl){
   const base = itens[idx];
   if (!base || base.unitario_num == null || base.qtd_num == null) return null;
   const qtd = Number(base.qtd_num), unit = Number(base.unitario_num);
+  // S103: as linhas levam o preço CHEIO (`valor_total_num`) e o que se cobra
+  // (`venda_num`); o desconto da linha do plano vale igual nos três planos
+  const fracVenda = Number(base.valor_total_num) > 0 && base.venda_num != null
+    ? Number(base.venda_num) / Number(base.valor_total_num) : 1;
+  const venda = l => l.venda_num != null ? Number(l.venda_num) : Number(l.valor_total_num) || 0;
   const out = {};
   _PLANOS_ID.forEach(pid => {
     const pct = pid === 'basico' ? Number(pl.basico_pct) : pid === 'premium' ? Number(pl.premium_pct) : 0;
     const u = pid === 'padrao' ? unit : precoPlano(unit, pct, pl.arredondar);
     const tot1 = pid === 'padrao' ? Number(base.valor_total_num) : Math.round(u * qtd * 100) / 100;
+    const ven1 = pid === 'padrao' ? venda(base) : _r2(tot1 * fracVenda);
     const linhas = itens.map((it, k) => k !== idx ? it : Object.assign({}, it, {
       descricao: [pl[pid + '_texto'], pl[pid + '_faixa'], pl.trecho_comum].filter(Boolean).join(' '),
       pecas: { texto: String(pl[pid + '_texto'] || ''), faixa: String(pl[pid + '_faixa'] || ''),
                trecho: String(pl.trecho_comum || '') },
-      unitario: _brlDoc(u), total: _brlDoc(tot1), valor_total_num: tot1, unitario_num: u }));
-    const total = Math.round(linhas.reduce((s, l) => s + (Number(l.valor_total_num) || 0), 0) * 100) / 100;
-    out[pid] = { linhas, total, unit: u, pct };
+      unitario: _brlDoc(u), total: _brlDoc(tot1), valor_total_num: tot1, unitario_num: u, venda_num: ven1 }));
+    const subtotal = _r2(linhas.reduce((s, l) => s + (Number(l.valor_total_num) || 0), 0));
+    const total = _r2(linhas.reduce((s, l) => s + venda(l), 0));
+    const desconto = _r2(subtotal - total);
+    out[pid] = { linhas, total, unit: u, pct, subtotal, desconto,
+                 resumo: { subtotal, desconto, total, pct: subtotal > 0 ? desconto / subtotal * 100 : 0 } };
   });
   return out;
 }
@@ -6219,6 +6405,10 @@ function montarPlanos(itens, idx, pl){
  * vira fôrma e a tabela cresce ou encolhe conforme a OS.
  */
 function reescreverTabela(t, linhas, totalTexto){
+  // S103: com o resumo (objeto), o pé ganha "Subtotal" e "Desconto X%" antes
+  // do Total Geral, numa cópia da própria linha do total do modelo
+  const resumo = (totalTexto && typeof totalTexto === 'object') ? totalTexto : null;
+  if (resumo) totalTexto = _brlDoc(resumo.total);
   const novas = linhas.map((it, i) => {
     // a linha do plano usa como fôrma a PRÓPRIA linha 1 do modelo (é ela que
     // tem as três cores); as outras, a fôrma de sempre
@@ -6233,12 +6423,21 @@ function reescreverTabela(t, linhas, totalTexto){
     return tr;
   });
   let rodape = t.linhaTotal;
+  let extras = '';
   if (rodape){
     const cs = _tags(rodape,'w:tc');
     const ult = cs[cs.length-1];
+    if (resumo && resumo.desconto > 0){
+      const linhaPe = (rot, val) => {
+        if (cs.length < 2) return rodape.replace(ult, _escreveCelula(ult, rot + ': ' + val));
+        return rodape.replace(cs[0], _escreveCelula(cs[0], rot)).replace(ult, _escreveCelula(ult, val));
+      };
+      extras = linhaPe('Subtotal', _brlDoc(resumo.subtotal))
+             + linhaPe('Desconto ' + pctTxt(resumo.pct), '−' + _brlDoc(resumo.desconto));
+    }
     rodape = rodape.replace(ult, _escreveCelula(ult, totalTexto));
   }
-  return t.antes + t.cabecalho + novas.join('') + (rodape || '') + '</w:tbl>';
+  return t.antes + t.cabecalho + novas.join('') + extras + (rodape || '') + '</w:tbl>';
 }
 
 // ── A LOGOMARCA DO CLIENTE ANTERIOR ─────────────────────────────────────────
@@ -6449,6 +6648,26 @@ function _anexoVasosXml(a){
     + '</w:tblPr><w:tblGrid>' + ANEXO_COLS.map(c => '<w:gridCol w:w="' + c[2] + '"/>').join('')
     + '</w:tblGrid>' + cab + linhas + '</w:tbl><w:p/>';
 }
+/** S103 (decisão 3a do Bruno): a tabela de vasos sai LOGO ABAIXO DOS PREÇOS,
+ *  sem quebra de página, com o título "Situação dos vasos (TapWeb, …)". As
+ *  colunas e o amarelo são os do anexo (`_anexoVasosXml`), que deixa de sair. */
+function _vasosAbaixoXml(a){
+  const xml = _anexoVasosXml(a);
+  const ini = xml.indexOf('<w:tbl>');
+  const run = (t, b, sz) => '<w:r><w:rPr>' + (b ? '<w:b/><w:bCs/>' : '')
+    + '<w:sz w:val="' + sz + '"/><w:szCs w:val="' + sz + '"/></w:rPr>'
+    + '<w:t xml:space="preserve">' + _xmlEsc(t) + '</w:t></w:r>';
+  const par = (t, b, sz, antes, depois) => '<w:p><w:pPr><w:keepNext/><w:spacing w:before="' + antes
+    + '" w:after="' + depois + '"/></w:pPr>' + run(t, b, sz) + '</w:p>';
+  return par(tituloVasos(a), true, 20, 200, 40)
+    + par('Em amarelo, os serviços vencidos em ' + a.hoje + '.', false, 17, 0, 80)
+    + xml.slice(ini);
+}
+/** Depois da tabela de preços: com os três planos, depois da última delas. */
+function inserirVasosAbaixo(xml, a, depoisDe){
+  if (!a || !(a.linhas || []).length || depoisDe == null || depoisDe < 0) return xml;
+  return xml.slice(0, depoisDe) + _vasosAbaixoXml(a) + xml.slice(depoisDe);
+}
 /** Entra ANTES do `<w:sectPr>` final do corpo (que tem de ser o último filho
  *  do body). Se o último sectPr é de parágrafo — há `</w:p>` depois dele —,
  *  o corpo não tem sectPr próprio e o anexo entra logo antes de `</w:body>`. */
@@ -6472,14 +6691,14 @@ function htmlAnexoGerador(est, idChk){
   const a = est.anexo;
   if (a === undefined) return '<p class="dica" style="margin:0 0 14px">Conferindo os vasos da proposta…</p>';
   if (!a) return '';
-  if (a.erro) return '<div class="aviso" style="margin:0 0 14px">O anexo por vaso não pôde ser montado: '
+  if (a.erro) return '<div class="aviso" style="margin:0 0 14px">A tabela de vasos não pôde ser montada: '
     + esc(a.erro) + (/tf_anexo_vasos/.test(a.erro) ? ' — falta rodar o <b>58_ajustes_s38.sql</b> no Supabase.' : '')
     + ' O documento sai sem ele.</div>';
   const ls = a.linhas || [];
-  if (!ls.length) return '<p class="dica" style="margin:0 0 14px">Sem anexo por vaso: nenhum vaso desta '
+  if (!ls.length) return '<p class="dica" style="margin:0 0 14px">Sem a tabela de vasos: nenhum vaso desta '
     + 'proposta tem dados do TapWeb.</p>';
   return '<div class="anexoPrev"><label class="check" style="margin:0 0 6px"><input type="checkbox" id="' + idChk + '"'
-    + (est.porAnexo !== false ? ' checked' : '') + '><span>Pôr no fim do documento o <b>anexo por vaso</b> — '
+    + (est.porAnexo !== false ? ' checked' : '') + '><span>Pôr <b>logo abaixo dos preços</b> a situação dos vasos — '
     + ls.length + ' vaso(s)' + (Number(a.vencidos) ? ', ' + a.vencidos + ' serviço(s) vencido(s) em amarelo' : '')
     + '</span></label>'
     + '<div style="overflow-x:auto"><table class="tbl"><thead><tr>'
@@ -6534,7 +6753,7 @@ async function docxGerar({ bytes, valores, tabela, totalTexto, tirarLogoCliente,
         tabs.slice().sort((a, b) => b.inicio - a.inicio).forEach(tb => {
           tb.moldePlano = moldePlano;
           const pl = planos[tb.plano];
-          t = t.slice(0, tb.inicio) + reescreverTabela(tb, pl.linhas, _brlDoc(pl.total)) + t.slice(tb.fim);
+          t = t.slice(0, tb.inicio) + reescreverTabela(tb, pl.linhas, pl.resumo || _brlDoc(pl.total)) + t.slice(tb.fim);
         });
         planosEscritos = 3;
         mexeu = true;
@@ -6544,10 +6763,14 @@ async function docxGerar({ bytes, valores, tabela, totalTexto, tirarLogoCliente,
         mexeu = true;
       }
     }
-    // S38 · item 2: o anexo por vaso, no fim do corpo
+    // S103 · a situação dos vasos logo abaixo dos preços (a página de anexo no
+    // fim deixou de sair — decisão 3a do Bruno)
     if (nome === 'word/document.xml' && anexo && (anexo.linhas || []).length){
+      const tabs = acharTabelasItens(t);
+      const pos = !tabs.length ? -1
+        : (planosEscritos ? Math.max(...tabs.map(x => x.fim)) : tabs[0].fim);
       const antes = t.length;
-      t = inserirAnexoVasos(t, anexo);
+      t = inserirVasosAbaixo(t, anexo, pos);
       if (t.length !== antes){ anexoVasos = anexo.linhas.length; mexeu = true; }
     }
     if (mexeu) zip.file(nome, t);
@@ -6831,23 +7054,9 @@ async function montarGerador(caixa, props){
           'itens aprovados. Sem itens, escolha "Itens do modelo".</p>';
         return;
       }
-      p.innerHTML = '<div style="overflow-x:auto;margin:0 0 14px"><table class="tbl"><thead><tr>' +
-        '<th>#</th><th>Item</th><th class="num">Qtd</th><th class="num">Unitário</th><th class="num">Total</th>' +
-        '</tr></thead><tbody></tbody><tfoot><tr><td colspan="4" style="text-align:right;font-weight:700">Total</td>' +
-        '<td class="num" style="font-weight:700" id="gTot"></td></tr></tfoot></table></div>';
-      const tb = p.querySelector('tbody');
-      daOS.forEach((it, i) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = '<td class="mono"></td><td class="d"></td><td class="num q"></td>' +
-                       '<td class="num u"></td><td class="num t"></td>';
-        tr.children[0].textContent = i+1;
-        tr.querySelector('.d').textContent = it.descricao;
-        tr.querySelector('.q').textContent = it.qtd;
-        tr.querySelector('.u').textContent = it.unitario;
-        tr.querySelector('.t').textContent = it.total;
-        tb.appendChild(tr);
-      });
-      document.getElementById('gTot').textContent = BRL(est.total);
+      // S103: a prévia é a tabela do papel (agrupada, preço cheio, desconto no pé)
+      p.innerHTML = est.ag ? htmlTabelaCliente(est.ag)
+        : '<p class="dica" style="margin:0 0 14px">Não deu para montar a prévia.</p>';
     };
     [...tg.children].forEach(b => b.addEventListener('click', () => {
       est.fonte = b.dataset.v; pinta();
@@ -6881,15 +7090,17 @@ async function montarGerador(caixa, props){
     document.getElementById('gMd').textContent = (est.modelo && est.modelo.descricao) || '';
     const nat = document.getElementById('gNat').value.trim();
     try{
-      const [v, itens] = DEMO
+      const [v, porVaso] = DEMO
         ? [demoValores(card), []]
         : await Promise.all([
             rpc('tf_valores_proposta', { p_os_id: card.os_id, p_numero: '(ao gerar)', p_natureza: nat || null }),
-            rpc('tf_itens_proposta',   { p_os_id: card.os_id })
+            linhasPorVasoOS(card.os_id)
           ]);
       est.valores = v || {};
-      est.itens = itens || [];
-      est.total = est.itens.reduce((s,i) => s + (Number(i.valor_total_num)||0), 0);
+      // S103: as linhas por vaso, juntas como o cliente vê (a mesma função do card)
+      est.ag = agruparParaCliente(porVaso || []);
+      est.itens = linhasDoc(est.ag);
+      est.total = est.ag.total;
       est.fonte = est.itens.length ? 'os' : 'modelo';
     }catch(e){ toast('Não consegui montar os dados: ' + e.message, 'err'); est.valores = est.valores || {}; }
     pintarValores(); pintarTabela();
@@ -6964,7 +7175,7 @@ async function montarGerador(caixa, props){
       const { blob, faltaram, logosTiradas, logosPostas, planosEscritos, anexoVasos } = await docxGerar({
         bytes, valores: est.valores,
         tabela: usaOS ? est.itens : null,
-        totalTexto: BRL(est.total).replace(/ /g,' '),
+        totalTexto: est.ag ? resumoDoc(est.ag) : BRL(est.total).replace(/ /g,' '),
         tirarLogoCliente: true,
         logoCliente: est.porLogo !== false ? est.logoCli : null,
         planos,
@@ -7001,7 +7212,7 @@ async function montarGerador(caixa, props){
         : 'gerada e baixada.';
       _msgGerador = { cor:'var(--ok)', texto: rot + ' ' + oque
         + (planosEscritos ? ' Os três planos preenchidos (Básico, Padrão e Premium).' : '')
-        + (anexoVasos ? ' Anexo por vaso no fim (' + anexoVasos + ' vaso(s)).' : '')
+        + (anexoVasos ? ' Situação dos vasos logo abaixo dos preços (' + anexoVasos + ' vaso(s)).' : '')
         + (logosPostas ? ' Logomarca do cliente no cabeçalho.' : '')
         + (logosTiradas ? ' Logomarca do cliente anterior removida do cabeçalho.' : '')
         + (reg && reg.rotulo && reg.rotulo !== est.valores['Nº_da_Proposta']
@@ -9502,6 +9713,15 @@ function modalPessoasVisita(a, n){
 // a primeira trava quem ainda não cadastrou, só a segunda joga fora um cadastro
 // de 519 clientes.
 let _propItens = [];       // o que está sendo montado agora
+let _propEquip = [];       // S103 · os equipamentos do cliente (a tabela de vasos da vista do cliente)
+/* S103 · a vista da lista: "vaso" (padrão) ou "cliente". A escolha é de cada
+   pessoa, neste aparelho. */
+const _kVistaProp = () => 'tfm_prop_vista:' + (sessao.email || sessao.usuario_id || '');
+function vistaProp(){ try{ return localStorage.getItem(_kVistaProp()) === 'cliente' ? 'cliente' : 'vaso'; }catch(e){ return 'vaso'; } }
+function guardarVistaProp(v){ try{ localStorage.setItem(_kVistaProp(), v); }catch(e){} }
+/** Quem monta proposta: o mesmo corte de `tf_criar_proposta_negocio`
+ *  (`tf_tem_perfil(comercial, compras, tecnico_adm)` ou admin). */
+const podeEditarPropostaNeg = () => DEMO || !!sessao.admin || ['comercial','compras','tecnico_adm'].includes(sessao.perfil);
 let _propLimpa = false;    // "começar vazia": a próxima montagem não carrega a vigente
 
 async function negPropostas(n, b){
@@ -9726,19 +9946,8 @@ async function montarGeradorNegocio(caixa, n, props){
         : 'Este modelo não tem a tabela de 5 colunas — os valores são ajustados no Word.') + '</p>';
       return;
     }
-    el.innerHTML = '<div style="overflow-x:auto;margin:0 0 14px"><table class="tbl"><thead><tr>'
-      + '<th>#</th><th>Item — na ordem da proposta</th><th class="num">Qtd</th><th class="num">Unitário</th>'
-      + '<th class="num">Total</th></tr></thead><tbody></tbody><tfoot><tr><td colspan="4" '
-      + 'style="text-align:right;font-weight:700">Total</td><td class="num" style="font-weight:700"></td>'
-      + '</tr></tfoot></table></div>';
-    const tb = el.querySelector('tbody');
-    est.itens.forEach((it, i) => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = '<td class="mono"></td><td></td><td class="num"></td><td class="num"></td><td class="num"></td>';
-      [i + 1, it.descricao, it.qtd, it.unitario, it.total].forEach((x, k) => tr.children[k].textContent = x);
-      tb.appendChild(tr);
-    });
-    el.querySelector('tfoot .num').textContent = BRL(est.total);
+    // S103: a prévia é a tabela do papel (agrupada, preço cheio, desconto no pé)
+    el.innerHTML = est.ag ? htmlTabelaCliente(est.ag) : '';
   };
   const pintarLogo = () => {
     const el = document.getElementById('gnLogo');
@@ -9763,12 +9972,15 @@ async function montarGeradorNegocio(caixa, n, props){
     document.getElementById('gnMd').textContent = (est.modelo && est.modelo.descricao) || '';
     const nat = document.getElementById('gnNat').value.trim();
     try{
-      const [v, itens] = await Promise.all([
+      const [v, porVaso] = await Promise.all([
         rpc('tf_valores_proposta_doc', { p_proposta_id: est.prop.id, p_natureza: nat || null }),
-        rpc('tf_itens_proposta_doc',   { p_proposta_id: est.prop.id })
+        linhasPorVasoProposta(est.prop.id)
       ]);
-      est.valores = v || {}; est.itens = itens || [];
-      est.total = est.itens.reduce((s, i) => s + (Number(i.valor_total_num) || 0), 0);
+      est.valores = v || {};
+      // S103: as linhas por vaso, juntas como o cliente vê (a mesma função do card)
+      est.ag = agruparParaCliente(porVaso || []);
+      est.itens = linhasDoc(est.ag);
+      est.total = est.ag.total;
     }catch(e){ toast('Não consegui montar os dados: ' + e.message, 'err'); est.valores = est.valores || {}; }
     pintarValores(); pintarTabela();
     est.anexo = undefined; pintarAnexo();
@@ -9815,7 +10027,7 @@ async function montarGeradorNegocio(caixa, n, props){
         const { blob, faltaram, logosPostas, planosEscritos, anexoVasos } = await docxGerar({
           bytes, valores: est.valores,
           tabela: usaItens ? est.itens : null,
-          totalTexto: BRL(est.total).replace(/\u00a0/g,' '),
+          totalTexto: est.ag ? resumoDoc(est.ag) : BRL(est.total).replace(/\u00a0/g,' '),
           tirarLogoCliente: true,
           logoCliente: est.porLogo !== false ? est.logoCli : null,
           planos,
@@ -9835,7 +10047,7 @@ async function montarGeradorNegocio(caixa, n, props){
         toast('Documento da proposta ' + rot + ' gerado.', 'ok');
         _msgGerNeg = rot + ' gerada e baixada.'
           + (planosEscritos ? ' Os três planos preenchidos (Básico, Padrão e Premium).' : '')
-          + (anexoVasos ? ' Anexo por vaso no fim (' + anexoVasos + ' vaso(s)).' : '')
+          + (anexoVasos ? ' Situação dos vasos logo abaixo dos preços (' + anexoVasos + ' vaso(s)).' : '')
           + (logosPostas ? ' Logomarca do cliente no cabeçalho.' : '')
           + (faltaram.length ? ' ⚠ Ficaram sem valor no papel: ' + faltaram.join(', ') + '.' : '')
           + ' Confira o arquivo e use "Registrar envio" quando mandar ao cliente.';
@@ -10234,12 +10446,13 @@ function blocoEquipamentosProposta(equip){
     // ITEM 5 (S37): aqui continua um por vaso (é o que a OS da inspeção usa
     // para saber ONDE ir); o documento soma por tipo — ver `57_ajustes_s37`.
     // S38: até 3 linhas, e Interna + Externa do mesmo vaso é UMA inspeção
-    + '<p class="dica">No <b>documento</b> da proposta os serviços marcados saem '
-    + '<b>somados por tipo</b> — até 3 linhas: <b>Inspeções</b> (conta os vasos: Interna e Externa '
-    + 'do mesmo vaso são <b>uma</b> inspeção), <b>Calibração de Manômetros</b> e <b>Calibração de '
-    + 'Válvulas</b>. Marcar Interna e Externa do mesmo vaso vira uma linha só, com um preço. '
-    + 'No fim do documento sai um <b>anexo por vaso</b>, com os vencimentos do TapWeb. '
-    + 'Aqui eles continuam um por vaso, porque é essa lista que a OS leva para o campo.</p>'
+    // S103: o papel junta por serviço e preço — a vista "Como o cliente vê" mostra
+    + '<p class="dica">No <b>documento</b> da proposta, o mesmo serviço com o mesmo preço vira '
+    + '<b>uma linha</b>, com a quantidade somada (ex.: "Calibração de Manômetros", 2 × R$ 150,00). '
+    + 'Marcar Interna e Externa do mesmo vaso vira uma linha só, com um preço. Logo abaixo dos '
+    + 'preços sai a <b>situação dos vasos</b>, com os vencimentos do TapWeb. Aqui eles continuam '
+    + 'um por vaso, porque é essa lista que a OS leva para o campo — a vista <b>Como o cliente vê</b> '
+    + 'mostra o papel.</p>'
     + '<div class="listaItens eqProp">' + linhas + '</div>'
     + (nVenc
         ? '<button class="btn" id="npVenc" type="button" style="width:100%;margin:10px 0 0">'
@@ -10275,6 +10488,7 @@ async function montarProposta(n, props){
   let equip = [];
   try{ equip = await rpc('tf_equipamentos_para_proposta', { p_cliente_id: n.cliente_id }); }
   catch(e){ equip = []; }
+  _propEquip = equip || [];
 
   // ── ITEM 2 (S28): EDITAR A PROPOSTA ATUAL, EM VEZ DE REDIGITAR ─────────────
   // A montagem abria sempre vazia: dar 3% numa proposta de 10 linhas era
@@ -10356,6 +10570,9 @@ async function montarProposta(n, props){
           + '<div style="margin-top:8px"><button class="btn mini" type="button" id="npLimpar" '
           + 'style="margin-left:0">Começar uma proposta vazia</button></div></div>'
         : '')
+    // S103 · as duas vistas da mesma lista
+    + '<div class="tog vistaProp" id="npVista"><button type="button" data-v="vaso">Por vaso</button>'
+    + '<button type="button" data-v="cliente">Como o cliente vê</button></div>'
     + '<div id="npLista"></div>'
     // ── ITEM 4 (S27) ────────────────────────────────────────────────────────
     // `proposta_itens.desconto_pct` já existia e `tf_criar_proposta_negocio`
@@ -10631,10 +10848,24 @@ function pintarItensProposta(){
   const el = document.getElementById('npLista');
   if (!el) return;
   if (_descNeg) setTimeout(() => _descNeg && _descNeg.atualizar(), 0);
+  // S103 · o seletor das vistas
+  const vista = vistaProp();
+  const tg = document.getElementById('npVista');
+  if (tg){
+    [...tg.children].forEach(b => {
+      b.classList.toggle('on', b.dataset.v === vista);
+      b.onclick = () => { guardarVistaProp(b.dataset.v); pintarItensProposta(); };
+    });
+  }
+  // quantidade, desconto e "tirar" são só do "Por vaso"
+  const dBox = document.getElementById('npDescBox');
+  if (dBox) dBox.hidden = vista === 'cliente' || !podeEditarPropostaNeg();
   if (!_propItens.length){
     el.innerHTML = '<p class="nota">Nada ainda. Marque equipamentos ou acrescente uma linha.</p>';
     return;
   }
+  if (vista === 'cliente') return pintarPropostaCliente(el);
+  const ro = !podeEditarPropostaNeg();
   // o mesmo cálculo que `proposta_itens.total` faz no banco — se as duas
   // contas divergirem, a tela mente sobre o que vai ser gravado
   const bruto = _propItens.reduce((s,i) =>
@@ -10657,21 +10888,22 @@ function pintarItensProposta(){
         // Inteira, a partir de 1: é o `ck_propitens_qtd_inteira` (12/09).
         + '<td class="num"><input class="mini" style="width:64px;text-align:right" type="number"'
         +   ' step="1" min="1" inputmode="numeric" data-qtd="' + k + '" value="'
-        +   (i.quantidade == null ? '' : i.quantidade) + '"></td>'
+        +   (i.quantidade == null ? '' : i.quantidade) + '"' + (ro ? ' disabled' : '') + '></td>'
         + '<td class="num"><input class="mini" style="width:96px;text-align:right" type="number"'
         +   ' step="0.01" inputmode="decimal" data-preco="' + k + '" value="'
-        +   (i.preco_unitario == null ? '' : i.preco_unitario) + '"></td>'
+        +   (i.preco_unitario == null ? '' : i.preco_unitario) + '"' + (ro ? ' disabled' : '') + '></td>'
         // S31: quatro casas. O desconto geral, quando parte de um valor em
         // R$, grava percentual quebrado (8,3333%) — é o que faz o centavo
         // fechar. Mostrar só duas aqui esconderia o número que está gravado.
         + '<td class="num"><input class="mini" style="width:78px;text-align:right" type="number"'
         +   ' step="0.0001" min="0" max="100" inputmode="decimal" data-desc="' + k + '" value="'
-        +   (Number(i.desconto_pct) ? _descCurto(i.desconto_pct) : '') + '" placeholder="0"></td>'
+        +   (Number(i.desconto_pct) ? _descCurto(i.desconto_pct) : '') + '" placeholder="0"' + (ro ? ' disabled' : '') + '></td>'
         + '<td class="num">' + BRL(totalItem(i)) + '</td>'
-        + '<td><button class="btn mini" type="button" data-tira="' + k + '">tirar</button></td>'
+        + '<td>' + (ro ? '' : '<button class="btn mini" type="button" data-tira="' + k + '">tirar</button>') + '</td>'
         + '</tr>').join('')
     + '</tbody></table></div>'
-    + htmlParesInspecao()
+    + (ro ? '' : htmlParesInspecao())
+    + (ro ? '<p class="nota">Só leitura: quem monta proposta é o comercial, compras ou o técnico administrativo.</p>' : '')
     + '<p class="nota" style="text-align:right;font-size:14px">'
     +   (descontado > 0 ? '<span style="color:var(--ink-3)">Sem desconto: ' + BRL(bruto)
                           + ' · desconto: −' + BRL(descontado) + '</span><br>' : '')
@@ -10699,6 +10931,33 @@ function pintarItensProposta(){
   }));
   el.querySelectorAll('[data-juntar]').forEach(b => b.addEventListener('click', () => {
     juntarParInspecao(b.dataset.juntar); pintarItensProposta();
+  }));
+}
+
+/** S103 · "Como o cliente vê": a tabela do papel (a MESMA função do documento),
+ *  com o subtotal, o desconto, o total e a tabela de vasos. Só o preço de um
+ *  grupo de vasos se edita aqui — e vale para todas as linhas do grupo, pelo
+ *  mesmo caminho do "Por vaso" (nada é gravado antes do Registrar). */
+function pintarPropostaCliente(el){
+  const ro = !podeEditarPropostaNeg();
+  const ag = agruparParaCliente(_propItens.map(i => ({ descricao: i.descricao, qtd: i.quantidade,
+    preco: i.preco_unitario, desc: i.desconto_pct, total: totalItem(i), equip: i.equipamento_id })));
+  const vasos = anexoDosEquip(_propEquip, _propItens.map(i => i.equipamento_id));
+  el.innerHTML = htmlTabelaCliente(ag, { editavel: !ro, tags: true, margem: 6 })
+    + '<p class="nota" style="margin:0 0 8px">' + (ro
+        ? 'Só leitura: quem monta proposta é o comercial, compras ou o técnico administrativo.'
+        : 'Aqui só o <b>preço de cada grupo</b> muda (vale para todas as linhas do grupo). '
+          + 'Para mudar quantidades ou tirar um vaso, use a vista <b>Por vaso</b>.') + '</p>'
+    + htmlVasosCliente(vasos);
+  el.querySelectorAll('[data-gpreco]').forEach(inp => inp.addEventListener('change', () => {
+    const g = ag.linhas[Number(inp.dataset.gpreco)];
+    const v = parseFloat(inp.value);
+    if (!g || g.grupo !== 'vaso') return;
+    if (!(v > 0)){ toast('O preço do grupo tem de ser maior que zero.','err'); pintarItensProposta(); return; }
+    g.origens.forEach(k => { if (_propItens[k]) _propItens[k].preco_unitario = v; });
+    toast(g.origens.length + ' linha(s) de "' + g.descricao + '" com ' + BRL(v) + ' cada. '
+          + 'Nada foi gravado ainda — confira e clique em Registrar.', 'ok');
+    pintarItensProposta();
   }));
 }
 
@@ -22488,11 +22747,11 @@ async function pintarFornecedores(){
   // está e não oferece botão. A leitura para todos depende do TapFin abrir uma
   // view/função com nome, CNPJ, cidade e contato (pedido registrado na FILA).
   if (!FIN_AUT){
+    // S103 · a 515 do TapFin abriu a consulta para todos: só leitura, sem botão
     board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Fornecedores</h2>'
-      + '<p>Quem recebe nas contas a pagar.</p></div>'
-      + '<div class="aviso" id="fforSemFin">A lista de fornecedores é mantida no TapFin. '
-      + 'A consulta para todos (nome, CNPJ, cidade e contato) chega numa próxima rodada; '
-      + 'até lá, ela abre só para quem tem o TapFin.</div></div>';
+      + '<p>Quem recebe nas contas a pagar. A lista é mantida no TapFin; aqui é só consulta.</p></div>'
+      + '<div class="lista" id="fforLista"><p class="nota">Carregando…</p></div></div>';
+    await fforConsultar();
     return;
   }
   board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Fornecedores</h2>'
@@ -22502,9 +22761,22 @@ async function pintarFornecedores(){
   document.getElementById('fforNovo').addEventListener('click', () => modalFornecedor(null));
   await fforCarregar();
 }
+/** S103 · quem não tem o TapFin: `tf_fornecedores_consultar()` (515), só leitura. */
+async function fforConsultar(){
+  const el = document.getElementById('fforLista'); if (!el) return;
+  try{ FFOR.lista = DEMO ? [] : await rpc('tf_fornecedores_consultar', {}); FFOR.consulta = true; }
+  catch(e){
+    el.innerHTML = '<div class="vazio2"><b>Não consegui abrir os fornecedores</b><p></p>'
+      + '<button class="btn" type="button" id="fforDeNovo">Tentar de novo</button></div>';
+    el.querySelector('p').textContent = e.message;
+    document.getElementById('fforDeNovo').addEventListener('click', fforConsultar);
+    return;
+  }
+  fforDesenhar();
+}
 async function fforCarregar(){
   const el = document.getElementById('fforLista'); if (!el) return;
-  try{ FFOR.lista = await rpc('tf_fin_fornecedores_listar', {}); }
+  try{ FFOR.lista = await rpc('tf_fin_fornecedores_listar', {}); FFOR.consulta = false; }
   catch(e){
     el.innerHTML = '<div class="vazio2"><b>Não consegui abrir os fornecedores</b><p></p>'
       + '<button class="btn" type="button" id="fforDeNovo">Tentar de novo</button></div>';
@@ -22517,16 +22789,21 @@ async function fforCarregar(){
 function fforDesenhar(){
   const el = document.getElementById('fforLista'); if (!el) return;
   const q = BUSCA.ffor || '';
-  const L = (FFOR.lista || []).filter(f => casa([f.nome, f.cnpj_cpf].join(' '), q));
+  const L = (FFOR.lista || []).filter(f => casa([f.nome, f.cnpj_cpf, f.cidade, f.uf, f.contato].join(' '), q));
   if (!L.length){
     el.innerHTML = '<p class="nota" style="padding:12px">Nenhum fornecedor ainda' + (q ? ' com essa busca' : '') + '.</p>';
     return;
   }
+  // S103 · cidade/UF e contato embaixo do nome (515); "Editar" só com o TapFin
+  const lugar = f => [[f.cidade, f.uf].filter(Boolean).join('/'), f.contato].filter(Boolean).join(' · ');
+  const edita = FIN_AUT && !FFOR.consulta;
   el.innerHTML = '<div class="ccLin cab"><span>Nome</span><span>CNPJ/CPF</span><span></span></div>'
-    + L.map(f => '<div class="ccLin"><span>' + esc(f.nome) + '</span>'
+    + L.map(f => '<div class="ccLin fforLin"><span>' + esc(f.nome)
+      + (lugar(f) ? '<small style="display:block;color:var(--ink-3);font-size:12px">' + esc(lugar(f)) + '</small>' : '')
+      + '</span>'
       + '<span>' + esc(f.cnpj_cpf || '—') + '</span>'
-      + '<span class="a"><button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editar="'
-      + esc(f.id) + '">Editar</button></span></div>').join('');
+      + '<span class="a">' + (edita ? '<button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-editar="'
+      + esc(f.id) + '">Editar</button>' : '') + '</span></div>').join('');
   el.querySelectorAll('[data-editar]').forEach(b => b.addEventListener('click', () => {
     const f = (FFOR.lista || []).find(x => x.id === b.dataset.editar);
     if (f) modalFornecedor(f);
