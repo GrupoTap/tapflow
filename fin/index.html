@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 12 · Financeiro</title>
+<title>TapFin 13 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2308,7 +2308,7 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'F12';   // TapFin 12 (comprovante do cancelamento da NFS-e) — o S## da publicação é do central
+const APP_VERSION = 'F13';   // TapFin 13 (OS de contrato: a medição vira título; a busca sem embaralhar) — o S## da publicação é do central
 try{ document.getElementById('verBadge').textContent = 'FINANCEIRO · ' + APP_VERSION; }catch(e){}
 
 const esc               = (...a) => Nucleo.util.esc(...a);
@@ -3139,7 +3139,7 @@ function irPara(v){
   document.body.classList.remove('navAberta');
 
   const bu = document.getElementById('tbBusca');
-  bu.value = BUSCA[v] || '';
+  if (bu.value !== (BUSCA[v] || '')) bu.value = BUSCA[v] || '';   // F13 · não mexe no que está sendo digitado
   bu.placeholder = PLACEHOLDER_BUSCA[v] || 'Buscar nesta tela…';
   bu.disabled = !PLACEHOLDER_BUSCA[v];
   bu.style.visibility = PLACEHOLDER_BUSCA[v] ? '' : 'hidden';
@@ -3217,14 +3217,13 @@ function ligarBusca(){
     clearTimeout(_buscaT);
     _buscaT = setTimeout(() => {
       const foco = document.activeElement === el;
-      const pos = el.selectionStart;
       // repinta sem ir à rede quando a tela sabe filtrar sozinha
       if (REPINTA[visao]) REPINTA[visao]();
       else irPara(visao);
-      if (foco){ requestAnimationFrame(() => {
-        const n = document.getElementById('tbBusca');
-        if (n){ n.focus(); try{ n.setSelectionRange(pos, pos); }catch(e){} }
-      }); }
+      // F13 · só devolve o foco se o redesenho o tirou, e com o cursor no fim do que está escrito AGORA
+      // (guardar a posição antes e devolvê-la depois embaralha as letras de quem digita rápido)
+      if (foco){ const n = document.getElementById('tbBusca');
+        if (n && document.activeElement !== n){ const pos = n.value.length; n.focus(); try{ n.setSelectionRange(pos, pos); }catch(e){} } }
     }, 140);
   });
   // Esc limpa a busca sem tirar a mão do teclado
@@ -3471,11 +3470,12 @@ async function finpCarregar(){
   // S66 · a projeção não pode derrubar o painel: sem o SQL 500, a tela abre como antes e avisa.
   // S69 · + as despesas futuras (recorrentes e outras), que só a tela Projeções soma
   // S70 · + o ciclo pelo saldo real do dia 1º e o plano das provisões (SQL 503)
-  let desp, ciclo;
-  try{ [d, pm, proj, desp, ciclo] = await Promise.all([rpc('tf_fin_painel', {}), rpc('tf_fin_painel_mensal', {}),
+  let desp, ciclo, med;
+  try{ [d, pm, proj, desp, ciclo, med] = await Promise.all([rpc('tf_fin_painel', {}), rpc('tf_fin_painel_mensal', {}),
                                           rpc('tf_fin_projecao_os', {}).catch(e => ({ erro: e.message })),
                                           rpc('tf_fin_projecao_despesas', {}).catch(e => ({ erro: e.message })),
-                                          rpc('tf_fin_ciclo', {}).catch(e => ({ erro: e.message }))]); }
+                                          rpc('tf_fin_ciclo', {}).catch(e => ({ erro: e.message })),
+                                          rpc('tf_fin_medicoes_sem_titulo', {}).catch(() => null)]); }   // F13 · sem a 509: sem aviso
   catch(e){
     el.innerHTML = '<div class="vazio2"><b>Não consegui abrir o painel</b><p></p>'
       + '<button class="btn" type="button" id="finpDeNovo">Tentar de novo</button></div>';
@@ -3483,7 +3483,7 @@ async function finpCarregar(){
     document.getElementById('finpDeNovo').addEventListener('click', finpCarregar);
     return;
   }
-  FINPM.d = d; FINPM.pm = pm; FINPM.proj = proj; FINPM.desp = desp; FINPM.ciclo = ciclo;
+  FINPM.d = d; FINPM.pm = pm; FINPM.proj = proj; FINPM.desp = desp; FINPM.ciclo = ciclo; FINPM.med = med;
   FINPM.meses = fpmMeses(pm);
   if (!FINPM.mes || !FINPM.meses.includes(FINPM.mes)) FINPM.mes = pm.mes_atual;
   fpmRedesenhar();
@@ -3591,6 +3591,7 @@ function fpmPendencias(d){
     +   (vencidos ? ' <span class="chip" style="background:var(--crit-soft);color:var(--crit)">' + vencidos + ' vencido' + (vencidos > 1 ? 's' : '') + '</span>' : '')
     +   (vencendo ? ' <span class="chip" style="background:var(--warn-soft);color:var(--warn)">' + vencendo + ' vencendo</span>' : '')
     + '</h3>'
+    + medAvisosPainel()   // F13
     + (!pend.length ? '<p class="nota" style="margin:0">Nada vencido ou vencendo nos próximos 7 dias.</p>'
         : pend.map(p => '<div class="ccLin" style="border-left:3px solid ' + (p.vencido ? 'var(--crit)' : 'var(--warn)') + ';padding-left:8px">'
             + '<span class="ccData">' + esc(dataBR(p.vencimento)) + (p.vencido ? ' <small style="color:var(--crit)">vencido</small>' : '') + '</span>'
@@ -3629,16 +3630,21 @@ function fpmProjAvisos(){
   const P = FINPM.proj || {};
   if (P.erro) return '<p class="fpmPq" style="margin:8px 0 0">A projeção das OS em execução não carregou (' + esc(P.erro) + ').</p>';
   const s = P.sem_os || {}, n = Number(s.n) || 0;
-  if (!n) return '';
+  const sm = P.contrato_sem_mob || {}, k = Number(sm.n) || 0;   // F13 · 510
+  const avisoMob = !k ? '' : '<p class="fpmPq" style="margin:8px 0 0">⚠ ' + (k === 1 ? '1 título cita' : k + ' títulos citam')
+    + ' o contrato sem dizer a mobilização (' + (sm.titulos || []).slice(0, 3).map(x => esc(x.descricao || x.os_codigo || '—')).join('; ') + (k > 3 ? '…' : '')
+    + '): ele não abate nenhuma OS. Escreva o código com o sufixo (OS-2026003-M10) no campo OS.</p>';
+  if (!n) return avisoMob;
   return '<p class="fpmPq" style="margin:8px 0 0">⚠ ' + finPlural(n, 'título', 'títulos') + ' a receber em aberto, de clientes com OS em execução, '
-    + (n === 1 ? 'está' : 'estão') + ' sem o número da OS (' + esc(BRL(Number(s.total) || 0)) + '). Se for de uma dessas OS, ela conta duas vezes (lançado + projeção): informe a OS no título.</p>';
+    + (n === 1 ? 'está' : 'estão') + ' sem o número da OS (' + esc(BRL(Number(s.total) || 0)) + '). Se for de uma dessas OS, ela conta duas vezes (lançado + projeção): informe a OS no título.</p>' + avisoMob;
 }
 
 function fpmProjTabela(compacta){
   const C = fpmProjComData(), S = fpmProjSemData();
   if (!C.length && !S.length) return '<p class="nota" style="margin:6px 0 0">Nenhuma OS aberta com proposta aprovada e ainda não lançada no Contas a Receber.</p>';
   const dias = d => d ? fpmDias(String(d).slice(0, 10)) * -1 : null;
-  const marca = o => o.parada ? ' <span class="chip" style="background:var(--warn-soft);color:var(--warn)" title="Sem prazo, sem tarefa marcada e aberta há ' + esc(String(dias(o.aberta_em))) + ' dias">parada</span>' : '';
+  const marca = o => (o.medicao === 'estimada' ? ' <span class="chip" title="OS de contrato: a medição ainda não foi fechada; o valor é a estimativa do TapFlow">estimativa</span>' : '')
+    + (o.parada ? ' <span class="chip" style="background:var(--warn-soft);color:var(--warn)" title="Sem prazo, sem tarefa marcada e aberta há ' + esc(String(dias(o.aberta_em))) + ' dias">parada</span>' : '');
   if (compacta){
     return (C.length ? '<table class="fpmTabela fpmProjTab curta"><tr><th>OS</th><th>Cliente</th><th>Projeção</th><th>Recebe em</th></tr>'
         + C.map(o => '<tr><td>' + esc(o.numero) + '</td><td>' + esc(o.cliente || '—') + '</td><td><b>' + esc(BRL(o.v)) + '</b></td><td>' + esc(fpmMesCurto(o.m)) + '</td></tr>').join('')
@@ -5876,7 +5882,7 @@ function finreLinha(t, hoje, par){
       + ' ' + finChipPrazo(t, hoje)
       + (t.nf_pdf_url ? ' <a href="' + esc(t.nf_pdf_url) + '" target="_blank" rel="noopener" style="font-size:11px">PDF</a>' : '')
       + (t.nf_xml_url ? ' <a href="' + esc(t.nf_xml_url) + '" target="_blank" rel="noopener" style="font-size:11px">XML</a>' : '')
-      + nfChip(t) + boChip(t)
+      + nfChip(t) + boChip(t) + medChip(t)
       + '</span>'
     + (t.anulado ? '<span class="a"></span>' : finAcoesHtml(t, p, t.cliente_nome || t.descricao))
     + '</div>';
@@ -5956,6 +5962,7 @@ async function pintarContasReceber(){
     + ' <button class="btn" type="button" id="finreNfCfg" hidden title="Configuração da nota fiscal">Nota fiscal ⚙</button>'
     + ' <button class="btn" type="button" id="finreBoCfg" hidden title="Boleto com Pix pelo Inter">Boleto ⚙</button>'
     + '<div id="boFaixas" hidden style="margin-top:10px"></div>'
+    + '<div id="medFaixa" hidden style="margin-top:10px"></div>'
     + '<div id="finreOs" hidden style="margin-top:10px"></div>');
   document.getElementById('finreNovo').addEventListener('click', () => modalTituloReceber());
   await finreCarregar();
@@ -5966,7 +5973,7 @@ async function pintarContasReceber(){
   boFaixas();
 }
 
-async function finreCarregar(){ await Promise.all([nfCarregar(), jfCarregar(), boCarregar(), osCarregar()]); boFaixas(); osDesenhar(); await finCarregarLista('finre', 'tf_fin_titulos_receber_listar', FINRE, 'as contas a receber'); }
+async function finreCarregar(){ await Promise.all([nfCarregar(), jfCarregar(), boCarregar(), osCarregar(), medCarregar()]); boFaixas(); medFaixa(); osDesenhar(); await finCarregarLista('finre', 'tf_fin_titulos_receber_listar', FINRE, 'as contas a receber'); }
 
 function finreDesenhar(){ finDesenhar('finre'); }
 
@@ -5979,6 +5986,158 @@ REPINTA.finre = finreDesenhar;
 // sempre. Falta valor: "Criar conta a receber desta OS" (o banco cria, com o cliente da OS).
 // Banco: 515_tapfin_faturar_pela_os.sql (tf_fin_os_faturar_ver / _criar_conta / _ligar_conta).
 // ════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
+// TAPFIN · AS OS DE CONTRATO (F13 · C2: 509 e 510)
+// ----------------------------------------------------------------------------
+// A OS de contrato (OS-2026003-M10) não tem proposta: ela é faturada pela MEDIÇÃO do TapFlow (301).
+// · Contas a Receber: a faixa "Medições fechadas sem título" (fechadas e com a K03 concluída), com
+//   "Lançar título": o formulário já preenchido; o cliente, o valor, a OS e o pedido vêm da medição.
+// · A linha do título da medição: o chip "Medição" e o PDF do boletim (gravado na K02).
+// · A nota: os itens juntados por código e "Pedido/Contrato: X"; acima de 2.000 caracteres, o resumo
+//   "N itens conforme medição anexa" e o aviso para mandar o PDF junto.
+// · O painel da OS (fin/?os=, o card da T16): o aprovado é a medição fechada; "Lançar título da medição".
+// · Painel e Projeções: o aviso das medições sem título e o do título que cita o contrato sem a mobilização.
+// Banco: 509_tapfin_contratos_medicao.sql e 510_tapfin_sufixo_mobilizacao.sql. Sem a 509 no banco, nada
+// disto aparece (a faixa some e a lista continua como antes).
+// ════════════════════════════════════════════════════════════════════════════
+const FINMED = { ativo: false, itens: [] };
+
+async function medCarregar(){
+  try{ FINMED.itens = (await rpc('tf_fin_medicoes_sem_titulo', {})) || []; FINMED.ativo = true; }
+  catch(e){ FINMED.itens = []; FINMED.ativo = false; }   // sem a 509 (ou sem a 301): nada a mostrar
+}
+
+/** O PDF do boletim abre em outra aba (o endereço é do Drive). */
+const medPdfOk = u => /^https:\/\//i.test(String(u || ''));
+
+/** A faixa "Medições fechadas sem título", em Contas a Receber. */
+function medFaixa(){
+  const el = document.getElementById('medFaixa'); if (!el) return;
+  const L = FINMED.ativo ? FINMED.itens : [];
+  el.hidden = !L.length;
+  if (!L.length){ el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="nfAvisos medFaixa" style="padding:8px 10px;margin:0">'
+    + '<b>' + (L.length === 1 ? '1 medição fechada sem título' : L.length + ' medições fechadas sem título') + '</b>'
+    + ' <span style="color:var(--ink-2)">(boletim aprovado pelo cliente, K03 concluída). Lance o título para emitir a nota.</span>'
+    + '<ul style="list-style:none;margin:6px 0 0;padding:0">'
+    + L.map(m => '<li style="display:flex;gap:6px 10px;align-items:center;flex-wrap:wrap;padding:4px 0;border-top:1px solid var(--line)">'
+        + '<span style="flex:1 1 240px"><b>' + esc(m.os_numero || '—') + '</b> · ' + esc(m.cliente || '—')
+        + ' · ' + esc(BRL(Number(m.valor) || 0))
+        + (m.pedido_cliente ? ' · <small>Pedido/Contrato ' + esc(m.pedido_cliente) + '</small>' : ' · <small>sem pedido</small>') + '</span>'
+        + '<button class="btn pri mini" type="button" data-medlancar="' + esc(m.medicao_id) + '">Lançar título</button></li>').join('')
+    + '</ul></div>';
+  el.querySelectorAll('[data-medlancar]').forEach(b => b.addEventListener('click', () => modalLancarMedicao(b.dataset.medlancar)));
+}
+
+/** Na linha do título: o chip "Medição" e o PDF do boletim. */
+function medChip(t){
+  if (!t || !t.medicao_id) return '';
+  return ' <span class="chip" title="Título da medição (OS de contrato)">Medição</span>'
+    + (medPdfOk(t.medicao_pdf) ? ' <a href="' + esc(t.medicao_pdf) + '" target="_blank" rel="noopener" style="font-size:11px;white-space:nowrap">Medição (PDF)</a>' : '');
+}
+
+/** "Lançar título" de uma medição: o formulário preenchido (o banco confere tudo de novo). */
+async function modalLancarMedicao(medicaoId, rasc){
+  if (rasc instanceof Event) rasc = null;
+  let v;
+  try{ v = await rpc('tf_fin_medicao_ver', { p_medicao_id: medicaoId }); }
+  catch(e){ toast(e.message, 'err'); return; }
+  const s = v.sugestao || {};
+  const d = Object.assign({ desc: s.descricao || '', comp: String(s.competencia || isoHoje()).slice(0, 7), venc: s.vencimento || isoHoje(), forma: '',
+    uid: (crypto.randomUUID && crypto.randomUUID()) || ('med-' + Date.now() + '-' + Math.random().toString(16).slice(2)) }, rasc || {});
+  const itens = v.itens_juntos || [];
+  const tab = itens.length
+    ? '<div class="fpmRolar" style="max-height:170px;overflow:auto"><table class="fpmTabela" style="font-size:12px"><tr><th>Código</th><th>Item</th><th>Qtd</th><th>Valor</th></tr>'
+      + itens.map(i => '<tr><td>' + esc(i.codigo) + '</td><td style="white-space:normal">' + esc(i.descricao || '—') + '</td><td>'
+          + esc(String(i.quantidade).replace('.', ',')) + (i.unidade ? ' ' + esc(i.unidade) : '') + '</td><td>' + esc(BRL(Number(i.valor) || 0)) + '</td></tr>').join('')
+      + '</table></div><p class="nota" style="margin:2px 0 8px">' + (itens.length === 1 ? '1 item' : itens.length + ' itens') + ', juntados por código (é assim que saem na nota).</p>'
+    : '<p class="nota">A medição não trouxe itens.</p>';
+  const pronta = !!v.pronta && !v.titulo;
+  abrirModal('Lançar título — ' + (v.os_numero || 'medição'),
+      (v.titulo ? '<div class="nfAvisos" style="padding:8px 10px;margin-bottom:10px">Esta medição já tem título no TapFin: “' + esc(v.titulo.descricao || '') + '”.</div>' : '')
+    + (!v.pronta ? '<div class="nfErros" style="padding:8px 10px;margin-bottom:10px">A medição ainda não está pronta para faturar: ela precisa estar fechada e com a K03 (boletim aprovado e pedido do cliente) concluída.</div>' : '')
+    + '<div class="dupla">'
+    +  '<div class="campo"><label>Cliente (da OS)</label><input type="text" value="' + esc(v.cliente || '—') + '" disabled></div>'
+    +  '<div class="campo"><label>OS</label><input type="text" value="' + esc(v.os_numero || '—') + '" disabled></div></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label>Valor (da medição)</label><input id="medValor" type="text" value="' + esc(BRL(Number(v.valor) || 0)) + '" disabled></div>'
+    +  '<div class="campo"><label>Pedido/Contrato do cliente (K03)</label><input type="text" value="' + esc(s.pedido || (v.usa_pedido === false ? 'o cliente não usa pedido' : '—')) + '" disabled></div></div>'
+    + tab
+    + (medPdfOk(v.pdf) ? '<p class="nota" style="margin:0 0 8px"><a href="' + esc(v.pdf) + '" target="_blank" rel="noopener">Abrir o PDF da medição</a> (o boletim que foi ao cliente).</p>' : '')
+    + '<div class="campo"><label for="medDesc">Descrição</label><input id="medDesc" type="text" maxlength="300" value="' + esc(d.desc) + '" autocomplete="off"></div>'
+    + '<div class="dupla">'
+    +  '<div class="campo"><label for="medComp">Competência (mês do serviço)</label><input id="medComp" type="month" value="' + esc(d.comp) + '"></div>'
+    +  '<div class="campo"><label for="medVenc">Vencimento (estimativa)</label><input id="medVenc" type="date" value="' + esc(d.venc) + '"></div></div>'
+    + '<div class="campo"><label for="medForma">Forma prevista (opcional)</label><select id="medForma"><option value="">—</option>'
+    +   FORMA_PREVISTA_FIN.map(f => '<option value="' + esc(f) + '"' + (d.forma === f ? ' selected' : '') + '>' + esc(f) + '</option>').join('') + '</select></div>'
+    + '<p class="nota">O título nasce “A faturar”, ligado à ' + esc(v.os_numero || 'OS') + ' e à medição. Depois, na linha dele: “Emitir nota” e “Emitir boleto”. '
+    + 'O pedido corrigido na K03 depois de lançar não muda o título: edite-o no “Emitir nota”.</p>',
+    pronta
+      ? [{ label: 'Cancelar', onClick: fecharModal },
+         { label: 'Lançar título', pri: true, onClick: async () => {
+            const val = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+            const r = { desc: val('medDesc'), comp: val('medComp'), venc: val('medVenc'), forma: val('medForma'), uid: d.uid };
+            if (!r.desc){ toast('A descrição é obrigatória.', 'err'); return; }
+            if (!r.comp || !r.venc){ toast('Informe a competência e o vencimento.', 'err'); return; }
+            const b = [...document.querySelectorAll('#mFoot .btn')].pop(); if (b) b.disabled = true;
+            try{
+              await rpc('tf_fin_medicao_criar_conta', { p_medicao_id: medicaoId, p_descricao: r.desc, p_competencia: r.comp + '-01',
+                p_vencimento: r.venc, p_forma_prevista: r.forma || null, p_subcategoria_id: null, p_client_uid: r.uid });
+              fecharModal();
+              toast('Título lançado para a ' + (v.os_numero || 'OS') + '.', 'ok');
+              await finreCarregar();
+            }catch(e){
+              toast(e.message, 'err');
+              modalLancarMedicao(medicaoId, r);   // volta com o que foi escrito (a mesma chave: não grava em dobro)
+            }
+         }}]
+      : [{ label: 'Fechar', pri: true, onClick: fecharModal }]);
+}
+
+/** O painel da OS de contrato: o que dizer. */
+function medMsgOs(v){
+  const c = v.contrato || {}, val = c.valor || {};
+  if (c.medicao && c.tem_titulo) return 'O título da medição já foi lançado: confira abaixo e use “Emitir nota” e “Emitir boleto” na linha.';
+  if (c.medicao) return 'A medição está fechada e com a K03 concluída: lance o título da medição.';
+  if (val.tipo === 'fechada') return 'A medição está fechada, mas a K03 (boletim aprovado e pedido do cliente) ainda não foi concluída no TapFlow.';
+  if (val.tipo === 'estimada') return 'A medição ainda não foi fechada (estimativa: ' + BRL(Number(val.valor) || 0) + '). O título sai dela depois da K03.';
+  return 'OS de contrato: o título sai da medição, depois que ela for fechada e a K03 concluída no TapFlow.';
+}
+
+/** O texto da nota acompanha o pedido digitado (só a parte "Pedido/Contrato: …"). */
+function medInfoComPedido(txt, p){
+  const partes = String(txt || '').split(' // ').filter(x => !/^Pedido\/Contrato: /.test(x));
+  if (p) partes.splice(Math.min(1, partes.length), 0, 'Pedido/Contrato: ' + p);
+  return partes.join(' // ');
+}
+
+/** A dica embaixo das informações complementares do título da medição. */
+function medNotaInfo(t, info){
+  const resumo = /conforme medição anexa/.test(info || '');
+  return '<small class="nota">Montado com a medição: o contrato e a mobilização, o pedido/contrato do cliente e os itens juntados por código. Pode editar.</small>'
+    + (resumo
+        ? '<div class="nfAvisos" style="padding:8px 10px;margin:6px 0 0"><b>Os itens não cabem na nota</b> (2.000 caracteres): ela sai com o resumo “conforme medição anexa”. '
+          + 'Mande o PDF da medição junto com a nota para o cliente.'
+          + (medPdfOk(t.medicao_pdf) ? ' <a href="' + esc(t.medicao_pdf) + '" target="_blank" rel="noopener">Abrir o PDF da medição</a>' : ' (o PDF não veio da medição: peça ao escritório)')
+          + '</div>'
+        : '');
+}
+
+/** Painel: as medições sem título e os títulos que citam o contrato sem a mobilização. */
+function medAvisosPainel(){
+  const n = (FINPM.med && Array.isArray(FINPM.med)) ? FINPM.med.length : 0;
+  const s = (FINPM.proj && FINPM.proj.contrato_sem_mob) || {}, k = Number(s.n) || 0;
+  let h = '';
+  if (n) h += '<div class="ccLin" style="border-left:3px solid var(--warn);padding-left:8px" id="fpmMedAviso"><span class="ccDesc"><b>'
+    + (n === 1 ? '1 medição fechada sem título' : n + ' medições fechadas sem título') + '</b> (OS de contrato, K03 concluída). '
+    + '<button class="fpmLk" type="button" data-ir="finre">Lançar em Contas a Receber</button></span></div>';
+  if (k) h += '<div class="ccLin" style="border-left:3px solid var(--warn);padding-left:8px" id="fpmSemMob"><span class="ccDesc"><b>'
+    + (k === 1 ? '1 título cita' : k + ' títulos citam') + ' o contrato sem dizer a mobilização</b> ('
+    + (s.titulos || []).slice(0, 3).map(x => esc(x.descricao || x.os_codigo || '—')).join('; ') + (k > 3 ? '…' : '')
+    + '). Escreva o código com o sufixo (OS-2026003-M10) no campo OS, ou ele não abate nenhuma OS.</span></div>';
+  return h;
+}
+
 const FINOS = { id: null, t: null, ver: null, ids: null, erro: null, sitPosta: false };
 
 /** Lê o ?os= da entrada (chamada pelo iniciar, antes do primeiro desenho). */
@@ -6037,6 +6196,8 @@ function osDesenhar(){
   else if (falta <= 0.009) msg = 'Esta OS já tem conta a receber de todo o valor aprovado: confira abaixo e use “Emitir nota” e “Emitir boleto” na linha.';
   else if (nC) msg = 'Já tem conta de ' + BRL(ja) + '; falta ' + BRL(falta) + '.';
   else msg = 'Esta OS ainda não tem conta a receber.';
+  const ctr = v.contrato || null;   // F13 · OS de contrato: fatura pela medição
+  if (ctr) msg = medMsgOs(v);
   const citam = (v.citam || []);
   el.innerHTML = '<div class="nfBloco osPainel">'
     + '<div style="display:flex;gap:8px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap">'
@@ -6044,11 +6205,12 @@ function osDesenhar(){
     +     (FINOS.t === 'T16' ? '<div class="nota" style="margin:2px 0 0">Vindo da tarefa T16 · Emitir boleto / nota fiscal</div>' : '') + '</div>'
     +   sair + '</div>'
     + '<div class="osNums" style="display:flex;gap:18px;flex-wrap:wrap;margin:8px 0 4px">'
-    +   '<span>Proposta aprovada: <span id="osAprov" style="font-weight:700">' + esc(BRL(aprov)) + '</span>' + (props ? ' <small style="color:var(--ink-3)">(' + ((v.propostas || []).length > 1 ? 'propostas ' : 'proposta ') + props + ')</small>' : '') + '</span>'
+    +   '<span>' + (ctr ? 'Medição fechada: ' : 'Proposta aprovada: ') + '<span id="osAprov" style="font-weight:700">' + esc(BRL(aprov)) + '</span>' + (props ? ' <small style="color:var(--ink-3)">(' + ((v.propostas || []).length > 1 ? 'propostas ' : 'proposta ') + props + ')</small>' : '') + '</span>'
     +   '<span>Já tem conta: <span id="osJa" style="font-weight:700">' + esc(BRL(ja)) + '</span>' + (nC ? ' <small style="color:var(--ink-3)">(' + (nC === 1 ? '1 conta' : nC + ' contas') + ')</small>' : '') + '</span>'
     +   '<span>Falta: <span id="osFalta" style="font-weight:700">' + esc(BRL(falta)) + '</span></span></div>'
     + '<p class="nota" id="osMsg" style="margin:4px 0 8px">' + esc(msg) + '</p>'
     + (podeCriar ? '<button class="btn pri" type="button" id="osCriar">Criar conta a receber desta OS</button>' : '')
+    + (ctr && ctr.medicao && !ctr.tem_titulo ? '<button class="btn pri" type="button" id="osMedLancar">Lançar título da medição</button>' : '')
     + (citam.length
         ? '<div style="margin-top:10px"><div class="nota" style="margin:0 0 4px">Estas contas citam a OS, mas não estão ligadas a ela:</div><ul class="nfAvisos" id="osCitam">'
           + citam.map(x => '<li>' + esc(x.descricao || '—') + ' · ' + esc(BRL(x.valor))
@@ -6060,6 +6222,7 @@ function osDesenhar(){
     + '</div>';
   document.getElementById('osSair').addEventListener('click', osSair);
   const bc = document.getElementById('osCriar'); if (bc) bc.addEventListener('click', modalCriarContaOs);
+  const bm = document.getElementById('osMedLancar'); if (bm) bm.addEventListener('click', () => modalLancarMedicao(ctr.medicao.medicao_id));
   el.querySelectorAll('[data-osligar]').forEach(b => b.addEventListener('click', async () => {
     b.disabled = true;
     try{ await rpc('tf_fin_os_ligar_conta', { p_titulo_id: b.dataset.osligar, p_os_id: FINOS.id }); toast('Conta ligada à ' + osRot() + '.', 'ok'); await finreCarregar(); }
@@ -6799,7 +6962,7 @@ async function modalEmitirNota(t){
     +   '<div class="nota" style="margin:2px 0 0">Código 14.01.01 · Simples Nacional: ISS pelo DAS · sem retenções · competência ' + esc(dataBR(r.competencia)) + '</div></div>'
     + '<div class="dupla">'
     +  '<div class="campo"><label>Valor</label><input type="text" value="' + esc(BRL(r.valor)) + '" readonly></div>'
-    +  '<div class="campo"><label for="nfPedido">Pedido de compra do cliente</label><input id="nfPedido" type="text" maxlength="120" autocomplete="off" value="' + esc(r.pedido_compra || '') + '"></div></div>'
+    +  '<div class="campo"><label for="nfPedido">' + (t.medicao_id ? 'Pedido/Contrato do cliente (K03)' : 'Pedido de compra do cliente') + '</label><input id="nfPedido" type="text" maxlength="120" autocomplete="off" value="' + esc(r.pedido_compra || '') + '"></div></div>'
     + '<div class="dupla">'
     +  '<div class="campo"><label for="nfCid">Cidade onde o serviço foi feito</label><input id="nfCid" type="text" value="' + esc(prep.local.cidade || '') + '"></div>'
     +  '<div class="campo"><label for="nfUf">UF</label><input id="nfUf" type="text" maxlength="2" style="text-transform:uppercase" value="' + esc(prep.local.uf || '') + '"></div></div>'
@@ -6809,8 +6972,9 @@ async function modalEmitirNota(t){
         + '<option value="050103"' + (prep.ind_op === '050103' ? ' selected' : '') + '>Feito todo no cliente (05.01.03) — imposto para a cidade do serviço</option>'
         + '</select></div>' : '')
     + '<div class="campo"><label for="nfInfo">Informações complementares (saem impressas na nota)</label>'
-    +   '<textarea id="nfInfo" rows="2" maxlength="2000">' + esc(infoAuto) + '</textarea>'
-    +   '<small class="nota">Montado com o pedido de compra e a proposta da OS' + (r.proposta ? ' (' + esc(r.proposta) + ')' : '') + '. Pode editar.</small></div>',
+    +   '<textarea id="nfInfo" rows="' + (t.medicao_id ? 5 : 2) + '" maxlength="2000">' + esc(infoAuto) + '</textarea>'
+    +   (t.medicao_id ? medNotaInfo(t, infoAuto)
+         : '<small class="nota">Montado com o pedido de compra e a proposta da OS' + (r.proposta ? ' (' + esc(r.proposta) + ')' : '') + '. Pode editar.</small>') + '</div>',
     [{ label: 'Cancelar', onClick: fecharModal },
      { label: 'Emitir nota', pri: true, onClick: async () => {
         const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
@@ -6851,7 +7015,8 @@ async function modalEmitirNota(t){
   ped.addEventListener('input', () => {
     if (infoMexeu) return;
     const p = ped.value.trim();
-    info.value = [p ? 'ORDEM DE COMPRA Nº ' + p : '', r.proposta ? 'PROPOSTA ' + r.proposta : ''].filter(Boolean).join(' // ');
+    info.value = t.medicao_id ? medInfoComPedido(info.value, p)
+               : [p ? 'ORDEM DE COMPRA Nº ' + p : '', r.proposta ? 'PROPOSTA ' + r.proposta : ''].filter(Boolean).join(' // ');
   });
 }
 
