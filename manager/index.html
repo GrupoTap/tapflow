@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S110</title>
+<title>TapFlow Manager · S111</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2392,7 +2392,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S110';
+const APP_VERSION = 'S111';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -19193,11 +19193,11 @@ function ctrDesenharLista(){
   document.querySelectorAll('#ctrFil [data-f]').forEach(b => b.addEventListener('click', () => { CTR.filtro = b.dataset.f; ctrDesenharLista(); }));
   const q = BUSCA.ctr || '';
   const L = (CTR.lista || []).filter(c => (CTR.filtro === 'todos' || (CTR.filtro === 'breve' ? c.vence_em_breve : c.situacao === CTR.filtro))
-    && casa([c.numero, c.cliente, c.contrato_cliente, c.area, c.art_numero].join(' '), q));
+    && casa([c.numero, c.cliente, c.cliente_fantasia, c.cliente_cidade, c.cliente_uf, c.contrato_cliente, c.area, c.art_numero].join(' '), q));
   if (!L.length){ el.innerHTML = '<p class="nota" style="padding:12px">Nenhum contrato' + (q ? ' com essa busca' : ' nesta lista') + '.</p>'; return; }
   el.innerHTML = '<div class="ctrLin cab"><span>Contrato</span><span>Vigência</span><span class="n">Visitas</span><span class="n">Medido</span><span>Situação</span></div>'
     + L.map(c => '<button type="button" class="ctrLin" data-id="' + esc(c.id) + '"><span class="t"><b class="mono">' + esc(c.numero) + '</b> · ' + esc(c.cliente)
-      + '<small>' + esc([c.contrato_cliente ? 'contrato no cliente ' + c.contrato_cliente : '', c.area].filter(Boolean).join(' · ') || '—') + '</small></span>'
+      + '<small>' + esc([(c.cliente_fantasia && c.cliente_fantasia !== c.cliente ? c.cliente_fantasia : ''), ctrCliLinha({ cidade: c.cliente_cidade, uf: c.cliente_uf }), c.contrato_cliente ? 'contrato no cliente ' + c.contrato_cliente : '', c.area].filter(Boolean).join(' · ') || '—') + '</small></span>'
       + '<span>' + esc(dataBR(c.inicio)) + ' a ' + (c.fim ? esc(dataBR(c.fim)) : 'sem fim')
       + (c.vence_em_breve ? ' <span class="mini warn">vence em ' + c.dias_para_fim + 'd</span>' : '') + '</span>'
       + '<span class="n">' + c.visitas + '</span><span class="n">' + esc(BRL(c.medido)) + '</span>'
@@ -19213,6 +19213,7 @@ async function ctrAbrirFicha(id, aba){
   if (!CTR.painel || CTR.painel.contrato.id !== id) board.innerHTML = '<div class="tela"><p class="nota">Carregando o contrato…</p></div>';
   try{ CTR.painel = await rpc('tf_contrato_painel', { p_id: id }); }
   catch(e){ CTR.id = null; toast(e.message, 'err'); return pintarContratos(); }
+  CTR.cliAtual = await ctrClienteInfo(CTR.painel.contrato.cliente_id);   // cidade/UF/fantasia: o mesmo cliente tem várias unidades
   document.getElementById('crumbAtual').textContent = 'Contratos › ' + CTR.painel.contrato.numero;
   ctrDesenharFicha();
 }
@@ -19223,6 +19224,7 @@ function ctrDesenharFicha(){
   const abas = [['resumo','Resumo'], ['itens','Itens e preços'], ['vasos','Vasos'], ['visitas','Visitas'], ['modelos','Modelos'], ['hist','Histórico']];
   board.innerHTML = '<div class="tela ctrFicha"><div class="ctrTopo"><button class="btn" type="button" id="ctrVolta">← Contratos</button>'
     + '<div class="ctrTit"><h2><span class="mono">' + esc(c.numero) + '</span> · ' + esc(c.cliente) + '</h2>'
+    + '<div class="nota" style="margin:2px 0 0">' + esc([(CTR.cliAtual && CTR.cliAtual.nome_fantasia && CTR.cliAtual.nome_fantasia !== c.cliente ? CTR.cliAtual.nome_fantasia : ''), ctrCliLinha(CTR.cliAtual)].filter(Boolean).join(' · ') || 'cliente sem cidade cadastrada') + '</div>'
     + '<div class="nota" style="margin:2px 0 0">' + esc(dataBR(c.inicio)) + ' a ' + (c.fim ? esc(dataBR(c.fim)) : 'sem fim') + ' · '
     + '<span class="mini ' + (c.situacao === 'ativo' ? 'ok' : c.situacao === 'rascunho' ? 'warn' : '') + '">' + esc(c.situacao) + '</span></div></div></div>'
     + (P.avisos && P.avisos.length ? '<div class="aviso">' + P.avisos.map(a => '• ' + esc(a)).join('<br>') + '</div>' : '')
@@ -19241,6 +19243,14 @@ async function ctrAcao(fn, ok){
 
 function ctrCampo(rot, valor){ return '<div class="ctrKv"><span>' + esc(rot) + '</span><b>' + (valor == null || valor === '' ? '—' : valor) + '</b></div>'; }
 
+/** As três pastas do Drive do contrato do ano (resumo da ficha). */
+function ctrBlocoDrive(c){
+  const lin = (rot, url) => '<div class="ctrKv"><span>' + esc(rot) + '</span><b>' + (ctrDriveId(url) ? '<a href="' + esc(ctrLinkSeguro(url)) + '" target="_blank" rel="noopener">Abrir no Drive</a>' : '<span class="mini warn">não informada</span>') + '</b></div>';
+  const nenhuma = !ctrDriveId(c.drive_proposta) && !ctrDriveId(c.drive_rdo) && !ctrDriveId(c.drive_medicao);
+  return '<div class="secTit">Pastas no Drive (os documentos do contrato)</div>'
+    + (nenhuma ? '<div class="aviso">Contrato sem pasta no Drive: os RDOs e o boletim ficam só no sistema. Cole os links em «Editar dados».</div>' : '')
+    + '<div class="ctrGrade">' + lin('Pasta da proposta do ano (dias de campo)', c.drive_proposta) + lin('Pasta dos RDOs', c.drive_rdo) + lin('Pasta das medições', c.drive_medicao) + '</div>';
+}
 function ctrAbaResumo(el){
   const P = CTR.painel, c = P.contrato;
   const pessoas = P.pessoas || [];
@@ -19259,6 +19269,7 @@ function ctrAbaResumo(el){
     + ctrCampo('Usa pedido de compra', c.usa_pedido ? 'sim' : 'não')
     + ctrCampo('Próxima visita / RDO / letra', esc('M' + ctrMob(c.prox_medicao) + ' · RDO ' + String(c.prox_rdo).padStart(3, '0') + ' · letra ' + c.prox_letra))
     + ctrCampo('Observações', esc(c.observacoes || '')) + '</div>'
+    + ctrBlocoDrive(c)
     + '<div class="secTit">Quem trabalha no cliente (nº pessoal)</div>'
     + '<p class="nota" style="margin-top:0">O número que o cliente deu a cada pessoa; sai na equipe do RDO.</p>'
     + (pessoas.length ? '<table class="tbl"><thead><tr><th>Pessoa</th><th>Número no cliente</th></tr></thead><tbody>'
@@ -19457,6 +19468,69 @@ async function ctrSubirArquivo(path, bytes, mime){
   if (!r.ok) throw new Error('Não consegui guardar o arquivo (HTTP ' + r.status + '). ' + (r.status === 403 ? 'Falta a permissão do bucket "contratos".' : ''));
   return path;
 }
+// ── C1-Drive (S111): os documentos do contrato na pasta do cliente ───────────
+// Quem decide ONDE é o contrato do ano (três links de pasta, colados uma vez). O
+// Storage do sistema continua guardando tudo: se o Drive falhar nada se perde, e o
+// envio se repete por um botão. Só os contratos usam isto; as OS comuns seguem o
+// subirArquivo() de sempre (TapFlow/<Cliente>/<OS>/<categoria>).
+const CTR_MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const MIME_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+/** O id da pasta que está dentro do link do Drive (as duas formas que o Google dá). */
+const ctrDriveId = url => { const t = String(url || ''); const m = t.match(/^https:\/\/(?:drive|docs)\.google\.com\/.*?\/folders\/([A-Za-z0-9_-]{10,})/) || t.match(/^https:\/\/(?:drive|docs)\.google\.com\/.*?[?&]id=([A-Za-z0-9_-]{10,})/); return m ? m[1] : null; };
+const ctrLinkSeguro = u => /^https:\/\//.test(String(u || '')) ? String(u) : '';
+/** "setembro e outubro" · "janeiro, fevereiro e março" */
+const ctrListaE = l => l.length < 2 ? (l[0] || '') : l.slice(0, -1).join(', ') + ' e ' + l[l.length - 1];
+/** "08 - Agosto 2026" (o mês da pasta dos RDOs) */
+const ctrPastaMes = iso => { const [a, m] = String(iso).slice(0, 10).split('-'); const nome = CTR_MESES[Number(m) - 1] || ''; return m + ' - ' + nome.charAt(0).toUpperCase() + nome.slice(1) + ' ' + a; };
+let DRIVE_V2 = false;
+/** Sem esta conferência, um script ainda na v1 ignoraria a pasta e gravaria o arquivo na árvore antiga. */
+async function ctrDriveV2(){
+  if (DEMO || DRIVE_V2) return;
+  if (!driveLigado()) throw Object.assign(new Error('O Google Drive ainda não foi configurado (Configurações › Google Drive).'), { negocio: true });
+  let j = null;
+  try{ const r = await fetch(PARAM.drive_url + (PARAM.drive_url.indexOf('?') >= 0 ? '&' : '?') + 'action=ping', { redirect: 'follow', signal: sinal(false) }); j = await r.json(); }catch(e){ j = null; }
+  if (!j) throw new Error('Não consegui falar com o serviço do Drive agora. Tente de novo em instantes.');
+  if (j.versao !== 'v2') throw Object.assign(new Error('O script do Drive ainda está na versão 1. Republique a versão 2 (passo a passo da rodada C1-Drive) antes de gravar documentos de contrato.'), { negocio: true });
+  DRIVE_V2 = true;
+}
+async function ctrDriveChamar(corpo){
+  if (DEMO) return { status: 'ok', pasta_id: 'demo', url: 'https://drive.google.com/demo', nome: corpo.nome || 'demo', file_id: 'demo' };
+  await ctrDriveV2();
+  const r = await fetch(PARAM.drive_url, { method: 'POST', redirect: 'follow', signal: sinal(true),
+    body: JSON.stringify(Object.assign({ chave: PARAM.drive_chave, token: sessao.token }, corpo)) });
+  const j = await r.json().catch(() => null);
+  if (!j) throw new Error('O serviço do Drive não respondeu como esperado.');
+  if (j.status !== 'ok') throw Object.assign(new Error(j.mensagem || 'Falha ao gravar no Drive'), { negocio: j.codigo === 'CHAVE' || j.codigo === 'TOKEN' || j.codigo === 'PASTA' });
+  return j;
+}
+/** 12 letras do SHA-256: o mesmo conteúdo reenviado não duplica; conteúdo corrigido vira outro arquivo (nada é sobrescrito). */
+async function ctrHash(bytes){
+  try{ const h = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)); return Array.from(h.slice(0, 6)).map(b => b.toString(16).padStart(2, '0')).join(''); }
+  catch(e){ return 'n' + bytes.length + 'x' + Date.now().toString(36); }
+}
+async function ctrDriveEnviar(bytes, mime, nome, uidBase, pastaId, subpastas){
+  const h = await ctrHash(bytes);
+  const base64 = await arquivoParaBase64(new Blob([bytes], { type: mime }));
+  return ctrDriveChamar({ client_uid: uidBase + '-' + h, pasta_id: pastaId, subpastas, nome, mime, base64 });
+}
+/** Os links do contrato (uma chamada; quem gera o RDO no campo também lê). */
+async function ctrDriveCtx(contratoId){ return DEMO ? null : await rpc('tf_contrato_drive', { p_id: contratoId }); }
+/** Cidade/UF e nome fantasia de um cliente: o mesmo cliente tem várias unidades (filial é outro cliente). */
+const ctrCliLinha = x => x ? [x.cidade, x.uf].filter(Boolean).join('/') : '';
+function ctrRotuloCliente(x){
+  const rs = x.razao_social || x.cliente || '', fan = x.nome_fantasia && x.nome_fantasia !== rs ? ' (' + x.nome_fantasia + ')' : '';
+  const loc = ctrCliLinha({ cidade: x.cidade || x.cliente_cidade, uf: x.uf || x.cliente_uf });
+  return rs + fan + ' — ' + (loc || 'sem cidade');
+}
+async function ctrClienteInfo(id){
+  CTR.cli = CTR.cli || {};
+  if (!CTR.cli[id]){ try{ const r = await get('clientes?select=id,razao_social,nome_fantasia,cidade,uf&id=eq.' + id); CTR.cli[id] = (r || [])[0] || {}; }catch(e){ CTR.cli[id] = {}; } }
+  return CTR.cli[id];
+}
+/** O que o Drive devolveu, em uma frase para o toast. */
+const ctrDriveMsgErro = e => (e && e.message) || 'erro desconhecido';
+
 function ctrAbaModelos(el){
   const P = CTR.painel, c = P.contrato, edita = ctrPodeEsc() && c.situacao !== 'encerrado' && c.situacao !== 'cancelado';
   el.innerHTML = '<p class="nota" style="margin-top:0">O modelo é o arquivo do próprio cliente, com marcadores no lugar dos dados: o layout, as cores, as fórmulas e as abas ficam como estão. '
@@ -19508,13 +19582,13 @@ const ctrOpts = (L, sel, vazio) => '<option value="">' + esc(vazio || '—') + '
 async function modalContrato(c){
   const novo = !c;
   let clientes = [];
-  try{ if (novo){ if (!CTR.clientes) CTR.clientes = await get('clientes?select=id,razao_social&ativo=eq.true&order=razao_social&limit=2000'); clientes = CTR.clientes; } }
+  try{ if (novo){ if (!CTR.clientes) CTR.clientes = await get('clientes?select=id,razao_social,nome_fantasia,cidade,uf&ativo=eq.true&order=razao_social,cidade&limit=2000'); clientes = CTR.clientes; } }
   catch(e){ return toast(e.message, 'err'); }
   const cliId = novo ? null : c.cliente_id;
   let ano = new Date().getFullYear(), sug = '';
   if (novo){ try{ sug = await rpc('tf_contrato_numero_sugerido', { p_ano: ano }); }catch(e){} }
   const corpo = (ctts) =>
-      (novo ? '<div class="campo"><label for="ctCli">Cliente</label><select id="ctCli"><option value="">— escolha —</option>' + clientes.map(x => '<option value="' + esc(x.id) + '">' + esc(x.razao_social) + '</option>').join('') + '</select></div>' : '')
+      (novo ? '<div class="campo"><label for="ctCli">Cliente</label><select id="ctCli"><option value="">— escolha —</option>' + clientes.map(x => '<option value="' + esc(x.id) + '">' + esc(ctrRotuloCliente(x)) + '</option>').join('') + '</select></div>' : '')
     + '<div class="dupla"><div class="campo"><label for="ctNum">Nº do contrato (só dígitos)</label><input id="ctNum" type="text" inputmode="numeric" autocomplete="off" value="' + esc(novo ? sug || '' : c.numero) + '"></div>'
     + '<div class="campo"><label for="ctCC">Nº do contrato no cliente</label><input id="ctCC" type="text" autocomplete="off" value="' + esc(novo ? '' : c.contrato_cliente || '') + '"></div></div>'
     + '<div class="dupla"><div class="campo"><label for="ctIni">Início da vigência</label><input id="ctIni" type="date" value="' + esc(novo ? isoHoje() : c.inicio || '') + '"></div>'
@@ -19530,7 +19604,8 @@ async function modalContrato(c){
     + (novo ? '<div class="secTit">Números de partida (conferidos com o inspetor)</div><div class="dupla3"><div class="campo"><label for="ctL">Próxima letra</label><input id="ctL" type="text" value="A" maxlength="4"></div>'
       + '<div class="campo"><label for="ctR">Próximo RDO</label><input id="ctR" type="text" inputmode="numeric" value="1"></div>'
       + '<div class="campo"><label for="ctM">Próxima visita (medição)</label><input id="ctM" type="text" inputmode="numeric" value="1"></div></div>' : '')
-    + '<div class="campo"><label for="ctObs">Observações</label><input id="ctObs" type="text" autocomplete="off" value="' + esc(novo ? '' : c.observacoes || '') + '"></div>';
+    + '<div class="campo"><label for="ctObs">Observações</label><input id="ctObs" type="text" autocomplete="off" value="' + esc(novo ? '' : c.observacoes || '') + '"></div>'
+    + ctrCamposDrive('ct', novo ? {} : c);
   let ctts = [];
   try{ if (!novo) ctts = await ctrContatos(cliId); }catch(e){}
   abrirModal(novo ? 'Novo contrato' : 'Dados do contrato ' + c.numero, corpo(ctts), [
@@ -19539,9 +19614,12 @@ async function modalContrato(c){
         const d = { numero: ctrIni(ctrVal('ctNum')), contrato_cliente: ctrVal('ctCC'), inicio: ctrVal('ctIni'), fim: ctrVal('ctFim') || null, objeto: ctrVal('ctObj'), area: ctrVal('ctArea'),
                     fiscal_id: ctrVal('ctFis') || null, gestor_id: ctrVal('ctGes') || null, art_numero: ctrVal('ctArt'), art_data: ctrVal('ctArtD') || null,
                     valor_previsto: ctrNum(ctrVal('ctVal')), usa_pedido: document.getElementById('ctPed').checked, observacoes: ctrVal('ctObs') };
+        const links = ctrLerDrive('ct'); if (links === false) return;
         if (novo){ d.cliente_id = ctrVal('ctCli'); d.prox_letra = ctrVal('ctL'); d.prox_rdo = ctrNum(ctrVal('ctR')); d.prox_medicao = ctrNum(ctrVal('ctM'));
                    if (!d.cliente_id) return toast('Escolha o cliente.', 'err'); }
-        try{ const r = await rpc('tf_contrato_salvar', { p_id: novo ? null : c.id, p_dados: d }); fecharModal();
+        try{ const r = await rpc('tf_contrato_salvar', { p_id: novo ? null : c.id, p_dados: d });
+             if (novo ? Object.values(links).some(Boolean) : ctrMudouDrive(c, links)) await rpc('tf_contrato_drive_links', { p_id: r.id, p_dados: links });
+             fecharModal();
              toast(novo ? 'Contrato ' + r.numero + ' criado (rascunho).' : 'Dados gravados.', 'ok');
              if (novo) { CTR.painel = null; await ctrAbrirFicha(r.id, 'itens'); } else await ctrRecarregar(); }
         catch(e){ toast(e.message, 'err'); } } }]);
@@ -19553,6 +19631,26 @@ async function modalContrato(c){
     });
   }
 }
+/** Os três campos de link de pasta (cadastro do contrato do ano). prefixo: 'ct' (contrato) · 'cn' (do negócio) */
+function ctrCamposDrive(pf, c){
+  const campo = (k, rot, dica) => '<div class="campo"><label for="' + pf + 'Dr' + k + '">' + rot + '</label><input id="' + pf + 'Dr' + k + '" type="text" autocomplete="off" placeholder="https://drive.google.com/drive/folders/…" value="' + esc(c['drive_' + dica] || '') + '"></div>';
+  return '<div class="secTit">Pastas no Drive (colar uma vez por ano)</div>'
+    + '<p class="nota" style="margin:0 0 6px">Abra a pasta no Drive, copie o endereço do navegador e cole aqui. O sistema cria dentro delas as pastas dos dias, dos RDOs (por ano e mês) e das medições (por ano). Em branco: tudo continua só no sistema.</p>'
+    + campo('P', 'Pasta da proposta do ano (onde ficam «Proposta … A, B, C…»)', 'proposta')
+    + campo('R', 'Pasta dos RDOs (ex.: «4.Controle de RDO»)', 'rdo')
+    + campo('M', 'Pasta das medições (ex.: «5.Medições», criada à mão uma vez)', 'medicao');
+}
+/** Lê e confere os três campos. Devolve {drive_proposta, drive_rdo, drive_medicao} ou false (já avisou o erro). */
+function ctrLerDrive(pf){
+  const rots = { P: 'da proposta do ano', R: 'dos RDOs', M: 'das medições' }, o = {};
+  for (const k of ['P', 'R', 'M']){
+    const v = ctrVal(pf + 'Dr' + k);
+    if (v && !ctrDriveId(v)){ toast('O link da pasta ' + rots[k] + ' não parece uma pasta do Google Drive (https://drive.google.com/drive/folders/…).', 'err'); return false; }
+    o[{ P: 'drive_proposta', R: 'drive_rdo', M: 'drive_medicao' }[k]] = v;
+  }
+  return o;
+}
+const ctrMudouDrive = (c, l) => ['drive_proposta', 'drive_rdo', 'drive_medicao'].some(k => String(c[k] || '') !== String(l[k] || ''));
 function modalEncerrarContrato(c){
   abrirModal('Encerrar o contrato ' + c.numero, '<p class="nota" style="margin-top:0">Encerrar fecha o contrato: não abre mais visita. Precisa estar sem visita aberta.</p>'
     + '<div class="campo"><label for="enMot">Motivo</label><input id="enMot" type="text" autocomplete="off"></div>',
@@ -19565,9 +19663,12 @@ async function modalAnoSeguinte(c){
   abrirModal('Criar o ano ' + (c.ano + 1), '<p class="nota" style="margin-top:0">Copia itens, preços, vasos, pessoas e modelos para um contrato novo (rascunho) de 01/01 a 31/12. Os números de partida voltam a A, 001 e 01. Revise os preços antes de ativar.</p>'
     + '<div class="campo"><label for="asNum">Nº do contrato novo</label><input id="asNum" type="text" inputmode="numeric" autocomplete="off" value="' + esc(sug || '') + '"></div>'
     + '<div class="dupla"><div class="campo"><label for="asArt">ART nova (número)</label><input id="asArt" type="text" autocomplete="off"></div>'
-    + '<div class="campo"><label for="asArtD">ART nova (data)</label><input id="asArtD" type="date"></div></div>',
+    + '<div class="campo"><label for="asArtD">ART nova (data)</label><input id="asArtD" type="date"></div></div>'
+    + '<div class="campo"><label for="asDrP">Pasta da proposta do ano ' + (c.ano + 1) + ' no Drive (link)</label><input id="asDrP" type="text" autocomplete="off" placeholder="https://drive.google.com/drive/folders/…"></div>'
+    + '<p class="nota" style="margin-top:0">As pastas dos RDOs e das medições são copiadas do contrato de ' + c.ano + ' (o sistema cria a subpasta do ano novo). A da proposta é outra a cada ano: cole aqui, ou depois em «Editar dados».</p>',
     [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Criar', pri: true, onClick: async () => {
-      try{ const r = await rpc('tf_contrato_proximo_ano', { p_id: c.id, p_dados: { numero: ctrIni(ctrVal('asNum')), art_numero: ctrVal('asArt'), art_data: ctrVal('asArtD') || null } });
+      const dp = ctrVal('asDrP'); if (dp && !ctrDriveId(dp)){ toast('O link da pasta da proposta não parece uma pasta do Google Drive.', 'err'); return; }
+      try{ const r = await rpc('tf_contrato_proximo_ano', { p_id: c.id, p_dados: { numero: ctrIni(ctrVal('asNum')), art_numero: ctrVal('asArt'), art_data: ctrVal('asArtD') || null, drive_proposta: dp || null } });
            fecharModal(); toast('Contrato ' + r.numero + ' criado.', 'ok'); CTR.painel = null; await ctrAbrirFicha(r.id, 'itens'); }
       catch(e){ toast(e.message, 'err'); } } }]);
 }
@@ -19612,10 +19713,13 @@ async function modalContratoDoNegocio(n, apr){
     + '<div class="dupla"><div class="campo"><label for="cnIni">Início</label><input id="cnIni" type="date" value="' + isoHoje() + '"></div><div class="campo"><label for="cnFim">Fim</label><input id="cnFim" type="date"></div></div>'
     + '<div class="campo"><label for="cnArea">Área / unidade</label><input id="cnArea" type="text" autocomplete="off"></div>'
     + '<div class="dupla"><div class="campo"><label for="cnFis">Fiscal do cliente</label><select id="cnFis">' + ctrOpts(ctts, null, '— escolha depois —') + '</select></div>'
-    + '<div class="campo"><label for="cnGes">Gestor do cliente</label><select id="cnGes">' + ctrOpts(ctts, null, '—') + '</select></div></div>',
+    + '<div class="campo"><label for="cnGes">Gestor do cliente</label><select id="cnGes">' + ctrOpts(ctts, null, '—') + '</select></div></div>'
+    + ctrCamposDrive('cn', {}),
     [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Criar contrato', pri: true, onClick: async () => {
+      const links = ctrLerDrive('cn'); if (links === false) return;
       try{ const r = await rpc('tf_contrato_de_negocio', { p_negocio: n.id, p_dados: { numero: ctrIni(ctrVal('cnNum')), contrato_cliente: ctrVal('cnCC'), inicio: ctrVal('cnIni'), fim: ctrVal('cnFim') || null,
               area: ctrVal('cnArea'), fiscal_id: ctrVal('cnFis') || null, gestor_id: ctrVal('cnGes') || null } });
+           if (links.drive_proposta || links.drive_rdo || links.drive_medicao){ try{ await rpc('tf_contrato_drive_links', { p_id: r.id, p_dados: links }); }catch(e){ toast('Contrato criado, mas as pastas do Drive não foram gravadas: ' + e.message, 'err'); } }
            fecharModal(); fecharDrawer(); toast('Contrato criado com ' + (r.itens || 0) + ' item(ns).', 'ok'); CTR.id = r.id; CTR.aba = 'itens'; CTR.painel = null; irPara('ctr'); }
       catch(e){ toast(e.message, 'err'); } } }]);
 }
@@ -19623,7 +19727,7 @@ async function modalContratoDoNegocio(n, apr){
 // ═════════════════════════════════════════════════════════════════════════
 // A OS DE CONTRATO NA GAVETA (C1b/C1c): dias de campo, RDO, medição, pedido (K03)
 // ═════════════════════════════════════════════════════════════════════════
-const CTRO = { rdos: [], os: null, med: null, itens: [], civis: [], modelos: [] };
+const CTRO = { rdos: [], os: null, med: null, itens: [], civis: [], modelos: [], drive: null };
 const ehContrato = card => !!card && card.template_id === 'INSPECAO_NR13_CONTRATO';
 const ctrHora = h => h ? String(h).slice(0, 5) : '';
 const ctrRdoNum = r => r.numero == null ? '' : String(r.numero).padStart(3, '0') + '/' + r.ano_numero;
@@ -19649,6 +19753,7 @@ async function ctrCarregarOS(){
   CTRO.os = (os || [])[0]; CTRO.rdos = rdos || [];
   if (CTRO.os && CTRO.os.contrato_id){
     try{ const m = await rpc('tf_contrato_modelo_lista', { p_contrato: CTRO.os.contrato_id }); CTRO.modelos = m || []; }catch(e){ CTRO.modelos = []; }
+    try{ CTRO.drive = await ctrDriveCtx(CTRO.os.contrato_id); }catch(e){ CTRO.drive = null; }   // S111: sem a 304 no banco, segue como antes
   }
 }
 const ctrModelo = tipo => (CTRO.modelos || []).find(m => m.tipo === tipo && m.ativo);
@@ -19678,6 +19783,19 @@ async function ctrPintarDias(){
   });
   body.querySelectorAll('[data-rd]').forEach(b => b.addEventListener('click', () => ctrAcaoDia(b.dataset.ac, CTRO.rdos.find(r => r.id === b.dataset.rd))));
 }
+/** A situação do dia no Drive: a pasta do dia e os arquivos do RDO (só quando o contrato tem as pastas). */
+function ctrDriveSitDia(r){
+  const D = CTRO.drive, partes = [];
+  if (!D) return '';
+  if (r.pasta_drive && ctrLinkSeguro(r.pasta_drive)) partes.push('<a href="' + esc(ctrLinkSeguro(r.pasta_drive)) + '" target="_blank" rel="noopener">pasta do dia no Drive</a>');
+  else if (r.letra && ctrDriveId(D.drive_proposta)) partes.push('<span class="mini warn">pasta do dia não criada no Drive</span>');
+  if (r.situacao === 'preenchido' && ctrDriveId(D.drive_rdo)){
+    if (r.docx_drive && r.pdf_drive) partes.push('<span class="mini ok">RDO no Drive</span>');
+    else if (r.docx_drive || r.pdf_drive) partes.push('<span class="mini warn">RDO no Drive: falta ' + (r.docx_drive ? 'o PDF' : 'o Word') + '</span>');
+    else partes.push('<span class="mini warn">RDO não foi ao Drive</span>');
+  }
+  return partes.length ? ' · ' + partes.join(' · ') : '';
+}
 function ctrLinhaDia(r){
   const equipe = [r.dono_id].concat(r.apoios || []).map(ctrNomeU).join(', ');
   const sel = r.situacao === 'preenchido';
@@ -19685,12 +19803,14 @@ function ctrLinhaDia(r){
     + (r.minutos ? ' · ' + esc(minHora(r.minutos)) : '') + ' <span class="mini ' + (sel ? 'ok' : 'warn') + '">' + esc(ctrSit[r.situacao] || r.situacao) + '</span>'
     + (r.letra ? ' <span class="mini ag" title="Letra do dia">dia ' + esc(r.letra) + '</span>' : '')
     + (r.numero ? ' <span class="mini ct" title="Número do RDO">RDO ' + esc(ctrRdoNum(r)) + '</span>' : '') + '</div>'
-    + '<div class="nota" style="margin:2px 0 6px">' + esc(equipe) + '</div><div class="ctrAcoes">'
+    + '<div class="nota" style="margin:2px 0 6px">' + esc(equipe) + ctrDriveSitDia(r) + '</div><div class="ctrAcoes">'
     + '<button class="btn mini" type="button" data-rd="' + esc(r.id) + '" data-ac="rdo">' + (sel ? 'Ver / corrigir o RDO' : 'Preencher o RDO') + '</button>'
     + (!r.letra ? '<button class="btn mini" type="button" data-rd="' + esc(r.id) + '" data-ac="real" title="Dar o dia como realizado (gera a letra)">Dia realizado</button>' : '')
+    + (r.letra && !r.pasta_drive && ctrDriveId(CTRO.drive && CTRO.drive.drive_proposta) ? '<button class="btn mini" type="button" data-rd="' + esc(r.id) + '" data-ac="pasta" title="Criar a pasta deste dia dentro da pasta da proposta do ano, no Drive">Criar pasta no Drive</button>' : '')
     + (!sel ? '<button class="btn mini" type="button" data-rd="' + esc(r.id) + '" data-ac="desm">Desmarcar</button>' : '')
     + (sel ? '<button class="btn mini" type="button" data-rd="' + esc(r.id) + '" data-ac="word"' + (ctrModelo('rdo') ? '' : ' disabled title="O contrato não tem o modelo do RDO (aba Modelos)"') + '>Word</button>'
            + '<button class="btn mini" type="button" data-rd="' + esc(r.id) + '" data-ac="pdf">PDF</button>'
+           + (ctrDriveId(CTRO.drive && CTRO.drive.drive_rdo) ? '<button class="btn mini" type="button" data-rd="' + esc(r.id) + '" data-ac="drive" title="Gera o Word e o PDF e grava no Controle de RDO do cliente, no Drive">' + (r.docx_drive || r.pdf_drive ? 'Reenviar ao Drive' : 'Enviar ao Drive') + '</button>' : '')
            + '<label class="btn mini" style="cursor:pointer">' + (r.pdf_assinado ? 'Trocar o assinado' : 'Anexar assinado (PDF)') + '<input type="file" accept=".pdf" hidden data-rd="' + esc(r.id) + '" data-ac="ass"></label>' : '')
     + '</div></div>';
 }
@@ -19705,6 +19825,8 @@ function ctrAcaoDia(ac, r){
   if (ac === 'desm') return modalDesmarcar(r);
   if (ac === 'real') return ctrRealizado(r, false);
   if (ac === 'word' || ac === 'pdf') return ctrGerarRDO(r, ac);
+  if (ac === 'pasta') return ctrCriarPastaDia(r, false);
+  if (ac === 'drive') return ctrEnviarRDODrive(r, false);
 }
 document.addEventListener('change', async ev => {   // o PDF assinado do RDO
   const i = ev.target; if (!i || !i.matches || !i.matches('input[type=file][data-ac="ass"]')) return;
@@ -19724,8 +19846,48 @@ async function ctrRealizado(r, forcar){
           + '.</p><p class="nota">As letras seguem a ordem dos dias. Dar a letra a este dia mesmo assim?</p>', 'Dar a letra assim mesmo')) return;
       return ctrRealizado(r, true);
     }
-    toast('Dia realizado' + (x.letra ? ' — letra ' + x.letra : '') + '.', 'ok'); ctrPintarDias();
+    toast('Dia realizado' + (x.letra ? ' — letra ' + x.letra : '') + '.', 'ok');
+    if (x.letra) await ctrCriarPastaDia(Object.assign({}, r, { letra: x.letra }), true);   // S111: a pasta do dia no Drive
+    ctrPintarDias();
   }catch(e){ toast(e.message, 'err'); }
+}
+/** Cria "Proposta <nº> <letra>" dentro da pasta da proposta do ano e guarda o link no dia. Nunca trava o dia realizado. */
+async function ctrCriarPastaDia(r, auto){
+  try{
+    const D = CTRO.drive || await ctrDriveCtx(CTRO.os.contrato_id), pastaId = ctrDriveId(D && D.drive_proposta);
+    if (!pastaId){ if (!auto) toast('O contrato não tem a pasta da proposta do ano no Drive (ficha do contrato › Editar dados).', 'err'); return; }
+    const j = await ctrDriveChamar({ acao: 'pasta', pasta_id: pastaId, subpastas: ['Proposta ' + D.numero + ' ' + r.letra] });
+    await rpc('tf_dia_campo_pasta', { p_rdo: r.id, p_url: j.url });
+    toast('Pasta do dia criada no Drive: ' + j.nome + '.', 'ok');
+    if (!auto) ctrPintarDias();
+  }catch(e){
+    toast((auto ? 'O dia foi dado como realizado, mas a pasta não foi criada no Drive: ' : 'Não criei a pasta no Drive: ') + ctrDriveMsgErro(e) + (auto ? ' Use «Criar pasta no Drive» na linha do dia.' : ''), 'err');
+  }
+}
+/** Word e PDF do RDO → <pasta dos RDOs>/<ano>/<MM - Mês ano>/RDO 054-2026.(docx|pdf). O Storage do sistema não é afetado. */
+async function ctrEnviarRDODrive(r, auto){
+  if (!ctrDocsOk()) return;
+  try{
+    const D = CTRO.drive || await ctrDriveCtx(CTRO.os.contrato_id), pastaId = ctrDriveId(D && D.drive_rdo);
+    if (!pastaId){ if (!auto) toast('O contrato não tem a pasta dos RDOs no Drive (ficha do contrato › Editar dados).', 'err'); return; }
+    const d = await rpc('tf_rdo_documento', { p_rdo: r.id }), m = ctrModelo('rdo');
+    const bytes = m ? await ctrBaixarArquivo(m.caminho) : null;
+    const sub = [String(r.dia).slice(0, 4), ctrPastaMes(r.dia)], nome = 'RDO ' + String(d.rdo_numero || '').replace('/', '-');
+    const url = {};
+    let falha = null;
+    try{
+      if (bytes){ const w = await Documentos.preencherDocx(bytes, Object.assign({}, d, { data: Documentos.data(d.data) }));
+                  url.docx = (await ctrDriveEnviar(w, MIME_DOCX, nome + '.docx', 'rdo-' + r.id + '-docx', pastaId, sub)).url; }
+      const p = await Documentos.pdfRdo(d, bytes);
+      url.pdf = (await ctrDriveEnviar(p, 'application/pdf', nome + '.pdf', 'rdo-' + r.id + '-pdf', pastaId, sub)).url;
+    }catch(e){ falha = e; }
+    if (url.docx || url.pdf) await rpc('tf_rdo_drive_arquivos', { p_rdo: r.id, p_docx: url.docx || null, p_pdf: url.pdf || null });
+    if (falha) throw falha;
+    toast(nome + ' guardado no Drive' + (bytes ? ' (Word e PDF)' : ' (só o PDF: o contrato não tem o modelo do Word)') + '.', 'ok');
+  }catch(e){
+    toast((auto ? 'O RDO foi concluído, mas não foi ao Drive: ' : 'O RDO não foi ao Drive: ') + ctrDriveMsgErro(e) + (auto ? ' Use «Enviar ao Drive» na linha do dia.' : ''), 'err');
+  }
+  if (!auto) ctrPintarDias();
 }
 function ctrOptsPessoas(sel, vazio){ return (vazio ? '<option value="">' + esc(vazio) + '</option>' : '') + (EQUIPE || []).filter(u => u.perfil !== 'comercial').map(u => '<option value="' + esc(u.id) + '"' + (u.id === sel ? ' selected' : '') + '>' + esc(u.nome) + '</option>').join(''); }
 function modalDiaCampo(){
@@ -19789,11 +19951,14 @@ async function gravarRDO(r, concluir){
   const d = { inicio_turno: ctrVal('rdIni') || null, intervalo: ctrVal('rdInt'), saida: ctrVal('rdSai') || null, atividades, comentarios: document.getElementById('rdCom').value, ocorrencias: document.getElementById('rdOco').value,
               obs_cliente: document.getElementById('rdObs').value, dono_id: dono, apoios, concluir };
   try{
+    const eraPreenchido = r.situacao === 'preenchido';
     const x = await rpc('tf_rdo_gravar', { p_rdo: r.id, p_dados: d });
     fecharModal();
     if (x.situacao === 'preenchido') toast('RDO ' + (x.numero ? String(x.numero).padStart(3, '0') : '') + ' preenchido' + (x.letra ? ' — dia ' + x.letra : '') + '.', 'ok');
     else if (concluir && x.falta && x.falta.length) toast('Rascunho salvo. Falta: ' + x.falta.join(', ') + '.', 'err');
     else toast('Rascunho salvo.', 'ok');
+    // S111: ao concluir o RDO pela primeira vez, Word e PDF vão sozinhos para o Controle de RDO do cliente (correção: pelo botão)
+    if (x.situacao === 'preenchido' && !eraPreenchido){ await ctrEnviarRDODrive(Object.assign({}, r, { dia: r.dia }), true); }
     await ctrRepintarOS();
   }catch(e){ toast(e.message, 'err'); }
 }
@@ -19856,7 +20021,7 @@ async function ctrPintarMedicao(){
     + '</div>'
     + '<div class="ctrAcoes" style="margin-top:10px">'
     + (rasc ? '<button class="btn" type="button" id="mdMais">+ Linha à mão</button><button class="btn" type="button" id="mdRefaz">Refazer a montagem</button><button class="btn pri" type="button" id="mdFecha">Fechar a medição</button>' : '')
-    + (fechada ? '<button class="btn" type="button" id="mdXls"' + (ctrModelo('boletim') ? '' : ' disabled title="O contrato não tem o modelo do boletim (aba Modelos do contrato)"') + '>Baixar o Excel</button><button class="btn" type="button" id="mdPdf">Baixar o PDF</button>'
+    + (fechada ? ctrDriveBtnMed(m) + '<button class="btn" type="button" id="mdXls"' + (ctrModelo('boletim') ? '' : ' disabled title="O contrato não tem o modelo do boletim (aba Modelos do contrato)"') + '>Baixar o Excel</button><button class="btn" type="button" id="mdPdf">Baixar o PDF</button>'
          + (k03 && (k03.status === 'pendente' || k03.status === 'em_andamento') ? '<button class="btn pri" type="button" id="mdPed">Lançar o pedido do cliente</button>' : '')
          + (k03 && k03.status === 'completo' ? '<button class="btn" type="button" id="mdPed2">Corrigir o nº do pedido</button>' : '')
          + (sessao.admin ? '<button class="btn" type="button" id="mdReabre">Reabrir a medição</button>' : '') : '')
@@ -19875,13 +20040,21 @@ async function ctrPintarMedicao(){
     if (!await confirmar('Fechar a medição', '<p>Fecha a medição nº ' + ctrMob(m.numero) + ' em <b>' + esc(BRL(m.valor_total)) + '</b>. Depois de fechada, as linhas não mudam (só o admin reabre). Conclui a tarefa "Criar Consolidado/Medição".</p>', 'Fechar')) return;
     try{
       await rpc('tf_medicao_fechar', { p_os: card.os_id }); toast('Medição fechada.', 'ok');
-      try{ await ctrGerarBoletim(m.id, { guardar: true, baixar: false }); }catch(e){ toast('Medição fechada, mas o boletim não foi guardado: ' + e.message, 'err'); }
+      try{ await ctrGerarBoletim(m.id, { guardar: true, baixar: false, drive: true, auto: true }); }catch(e){ toast('Medição fechada, mas o boletim não foi guardado: ' + e.message, 'err'); }
       await ctrRepintarOS(); abaDrawer = 'med'; montarTabsOS(osAberta.card); pintarDrawer();
     }catch(e){ toast(e.message, 'err'); } });
+  on('mdDrive', () => ctrGerarBoletim(m.id, { drive: true }).then(() => ctrPintarMedicao()).catch(e => toast(e.message, 'err')));
   on('mdXls', () => ctrGerarBoletim(m.id, { xlsx: true }).catch(e => toast(e.message, 'err')));
   on('mdPdf', () => ctrGerarBoletim(m.id, { pdf: true }).catch(e => toast(e.message, 'err')));
   on('mdPed', () => modalPedido(m, false)); on('mdPed2', () => modalPedido(m, true));
   on('mdReabre', () => modalReabrirMedicao(m));
+}
+/** Botão e situação do boletim no Drive (só quando o contrato tem a pasta das medições). */
+function ctrDriveBtnMed(m){
+  const D = CTRO.drive; if (!D || !ctrDriveId(D.drive_medicao)) return '';
+  const foi = !!ctrLinkSeguro(m.pdf);
+  return (foi ? '<a class="btn" href="' + esc(ctrLinkSeguro(m.pdf)) + '" target="_blank" rel="noopener">Abrir o PDF no Drive</a>' : '<span class="mini warn" style="align-self:center">boletim não foi ao Drive</span>')
+    + '<button class="btn" type="button" id="mdDrive">' + (foi ? 'Reenviar ao Drive' : 'Enviar ao Drive') + '</button>';
 }
 function modalLinhaMedicao(it){
   const novo = !it, civ = CTRO.civis;
@@ -19945,6 +20118,30 @@ async function ctrGerarBoletim(medId, o){
     if (o.guardar) guardados.pdf = await ctrSubirArquivo(d.contrato_id + '/medicoes/' + base.replace(/\s+/g, '-') + '-' + Date.now() + '.pdf', p, 'application/pdf');
   }
   if (o.guardar && (guardados.xlsx || guardados.pdf)) await rpc('tf_medicao_arquivos', { p_medicao: medId, p_xlsx_storage: guardados.xlsx || null, p_pdf_storage: guardados.pdf || null, p_xlsx_url: null, p_pdf_url: null, p_pasta: null });
+  if (o.drive) await ctrBoletimDrive(medId, d, bytes, mod, o);
+}
+/** Excel e PDF do boletim → <pasta das medições>/<ano>/Medição 10-2026 (setembro e outubro).(xlsx|pdf). Nunca trava o fechamento da medição. */
+async function ctrBoletimDrive(medId, d, bytesModelo, mod, o){
+  try{
+    const D = CTRO.drive || await ctrDriveCtx(d.contrato_id), pastaId = ctrDriveId(D && D.drive_medicao);
+    if (!pastaId){ if (!o.auto) toast('O contrato não tem a pasta das medições no Drive (ficha do contrato › Editar dados).', 'err'); else toast('Contrato sem pasta de medições no Drive: o boletim ficou só no sistema.', 'ok'); return; }
+    const meses = [...new Set((CTRO.rdos || []).filter(r => r.situacao !== 'desmarcado').map(r => Number(String(r.dia).slice(5, 7))).filter(Boolean))].sort((a, b) => a - b).map(n => CTR_MESES[n - 1]);
+    const nome = 'Medição ' + ctrMob(d.medicao) + '-' + D.ano + (meses.length ? ' (' + ctrListaE(meses) + ')' : '');
+    const sub = [String(D.ano)], url = {};
+    let falha = null;
+    try{
+      if (bytesModelo){ const x = await Documentos.preencherXlsx(bytesModelo, d, { manter: ['codigos'] });
+                        url.xlsx = (await ctrDriveEnviar(x, MIME_XLSX, nome + '.xlsx', 'med-' + medId + '-xlsx', pastaId, sub)).url; }
+      const p = await Documentos.pdfBoletim(d, bytesModelo);
+      const j = await ctrDriveEnviar(p, 'application/pdf', nome + '.pdf', 'med-' + medId + '-pdf', pastaId, sub);
+      url.pdf = j.url; url.pasta = j.pasta_url || null;
+    }catch(e){ falha = e; }
+    if (url.xlsx || url.pdf) await rpc('tf_medicao_arquivos', { p_medicao: medId, p_xlsx_storage: null, p_pdf_storage: null, p_xlsx_url: url.xlsx || null, p_pdf_url: url.pdf || null, p_pasta: url.pasta || null });
+    if (falha) throw falha;
+    toast('Boletim guardado no Drive: ' + nome + '.', 'ok');
+  }catch(e){
+    toast((o.auto ? 'A medição foi fechada e o boletim está guardado no sistema, mas não foi ao Drive: ' : 'O boletim não foi ao Drive: ') + ctrDriveMsgErro(e) + (o.auto ? ' Use «Enviar ao Drive» na aba Medição.' : ''), 'err');
+  }
 }
 
 // ── O QUE FAZER QUANDO A TAREFA ATUAL É DO FLUXO DE CONTRATO ────────────────
