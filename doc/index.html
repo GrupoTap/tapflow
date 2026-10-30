@@ -10,7 +10,7 @@
 <script src="../nucleo/config.js?v=N2"></script>
 <script src="../nucleo/nucleo.js?v=N2"></script>
 <script src="../nucleo/modulos.js?v=M1"></script>
-<script src="motor-calculo-nr13.js?v=R00.3"></script>
+<script src="motor-calculo-nr13.js?v=R00.4"></script>
 <!--
   TapDoc (escritório) · R02b1 — preparar a inspeção
   ─────────────────────────────────────────────────
@@ -154,7 +154,7 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E10';   // E10 (S107 · 412): o CSV do medidor anexado na revisão (Espessuras do medidor); a revisão exige as espessuras ·   // E9 (S94 · 410, R06a): o laudo em PDF (aba Laudos), a ART na preparação, o ambiente, o PDF do certificado dos instrumentos e as datas do PLH na aprovação ·   // E8 (S93 · 409, R05a): a revisão (A revisar: Revisão 1, Revisão 2 e a aprovação do PLH) ·   // E7 (S92 · 408, Acessos P3): entra quem tem o TapDoc; conferir e decidir é do PLH ·   // E = escritório · E6 (S86 · 407, R04a): padrão com U/k, numeração M/V e as aferições da inspeção (E5: material de campo; E4: faixa)
+const VERSAO = 'TapDoc E11';   // E11 (S113 · 414): tirar o vaso da OS (mesmo em campo, com motivo) · reabrir para o campo na revisão · a boroscopia lançada no escritório ·   // E10 (S107 · 412): o CSV do medidor anexado na revisão (Espessuras do medidor); a revisão exige as espessuras ·   // E9 (S94 · 410, R06a): o laudo em PDF (aba Laudos), a ART na preparação, o ambiente, o PDF do certificado dos instrumentos e as datas do PLH na aprovação ·   // E8 (S93 · 409, R05a): a revisão (A revisar: Revisão 1, Revisão 2 e a aprovação do PLH) ·   // E7 (S92 · 408, Acessos P3): entra quem tem o TapDoc; conferir e decidir é do PLH ·   // E = escritório · E6 (S86 · 407, R04a): padrão com U/k, numeração M/V e as aferições da inspeção (E5: material de campo; E4: faixa)
 // 405: a faixa de resistência (norma do material) e o S esperado pelo ASME (fator 3,5; 2/3 do escoamento; costura × 0,85)
 function faixaTxt(m){
   if (!m || m.resist_min_mpa == null) return 'faixa de resistência não cadastrada';
@@ -553,6 +553,15 @@ async function telaOS(os){
     try{ await rpc('tf_insp_vaso_confirmar', { p_equip: b.dataset.conf }); U.toast('Vaso confirmado no cadastro.', 'ok'); pintar(); }catch(e){ erro(e); }
   })));
   $('novo').addEventListener('click', () => novoVaso(os, P.os.cliente_id));
+  // E11 (414): o campo já começou este vaso: tirar da OS pede o motivo (o que foi lançado fica guardado)
+  $('tela').querySelectorAll('[data-tirar]').forEach(b => b.addEventListener('click', () => {
+    janela('Tirar da OS: ' + b.dataset.tag, '<p>O inspetor já começou este vaso. Ele sai da lista do celular; o que foi lançado fica guardado.</p>'
+      + '<label class="f">Motivo<input class="t" id="trMot" placeholder="ex.: era outro vaso / vaso fora de operação"></label>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Tirar da OS', classe:'pri', acao:async () => {
+        if (!($('trMot').value || '').trim()){ U.toast('Diga o motivo.', 'err'); return false; }
+        try{ await rpc('tf_insp_tirar_vaso', { p_os_id: os, p_equip: b.dataset.tirar, p_motivo: $('trMot').value }); U.toast('Vaso tirado da OS.', 'ok'); pintar(); }
+        catch(e){ erro(e); return false; } } }]);
+  }));
   ligarArt(os, P);
   $('tela').querySelectorAll('[data-amb]').forEach(sl => sl.addEventListener('change', async () => {
     try{ await rpc('tf_insp_vaso_ambiente', { p_equip: sl.dataset.amb, p_ambiente: sl.value || null }); U.toast('Ambiente previsto gravado. O inspetor confirma no local.', 'ok'); }
@@ -591,6 +600,7 @@ function tabelaVasos(lista, marcados){
             + [['', '—'], ['fechado', 'local fechado'], ['aberto', 'céu aberto']].map(([k, r]) => '<option value="' + k + '"' + ((v.ambiente || '') === k ? ' selected' : '') + '>' + r + '</option>').join('')
             + '</select> <small>(o inspetor confirma)</small></label></td>' : '')
         + '<td class="acoes" style="text-align:right;white-space:nowrap">' + (v.provisorio ? '<button class="btn mini sec" data-conf="' + esc(v.id) + '">Confirmar cadastro</button> ' : '')
+        + (marcados && ins && ins.situacao === 'em_campo' ? '<button class="btn mini sec" data-tirar="' + esc(v.id) + '" data-tag="' + esc(v.tag) + '">Tirar da OS</button> ' : '')
         + (marcados ? '<button class="btn mini" data-abre="' + esc(v.id) + '">Laudo anterior ›</button>' : '') + '</td></tr>';
     }).join('') + '</table>';
 }
@@ -1163,11 +1173,18 @@ function pintarRevisao(){
   if ((R.correcoes || []).length) h += '<h2>Correções feitas na revisão</h2><div class="card"><table><tr><th>Dado</th><th>Antes</th><th>Depois</th><th>Motivo</th><th>Quem</th></tr>'
     + R.correcoes.map(c => '<tr><td>' + esc(c.rotulo || '') + '<div class="muted">R' + c.etapa + '</div></td><td>' + esc(c.antes == null ? '—' : c.antes) + '</td><td><b>' + esc(c.depois == null ? '—' : c.depois) + '</b></td><td>' + esc(c.motivo || '')
       + '</td><td>' + esc(c.por || '') + '<div class="muted">' + quandoBR(c.em) + '</div></td></tr>').join('') + '</table></div>';
+  // E11 (414): a boroscopia é lançada aqui (o inspetor não a faz no celular)
+  const bo = (v.inspecao && v.inspecao.boroscopia) || null;
+  h += '<div class="card"><div class="linha" style="justify-content:space-between"><h3 style="margin:0">5 · Boroscopia (lançada no escritório)</h3>'
+    + (eu.pode ? '<button class="btn mini" id="revBoro">' + (bo ? 'Alterar' : 'Lançar') + '</button>' : '') + '</div>'
+    + (bo ? '<p style="margin:8px 0 0">' + (bo.realizada ? 'Realizada: <b>' + (bo.resultado === 'com_anomalia' ? 'com anomalia' : 'sem anomalia') + '</b>' + (bo.anomalia ? ' · ' + esc(bo.anomalia) : '') : 'Não realizada: ' + esc(bo.motivo_nao || '')) + '</p>'
+        : '<p class="muted" style="margin:8px 0 0">Ainda não lançada. Sem ela o laudo sai com "boroscopia sem resposta".</p>') + '</div>';
   // ações
   h += '<div class="card linha acoesrev">';
   if (eu.pode && (e === 1 || e === 2)) h += '<button class="btn pri" id="revConcluir">Concluir a ' + (e === 1 ? 'Revisão 1' : 'Revisão 2') + '</button>';
   if (eu.pode && e === 3) h += '<button class="btn pri" id="revAprovar"' + (nV ? ' disabled title="Há pendência em vermelho"' : '') + '>Aprovar e liberar para o laudo</button>';
   if (eu.pode && (e === 2 || e === 3)) h += '<button class="btn" id="revDevolver">Devolver à ' + (e === 2 ? 'Revisão 1' : 'Revisão 2') + '</button>';
+  if (eu.pode && ['enviada','em_revisao'].indexOf(I.situacao) >= 0) h += '<button class="btn sec" id="revReabrirCampo">Reabrir para o campo</button>';
   h += '<span class="muted">' + (e === 3 ? 'Aprovar grava o cálculo oficial e libera a inspeção para o laudo (R06).' : 'Para corrigir o que veio do campo, reabra a inspeção para a equipe (vaso › Reabrir).') + '</span></div>';
   $('tela').innerHTML = h;
   ligarRevisao();
@@ -1275,6 +1292,29 @@ function revMontarResultado(){
 function ligarRevisao(){
   const { R } = REV, id = REV.id, T = $('tela');
   const recarregar = async () => { const y = window.scrollY; await telaRevisao(id); window.scrollTo(0, y); };
+  // E11 (414): devolver ao celular (a equipe corrige a coleta; a revisão recomeça depois do novo envio)
+  const brc = $('revReabrirCampo'); if (brc) brc.addEventListener('click', () => {
+    janela('Reabrir para o campo', '<p>A equipe volta a poder alterar o que coletou. Depois do novo envio, a revisão recomeça.</p>'
+      + '<label class="f">Motivo<textarea class="t" id="rcpMot" rows="3" placeholder="o que o inspetor deve corrigir"></textarea></label>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Reabrir', classe:'pri', acao:async () => {
+        if (!($('rcpMot').value || '').trim()){ U.toast('Diga o motivo.', 'err'); return false; }
+        try{ await rpc('tf_insp_reabrir', { p_id:id, p_para:'em_campo', p_motivo:$('rcpMot').value }); U.toast('Reaberta para o campo.', 'ok'); location.hash = 'aba=laudos'; }
+        catch(e){ erro(e); return false; } } }]);
+  });
+  const bbo = $('revBoro'); if (bbo) bbo.addEventListener('click', () => {
+    const b = (REV.v.inspecao && REV.v.inspecao.boroscopia) || {};
+    janela('Boroscopia', '<label class="f">Foi feita?<select class="t" id="boR"><option value="1"' + (b.realizada !== false ? ' selected' : '') + '>Sim</option><option value="0"' + (b.realizada === false ? ' selected' : '') + '>Não</option></select></label>'
+      + '<div id="boSim"><label class="f">Resultado<select class="t" id="boRes"><option value="sem_anomalia"' + (b.resultado !== 'com_anomalia' ? ' selected' : '') + '>Sem anomalia</option><option value="com_anomalia"' + (b.resultado === 'com_anomalia' ? ' selected' : '') + '>Com anomalia</option></select></label>'
+      + '<label class="f">Anomalia (se houver)<textarea class="t" id="boAno" rows="2">' + esc(b.anomalia || '') + '</textarea></label></div>'
+      + '<div id="boNao" hidden><label class="f">Motivo de não fazer<textarea class="t" id="boMot" rows="2">' + esc(b.motivo_nao || '') + '</textarea></label></div>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
+        const fez = $('boR').value === '1';
+        const d = fez ? { realizada:true, resultado:$('boRes').value, anomalia:$('boAno').value } : { realizada:false, motivo_nao:$('boMot').value };
+        try{ await rpc('tf_insp_boroscopia_gravar', { p_id:id, p_dados:d }); U.toast('Boroscopia gravada.', 'ok'); recarregar(); }
+        catch(e){ erro(e); return false; } } }]);
+    const mostra = () => { const f = $('boR').value === '1'; $('boSim').hidden = !f; $('boNao').hidden = f; };
+    $('boR').addEventListener('change', mostra); mostra();
+  });
   ligarEsp(recarregar);   // E10
   T.querySelectorAll('[data-ok]').forEach(c => c.addEventListener('change', async () => {
     try{ await rpc('tf_insp_revisao_ok', { p_id:id, p_item:c.dataset.ok, p_ok:c.checked }); const e = R.inspecao.etapa; R.oks = R.oks || {}; R.oks[e] = (R.oks[e] || []).filter(x => x !== c.dataset.ok).concat(c.checked ? [c.dataset.ok] : []); }

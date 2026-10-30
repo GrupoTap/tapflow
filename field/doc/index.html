@@ -10,7 +10,7 @@
 <script src="../../nucleo/config.js?v=N2"></script>
 <script src="../../nucleo/nucleo.js?v=N2"></script>
 <script src="../../nucleo/modulos.js?v=M1"></script>
-<script src="motor-calculo-nr13.js?v=R00.3"></script>
+<script src="motor-calculo-nr13.js?v=R00.4"></script>
 <!--
   TapDoc 4 · a coleta da inspeção no celular (R02a, R02b1, R03a e R03b)
   ─────────────────────────────────────────────────────────────────
@@ -161,7 +161,7 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 11';   // S112 · 413: correções do teste de 29/10 (posição primeiro; aferição por ciclo e por escala; sem bancada, boroscopia, E e R em campo) · S107 · 412: as leituras não travam o envio (o CSV do medidor entra no escritório) ·   // S94 · 410 (R06a): o ambiente do vaso (local fechado ou céu aberto) na Localização, obrigatório no envio ·   // S86 · 407 (R04a): aferição de manômetro e teste de válvula em campo (TapDoc 7: material do escritório; 6: faixa)
+const VERSAO = 'TapDoc 12';   // S113 · 414: reabrir o que enviou (a equipe, até a revisão começar) · válvula com 3 ciclos (abertura + assentamento) ·   // S112 · 413: correções do teste de 29/10 (posição primeiro; aferição por ciclo e por escala; sem bancada, boroscopia, E e R em campo) · S107 · 412: as leituras não travam o envio (o CSV do medidor entra no escritório) ·   // S94 · 410 (R06a): o ambiente do vaso (local fechado ou céu aberto) na Localização, obrigatório no envio ·   // S86 · 407 (R04a): aferição de manômetro e teste de válvula em campo (TapDoc 7: material do escritório; 6: faixa)
 // 405: uma linha curta com a faixa do material, para conferir com a plaqueta ou o certificado da chapa
 function linhaFaixa(m){
   if (!m || m.resist_min_mpa == null) return '';
@@ -596,7 +596,8 @@ function telaPainel(v){
   const al = alertas(v);
   let h = '';
   if (!ed) h += '<div class="alerta"><b>' + (v.inspecao.nao_inspecionado_motivo ? 'Vaso não inspecionado' : 'Inspeção ' + esc(String(v.inspecao.situacao).replace('_', ' '))) + '</b>' +
-    (v.inspecao.nao_inspecionado_motivo ? esc(v.inspecao.nao_inspecionado_motivo) + '<br>' : '') + 'O campo não grava mais neste vaso.</div>';
+    (v.inspecao.nao_inspecionado_motivo ? esc(v.inspecao.nao_inspecionado_motivo) + '<br>' : '') + 'O campo não grava mais neste vaso.</div>' +
+    (v.inspecao.situacao === 'enviada' ? cartaoReabrir(v) : '');
   if (v.inspecao.instrucoes_campo) h += '<div class="alerta" style="background:var(--accent-soft);color:var(--accent-ink)"><b>Instruções do escritório</b>' + esc(v.inspecao.instrucoes_campo) + '</div>';
   if (al.length && ed) h += '<div class="alerta"><b>Atenção</b><ul>' + al.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
   const sec = (k, nome, sub, e) => '<button class="card secao" data-s="' + k + '"' + (ed ? '' : ' disabled') + '><span class="sn">' + nome +
@@ -621,6 +622,7 @@ function telaPainel(v){
   h += '<h2>Cálculo</h2><button class="card secao" data-s="previa"><span class="sn">Prévia do cálculo<small>PMTA por câmara, categoria e prazos. Só informativa: o resultado oficial sai na revisão.</small></span><span class="est vazia">ver</span></button>';
   $('tela').innerHTML = h;
   $('tela').querySelectorAll('[data-s]').forEach(b => { if (b.dataset.s === 'previa') b.disabled = false; b.addEventListener('click', () => ir({ nome:b.dataset.s, vaso:v.id })); });
+  if (!ed && v.inspecao.situacao === 'enviada') ligarReabrir(v);
 }
 
 // ── campos ─────────────────────────────────────────────────────────────────
@@ -1353,7 +1355,7 @@ function resultadoAf(v, a, af){
       r.aprovadaOk = r.aprovado;
     } else {
       r = M.testeValvula({ unidade:af.unidade || 'bar', ajuste:af.ajuste, aberturas:(af.leituras && af.leituras.aberturas) || [],
-        assentamento:af.leituras && af.leituras.assentamento, pmtaMPa:pmtaVigenteCam(v, a.camara_id) });
+        assentamentos:(af.leituras && af.leituras.assentamentos) || [], assentamento:af.leituras && af.leituras.assentamento, pmtaMPa:pmtaVigenteCam(v, a.camara_id) });
       r.aprovadaOk = r.aprovada;
     }
   }catch(e){ r = { completo:false, faltas:[e.message], avisos:[], aprovadaOk:false }; }
@@ -1409,7 +1411,7 @@ function novaAfericao(v, a){
     padrao_id:pad ? pad.id : null, lacre_retirado:null, lacre_colocado:null,
     validade_meses:vv ? null : 24, realizada_em:new Date().toISOString(),
     ajuste:vv && a.pressao_ajuste_mpa != null ? Number(fmt(window.MotorNR13.deMPa(a.pressao_ajuste_mpa, UN_AF.includes(un) ? un : 'bar'), 3).replace(',', '.')) : null,
-    leituras:vv ? { aberturas:[null, null, null], assentamento:null } : { pontos:[] } };
+    leituras:vv ? { aberturas:[null, null, null], assentamentos:[null, null, null] } : { pontos:[] } };
   v.inspecao.afericoes = ((v.inspecao.afericoes) || []).concat([af]); salvar(); gravarAfericao(v, af);
   return af;
 }
@@ -1439,10 +1441,12 @@ function telaAfericao(v){
     + ((E.padroes || []).length ? '' : '<p class="alerta">Nenhum padrão com certificado válido no pacote. O escritório cadastra em TapDoc › Instrumentos.</p>')
     + '<label class="f">Unidade<select class="t" id="afUn">' + UN_AF.map(u => '<option value="' + u + '"' + (u === un ? ' selected' : '') + '>' + UN_AF_ROT[u] + '</option>').join('') + '</select></label></div>';
   if (vv){
-    const L = af.leituras || (af.leituras = { aberturas:[null, null, null], assentamento:null });
+    const L = af.leituras || (af.leituras = { aberturas:[null, null, null], assentamentos:[null, null, null] });
+    // S113 · C8: 3 ciclos, cada um com a abertura e o seu assentamento (o formato antigo, com 1 assentamento, é trocado por este)
+    if (!Array.isArray(L.assentamentos)){ L.assentamentos = [null, null, null]; delete L.assentamento; }
     h += '<div class="card">' + campoNum('Pressão de abertura (plaqueta/certificado) (' + UN_AF_ROT[un] + ')', 'afAj', af.ajuste, 'Como está na válvula ou no certificado')
-      + '<div class="lin">' + [0, 1, 2].map(k => campoNum('Abertura ' + (k + 1), 'afAb' + k, L.aberturas[k])).join('') + '</div>'
-      + campoNum('Assentamento (' + UN_AF_ROT[un] + ')', 'afAs', L.assentamento) + '</div>';
+      + '</div>' + [0, 1, 2].map(k => '<div class="card"><b>Ciclo ' + (k + 1) + '</b><div class="lin">' +
+          campoNum('Abertura (' + UN_AF_ROT[un] + ')', 'afAb' + k, L.aberturas[k]) + campoNum('Assentamento (' + UN_AF_ROT[un] + ')', 'afAs' + k, L.assentamentos[k]) + '</div></div>').join('');
   } else {
     const L = af.leituras || (af.leituras = { pontos:[] }), es = L.escala || (L.escala = {});
     // S112 · C4: como no TapDoc do Paulo — escala de indicação, graduações, escala de utilização e resolução; "Gerar calibração" monta os pontos
@@ -1490,7 +1494,7 @@ function telaAfericao(v){
   if (vv){
     ligar('afAj', el => { af.ajuste = n(el.value); mudou(true); });
     [0, 1, 2].forEach(k => ligar('afAb' + k, el => { af.leituras.aberturas[k] = n(el.value); mudou(true); }));
-    ligar('afAs', el => { af.leituras.assentamento = n(el.value); mudou(true); });
+    [0, 1, 2].forEach(k => ligar('afAs' + k, el => { af.leituras.assentamentos[k] = n(el.value); mudou(true); }));
   } else {
     const es = af.leituras.escala || (af.leituras.escala = {});
     ligar('afIni', el => { af.faixa_ini = n(el.value); mudou(true); });
@@ -1691,14 +1695,39 @@ function telaTeste(v){
   ligar('tThTx', el => { t.th_comprovacao = el.value.trim() || null; mudou(); });
 }
 
+// ── S113 · C6 · reabrir o que foi enviado (a equipe, enquanto o escritório não começou a revisão) ──
+function cartaoReabrir(v){
+  return '<div class="card"><b>Errou algo ou faltou algo?</b><p class="info" style="margin:4px 0 8px">Enquanto o escritório não começou a revisão, você reabre a inspeção, corrige e envia de novo.</p>' +
+    '<button class="btn" id="reabrirCampo">Reabrir para corrigir</button></div>';
+}
+function ligarReabrir(v){
+  ligar('reabrirCampo', () => {
+    if (DEMO || navigator.onLine === false){ U.toast('Precisa de sinal para reabrir.', 'err'); return; }
+    if (pendDoVaso(v).length){ U.toast('Espere terminar de enviar o que está na fila.', 'err'); return; }
+    janela('Reabrir para corrigir', '<p class="info">O vaso ' + esc(v.tag) + ' volta para o campo. Corrija e envie de novo.</p>' +
+      '<label class="f">O que vai corrigir<textarea class="t" id="rbTx"></textarea></label>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Reabrir', classe:'pri', acao:() => {
+        const mot = ($('rbTx').value || '').trim();
+        if (!mot){ U.toast('Diga o que vai corrigir.', 'err'); return false; }
+        N.api.rpc('tf_insp_reabrir_campo', { p_id:v.inspecao.id, p_motivo:mot }).then(() => {
+          const i = v.inspecao; i.situacao = 'em_campo'; i.pode_editar = true; i.nao_inspecionado_motivo = null; salvar();
+          N.janela.fechar(); U.toast('Reaberta: pode corrigir.', 'ok'); baixar(true); ir({ nome:'vaso', vaso:v.id }, true);
+        }, e => U.toast(e.message || 'Não consegui reabrir.', 'err'));
+        return false;
+      } }]);
+  }, 'click');
+}
+
 // ── fechamento e envio ─────────────────────────────────────────────────────
 function telaFechamento(v){
   titulo('Fechamento e envio', v.tag);
   const i = v.inspecao, pode = ed(v);
   if (!pode){
     $('tela').innerHTML = '<div class="card"><b>' + (i.nao_inspecionado_motivo ? 'Vaso não inspecionado' : 'Inspeção enviada') + '</b><p class="info" style="margin:4px 0 0">' +
-      esc(i.nao_inspecionado_motivo || 'O escritório revisa a partir daqui. Para corrigir algo, peça ao escritório para reabrir.') + '</p></div>' +
-      (i.observacao ? '<div class="card"><b>Observações</b><p class="info" style="margin:4px 0 0">' + esc(i.observacao) + '</p></div>' : '');
+      esc(i.nao_inspecionado_motivo || (i.situacao === 'enviada' ? 'O escritório ainda não começou a revisão: você pode reabrir para corrigir.' : 'O escritório revisa a partir daqui. Para corrigir algo, peça ao escritório para reabrir.')) + '</p></div>' +
+      (i.observacao ? '<div class="card"><b>Observações</b><p class="info" style="margin:4px 0 0">' + esc(i.observacao) + '</p></div>' : '') +
+      (i.situacao === 'enviada' ? cartaoReabrir(v) : '');
+    if (i.situacao === 'enviada') ligarReabrir(v);
     return;
   }
   const f = faltasEnvio(v), a = avisosEnvio(v);
@@ -1709,7 +1738,7 @@ function telaFechamento(v){
   h += '<div class="card"><label class="f">Observações do vaso<small>O que o escritório precisa saber e não coube nas seções.</small><textarea class="t" id="fObs">' + esc(i.observacao || '') + '</textarea></label></div>';
   h += '<div class="card"><b>Foto de capa</b><p class="muted" style="margin:2px 0 0">O vaso inteiro, de frente: vai na capa do laudo.</p>' + gradeFotos(v, 'capa', 1) + '</div>';
   h += '<button class="btn pri" id="fEnviar"' + (f.length ? ' disabled' : '') + '>Enviar a inspeção deste vaso</button>';
-  h += '<p class="muted" style="text-align:center;margin-top:6px">Depois de enviar, o campo não altera mais. Sem sinal, vai quando o sinal voltar.</p>';
+  h += '<p class="muted" style="text-align:center;margin-top:6px">Depois de enviar, você ainda pode reabrir para corrigir, até o escritório começar a revisão. Sem sinal, vai quando o sinal voltar.</p>';
   h += '<button class="btn perigo" id="fNao">Não foi possível inspecionar este vaso</button>';
   $('tela').innerHTML = h;
   ligarFotos(v, 'capa', () => 'Capa');
@@ -1718,7 +1747,7 @@ function telaFechamento(v){
     i.situacao = 'enviada'; i.pode_editar = false; if (motivo) i.nao_inspecionado_motivo = motivo; salvar();
   };
   ligar('fEnviar', () => {
-    N.janela.confirmar('Enviar a inspeção do ' + v.tag + '?', '<p>Depois de enviar, o campo não altera mais este vaso.</p>', 'Enviar').then(s => {
+    N.janela.confirmar('Enviar a inspeção do ' + v.tag + '?', '<p>Depois de enviar, você ainda pode reabrir para corrigir, até o escritório começar a revisão.</p>', 'Enviar').then(s => {
       if (!s) return;
       if (i.observacao !== undefined) enfileirar(v, 'fech', 'observações', { funcao:'tf_insp_fechamento_gravar', payload:{ p_id:i.id, p_dados:{ observacao:i.observacao || null } } });
       enfileirar(v, 'enviar-' + i.id, 'enviar', { funcao:'tf_insp_enviar', payload:{ p_id:i.id } }, null, true);

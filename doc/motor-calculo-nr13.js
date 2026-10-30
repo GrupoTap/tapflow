@@ -1,5 +1,6 @@
 /**
  * Motor de cálculo NR-13 — TapFlow · módulo de inspeção
+ * Versão R00.4 · 30/10/2026 (R00.3 + o teste de válvula com 3 ciclos: abertura e assentamento de cada um, S113)
  * Versão R00.3 · 24/10/2026 (R00.2 de 23/10 + a aferição de manômetro e o teste de válvula, R04a)
  *
  * Calcula espessura mínima requerida e PMTA de cada componente de um vaso de pressão
@@ -324,24 +325,29 @@ function toleranciaValvulaMPa(ajusteMPa) {
 }
 
 /**
- * Teste de válvula: 3 aberturas e o assentamento.
- * v = { unidade, ajuste, aberturas: [a1, a2, a3], assentamento, pmtaMPa }
+ * Teste de válvula: 3 ciclos, cada um com a abertura e o seu assentamento.
+ * v = { unidade, ajuste, aberturas: [a1, a2, a3], assentamentos: [s1, s2, s3] (ou, no formato antigo, assentamento), pmtaMPa }
  */
 function testeValvula(v) {
     const faltas = [], avisos = [];
     const un = v.unidade || 'bar';
-    const aj = num(v.ajuste), ab = (v.aberturas || []).map(num).filter((x) => x !== null), as = num(v.assentamento);
-    if (!(aj > 0)) faltas.push('Informe a pressão de ajuste.');
+    const aj = num(v.ajuste), ab = (v.aberturas || []).map(num).filter((x) => x !== null);
+    // R00.4 (S113): 3 ciclos, cada um com a abertura e o seu assentamento; o formato antigo (1 assentamento) continua valendo
+    const porCiclo = Array.isArray(v.assentamentos);
+    const asv = porCiclo ? v.assentamentos.map(num).filter((x) => x !== null) : [];
+    const as = porCiclo ? (asv.length ? asv.reduce((x, y) => x + y, 0) / asv.length : null) : num(v.assentamento);
+    if (!(aj > 0)) faltas.push('Informe a pressão de abertura (plaqueta ou certificado).');
     if (ab.length < 3) faltas.push('Faça 3 aberturas.');
-    if (as === null) faltas.push('Informe o assentamento.');
+    if (porCiclo ? asv.length < 3 : as === null) faltas.push(porCiclo ? 'Informe o assentamento dos 3 ciclos.' : 'Informe o assentamento.');
     if (faltas.length) return { aprovada: false, completo: false, grave: false, faltas, avisos };
     const ajM = paraMPa(aj, un), med = media(ab), medM = paraMPa(med, un), maxM = paraMPa(Math.max(...ab), un);
     const tolM = toleranciaValvulaMPa(ajM);
     const r = { completo: true, faltas, avisos, media: med, tol: deMPa(tolM, un), desvio: med - aj };
     r.dentroTolerancia = Math.abs(medM - ajM) <= tolM + 1e-9;
     if (!r.dentroTolerancia) avisos.push('Abertura média ' + med.toFixed(3) + ' ' + un + ' fora da tolerância do ajuste (±' + r.tol.toFixed(3) + ').');
-    if (as > Math.min(...ab) + 1e-9) avisos.push('Assentamento acima da abertura.');
-    r.assentamentoOk = as <= Math.min(...ab) + 1e-9;
+    r.assentamentoOk = porCiclo ? asv.every((x, k) => x <= ab[k] + 1e-9) : as <= Math.min(...ab) + 1e-9;
+    if (!r.assentamentoOk) avisos.push('Assentamento acima da abertura.');
+    r.assentamentoMedio = as;
     const pm = num(v.pmtaMPa);
     r.acimaPMTA = pm !== null && maxM > pm + 1e-9;
     if (r.acimaPMTA) avisos.push('Abertura acima da PMTA vigente (' + deMPa(pm, un).toFixed(3) + ' ' + un + '): NR-13 13.5.1.2 "a".');
@@ -359,7 +365,7 @@ const MotorNR13 = {
     // R00.3 · R04a
     UNIDADES_MPA: R04.UNIDADES_MPA, paraMPa: R04.paraMPa, deMPa: R04.deMPa, toleranciaManometro: R04.toleranciaManometro,
     afericaoManometro: R04.afericaoManometro, toleranciaValvulaMPa: R04.toleranciaValvulaMPa, testeValvula: R04.testeValvula,
-    versao: 'R00.3-2026-10-24',
+    versao: 'R00.4-2026-10-30',
 };
 
 if (typeof module !== 'undefined' && module.exports) module.exports = MotorNR13;

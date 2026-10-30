@@ -312,11 +312,14 @@ function montar(d, opc) {
     const f = a.afericao, nome = (a.tipo !== 'valvula_seguranca' ? (TIPOS_ACESS[a.tipo] || '').toLowerCase() + ' ' : '') + (a.tag || a.marca || '');
     const kc = rcams.find(k => k.camara_id === a.camara_id) || rcams[0] || {};
     if (f && (f.resultado === 'aprovado' || f.resultado === 'reprovado')) {
-      const pz = f.padrao || {}, bz = f.bancada || {}, ab = ((f.leituras || {}).aberturas || []).map(Number).filter(x => isFinite(x));
+      const pz = f.padrao || {}, bz = f.bancada || {}, ab = ((f.leituras || {}).aberturas || []).map(Number).filter(x => isFinite(x)),
+        asv = ((f.leituras || {}).assentamentos || []).map(Number).filter(x => isFinite(x));
       par(txt(M.valvula_feita, { acessorio: nome, bancada: bz.descricao ? ' (' + [bz.descricao, bz.marca, bz.modelo].filter(Boolean).join(', ') + ')' : '',
         padrao: [pz.descricao, pz.marca, pz.modelo].filter(Boolean).join(', ') || '—', certificado: pz.certificado_num || '—',
         ajuste: unidadeTxt(f.ajuste, f.unidade), abertura: ab.length ? unidadeTxt(ab.reduce((x, y) => x + y, 0) / ab.length, f.unidade) : '—',
-        assentamento: unidadeTxt((f.leituras || {}).assentamento, f.unidade), pmta: bar(kc.pmta_adotada_mpa),
+        aberturas: ab.length ? ab.map(x => unidadeTxt(x, f.unidade)).join('; ') : '—',
+        assentamentos: asv.length ? asv.map(x => unidadeTxt(x, f.unidade)).join('; ') : '—',
+        assentamento: unidadeTxt(asv.length ? asv.reduce((x, y) => x + y, 0) / asv.length : (f.leituras || {}).assentamento, f.unidade), pmta: bar(kc.pmta_adotada_mpa),
         resultado: f.resultado === 'aprovado' ? 'APROVADA' : 'REPROVADA', lacre: f.lacre_colocado || a.lacre_num || '—', codigo: f.codigo || 'a numerar' }));
       conc.valv.push(M.conc && (f.resultado === 'aprovado' ? M.conc.valv_ok : M.conc.valv_nc));
     } else { par(txt(M.valvula_nao, { acessorio: nome, motivo: a.afericao_motivo || 'não informado' })); conc.valv.push(txt(M.conc && M.conc.valv_nao, { motivo: a.afericao_motivo || 'motivo não informado' })); }
