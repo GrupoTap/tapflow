@@ -24,7 +24,7 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S38-T12';   // S113: TapDoc 12 (414: reabrir o que enviou; válvula com 3 ciclos) e o motor R00.4 · S112: TapDoc 11 (413: posição primeiro, aferição por ciclo e por escala, sem bancada/boroscopia/E/R em campo) · S107: TapDoc 10 (412: as leituras não travam o envio) · S94: TapDoc 9 (R06a: o ambiente na Localização) · S86: TapDoc 8 (R04a: aferição em campo) e o motor R00.3
+const VERSAO = 'S39-T12';   // S39: a medição da OS (e o gerador de PDF guardado para o campo) · S113: TapDoc 12 (414: reabrir o que enviou; válvula com 3 ciclos) e o motor R00.4 · S112: TapDoc 11 (413: posição primeiro, aferição por ciclo e por escala, sem bancada/boroscopia/E/R em campo) · S107: TapDoc 10 (412: as leituras não travam o envio) · S94: TapDoc 9 (R06a: o ambiente na Localização) · S86: TapDoc 8 (R04a: aferição em campo) e o motor R00.3
 const CACHE  = 'tapflow-field-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -48,7 +48,10 @@ const ESSENCIAIS = [
   // S35 · TapDoc 1: a coleta da inspeção (página própria, abre sem sinal)
   './doc/',
   // S80 · TapDoc 4: o motor de cálculo para a prévia sem sinal. Mesmo ?v= do <script> de doc/index.html.
-  './doc/motor-calculo-nr13.js?v=R00.4'
+  './doc/motor-calculo-nr13.js?v=R00.4',
+  // S39 · a medição gera o PDF no campo, sem sinal: o pdfmake do TapDoc (mesmo endereço do <script> que a tela carrega)
+  '../doc/vendor/pdfmake.min.js',
+  '../doc/vendor/vfs_fonts.js'
 ];
 
 self.addEventListener('install', ev => {

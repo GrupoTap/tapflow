@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 13 · Financeiro</title>
+<title>TapFin 14 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -288,6 +288,9 @@ button{font:inherit;color:inherit;cursor:pointer}
 .ccLin{display:grid;grid-template-columns:86px minmax(0,1fr) 120px 120px 92px;gap:10px;align-items:center;
   padding:8px 12px;border-bottom:1px solid var(--rule-2);font-size:13px}
 .ccLin:last-child{border-bottom:0}
+/* F14 · o aviso da medição da OS comum no Painel */
+.ccLin.omdLin{grid-template-columns:86px minmax(0,1fr) minmax(0,1.6fr) 110px}
+@media (max-width:640px){ .ccLin.omdLin{grid-template-columns:auto 1fr} .ccLin.omdLin .ccNome{text-align:right} .ccLin.omdLin .ccDesc{grid-column:1/-1} .ccLin.omdLin .n{grid-column:1/-1} }
 .ccLin.cab{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.4px;background:var(--surface-2)}
 .ccLin .d{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2)}
 .ccLin .t{overflow-wrap:anywhere}
@@ -2308,7 +2311,7 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'F13';   // TapFin 13 (OS de contrato: a medição vira título; a busca sem embaralhar) — o S## da publicação é do central
+const APP_VERSION = 'F14';   // TapFin 14 (a medição da OS comum: avisos no Painel e no painel da OS) · F13: OS de contrato — o S## da publicação é do central
 try{ document.getElementById('verBadge').textContent = 'FINANCEIRO · ' + APP_VERSION; }catch(e){}
 
 const esc               = (...a) => Nucleo.util.esc(...a);
@@ -3470,12 +3473,13 @@ async function finpCarregar(){
   // S66 · a projeção não pode derrubar o painel: sem o SQL 500, a tela abre como antes e avisa.
   // S69 · + as despesas futuras (recorrentes e outras), que só a tela Projeções soma
   // S70 · + o ciclo pelo saldo real do dia 1º e o plano das provisões (SQL 503)
-  let desp, ciclo, med;
-  try{ [d, pm, proj, desp, ciclo, med] = await Promise.all([rpc('tf_fin_painel', {}), rpc('tf_fin_painel_mensal', {}),
+  let desp, ciclo, med, osmed;
+  try{ [d, pm, proj, desp, ciclo, med, osmed] = await Promise.all([rpc('tf_fin_painel', {}), rpc('tf_fin_painel_mensal', {}),
                                           rpc('tf_fin_projecao_os', {}).catch(e => ({ erro: e.message })),
                                           rpc('tf_fin_projecao_despesas', {}).catch(e => ({ erro: e.message })),
                                           rpc('tf_fin_ciclo', {}).catch(e => ({ erro: e.message })),
-                                          rpc('tf_fin_medicoes_sem_titulo', {}).catch(() => null)]); }   // F13 · sem a 509: sem aviso
+                                          rpc('tf_fin_medicoes_sem_titulo', {}).catch(() => null),   // F13 · sem a 509: sem aviso
+                                          rpc('tf_osmed_avisos', {}).catch(() => [])]); }   // F14 · sem a 306: sem aviso
   catch(e){
     el.innerHTML = '<div class="vazio2"><b>Não consegui abrir o painel</b><p></p>'
       + '<button class="btn" type="button" id="finpDeNovo">Tentar de novo</button></div>';
@@ -3483,7 +3487,7 @@ async function finpCarregar(){
     document.getElementById('finpDeNovo').addEventListener('click', finpCarregar);
     return;
   }
-  FINPM.d = d; FINPM.pm = pm; FINPM.proj = proj; FINPM.desp = desp; FINPM.ciclo = ciclo; FINPM.med = med;
+  FINPM.d = d; FINPM.pm = pm; FINPM.proj = proj; FINPM.desp = desp; FINPM.ciclo = ciclo; FINPM.med = med; FINPM.osmed = osmed;
   FINPM.meses = fpmMeses(pm);
   if (!FINPM.mes || !FINPM.meses.includes(FINPM.mes)) FINPM.mes = pm.mes_atual;
   fpmRedesenhar();
@@ -3566,6 +3570,7 @@ function fpmLigar(el, i){
   });
   el.querySelectorAll('[data-tip]').forEach(s => { s.addEventListener('mousemove', e => fpmTip(e, esc(s.dataset.tip))); s.addEventListener('mouseleave', fpmTipSai); });
   el.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => irPara(b.dataset.ir)));   // S66
+  osmedLigarPainel(el);   // F14
   const vp = document.getElementById('fpmVerProj');                                                       // S66
   if (vp) vp.addEventListener('click', () => { FINPM.verProj = !FINPM.verProj; fpmRedesenhar(); });
   if (!FINPM._teclas){
@@ -4280,7 +4285,7 @@ function finpDesenhar(){
   const el = document.getElementById('finpCorpo'); if (!el || !FINPM.d) return;
   const d = FINPM.d, k = FINPM.mes, atual = k === FINPM.pm.mes_atual;
   const i = FINPM.meses.indexOf(k);
-  el.innerHTML = fpmPendencias(d)
+  el.innerHTML = fpmPendencias(d) + osmedAvisosPainel()   // F14
     + '<div class="fpmNav" role="group" aria-label="Escolher o mês">'
     +   '<button type="button" class="btn" id="fpmAnt" aria-label="Mês anterior"' + (i <= 0 ? ' disabled' : '') + '>◀</button>'
     +   '<b aria-live="polite">' + esc(fpmRot(k).replace(/^./, c => c.toUpperCase())) + (atual ? '<small>até ' + esc(dataBR(FINPM.pm.hoje).slice(0, 5)) + '</small>' : '') + '</b>'
@@ -6138,7 +6143,53 @@ function medAvisosPainel(){
   return h;
 }
 
-const FINOS = { id: null, t: null, ver: null, ids: null, erro: null, sitPosta: false };
+// ════════════════════════════════════════════════════════════════════════════
+// F14 · A MEDIÇÃO DA OS COMUM NO TAPFIN (306 do TapFlow + 518; desenho
+// processos/medicao-os-desenho.md). A equipe fecha a medição no celular; a 518
+// faz dela o "aprovado" da OS. Aqui:
+//  · Painel: as medições que pedem um olhar (`tf_osmed_avisos`): valor diferente
+//    da proposta, algo a mais, aguardando assinatura há mais de 5 dias. Só aviso.
+//  · Painel da OS (fin/?os=): "Medição fechada" no lugar de "Proposta aprovada",
+//    com a assinatura; medição ainda em aberto = o aprovado continua a proposta.
+// Sem a 306 no banco, nada aparece (as chamadas caem no catch).
+// ════════════════════════════════════════════════════════════════════════════
+const OSMED_AV = { valor_diferente: 'valor diferente da proposta', algo_a_mais: 'algo a mais que a proposta', assinatura_atrasada: 'aguardando assinatura há mais de 5 dias' };
+function osmedAvisosPainel(){
+  const l = Array.isArray(FINPM.osmed) ? FINPM.osmed : [];
+  if (!l.length) return '';
+  return '<div class="painel" style="margin-bottom:14px;padding:14px" id="fpmOsmed"><h3 style="margin-top:0">Medições das OS '
+    + '<span class="chip" style="background:var(--warn-soft);color:var(--warn)">' + l.length + '</span></h3>'
+    + '<p class="nota" style="margin-top:0">Fechadas em campo com diferença da proposta, com algo a mais, ou esperando a assinatura do encarregado. Só aviso: o faturamento não espera.</p>'
+    + l.map(a => '<div class="ccLin omdLin" role="button" tabindex="0" data-osmed="' + esc(a.os_id) + '" style="cursor:pointer;border-left:3px solid '
+        + ((a.avisos || []).includes('assinatura_atrasada') ? 'var(--crit)' : 'var(--warn)') + ';padding-left:8px">'
+      + '<span class="ccData">' + esc(a.os_numero || '') + '</span>'
+      + '<span class="ccNome">' + esc(a.cliente || '—') + '</span>'
+      + '<span class="ccDesc">' + (a.avisos || []).map(x => esc(OSMED_AV[x] || x)).join(' · ')
+      +   ' <small style="color:var(--ink-3)">· proposta ' + esc(BRL(a.valor_proposta)) + '</small></span>'
+      + '<span class="n v">' + esc(BRL(a.valor)) + '</span></div>').join('') + '</div>';
+}
+function osmedLigarPainel(el){
+  el.querySelectorAll('[data-osmed]').forEach(l => {
+    const vai = () => { location.href = '?os=' + encodeURIComponent(l.dataset.osmed); };
+    l.addEventListener('click', vai);
+    l.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); vai(); } });
+  });
+}
+/** O painel da OS: a medição da OS comum (null = OS sem medição ou sem a 306). */
+function osmedLinhaOs(m){
+  if (!m) return '';
+  if (m.situacao !== 'fechada')
+    return '<p class="nota" id="osMedOs" style="margin:2px 0 6px">A medição desta OS ainda está em aberto (a equipe fecha no celular). Até ela fechar, o aprovado é o da proposta.</p>';
+  const ass = m.assinatura === 'assinada' ? '<span class="chip">assinada' + (m.assinante_nome ? ' por ' + esc(m.assinante_nome) : '') + '</span>'
+            : m.assinatura === 'aguardando' ? '<span class="chip" style="background:var(--warn-soft);color:var(--warn)">aguardando assinatura</span>'
+            : '<span class="chip">sem assinatura exigida</span>';
+  const prop = Number((m.resumo || {}).total_proposta) || 0, dif = Number(m.valor) - prop;
+  return '<p class="nota" id="osMedOs" style="margin:2px 0 6px">Medição fechada em ' + esc(dataBR(String(m.fechada_em || '').slice(0, 10)))
+    + ' ' + ass + ' · proposta ' + esc(BRL(prop)) + (Math.abs(dif) >= 0.01 ? ' (' + (dif < 0 ? '−' : '+') + esc(BRL(Math.abs(dif))) + ')' : '')
+    + '. O valor da nota é o da medição.</p>';
+}
+
+const FINOS = { id: null, t: null, ver: null, ids: null, erro: null, sitPosta: false, med: null };
 
 /** Lê o ?os= da entrada (chamada pelo iniciar, antes do primeiro desenho). */
 function osDaEntrada(params){
@@ -6154,6 +6205,7 @@ async function osCarregar(){
   if (!FINOS.id) return;
   try{
     FINOS.ver = await rpc('tf_fin_os_faturar_ver', { p_os_id: FINOS.id });
+    FINOS.med = await rpc('tf_osmed_ver', { p_os: FINOS.id }).catch(() => null);   // F14 · sem a 306 ou sem medição: null
     FINOS.ids = (FINOS.ver.contas || []).map(c => c.id); FINOS.erro = null;
   }catch(e){
     FINOS.ver = null; FINOS.ids = []; FINOS.erro = e.message;
@@ -6163,6 +6215,7 @@ async function osCarregar(){
 }
 
 function osSair(){
+  FINOS.med = null;
   FINOS.id = null; FINOS.ver = null; FINOS.ids = null; FINOS.erro = null; FINOS.t = null;
   if (FINF.finre) FINF.finre.sit = FIN_CFG.finre.sitPadrao || 'todas';
   osDesenhar();
@@ -6197,6 +6250,7 @@ function osDesenhar(){
   else if (nC) msg = 'Já tem conta de ' + BRL(ja) + '; falta ' + BRL(falta) + '.';
   else msg = 'Esta OS ainda não tem conta a receber.';
   const ctr = v.contrato || null;   // F13 · OS de contrato: fatura pela medição
+  const omed = !ctr && FINOS.med && FINOS.med.situacao === 'fechada';   // F14 · OS comum com a medição fechada
   if (ctr) msg = medMsgOs(v);
   const citam = (v.citam || []);
   el.innerHTML = '<div class="nfBloco osPainel">'
@@ -6205,9 +6259,10 @@ function osDesenhar(){
     +     (FINOS.t === 'T16' ? '<div class="nota" style="margin:2px 0 0">Vindo da tarefa T16 · Emitir boleto / nota fiscal</div>' : '') + '</div>'
     +   sair + '</div>'
     + '<div class="osNums" style="display:flex;gap:18px;flex-wrap:wrap;margin:8px 0 4px">'
-    +   '<span>' + (ctr ? 'Medição fechada: ' : 'Proposta aprovada: ') + '<span id="osAprov" style="font-weight:700">' + esc(BRL(aprov)) + '</span>' + (props ? ' <small style="color:var(--ink-3)">(' + ((v.propostas || []).length > 1 ? 'propostas ' : 'proposta ') + props + ')</small>' : '') + '</span>'
+    +   '<span>' + (ctr || omed ? 'Medição fechada: ' : 'Proposta aprovada: ') + '<span id="osAprov" style="font-weight:700">' + esc(BRL(aprov)) + '</span>' + (props ? ' <small style="color:var(--ink-3)">(' + ((v.propostas || []).length > 1 ? 'propostas ' : 'proposta ') + props + ')</small>' : '') + '</span>'
     +   '<span>Já tem conta: <span id="osJa" style="font-weight:700">' + esc(BRL(ja)) + '</span>' + (nC ? ' <small style="color:var(--ink-3)">(' + (nC === 1 ? '1 conta' : nC + ' contas') + ')</small>' : '') + '</span>'
     +   '<span>Falta: <span id="osFalta" style="font-weight:700">' + esc(BRL(falta)) + '</span></span></div>'
+    + (ctr ? '' : osmedLinhaOs(FINOS.med))   // F14
     + '<p class="nota" id="osMsg" style="margin:4px 0 8px">' + esc(msg) + '</p>'
     + (podeCriar ? '<button class="btn pri" type="button" id="osCriar">Criar conta a receber desta OS</button>' : '')
     + (ctr && ctr.medicao && !ctr.tem_titulo ? '<button class="btn pri" type="button" id="osMedLancar">Lançar título da medição</button>' : '')

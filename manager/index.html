@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S111</title>
+<title>TapFlow Manager · S114</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1443,7 +1443,28 @@ button.mini{padding:6px 12px;font-weight:600}
 .fase-h.atual{color:var(--accent)}
 .fase-h::after{content:"";flex:1;height:1px;background:var(--rule-2)}
 
-.tk{display:flex;gap:9px;padding:7px 0;border-bottom:1px solid var(--rule-2);align-items:flex-start}
+.tk{display:flex;gap:9px;padding:7px 0;border-bottom:1px solid var(--rule-2);align-items:flex-start;flex-wrap:wrap}
+/* S114 · o "quem faz / dia / botões" desce para a linha de baixo, na largura toda.
+   Até o S111 ele era a 3ª coluna da linha e espremia o nome da tarefa
+   ("Emitir boleto / nota fiscal" quebrava palavra por palavra). */
+.tk > .tkDes{flex:1 0 calc(100% - 30px);flex-wrap:wrap;margin-top:1px;padding-top:4px}
+.tk > .tkDes > span:first-child{flex:1 1 auto;min-width:0}
+.tk > .tkDes .btn.mini{margin-left:0}
+.tk > .tkDes > span:first-child + .btn.mini{margin-left:auto}
+/* S114 · a medição da OS comum (aba Medição) */
+.omdSit{margin:0 0 12px;display:flex;flex-direction:column;gap:4px;font-size:13px}
+.omdS.ok{color:var(--ok)} .omdS.warn{color:var(--warn)}
+.omdAvs{display:flex;flex-wrap:wrap;gap:5px;margin-top:3px}
+.omdTab{border:1px solid var(--rule-2);border-radius:4px}
+.omdH,.omdL{display:grid;grid-template-columns:1fr 70px 86px 96px;gap:8px;padding:8px 10px;align-items:start}
+.omdH i{font-style:normal} .omdH i.sm{display:none}
+.omdH{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--rule-2)}
+.omdH span:not(:first-child),.omdL .n{text-align:right;font-family:var(--mono);font-size:12.5px}
+.omdL{border-bottom:1px solid var(--rule-2);font-size:13px}
+.omdL:last-child{border-bottom:0}
+.omdL.mud{background:var(--warn-soft)}
+.omdD small{display:block;color:var(--ink-3);font-size:11.5px;margin-top:2px}
+@media (max-width:520px){ .omdH,.omdL{grid-template-columns:1fr 40px 44px 84px;gap:6px;padding:8px} .omdH{letter-spacing:.02em} .omdH i.lg{display:none} .omdH i.sm{display:inline} }
 .tk:last-child{border-bottom:0}
 .tk .st{flex:0 0 17px;text-align:center;font-size:13px;line-height:1.4}
 .tk .nm{flex:1;font-size:13.5px;line-height:1.35}
@@ -2392,7 +2413,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S111';
+const APP_VERSION = 'S114';
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -3305,6 +3326,8 @@ async function abrirOS(c){
              document.getElementById('dBody').querySelector('p').textContent = e.message; return; }
 
   osAberta = { card:c, tarefas };
+  if (abaDrawer === 'osmed' && !osmedTem()) abaDrawer = 'tarefas';   // S114
+  montarTabsOS(c);                                                   // S114 · a aba Medição depende das tarefas
   await qdCarregarAte(tarefas);   // S61 · até quando vai cada tarefa
   await carregarReag();   // S41 · item 7: a marca de reagendada nas tarefas
   pintarDrawer();
@@ -3315,7 +3338,9 @@ async function abrirOS(c){
 function montarTabsOS(card){
   const t = document.getElementById('dTabs');
   card = card || (osAberta && osAberta.card);
-  t.innerHTML = (ctrTabsOS(card) || [['tarefas','Tarefas'],['cliente','Cliente'],['itens','Itens'],['proposta','Proposta'],
+  // S114 · a OS com a T06B ganha a aba "Medição" (a medição da OS comum, 306)
+  const medOS = osmedTem() && osAberta.card === card ? [['osmed','Medição']] : [];
+  t.innerHTML = (ctrTabsOS(card) || [['tarefas','Tarefas'], ...medOS, ['cliente','Cliente'],['itens','Itens'],['proposta','Proposta'],
                  ['custos','Custos'],['arquivos','Arquivos'],['hist','Histórico']])
     .map(([k,r]) => '<button type="button" data-t="' + k + '"'
       + (abaDrawer === k ? ' class="on"' : '') + '>' + r + '</button>').join('');
@@ -3324,6 +3349,7 @@ function montarTabsOS(card){
 function pintarDrawer(){
   if (abaDrawer === 'dias' && ehContrato(osAberta.card)) return ctrPintarDias();
   if (abaDrawer === 'med' && ehContrato(osAberta.card)) return ctrPintarMedicao();
+  if (abaDrawer === 'osmed' && osmedTem()) return osmedPintar();   // S114
   if (abaDrawer === 'cliente')  return pintarClienteOS();
   if (abaDrawer === 'hist')     return pintarHistorico();
   if (abaDrawer === 'itens')    return pintarItens();
@@ -3936,6 +3962,7 @@ function pintarAcoes_(){
     cx.appendChild(hf);
   }
 
+  if (osmedAcoesTarefa(card, t, row, hint)) return;   // S114 · T06B: quem fecha é a equipe, no celular
   if (!podeAgir){
     hint.textContent = 'Esta tarefa é de ' + t.perfis_responsaveis.join(' ou ')
       + '. Ela aparece aqui para você saber por que a OS está parada — mas quem conclui é o perfil responsável.';
@@ -4352,6 +4379,7 @@ function temRequisitosObrigatorios(t){
   const r = t.requisitos || {};
   return (r.fotos || []).some(f => (f.min || 0) > 0) || (r.checklist || []).some(q => q.obrigatoria)
       || !!r.agenda    // S61 · o "Agendar serviço" pede a janela de agendamento
+      || !!r.medicao       // S114 · a T06B só conclui ao fechar a medição (306)
       || !!r.preparacao;   // S78 · a T05 "Preparar a inspeção" só conclui com a preparação completa (401)
 }
 // ── S78 · A T05 "PREPARAR A INSPEÇÃO" (pedido do central, S77) ─────────────
@@ -20170,6 +20198,168 @@ function ctrDicaParalela(card, tarefas, cx){
   d.appendChild(b); cx.appendChild(d);
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// S112 · A MEDIÇÃO DA OS COMUM NO MANAGER (306; desenho processos/medicao-os-desenho.md)
+// ----------------------------------------------------------------------------
+// Quem preenche e fecha é a equipe, no Field (decisão 4). Aqui o escritório VÊ
+// a medição (aba "Medição" na OS que tem a T06B), baixa o boletim e o PDF
+// assinado, anexa o assinado que voltou e reabre com motivo (a mesma regra do
+// celular: sem conta no TapFin e sem nota). Reabrir não avisa ninguém, fica
+// registrado (Bruno, 30/10). Os avisos de todas as OS vão no Painel do TapFin (fin/, F14).
+// ════════════════════════════════════════════════════════════════════════════
+const OSMED = { v: null, os: null };
+const osmedTem = () => !!(osAberta && (osAberta.tarefas || []).some(t => t.tarefa_id === 'T06B'));
+const osmedUrl = path => SUPABASE_URL + '/storage/v1/object/medicoes/' + String(path).split('/').map(encodeURIComponent).join('/');
+const osmedQtd = v => (Number(v) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 4 });
+/** Os avisos de UMA medição fechada, pela mesma regra do `tf_osmed_avisos`. */
+function osmedAvisos(v){
+  if (!v || v.situacao !== 'fechada') return [];
+  const r = v.resumo || {}, out = [];
+  const dif = Number(v.valor || 0) - Number(r.total_proposta || 0);
+  if (Math.abs(dif) >= 0.01) out.push({ cls: 'warn', txt: (dif < 0 ? BRL(-dif) + ' abaixo' : BRL(dif) + ' acima') + ' da proposta' });
+  if (Number(r.adicionais) > 0 || Number(r.acima_do_previsto) > 0) out.push({ cls: 'warn', txt: 'algo a mais que a proposta' });
+  if (v.assinatura === 'aguardando'){
+    const d = v.fechada_em ? Math.floor((Date.now() - new Date(v.fechada_em)) / 864e5) : 0;
+    out.push({ cls: d > 5 ? 'crit' : 'warn', txt: 'aguardando assinatura' + (d > 5 ? ' há ' + d + ' dias' : '') });
+  }
+  return out;
+}
+async function osmedPintar(){
+  const body = document.getElementById('dBody'), card = osAberta.card;
+  body.innerHTML = '<p class="nota">Carregando…</p>';
+  let v;
+  try{ v = await rpc('tf_osmed_ver', { p_os: card.os_id }); }
+  catch(e){
+    if (osAberta.card !== card || abaDrawer !== 'osmed') return;
+    body.innerHTML = '<div class="aviso"><b>Não consegui abrir a medição.</b> <span></span> <button class="btn mini" type="button">Tentar de novo</button></div>';
+    body.querySelector('span').textContent = e.message;
+    body.querySelector('button').addEventListener('click', osmedPintar);
+    return;
+  }
+  if (osAberta.card !== card || abaDrawer !== 'osmed') return;
+  OSMED.v = v; OSMED.os = card.os_id;
+  body.innerHTML = '';
+  if (!v){
+    body.innerHTML = '<p class="nota" style="margin-top:0">A medição ainda não foi aberta. Ela nasce da proposta aprovada quando a equipe a abre no celular (Field), na tarefa "Fechar a medição", e é lá que a equipe ajusta, lança o que foi a mais e fecha com o encarregado.</p>';
+    return;
+  }
+  const r = v.resumo || {}, aberta = v.situacao === 'rascunho', fechada = v.situacao === 'fechada';
+  const total = fechada ? Number(v.valor) : Number(r.total || v.valor || 0);
+  const dif = total - Number(r.total_proposta || 0);
+  const cab = document.createElement('div');
+  cab.className = 'mdCab';
+  cab.innerHTML = '<div><span class="mini ' + (fechada ? 'ok' : 'warn') + '"></span> <span class="nota omdProp" style="margin:0"></span></div><div class="mdTot"></div>';
+  cab.querySelector('.mini').textContent = fechada ? 'fechada' : 'em aberto (no celular)';
+  cab.querySelector('.omdProp').textContent = 'proposta ' + ((v.propostas || []).map(p => p.rotulo).join(', ') || '—') + ' · ' + BRL(r.total_proposta)
+    + (Math.abs(dif) >= 0.01 ? ' · ' + (dif > 0 ? '+' : '−') + BRL(Math.abs(dif)) : ' · igual');
+  cab.querySelector('.mdTot').textContent = BRL(total);
+  body.appendChild(cab);
+  // a assinatura e os avisos
+  const sit = document.createElement('div'); sit.className = 'omdSit';
+  const linha = (txt, cls) => { const p = document.createElement('div'); p.className = 'omdS ' + (cls || ''); p.textContent = txt; sit.appendChild(p); };
+  if (fechada){
+    linha('Fechada em ' + (v.fechada_em ? dataBR(String(v.fechada_em).slice(0, 10)) : '—') + (v.fechada_por ? ' por ' + v.fechada_por : '') + '.');
+    if (v.assinatura === 'assinada') linha('Assinada' + (v.assinante_nome ? ' por ' + v.assinante_nome + (v.assinante_cargo ? ' (' + v.assinante_cargo + ')' : '') : '')
+      + (v.assinado_pdf_em ? ' · PDF assinado anexado em ' + dataBR(String(v.assinado_pdf_em).slice(0, 10)) : ' · na tela do celular') + '.', 'ok');
+    else if (v.assinatura === 'aguardando') linha('Aguardando a assinatura do encarregado' + (v.sem_assinatura_motivo ? ' (' + v.sem_assinatura_motivo + ')' : '') + '. O faturamento não espera.', 'warn');
+    else linha('Sem assinatura exigida (igual à proposta ou só redução).', 'ok');
+  } else {
+    linha(r.assinatura_exigida ? 'Há algo a mais que a proposta: o encarregado vai assinar ao fechar.' : 'Até aqui, fecha sem assinatura.');
+    if (v.reaberta_em) linha('Reaberta em ' + dataBR(String(v.reaberta_em).slice(0, 10)) + (v.motivo_reabertura ? ': ' + v.motivo_reabertura : '') + '.', 'warn');
+  }
+  const avs = osmedAvisos(v);
+  if (avs.length){
+    const ch = document.createElement('div'); ch.className = 'omdAvs';
+    avs.forEach(a => { const s = document.createElement('span'); s.className = 'mini ' + a.cls; s.textContent = a.txt; ch.appendChild(s); });
+    sit.appendChild(ch);
+  }
+  body.appendChild(sit);
+  // as linhas: previsto × executado
+  const tb = document.createElement('div'); tb.className = 'omdTab';
+  tb.innerHTML = '<div class="omdH"><span>Item</span><span><i class="lg">Previsto</i><i class="sm">Prev.</i></span><span><i class="lg">Executado</i><i class="sm">Exec.</i></span><span>Valor</span></div>';
+  (v.linhas || []).filter(l => !l.adicional || l.incluido).forEach(l => {
+    const mudou = l.adicional || Number(l.executado) !== Number(l.previsto || 0);
+    const d = document.createElement('div'); d.className = 'omdL' + (mudou ? ' mud' : '');
+    d.innerHTML = '<span class="omdD"><b></b><small></small></span><span class="n"></span><span class="n"></span><span class="n"></span>';
+    d.querySelector('b').textContent = (l.adicional ? '[a mais] ' : '') + l.descricao + (l.tag ? ' · ' + l.tag : '');
+    d.querySelector('small').textContent = BRL(l.preco) + (Number(l.desconto_pct) ? ' − ' + osmedQtd(l.desconto_pct) + '%' : '') + ' cada'
+      + (l.justificativa ? ' · ' + l.justificativa : '');
+    const ns = d.querySelectorAll('.n');
+    ns[0].textContent = l.adicional ? '—' : osmedQtd(l.previsto);
+    ns[1].textContent = osmedQtd(l.executado);
+    ns[2].textContent = BRL(l.total);
+    tb.appendChild(d);
+  });
+  body.appendChild(tb);
+  // as ações
+  const ac = document.createElement('div'); ac.className = 'ctrAcoes'; ac.style.marginTop = '12px';
+  const bt = (rot, f, pri) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn' + (pri ? ' pri' : ''); b.textContent = rot; b.addEventListener('click', () => _semDuploEnvio_(b, f)); ac.appendChild(b); return b; };
+  if (fechada){
+    if (v.pdf_storage) bt('Baixar o boletim (PDF)', () => osmedBaixar(v.pdf_storage, 'Medicao ' + card.numero + '.pdf'));
+    if (v.assinado_pdf_storage) bt('Baixar o PDF assinado', () => osmedBaixar(v.assinado_pdf_storage, 'Medicao ' + card.numero + ' assinada.pdf'));
+    if (v.assinatura === 'aguardando') bt('Anexar o PDF assinado', () => osmedAnexar(card), true);
+    bt('Reabrir a medição', () => osmedModalReabrir(card));
+  }
+  if (ac.children.length) body.appendChild(ac);
+  if (fechada && !v.pdf_storage){
+    const n = document.createElement('p'); n.className = 'nota';
+    n.textContent = 'O boletim (PDF) ainda não subiu do celular: ele sobe quando a equipe gera o PDF com sinal.';
+    body.appendChild(n);
+  }
+  if (aberta){
+    const n = document.createElement('p'); n.className = 'nota';
+    n.textContent = 'A equipe ajusta e fecha a medição no celular (Field), ainda na planta. Aqui é só para acompanhar.';
+    body.appendChild(n);
+  }
+}
+async function osmedBaixar(path, nome){
+  try{
+    const r = await ctrStorage(osmedUrl(path));
+    if (!r.ok) throw new Error('Não consegui ler o arquivo da medição (HTTP ' + r.status + ').');
+    const blob = await r.blob();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  }catch(e){ toast(e.message, 'err'); }
+}
+function osmedAnexar(card){
+  abrirModal('Anexar o PDF assinado · ' + card.numero,
+    '<p class="nota" style="margin-top:0">O PDF que o encarregado devolveu assinado (ex.: gov.br). A medição passa a "assinada".</p>'
+    + '<div class="campo"><label for="omdArq">Arquivo (PDF)</label><input id="omdArq" type="file" accept="application/pdf,.pdf"></div>'
+    + '<div class="campo"><label for="omdNome">Nome de quem assinou (se não veio na tela)</label><input id="omdNome" type="text" maxlength="80" autocomplete="off"></div>'
+    + '<div class="campo"><label for="omdCargo">Cargo</label><input id="omdCargo" type="text" maxlength="60" autocomplete="off"></div>',
+    [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Anexar', pri: true, onClick: async () => {
+      const f = (document.getElementById('omdArq').files || [])[0];
+      if (!f){ toast('Escolha o PDF assinado.', 'err'); return; }
+      if (!/pdf$/i.test(f.type) && !/\.pdf$/i.test(f.name)){ toast('O arquivo tem de ser PDF.', 'err'); return; }
+      if (f.size > 10 * 1024 * 1024){ toast('O PDF passa de 10 MB.', 'err'); return; }
+      try{
+        const path = card.os_id + '/assinado-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.pdf';
+        const r = await ctrStorage(osmedUrl(path), { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: f });
+        if (!r.ok) throw new Error('Não consegui guardar o PDF (HTTP ' + r.status + ').');
+        await rpc('tf_osmed_anexar_assinado', { p_os: card.os_id, p_pdf_storage: path,
+          p_assinante_nome: document.getElementById('omdNome').value.trim() || null, p_assinante_cargo: document.getElementById('omdCargo').value.trim() || null });
+        fecharModal(); toast('PDF assinado anexado.', 'ok'); osmedPintar();
+      }catch(e){ toast(e.message, 'err'); }
+    } }]);
+}
+function osmedModalReabrir(card){
+  abrirModal('Reabrir a medição · ' + card.numero,
+    '<p class="nota" style="margin-top:0">Só enquanto o TapFin não lançou a conta desta OS (e sem nota). A medição volta a ficar em aberto, a assinatura deixa de valer e a tarefa "Fechar a medição" volta a esperar a equipe. Fica registrado quem reabriu e por quê.</p>'
+    + '<div class="campo"><label for="omdMot">Motivo (pelo menos 5 letras)</label><input id="omdMot" type="text" maxlength="200" autocomplete="off"></div>',
+    [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Reabrir', cls: 'perigo', onClick: async () => {
+      try{ await rpc('tf_osmed_reabrir', { p_os: card.os_id, p_motivo: document.getElementById('omdMot').value.trim() });
+           fecharModal(); toast('Medição reaberta.', 'ok'); await ctrRepintarOS(); abaDrawer = 'osmed'; montarTabsOS(osAberta.card); pintarDrawer(); }
+      catch(e){ toast(e.message, 'err'); } } }]);
+}
+/** A T06B atual: o "Concluir" genérico não vale (requisito `medicao`): o caminho é a aba. */
+function osmedAcoesTarefa(card, t, row, hint){
+  if (!t || t.tarefa_id !== 'T06B') return false;
+  const b = document.createElement('button'); b.className = 'btn pri'; b.type = 'button'; b.textContent = 'Ver a medição';
+  b.addEventListener('click', () => { abaDrawer = 'osmed'; montarTabsOS(card); pintarDrawer(); });
+  row.appendChild(b);
+  hint.textContent = 'A equipe fecha a medição no celular (Field), com o encarregado. Ao fechar, esta tarefa se conclui sozinha e libera "Emitir boleto / nota fiscal".';
+  return true;
+}
 // BOOT
 // ════════════════════════════════════════════════════════════════════════════
 montarNav();

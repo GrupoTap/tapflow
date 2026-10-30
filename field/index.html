@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapFlow Field · S38</title>
+<title>TapFlow Field · S39</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -506,6 +506,28 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 .agAp summary{font-size:14px;font-weight:600;padding:8px 0;cursor:pointer}
 .agMsg{color:var(--crit);font-size:13.5px;font-weight:600;margin:0 0 8px;min-height:1px}
 .agSheetC .btn{margin-top:8px}
+/* S39 · a medição da OS */
+.mdRes .mdTot{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.mdRes .mdTot b{font:700 24px 'JetBrains Mono',monospace;color:var(--ink)}
+.mdRes .mdTot small{font-size:13px;color:var(--ink-3)}
+.mdSit{margin:8px 0 0;font-size:14px;font-weight:600}
+.mdSit.ok{color:var(--ok)} .mdSit.warn{color:var(--warn)}
+.mdFila{margin:8px 0 0;font-size:13px;color:var(--crit);font-weight:600}
+.mdLin{border-top:1px solid var(--rule);padding:10px 0}
+.mdLin:first-of-type{border-top:0}
+.mdLin.adic{background:var(--warn-soft);margin:0 -12px;padding:10px 12px}
+.mdDesc{display:flex;align-items:flex-start;gap:8px}
+.mdDesc b{display:block;font-size:14.5px}
+.mdDesc small{display:block;font-size:12.5px;color:var(--ink-3);margin-top:2px}
+.mdDesc > b, .mdDesc > small{flex:1}
+.mdDesc{flex-direction:column}
+.mdNum{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:8px}
+.mdNum label{font-size:12px;color:var(--ink-3);display:flex;flex-direction:column;gap:3px}
+.mdNum input{width:110px;font-size:17px;padding:9px;border:1px solid var(--rule);border-radius:5px}
+.mdVal{font:600 15px 'JetBrains Mono',monospace}
+.mdJust{width:100%;margin-top:8px;font-size:15px;padding:9px;border:1px solid var(--warn);border-radius:5px;box-sizing:border-box}
+.mdTirar{align-self:flex-start;background:none;border:1px solid var(--crit);color:var(--crit);border-radius:4px;padding:4px 10px;font-size:12.5px;margin-top:6px}
+.mdCanvas{width:100%;height:auto;aspect-ratio:600/220;border:1px dashed var(--ink-3);border-radius:5px;background:#fff;touch-action:none;display:block}
 </style>
 <!-- S33 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
 <link rel="stylesheet" href="../nucleo/nucleo.css?v=N2">
@@ -571,7 +593,7 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S38';
+const APP_VERSION = 'S39';
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // o crachá lê a constante, nunca o contrário: já houve app dizendo uma versão e
@@ -1641,6 +1663,8 @@ async function abrirOS(o){
           get('v_os_coleta?select=inspetor,total_itens,enviado_em,fase&os_id=eq.' + o.os_id + '&order=enviado_em')
         ]);
     atual = { os:o, tarefas, equipamentos, coletas: coletas || [], extras: [] };
+    // S39 · a medição fica no aparelho para o fim da visita, mesmo sem sinal
+    if ((tarefas || []).some(x => x.tarefa_id === 'T06B')) medPreparar(o);
     await carregarNomes();   // S15: para dizer COM QUEM a tarefa está
     // S39 · na inspeção, o que o campo já lançou de extra e em que pé está.
     // Falhar aqui não impede de abrir a OS: o painel diz que não conseguiu ler.
@@ -2060,7 +2084,7 @@ function possoConcluirParalela(t, os){
   const r = t.requisitos || {};
   if (t.tipo !== 'manual' || t.acao_terminal
       || (r.fotos || []).some(f => (f.min || 0) > 0) || (r.checklist || []).some(q => q.obrigatoria)
-      || r.agenda) return false;   // S31 · o "Agendar serviço" tem a tela dele
+      || r.agenda || r.medicao) return false;   // S31 · o "Agendar serviço" tem a tela dele · S39 · a medição também
   if (sessao.admin) return true;
   const ps = t.perfis_responsaveis || [];
   return !ps.length || ps.includes(sessao.perfil);
@@ -2085,6 +2109,9 @@ function pintarOSBase(){
   // S39 · os extras vêm PRIMEIRO na inspeção: é o que o inspetor tem na mão
   // enquanto anda pela planta, e não pode depender de em que etapa a OS está.
   if (ehInspecao(os)) m.appendChild(painelExtras());
+  // S39 · a medição fechada continua à mão (PDF, assinado que volta, reabrir) depois que a OS anda
+  const tMed = (tarefas || []).find(x => x.tarefa_id === 'T06B');
+  if (tMed && tMed.status === 'completo' && (!t || t.tarefa_id !== 'T06B')) m.appendChild(painelMedicao(tMed));
   // S19 · S45 item 2: o que está liberado para mim em paralelo aparece logo
   // em cima — quem veio pelo "Hoje" veio por causa dela, não da etapa atual.
   const par = (tarefas || []).filter(x => possoConcluirParalela(x));
@@ -2161,6 +2188,10 @@ function pintarOSBase(){
   p.querySelector('h2').textContent = t.nome;
   p.querySelector('.ds').textContent = t.descricao || '';
   m.appendChild(p);
+
+  // S39 · "Fechar a medição" só fecha pela tela da medição (o "Concluir" direto o banco recusa)
+  if (t.tarefa_id === 'T06B'){ m.appendChild(painelMedicao(t)); return; }
+  if (t.tarefa_id === 'T06' && medTemT06B()) m.appendChild(painelMedicao(t));
 
   if (!meu){
     const a = document.createElement('p');
@@ -3444,6 +3475,609 @@ function telaFechamento(){
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// S39 · A MEDIÇÃO DA OS (306; desenho processos/medicao-os-desenho.md)
+// ----------------------------------------------------------------------------
+// A equipe fecha, ainda na planta, o que foi EXECUTADO: é o valor da nota.
+//  · a tela lê a medição do banco (tf_osmed_ver/abrir) e guarda a última no
+//    aparelho: sem sinal, abre a guardada e continua;
+//  · cada mudança vai direto ao banco com sinal; sem sinal (ou com algo da
+//    medição ainda na fila) vai para a fila do núcleo, no grupo da OS, e a
+//    tela aplica a mudança na cópia guardada até a fila subir;
+//  · quem decide se a assinatura é exigida é o BANCO, no fechar. A tela só
+//    adianta a mesma conta (algo a mais = adicional, quantidade maior que a
+//    prevista ou total acima da proposta) para pedir a assinatura na hora;
+//  · fechar, a assinatura, as fotos e o PDF assinado sobem pela fila (a imagem
+//    antes da função), também com sinal: uma porta só, que funciona igual sem.
+// ════════════════════════════════════════════════════════════════════════════
+// o "não grava duas vezes" do núcleo (sem ele, só roda a função), e o erro vira aviso
+const _semDuploEnvio_ = (b, fn) => ((window.Nucleo && Nucleo.util && Nucleo.util.semDuploEnvio)
+  ? Nucleo.util.semDuploEnvio(b, fn) : Promise.resolve().then(fn)).catch(e => toast((e && e.message) || String(e), 'err'));
+const K_MED = 'tff_med_';            // + os_id → a última medição lida (tf_osmed_ver)
+const K_MED_CAT = 'tff_med_cat';     // o catálogo com preço (tf_osmed_catalogo)
+const MED_GRUPO = os => 'med|' + os;
+let med = null;                      // { os, v (a medição), form }
+
+const medBRL = v => (Number(v) || 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+const medQtd = v => (Number(v) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 4 });
+const medTotal = (p, q, d) => Math.round((Number(p) || 0) * (Number(q) || 0) * (1 - (Number(d) || 0) / 100) * 100) / 100;
+const medTemT06B = () => !!(atual && (atual.tarefas || []).some(x => x.tarefa_id === 'T06B'));
+const medNaFila = osId => (window.Nucleo && Nucleo.fila) ? Nucleo.fila.listar({ grupo: MED_GRUPO(osId) }) : [];
+
+/** O resumo, com as regras do banco (tf__osmed_resumo): a tela só adianta. */
+function medResumo(v){
+  const ls = (v.linhas || []).filter(l => l.incluido);
+  const total = Math.round(ls.reduce((s, l) => s + (Number(l.total) || 0), 0) * 100) / 100;
+  const prop = Number((v.resumo || {}).total_proposta) || 0;
+  const adic = ls.filter(l => l.adicional && Number(l.executado) > 0).length;
+  const maior = ls.filter(l => !l.adicional && Number(l.executado) > Number(l.previsto || 0)).length;
+  const menor = ls.filter(l => !l.adicional && Number(l.executado) < Number(l.previsto || 0)).length;
+  const semJust = ls.filter(l => (l.adicional || Number(l.executado) !== Number(l.previsto || 0))
+                             && String(l.justificativa || '').trim().length < 3).length;
+  return { total, total_proposta: prop, diferenca: Math.round((total - prop) * 100) / 100,
+           adicionais: adic, acima_do_previsto: maior, abaixo_do_previsto: menor,
+           conforme: !adic && !maior && !menor, assinatura_exigida: adic > 0 || maior > 0 || total > prop + 0.005,
+           pendencias: semJust ? [semJust + ' linha(s) diferente(s) da proposta sem justificativa'] : [] };
+}
+function medGuardar(osId, v){ if (v) LS.set(K_MED + osId, v); }
+function medLida(osId){ return LS.get(K_MED + osId, null); }
+
+/** Lê do banco (abre na primeira vez). Sem sinal devolve a guardada. */
+async function medBuscar(osId, abrirSeNaoExiste){
+  if (DEMO) return medLida(osId) || medDemo(osId);
+  try{
+    const v = abrirSeNaoExiste ? await rpc('tf_osmed_abrir', { p_os: osId, p_client_uid: 'med-' + osId })
+                               : await rpc('tf_osmed_ver', { p_os: osId });
+    if (v){
+      // o que ainda está na fila continua valendo na tela por cima do que o banco devolveu
+      const pend = medNaFila(osId);
+      const base = pend.length ? (medLida(osId) || v) : v;
+      if (!pend.length) medGuardar(osId, v);
+      return base;
+    }
+    return null;
+  }catch(e){
+    const g = medLida(osId);
+    if (g) return g;
+    throw e;
+  }
+}
+
+/** Em segundo plano, ao abrir a OS com sinal: deixa a medição no aparelho para o campo sem sinal. */
+function medPreparar(o){
+  if (DEMO || !o || navigator.onLine === false) return;
+  rpc('tf_osmed_abrir', { p_os: o.os_id, p_client_uid: 'med-' + o.os_id })
+    .then(v => { if (v && !medNaFila(o.os_id).length) medGuardar(o.os_id, v); })
+    .catch(() => {});
+  if (!LS.get(K_MED_CAT, null)) medCatalogo().catch(() => {});
+}
+async function medCatalogo(){
+  if (DEMO) return [{ id:'cm1', codigo:'SRV-MAN', descricao:'Instalação de manômetro aferido', unidade:'un', preco:350, familia_id:'manometro' },
+                    { id:'cm2', codigo:'SRV-VAL', descricao:'Instalação de válvula aferida', unidade:'un', preco:480, familia_id:'valvula' }];
+  try{ const c = await rpc('tf_osmed_catalogo', {}); LS.set(K_MED_CAT, c || []); return c || []; }
+  catch(e){ const g = LS.get(K_MED_CAT, null); if (g) return g; throw e; }
+}
+
+/**
+ * Uma mudança na medição. Com sinal e nada da medição na fila: direto, e a tela
+ * mostra o que o banco devolveu. Senão: fila (no grupo da OS, na ordem) e a
+ * mudança aplicada na cópia do aparelho (`local`). `sempreFila` = fechar e
+ * qualquer coisa com arquivo: a imagem sobe antes da função.
+ */
+async function medMudar(rotulo, funcao, payload, local, opts){
+  opts = opts || {};
+  const osId = med.os.os_id;
+  const naFila = medNaFila(osId).length > 0;
+  if (!DEMO && !opts.sempreFila && !naFila && navigator.onLine !== false){
+    try{
+      const v = await rpc(funcao, payload);
+      if (v && v.medicao_id){ med.v = v; medGuardar(osId, v); }
+      return true;
+    }catch(e){
+      if (!e.rede) { toast(e.message, 'err'); return false; }
+      // caiu o sinal no meio: segue para a fila
+    }
+  }
+  if (DEMO){ local(med.v); med.v.resumo = Object.assign({}, med.v.resumo, medResumo(med.v)); medGuardar(osId, med.v); return true; }
+  if (!(window.Nucleo && Nucleo.fila)){ toast('Sem sinal, e este aparelho não tem a fila de envios. Tente com sinal.', 'err'); return false; }
+  Nucleo.fila.adicionar({ tipo: 'medicao', id: opts.id || uid(), grupo: MED_GRUPO(osId),
+                          rotulo: rotulo + ' (' + med.os.numero + ')', fotos: opts.fotos || [],
+                          rpc: { funcao, payload } });
+  local(med.v);
+  med.v.resumo = Object.assign({}, med.v.resumo, medResumo(med.v));
+  medGuardar(osId, med.v);
+  pintarFila();
+  return true;
+}
+
+// quando a fila sobe algo da medição aberta, a tela relê do banco
+try{
+  if (window.Nucleo && Nucleo.fila) Nucleo.fila.aoMudar(ev => {
+    if (!med || ev.tipo !== 'medicao' || ev.situacao !== 'enviado') return;
+    if (medNaFila(med.os.os_id).length) return;
+    medBuscar(med.os.os_id, false).then(v => { if (v){ med.v = v; medGuardar(med.os.os_id, v); if (tela === 'med' && !med.form) pintarMedicao(); } }).catch(() => {});
+  });
+}catch(e){}
+
+/** O painel da medição dentro da OS (quem tem a T06B). */
+function painelMedicao(t){
+  const osId = atual.os.os_id;
+  const g = medLida(osId);
+  const p = document.createElement('div');
+  p.className = 'painel';
+  p.innerHTML = '<div class="et">Medição</div><h2 style="font-size:17px"></h2><p class="ds" style="margin:0 0 12px"></p>'
+    + '<button class="btn pri" type="button">Abrir a medição</button>';
+  const sit = !g ? 'Ainda não aberta'
+    : g.situacao === 'fechada' ? ('Fechada · ' + medBRL(g.valor) + (g.assinatura === 'aguardando' ? ' · aguardando assinatura'
+                                  : g.assinatura === 'assinada' ? ' · assinada' : ''))
+    : 'Em aberto · ' + medBRL((g.resumo || {}).total);
+  p.querySelector('h2').textContent = sit;
+  p.querySelector('.ds').textContent = (t && t.tarefa_id === 'T06B' && t.status !== 'completo')
+    ? 'Ainda na planta: confira com o encarregado o que foi feito e feche a medição. É ela que diz o valor da nota.'
+    : 'Lance aqui o que mudar em campo (um item a mais, um vaso a menos). A medição fecha no fim da visita.';
+  p.querySelector('button').addEventListener('click', () => abrirMedicao());
+  return p;
+}
+
+async function abrirMedicao(){
+  tela = 'med';
+  const o = atual.os;
+  med = { os: o, v: null, form: null };
+  document.getElementById('btnBack').hidden = false;
+  document.getElementById('hTit').textContent = 'Medição';
+  document.getElementById('hSub').textContent = o.numero + ' · ' + o.cliente;
+  const m = document.getElementById('main');
+  m.innerHTML = '<div class="vazio"><p>Carregando a medição…</p></div>';
+  try{
+    med.v = await medBuscar(o.os_id, true);
+    if (!med.v){ m.innerHTML = '<div class="vazio"><b>Sem medição</b><p>Esta OS não tem medição.</p></div>'; return; }
+    pintarMedicao();
+  }catch(e){
+    m.innerHTML = '<div class="vazio"><b>Não deu para abrir a medição</b><p></p>'
+      + '<button class="btn" type="button" id="mdTenta">Tentar de novo</button></div>';
+    m.querySelector('p').textContent = (e.rede || navigator.onLine === false)
+      ? 'Sem sinal, e a medição desta OS ainda não foi aberta neste aparelho. Abra uma vez com sinal (basta abrir a OS) e ela fica guardada.'
+      : e.message;
+    document.getElementById('mdTenta').addEventListener('click', abrirMedicao);
+  }
+}
+
+function pintarMedicao(){
+  if (!med || !med.v) return;
+  med.form = null;
+  const v = med.v, r = Object.assign({}, v.resumo || {}, medResumo(v));
+  const aberta = v.situacao === 'rascunho';
+  const pode = aberta && v.pode_editar !== false;
+  const fila = medNaFila(med.os.os_id);
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+
+  // ── o resumo ──
+  const cab = document.createElement('div'); cab.className = 'painel mdRes';
+  cab.innerHTML = '<div class="et"></div><div class="mdTot"><b></b><small></small></div><p class="mdSit"></p>';
+  cab.querySelector('.et').textContent = aberta ? 'Medição em aberto' : 'Medição fechada';
+  cab.querySelector('b').textContent = medBRL(aberta ? r.total : v.valor);
+  cab.querySelector('small').textContent = 'proposta ' + medBRL(r.total_proposta)
+    + (Math.abs(r.diferenca) >= 0.01 ? ' · ' + (r.diferenca > 0 ? '+' : '−') + medBRL(Math.abs(r.diferenca)) : ' · igual');
+  const sit = cab.querySelector('.mdSit');
+  if (aberta){
+    sit.textContent = r.assinatura_exigida
+      ? 'Algo a mais que a proposta: o encarregado assina ao fechar.'
+      : (r.conforme ? 'Igual à proposta: fecha sem assinatura.' : 'Só redução: fecha sem assinatura (com a justificativa).');
+    sit.className = 'mdSit ' + (r.assinatura_exigida ? 'warn' : 'ok');
+  } else {
+    sit.textContent = v.assinatura === 'aguardando' ? 'Aguardando a assinatura do encarregado' + (v.sem_assinatura_motivo ? ' (' + v.sem_assinatura_motivo + ')' : '') + '.'
+      : v.assinatura === 'assinada' ? 'Assinada' + (v.assinante_nome ? ' por ' + v.assinante_nome + (v.assinante_cargo ? ' (' + v.assinante_cargo + ')' : '') : '') + '.'
+      : 'Sem assinatura exigida.';
+    sit.className = 'mdSit ' + (v.assinatura === 'aguardando' ? 'warn' : 'ok');
+  }
+  if (fila.length){
+    const f = document.createElement('p'); f.className = 'mdFila';
+    f.textContent = fila.length + ' mudança(s) guardada(s) no aparelho, ainda não enviada(s). Sobem sozinhas com sinal.';
+    cab.appendChild(f);
+  }
+  m.appendChild(cab);
+
+  // ── as linhas da proposta ──
+  const props = (v.linhas || []).filter(l => !l.adicional);
+  const pl = document.createElement('div'); pl.className = 'painel';
+  pl.innerHTML = '<div class="et">Da proposta</div>';
+  if (!props.length){
+    const n = document.createElement('p'); n.className = 'ds';
+    n.textContent = 'Esta OS não tem proposta aprovada com itens. Lance o que foi feito em "Item a mais".';
+    pl.appendChild(n);
+  }
+  props.forEach(l => pl.appendChild(medLinha(l, pode)));
+  if (pode && props.length){
+    const bc = document.createElement('button'); bc.type = 'button'; bc.className = 'btn'; bc.style.marginTop = '10px';
+    bc.textContent = 'Executado conforme proposta';
+    bc.addEventListener('click', () => _semDuploEnvio_(bc, async () => {
+      const ok = await medMudar('Conforme proposta', 'tf_osmed_conforme', { p_os: med.os.os_id }, x => {
+        (x.linhas || []).forEach(l => {
+          if (l.adicional) l.incluido = false;
+          else { l.executado = l.previsto; l.total = medTotal(l.preco, l.previsto, l.desconto_pct); l.justificativa = null; l.incluido = true; }
+        });
+      });
+      if (ok){ toast('Tudo como a proposta.', 'ok'); pintarMedicao(); }
+    }));
+    pl.appendChild(bc);
+  }
+  m.appendChild(pl);
+
+  // ── os itens a mais ──
+  const adic = (v.linhas || []).filter(l => l.adicional && l.incluido);
+  const pa = document.createElement('div'); pa.className = 'painel';
+  pa.innerHTML = '<div class="et">Item a mais</div>';
+  if (!adic.length){
+    const n = document.createElement('p'); n.className = 'ds';
+    n.textContent = 'Nada a mais. Troca de manômetro ou de válvula, por exemplo, entra aqui (do catálogo, com o preço do catálogo).';
+    pa.appendChild(n);
+  }
+  adic.forEach(l => pa.appendChild(medLinha(l, pode)));
+  if (pode){
+    const ba = document.createElement('button'); ba.type = 'button'; ba.className = 'btn'; ba.style.marginTop = '10px';
+    ba.textContent = '+ Item a mais';
+    ba.addEventListener('click', () => medAdicional());
+    pa.appendChild(ba);
+  }
+  m.appendChild(pa);
+
+  // ── fechar / depois de fechado ──
+  const pf = document.createElement('div'); pf.className = 'painel';
+  if (aberta){
+    if (!pode){
+      pf.innerHTML = '<p class="ds" style="margin:0">A medição é da equipe da OS (ou do escritório). Você vê, mas não mexe.</p>';
+    } else {
+      const bf = document.createElement('button'); bf.type = 'button'; bf.className = 'btn pri';
+      bf.textContent = 'Fechar a medição';
+      bf.addEventListener('click', () => {
+        const rr = medResumo(med.v);
+        if (rr.pendencias.length){ toast('Falta: ' + rr.pendencias.join('; ') + '.', 'err'); return; }
+        medFechar(rr);
+      });
+      pf.appendChild(bf);
+    }
+  } else {
+    const bp = document.createElement('button'); bp.type = 'button'; bp.className = 'btn pri';
+    bp.textContent = 'Gerar o PDF e compartilhar';
+    bp.addEventListener('click', () => _semDuploEnvio_(bp, () => medPdf()));
+    pf.appendChild(bp);
+    if (v.assinatura === 'aguardando'){
+      const bs = document.createElement('button'); bs.type = 'button'; bs.className = 'btn';
+      bs.textContent = 'Anexar o PDF assinado';
+      bs.addEventListener('click', () => medAnexarAssinado());
+      pf.appendChild(bs);
+    }
+    if (v.assinado_pdf_em){
+      const n = document.createElement('p'); n.className = 'ds'; n.style.margin = '8px 0 0';
+      n.textContent = 'PDF assinado anexado em ' + dataBR(String(v.assinado_pdf_em).slice(0, 10)) + '.';
+      pf.appendChild(n);
+    }
+    const br = document.createElement('button'); br.type = 'button'; br.className = 'btn';
+    br.textContent = 'Reabrir para corrigir';
+    br.addEventListener('click', () => medReabrir());
+    pf.appendChild(br);
+  }
+  m.appendChild(pf);
+}
+
+/** Uma linha: descrição, previsto × executado, valor; diferente pede o porquê. */
+function medLinha(l, pode){
+  const d = document.createElement('div'); d.className = 'mdLin' + (l.adicional ? ' adic' : '');
+  const dif = Number(l.executado) !== Number(l.previsto || 0);
+  d.innerHTML = '<div class="mdDesc"><b></b><small></small></div>'
+    + '<div class="mdNum"><label>Executado<input type="number" inputmode="decimal" min="0" step="any"></label><span class="mdVal"></span></div>'
+    + '<input class="mdJust" type="text" maxlength="200" placeholder="Por que mudou? (obrigatório)">';
+  d.querySelector('b').textContent = l.descricao + (l.tag ? ' · ' + l.tag : '');
+  d.querySelector('small').textContent = (l.adicional ? 'A mais' : 'Previsto ' + medQtd(l.previsto))
+    + ' · ' + medBRL(l.preco) + (Number(l.desconto_pct) ? ' − ' + medQtd(l.desconto_pct) + '%' : '') + ' cada';
+  const q = d.querySelector('input[type=number]'), j = d.querySelector('.mdJust');
+  q.value = Number(l.executado);
+  q.setAttribute('aria-label', 'Executado: ' + l.descricao);
+  d.querySelector('.mdVal').textContent = medBRL(l.total);
+  j.value = l.justificativa || '';
+  j.hidden = !(dif || l.adicional);
+  q.disabled = j.disabled = !pode;
+  if (pode){
+    const gravar = () => {
+      const nq = Number(String(q.value).replace(',', '.'));
+      if (!(nq >= 0)){ toast('Quantidade: 0 ou mais.', 'err'); q.value = Number(l.executado); return; }
+      const nj = j.value.trim();
+      if (nq === Number(l.executado) && nj === String(l.justificativa || '')) return;
+      const difAgora = nq !== Number(l.previsto || 0) || l.adicional;
+      j.hidden = !difAgora;
+      if (difAgora && nj.length < 3){ j.focus(); return; }   // grava quando o porquê vier
+      medMudar('Medição: ' + l.descricao, 'tf_osmed_linha', { p_item: l.id, p_quantidade: nq, p_justificativa: nj || null }, x => {
+        const ll = (x.linhas || []).find(y => y.id === l.id);
+        if (ll){ ll.executado = nq; ll.total = medTotal(ll.preco, nq, ll.desconto_pct); ll.justificativa = nj || ll.justificativa; ll.incluido = true; }
+      }).then(ok => { if (ok) pintarMedicao(); });
+    };
+    q.addEventListener('change', gravar);
+    j.addEventListener('change', gravar);
+    if (l.adicional){
+      const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'mdTirar'; bt.textContent = 'Tirar';
+      bt.addEventListener('click', () => {
+        if (String(l.id).startsWith('tmp-')){ toast('Este item ainda está no aparelho: espere subir (com sinal) para tirar.', 'err'); return; }
+        medMudar('Tirar item a mais', 'tf_osmed_adicional_tirar', { p_item: l.id }, x => {
+          const ll = (x.linhas || []).find(y => y.id === l.id); if (ll) ll.incluido = false;
+        }).then(ok => { if (ok) pintarMedicao(); });
+      });
+      d.querySelector('.mdDesc').appendChild(bt);
+    }
+  }
+  return d;
+}
+
+/** + Item a mais: do catálogo (com preço), quantidade, por quê, vaso e foto (opcionais). */
+async function medAdicional(){
+  let cat;
+  try{ cat = await medCatalogo(); }
+  catch(e){ toast('Sem o catálogo neste aparelho. Abra uma OS com sinal uma vez e tente de novo.', 'err'); return; }
+  med.form = 'cat';
+  const m = document.getElementById('main'); m.innerHTML = '';
+  const box = document.createElement('div'); box.className = 'painel';
+  box.innerHTML = '<div class="et">Item a mais · do catálogo</div>'
+    + '<div class="campo"><label for="mdB">Buscar</label><input id="mdB" type="search" autocomplete="off" name="mdbusca_nofill" data-lpignore="true" data-1p-ignore placeholder="manômetro, válvula…"></div>'
+    + '<div id="mdCL"></div><button class="btn" type="button" id="mdCV" style="margin-top:12px">Voltar</button>';
+  m.appendChild(box);
+  const lista = () => {
+    const t = norm(document.getElementById('mdB').value).trim().split(/\s+/).filter(Boolean);
+    const el = document.getElementById('mdCL'); el.innerHTML = '';
+    const ach = (cat || []).filter(i => t.every(w => norm(i.descricao + ' ' + (i.codigo || '')).includes(w)));
+    if (!ach.length){ el.innerHTML = '<p class="ds">Nada no catálogo com preço. Peça ao escritório para cadastrar o item com o preço.</p>'; return; }
+    ach.slice(0, 60).forEach(i => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'itemCat';
+      b.innerHTML = '<span class="txtP"><b></b><small></small></span>';
+      b.querySelector('b').textContent = i.descricao;
+      b.querySelector('small').textContent = (i.codigo || '') + ' · ' + medBRL(i.preco);
+      b.addEventListener('click', () => medAdicionalForm(i));
+      el.appendChild(b);
+    });
+  };
+  let deb = null;
+  document.getElementById('mdB').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(lista, 140); });
+  document.getElementById('mdCV').addEventListener('click', pintarMedicao);
+  lista();
+}
+
+function medAdicionalForm(item){
+  med.form = 'adic';
+  const m = document.getElementById('main'); m.innerHTML = '';
+  const box = document.createElement('div'); box.className = 'painel';
+  box.innerHTML = '<div class="et">Item a mais</div><h2 style="font-size:17px"></h2><p class="ds"></p>'
+    + '<div class="campo"><label for="mdQ">Quantidade</label><input id="mdQ" type="number" inputmode="decimal" min="0" step="any" value="1"></div>'
+    + '<div class="campo"><label for="mdJ">Por quê</label><input id="mdJ" type="text" maxlength="200" placeholder="ex.: manômetro sem condição de uso"></div>'
+    + '<div class="campo"><label for="mdV">Vaso (opcional)</label><select id="mdV"><option value="">—</option></select></div>'
+    + '<div class="campo"><button class="btn" type="button" id="mdF" style="margin:0">Tirar foto (opcional)</button><p id="mdFt" class="ds" style="margin:6px 0 0"></p></div>'
+    + '<button class="btn pri" type="button" id="mdOk">Lançar</button><button class="btn" type="button" id="mdVolta">Voltar</button>';
+  box.querySelector('h2').textContent = item.descricao;
+  const desc = Number(med.v.desconto_pct) || 0;
+  box.querySelector('.ds').textContent = medBRL(item.preco) + ' cada' + (desc ? ' − ' + medQtd(desc) + '% da proposta' : '');
+  const sel = box.querySelector('#mdV');
+  (atual.equipamentos || []).forEach(e => { const o = document.createElement('option'); o.value = e.id; o.textContent = e.tag; sel.appendChild(o); });
+  m.appendChild(box);
+  let foto = null;
+  document.getElementById('mdF').addEventListener('click', async () => {
+    const f = await tirarFoto(); if (!f) return;
+    foto = f; document.getElementById('mdFt').textContent = 'Foto pronta — sobe com o item.';
+  });
+  document.getElementById('mdVolta').addEventListener('click', pintarMedicao);
+  const ok = document.getElementById('mdOk');
+  ok.addEventListener('click', () => _semDuploEnvio_(ok, async () => {
+    const q = Number(String(document.getElementById('mdQ').value).replace(',', '.'));
+    const just = document.getElementById('mdJ').value.trim();
+    const eq = sel.value || null;
+    if (!(q > 0)){ toast('Quantidade maior que zero.', 'err'); return; }
+    if (just.length < 3){ toast('Diga por que o item foi acrescentado.', 'err'); return; }
+    const u = 'med-adic-' + uid();
+    const fotos = [];
+    let caminho = null;
+    if (foto && window.Nucleo && Nucleo.fila){
+      caminho = med.os.os_id + '/foto-' + u + '.jpg';
+      fotos.push({ chave: await Nucleo.fila.guardarFoto(foto), bucket: 'medicoes', caminho, tipo: 'image/jpeg' });
+    }
+    const tag = eq ? ((atual.equipamentos || []).find(e => e.id === eq) || {}).tag : null;
+    const feito = await medMudar('Item a mais: ' + item.descricao, 'tf_osmed_adicional',
+      { p_os: med.os.os_id, p_catalogo_item: item.id, p_quantidade: q, p_justificativa: just,
+        p_equipamento: eq, p_foto_storage: caminho, p_client_uid: u },
+      x => { (x.linhas = x.linhas || []).push({ id: 'tmp-' + u, descricao: item.descricao, unidade: item.unidade, preco: item.preco,
+              desconto_pct: x.desconto_pct, previsto: 0, executado: q, total: medTotal(item.preco, q, x.desconto_pct), adicional: true,
+              incluido: true, justificativa: just, equipamento_id: eq, tag }); },
+      { sempreFila: fotos.length > 0, id: u, fotos });
+    if (feito){ toast('Item lançado.', 'ok'); pintarMedicao(); }
+  }));
+}
+
+/** Fechar: com algo a mais, o encarregado assina na tela (ou fecha "aguardando", com o motivo). */
+function medFechar(rr){
+  med.form = 'fechar';
+  const m = document.getElementById('main'); m.innerHTML = '';
+  const box = document.createElement('div'); box.className = 'painel';
+  box.innerHTML = '<div class="et">Fechar a medição</div><h2 style="font-size:17px"></h2><p class="ds"></p><div id="mdAss"></div>'
+    + '<button class="btn pri" type="button" id="mdFok"></button><button class="btn" type="button" id="mdFv">Voltar</button>';
+  box.querySelector('h2').textContent = medBRL(rr.total) + ' (proposta ' + medBRL(rr.total_proposta) + ')';
+  const ass = box.querySelector('#mdAss');
+  let canvas = null, riscou = false, semAss = false;
+  if (rr.assinatura_exigida){
+    box.querySelector('.ds').textContent = 'Houve algo a mais que a proposta: o encarregado confere e assina.';
+    ass.innerHTML = '<div class="campo"><label for="mdAn">Nome do encarregado</label><input id="mdAn" type="text" maxlength="80" autocomplete="off"></div>'
+      + '<div class="campo"><label for="mdAc">Cargo</label><input id="mdAc" type="text" maxlength="60" autocomplete="off"></div>'
+      + '<div class="campo"><label>Assinatura</label><canvas class="mdCanvas" width="600" height="220" aria-label="Assine aqui com o dedo"></canvas>'
+      + '<button type="button" class="mdTirar" id="mdLimpa">Limpar</button></div>'
+      + '<label class="check"><input type="checkbox" id="mdSem"><span>O encarregado não está na planta: fechar sem assinatura (ele assina depois)</span></label>'
+      + '<div class="campo" id="mdMotB" hidden><label for="mdMot">Motivo</label><input id="mdMot" type="text" maxlength="200" placeholder="ex.: encarregado saiu antes do fim"></div>';
+    canvas = ass.querySelector('canvas');
+    const ctx = canvas.getContext('2d'); ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.strokeStyle = '#14181B';
+    let desenhando = false;
+    const pos = ev => { const b = canvas.getBoundingClientRect(); return [(ev.clientX - b.left) * canvas.width / b.width, (ev.clientY - b.top) * canvas.height / b.height]; };
+    canvas.addEventListener('pointerdown', ev => { desenhando = true; riscou = true; canvas.setPointerCapture(ev.pointerId); const [x, y] = pos(ev); ctx.beginPath(); ctx.moveTo(x, y); ev.preventDefault(); });
+    canvas.addEventListener('pointermove', ev => { if (!desenhando) return; const [x, y] = pos(ev); ctx.lineTo(x, y); ctx.stroke(); ev.preventDefault(); });
+    canvas.addEventListener('pointerup', () => { desenhando = false; });
+    ass.querySelector('#mdLimpa').addEventListener('click', () => { ctx.clearRect(0, 0, canvas.width, canvas.height); riscou = false; });
+    ass.querySelector('#mdSem').addEventListener('change', ev => { semAss = ev.target.checked; ass.querySelector('#mdMotB').hidden = !semAss; });
+  } else {
+    box.querySelector('.ds').textContent = rr.conforme ? 'Igual à proposta: fecha sem assinatura.' : 'Só redução: fecha sem assinatura.';
+  }
+  box.querySelector('#mdFok').textContent = 'Fechar a medição';
+  m.appendChild(box);
+  document.getElementById('mdFv').addEventListener('click', pintarMedicao);
+  const ok = document.getElementById('mdFok');
+  ok.addEventListener('click', () => _semDuploEnvio_(ok, async () => {
+    const u = 'med-fechar-' + med.os.os_id + '-' + uid();
+    const p = { p_os: med.os.os_id, p_fechada_no_celular_em: new Date().toISOString(), p_client_uid: u,
+                p_assinante_nome: null, p_assinante_cargo: null, p_assinatura_storage: null, p_sem_assinatura_motivo: null };
+    const fotos = [];
+    let dataAss = null;
+    if (rr.assinatura_exigida){
+      if (semAss){
+        p.p_sem_assinatura_motivo = document.getElementById('mdMot').value.trim();
+        if (p.p_sem_assinatura_motivo.length < 5){ toast('Escreva o motivo de fechar sem a assinatura.', 'err'); return; }
+      } else {
+        p.p_assinante_nome = document.getElementById('mdAn').value.trim();
+        p.p_assinante_cargo = document.getElementById('mdAc').value.trim();
+        if (p.p_assinante_nome.length < 3){ toast('Nome do encarregado.', 'err'); return; }
+        if (p.p_assinante_cargo.length < 2){ toast('Cargo do encarregado.', 'err'); return; }
+        if (!riscou){ toast('Falta a assinatura na tela.', 'err'); return; }
+        dataAss = canvas.toDataURL('image/png');
+        p.p_assinatura_storage = med.os.os_id + '/assinatura-' + u + '.png';
+        if (!DEMO) fotos.push({ chave: await Nucleo.fila.guardarFoto(dataAss), bucket: 'medicoes', caminho: p.p_assinatura_storage, tipo: 'image/png' });
+      }
+    }
+    if (dataAss) LS.set(K_MED + 'ass_' + med.os.os_id, dataAss);   // para o PDF sair com a assinatura, mesmo sem sinal
+    const feito = await medMudar('Fechar a medição', 'tf_osmed_fechar', p, x => {
+      const t = medResumo(x);
+      x.situacao = 'fechada'; x.valor = t.total; x.fechada_em = p.p_fechada_no_celular_em;
+      x.assinatura = p.p_assinatura_storage ? 'assinada' : (t.assinatura_exigida ? 'aguardando' : 'nao_exigida');
+      x.assinante_nome = p.p_assinante_nome; x.assinante_cargo = p.p_assinante_cargo;
+      x.sem_assinatura_motivo = p.p_sem_assinatura_motivo; x.pode_editar = false;
+    }, { sempreFila: true, id: u, fotos });
+    if (feito){ toast('Medição fechada.', 'ok'); pintarMedicao(); }
+  }));
+}
+
+/** O PDF (uma folha): proposto × executado, justificativas, assinatura. Sobe para o bucket e abre o "Compartilhar". */
+async function medPdf(){
+  const v = med.v, o = med.os, r = Object.assign({}, v.resumo || {}, medResumo(v));
+  let pdfMake;
+  try{
+    pdfMake = window.pdfMake && window.pdfMake.vfs ? window.pdfMake : await medPdfLib();
+  }catch(e){ toast('Não consegui carregar o gerador de PDF. Abra o app uma vez com sinal para ele ficar no aparelho.', 'err'); return; }
+  const ass = LS.get(K_MED + 'ass_' + o.os_id, null);
+  const L = (v.linhas || []).filter(l => l.incluido || !l.adicional);
+  const corpo = [[{ text: 'Item', bold: true }, { text: 'Previsto', bold: true, alignment: 'right' }, { text: 'Executado', bold: true, alignment: 'right' },
+                  { text: 'Preço', bold: true, alignment: 'right' }, { text: 'Valor', bold: true, alignment: 'right' }]];
+  L.forEach(l => corpo.push([
+    { text: (l.adicional ? '[a mais] ' : '') + l.descricao + (l.tag ? ' · ' + l.tag : '') + (l.justificativa ? '\n' + l.justificativa : ''), fontSize: 8.5 },
+    { text: l.adicional ? '—' : medQtd(l.previsto), alignment: 'right' }, { text: medQtd(l.executado), alignment: 'right' },
+    { text: medBRL(l.preco) + (Number(l.desconto_pct) ? ' −' + medQtd(l.desconto_pct) + '%' : ''), alignment: 'right', fontSize: 8.5 },
+    { text: medBRL(l.total), alignment: 'right' }]));
+  const total = v.situacao === 'fechada' ? Number(v.valor) : r.total;
+  const blocoAss = v.assinatura === 'assinada'
+    ? [ass ? { image: ass, width: 180 } : { text: '(assinado na tela)', italics: true },
+       { text: (v.assinante_nome || '') + (v.assinante_cargo ? ' — ' + v.assinante_cargo : ''), margin: [0, 2, 0, 0] }]
+    : v.assinatura === 'aguardando'
+      ? [{ text: 'AGUARDANDO ASSINATURA DO CLIENTE', bold: true, color: '#8A5A12' }, { text: '\n\n____________________________________\nNome, cargo e assinatura do encarregado', fontSize: 8.5 }]
+      : [{ text: '\n\n____________________________________\nNome, cargo e assinatura (opcional)', fontSize: 8.5 }];
+  const doc = {
+    pageSize: 'A4', pageMargins: [36, 36, 36, 36], defaultStyle: { fontSize: 9.5 },
+    content: [
+      { text: 'Boletim de medição', fontSize: 15, bold: true, color: '#164C77' },
+      { text: 'Engetap Engenharia', color: '#515252', margin: [0, 0, 0, 8] },
+      { columns: [{ text: [{ text: 'OS: ', bold: true }, o.numero, '\n', { text: 'Cliente: ', bold: true }, v.cliente || o.cliente || ''] },
+                  { text: [{ text: 'Proposta: ', bold: true }, (v.propostas || []).map(p => p.rotulo).join(', ') || '—', '\n',
+                           { text: 'Fechada em: ', bold: true }, v.fechada_em ? dataBR(String(v.fechada_em).slice(0, 10)) : '(em aberto)'] }],
+        margin: [0, 0, 0, 10] },
+      { table: { headerRows: 1, widths: ['*', 50, 55, 70, 70], body: corpo }, layout: 'lightHorizontalLines' },
+      { columns: [{ text: '' }, { width: 220, table: { widths: ['*', 90], body: [
+          ['Total da proposta', { text: medBRL(r.total_proposta), alignment: 'right' }],
+          [{ text: 'Total executado', bold: true }, { text: medBRL(total), alignment: 'right', bold: true }],
+          ['Diferença', { text: (total - r.total_proposta >= 0 ? '+' : '−') + medBRL(Math.abs(total - r.total_proposta)), alignment: 'right' }]] },
+          layout: 'noBorders' }], margin: [0, 10, 0, 18] },
+      { text: 'Encarregado do cliente', bold: true, margin: [0, 0, 0, 4] },
+      ...blocoAss
+    ]
+  };
+  const blob = await new Promise((ok, err) => { try{ pdfMake.createPdf(doc).getBlob(ok); }catch(e){ err(e); } });
+  const nome = 'Medicao ' + o.numero + '.pdf';
+  // guarda no bucket (pela fila: funciona sem sinal) e registra na medição
+  if (!DEMO && window.Nucleo && Nucleo.fila){
+    try{
+      const u = 'med-pdf-' + uid();
+      const caminho = o.os_id + '/boletim-' + u + '.pdf';
+      Nucleo.fila.adicionar({ tipo: 'medicao', id: u, grupo: MED_GRUPO(o.os_id), rotulo: 'PDF da medição (' + o.numero + ')',
+        fotos: [{ chave: await Nucleo.fila.guardarFoto(blob), bucket: 'medicoes', caminho, tipo: 'application/pdf' }],
+        rpc: { funcao: 'tf_osmed_arquivos', payload: { p_os: o.os_id, p_pdf_storage: caminho } } });
+      pintarFila();
+    }catch(e){ /* o compartilhar não depende disto */ }
+  }
+  const arq = new File([blob], nome, { type: 'application/pdf' });
+  if (navigator.canShare && navigator.canShare({ files: [arq] })){
+    try{ await navigator.share({ files: [arq], title: nome, text: 'Boletim de medição da ' + o.numero }); return; }
+    catch(e){ if (e && e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  toast('PDF salvo no aparelho. Mande pelo WhatsApp como anexo.', 'ok');
+}
+function medPdfLib(){
+  const carrega = src => new Promise((ok, err) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => err(new Error(src)); document.head.appendChild(s); });
+  return carrega('../doc/vendor/pdfmake.min.js').then(() => carrega('../doc/vendor/vfs_fonts.js')).then(() => window.pdfMake);
+}
+
+/** O PDF assinado que voltou (gov.br, foto da folha assinada): a equipe anexa. */
+function medAnexarAssinado(){
+  const i = document.createElement('input'); i.type = 'file'; i.accept = 'application/pdf,image/*'; i.style.display = 'none';
+  i.addEventListener('change', async () => {
+    const f = i.files && i.files[0]; i.remove();
+    if (!f) return;
+    if (f.size > 9 * 1024 * 1024){ toast('Arquivo acima de 9 MB.', 'err'); return; }
+    const pdf = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name);
+    const u = 'med-assinado-' + uid();
+    const caminho = med.os.os_id + '/assinado-' + u + (pdf ? '.pdf' : '.jpg');
+    const corpo = pdf ? f : await reduzirFoto(f);
+    const fotos = DEMO ? [] : [{ chave: await Nucleo.fila.guardarFoto(corpo), bucket: 'medicoes', caminho, tipo: pdf ? 'application/pdf' : 'image/jpeg' }];
+    const feito = await medMudar('PDF assinado', 'tf_osmed_anexar_assinado', { p_os: med.os.os_id, p_pdf_storage: caminho },
+      x => { x.assinatura = 'assinada'; x.assinado_pdf_em = new Date().toISOString(); }, { sempreFila: true, id: u, fotos });
+    if (feito){ toast('PDF assinado anexado.', 'ok'); pintarMedicao(); }
+  });
+  document.body.appendChild(i); i.click();
+}
+
+/** Reabrir para corrigir (a equipe, com o motivo; só com sinal: o banco confere o TapFin). */
+function medReabrir(){
+  if (!DEMO && navigator.onLine === false){ toast('Reabrir precisa de sinal (o sistema confere se já há conta no financeiro).', 'err'); return; }
+  if (medNaFila(med.os.os_id).length){ toast('Espere subir o que está no aparelho antes de reabrir.', 'err'); return; }
+  med.form = 'reabrir';
+  const m = document.getElementById('main'); m.innerHTML = '';
+  const box = document.createElement('div'); box.className = 'painel';
+  box.innerHTML = '<div class="et">Reabrir a medição</div><p class="ds">A assinatura deixa de valer: ao fechar de novo, se houver algo a mais, o encarregado assina outra vez. Fica registrado quem reabriu e por quê.</p>'
+    + '<div class="campo"><label for="mdRm">Motivo</label><input id="mdRm" type="text" maxlength="200" placeholder="ex.: lancei 8 manômetros, eram 6"></div>'
+    + '<button class="btn pri" type="button" id="mdRok">Reabrir</button><button class="btn" type="button" id="mdRv">Voltar</button>';
+  m.appendChild(box);
+  document.getElementById('mdRv').addEventListener('click', pintarMedicao);
+  const ok = document.getElementById('mdRok');
+  ok.addEventListener('click', () => _semDuploEnvio_(ok, async () => {
+    const mot = document.getElementById('mdRm').value.trim();
+    if (mot.length < 5){ toast('Escreva o motivo.', 'err'); return; }
+    const feito = await medMudar('Reabrir', 'tf_osmed_reabrir', { p_os: med.os.os_id, p_motivo: mot },
+      x => { x.situacao = 'rascunho'; x.valor = null; x.assinatura = null; x.pode_editar = true; });
+    if (feito){ LS.del(K_MED + 'ass_' + med.os.os_id); toast('Medição reaberta.', 'ok'); pintarMedicao(); }
+  }));
+}
+
+/** Modo demo: uma medição de exemplo (a proposta das OS de inspeção). */
+function medDemo(osId){
+  const L = (id, d, q, p) => ({ id, descricao: d, unidade: 'un', preco: p, desconto_pct: 3, previsto: q, executado: q,
+                                 total: medTotal(p, q, 3), adicional: false, incluido: true, justificativa: null });
+  const v = { medicao_id: 'demo-med', os_id: osId, situacao: 'rascunho', desconto_pct: 3, pode_editar: true,
+              propostas: [{ rotulo: '26001 Rev. 01' }],
+              linhas: [L('dl1', 'Inspeção de vaso de pressão', 3, 1080), L('dl2', 'Calibração de válvula de segurança', 6, 180),
+                       L('dl3', 'Calibração de manômetro', 6, 150), L('dl4', 'Mobilização', 1, 1790)] };
+  v.resumo = { total_proposta: v.linhas.reduce((s, l) => s + l.total, 0) };
+  v.resumo = Object.assign(v.resumo, medResumo(v));
+  return v;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // AUXILIARES
 // ════════════════════════════════════════════════════════════════════════════
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c =>
@@ -3500,6 +4134,12 @@ document.getElementById('btnBack').addEventListener('click', () => {
   if (tela === 'canhoto'){ canVoltar(); return; }   // S60
   if (tela === 'video' || tela === 'faq'){ pararVideo(); pintarSeg(); return; }   // S17
   if (tela === 'coleta'){ voltarParaOS(); return; }
+  if (tela === 'med'){   // S39: do formulário para a medição; da medição para a OS (relida, se houver sinal)
+    if (med && med.form){ pintarMedicao(); return; }
+    med = null;
+    if (!DEMO && navigator.onLine !== false && atual) abrirOS(atual.os); else voltarParaOS();
+    return;
+  }
   // na execução o voltar tem dois degraus: do formulário para a lista de itens,
   // e só da lista para a OS. Sair da peça por engano e perder a tela toda irrita.
   if (tela === 'exec'){
