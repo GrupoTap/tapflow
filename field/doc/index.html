@@ -161,7 +161,7 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 10';   // S107 · 412: as leituras não travam o envio (o CSV do medidor entra no escritório) ·   // S94 · 410 (R06a): o ambiente do vaso (local fechado ou céu aberto) na Localização, obrigatório no envio ·   // S86 · 407 (R04a): aferição de manômetro e teste de válvula em campo (TapDoc 7: material do escritório; 6: faixa)
+const VERSAO = 'TapDoc 11';   // S112 · 413: correções do teste de 29/10 (posição primeiro; aferição por ciclo e por escala; sem bancada, boroscopia, E e R em campo) · S107 · 412: as leituras não travam o envio (o CSV do medidor entra no escritório) ·   // S94 · 410 (R06a): o ambiente do vaso (local fechado ou céu aberto) na Localização, obrigatório no envio ·   // S86 · 407 (R04a): aferição de manômetro e teste de válvula em campo (TapDoc 7: material do escritório; 6: faixa)
 // 405: uma linha curta com a faixa do material, para conferir com a plaqueta ou o certificado da chapa
 function linhaFaixa(m){
   if (!m || m.resist_min_mpa == null) return '';
@@ -442,7 +442,7 @@ function estLaudo(v){
 }
 function est(itens){ const n = itens.filter(Boolean).length; return n === 0 ? 'vazia' : n === itens.length ? 'ok' : 'inc'; }
 const EST_ROT = { vazia:'vazia', inc:'incompleta', ok:'ok' };
-function estados(v){ return [estPlaqueta(v), estOperacao(v), estComp(v), estLocal(v), estLaudo(v), estVisual(v), estAcess(v), estUltra(v), estBoro(v), estTeste(v), estFech(v)]; }
+function estados(v){ return [estPlaqueta(v), estOperacao(v), estComp(v), estLocal(v), estLaudo(v), estVisual(v), estAcess(v), estUltra(v), estTeste(v), estFech(v)]; }
 const N_SECOES = 11;
 function secoesOk(v){ return estados(v).filter(x => x === 'ok').length; }
 function alertas(v){
@@ -539,12 +539,29 @@ function telaCartao(v){
          la.data_laudo && la.data_laudo.split('-').reverse().join('/')].filter(Boolean).join(' · ')) + (la.pmta_mpa != null ? '<br>PMTA vigente: ' + fmt(la.pmta_mpa, 3) + ' MPa' : '') + '</p></div>';
   else if (la && la.situacao === 'pendente_cliente')
     h += '<div class="alerta"><b>Laudo anterior: pegar no cliente</b>Fotografe o laudo impresso na seção "Laudo anterior".</div>';
-  h += '<button class="btn pri" id="comecar">Começar a inspeção deste vaso</button>';
+  // S112 · C10: a posição vem antes de a lista de componentes nascer (os nomes dos tampos dependem dela)
+  h += '<div class="card"><b>Posição do vaso</b><div class="seg" id="cPos">' + ['vertical','horizontal'].map(p => '<button data-p="' + p + '" class="' + (v.posicao === p ? 'on' : '') + '">' + p + '</button>').join('') +
+       '</div><p class="muted" style="margin:6px 0 0">Define os nomes dos tampos e do costado (vertical: superior e inferior · horizontal: esquerdo e direito).</p></div>';
+  h += '<button class="btn pri" id="comecar"' + (v.posicao ? '' : ' disabled') + '>Começar a inspeção deste vaso</button>';
+  if (!v.posicao) h += '<p class="muted" style="text-align:center;margin-top:8px">Escolha a posição do vaso para começar.</p>';
   h += '<p class="muted" style="text-align:center;margin-top:8px">Funciona sem sinal. Tudo vai para o servidor quando houver conexão.</p>';
   $('tela').innerHTML = h;
-  $('comecar').addEventListener('click', () => { comecar(v); pintar(); });
+  $('cPos').querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => { mudouVaso(v, 'posicao', b.dataset.p); pintar(); }));
+  $('comecar').addEventListener('click', () => { if (!v.posicao) return; comecar(v); pintar(); });
 }
 
+/** C10: muda a posição do vaso e renomeia os tampos que ainda têm o nome padrão (superior/inferior ↔ esquerdo/direito). */
+const NOME_TAMPO = { superior:'Tampo superior', inferior:'Tampo inferior', esquerdo:'Tampo esquerdo', direito:'Tampo direito' };
+function aplicarPosicao(v, p){
+  mudouVaso(v, 'posicao', p);
+  const mapa = p === 'horizontal' ? { superior:'esquerdo', inferior:'direito' } : { esquerdo:'superior', direito:'inferior' };
+  compsAtivos(v).forEach(c => {
+    const alvo = mapa[c.posicao];
+    if (alvo && c.tipo === 'eliptico' && c.nome === NOME_TAMPO[c.posicao]){
+      mudouComp(v, c, 'posicao', alvo); mudouComp(v, c, 'nome', NOME_TAMPO[alvo]);
+    }
+  });
+}
 /** Abre a inspeção do vaso (id do celular) e monta o mínimo: a câmara única e
  *  costado + dois tampos. A ordem na fila é a de dependência. */
 function comecar(v){
@@ -596,10 +613,9 @@ function telaPainel(v){
   const vis = v.inspecao.visual || [], nc = vis.filter(x => x.conforme === false).length;
   h += sec('visual', 'Exame visual', nc ? nc + ' não conforme' + (nc > 1 ? 's' : '') : 'Costado, tampos, conexões, base e aterramento', estVisual(v));
   const acs = acessDe(v);
-  h += sec('acessorios', 'Acessórios', acs.length ? acs.length + ' na lista' : 'Válvulas, manômetros e outros, com lacre e foto', estAcess(v));
+  h += sec('acessorios', 'Acessórios', acs.length ? acs.length + ' na lista' : 'Válvulas e manômetros, com lacre e foto', estAcess(v));
   const nMed = compsAtivos(v).filter(c => !c.nao_medir).length, nLid = compsAtivos(v).filter(c => !c.nao_medir && leiturasDe(v, c.id).length).length;
   h += sec('ultrassom', 'Ultrassom', nMed ? nLid + ' de ' + nMed + ' componentes medidos' : 'Medidor e espessuras por componente', estUltra(v));
-  h += sec('boroscopia', 'Boroscopia', 'Realizada ou o motivo', estBoro(v));
   h += sec('teste', 'Teste de pressão', 'Realizado ou o motivo', estTeste(v));
   h += sec('fechamento', 'Fechamento e envio', 'Observações, foto de capa e enviar', estFech(v));
   h += '<h2>Cálculo</h2><button class="card secao" data-s="previa"><span class="sn">Prévia do cálculo<small>PMTA por câmara, categoria e prazos. Só informativa: o resultado oficial sai na revisão.</small></span><span class="est vazia">ver</span></button>';
@@ -849,7 +865,7 @@ function telaOperacao(v){
   h += '<button class="btn sec" id="maisCam">+ câmara (casco, tubos ou camisa)</button>';
   $('tela').innerHTML = h;
 
-  $('oPos').querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => { mudouVaso(v, 'posicao', b.dataset.p); pintar(); }));
+  $('oPos').querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => { aplicarPosicao(v, b.dataset.p); pintar(); }));
   ligar('oCirc', el => { const x = numOuAviso(el, 1, 100000, 'Circunferência'); if (x !== undefined) mudouVaso(v, 'circunferencia_mm', x); });
   ligar('oMat', el => {
     const novo = el.value || null;
@@ -934,24 +950,25 @@ function geoDe(v, c){
   const p = geoPadrao(v, c), g = { tipo:c.tipo, nome:c.nome, id:c.id, aparafusada:c.aparafusada === true, padrao:[] };
   (GEO_CAMPOS[c.tipo] || []).concat(['E']).forEach(k => {
     const x = c[GEO_COL[k]];
-    if (x != null && x !== '') g[k] = Number(x);
+    // S112 · C1: o raio R sai SEMPRE da circunferência (ninguém o digita em campo); a eficiência E vem do escritório
+    if (k !== 'R' && x != null && x !== '') g[k] = Number(x);
     else if (p[k] != null){ g[k] = p[k]; g.padrao.push(k); }
+    else if (k === 'R' && x != null && x !== '') g[k] = Number(x);   // sem circunferência: o que já estava gravado
   });
   return g;
 }
 function campoGeo(v, c){
   const p = geoPadrao(v, c), id = esc(c.id);
-  const e = c.eficiencia_junta;
-  let h = '<div class="lin">';
-  h += '<label class="f">E · eficiência da junta<select class="t" data-geo="' + id + '" data-g="E"><option value="">padrão (' + fmt(p.E, 2) + ')</option>' +
-    [1, 0.85, 0.7].map(x => '<option value="' + x + '"' + (e != null && Number(e) === x ? ' selected' : '') + '>' + fmt(x, 2) + '</option>').join('') + '</select></label>';
-  (GEO_CAMPOS[c.tipo] || []).forEach((k, n) => {
+  // S112 · C1: E (eficiência da junta) e R (raio) saem da tela de campo
+  const campos = (GEO_CAMPOS[c.tipo] || []).filter(k => k !== 'R');
+  let h = campos.length ? '<div class="lin">' : '';
+  campos.forEach((k, n) => {
     if (n && n % 2 === 1) h += '</div><div class="lin">';
     const val = c[GEO_COL[k]];
     h += '<label class="f">' + GEO_ROT[k] + '<input class="t" inputmode="decimal" data-geo="' + id + '" data-g="' + k + '" value="' + esc(val == null ? '' : fmt(val, 3)) +
       '" placeholder="' + (p[k] != null ? 'padrão ' + fmt(p[k], k === 'C' ? 2 : 1) : (k === 'd' && c.tipo === 'janela' ? 'medir' : '—')) + '"></label>';
   });
-  h += '</div>';
+  if (campos.length) h += '</div>';
   if (c.tipo === 'janela') h += '<div class="chk"><input type="checkbox" id="ap_' + id + '"' + (c.aparafusada ? ' checked' : '') + '><label for="ap_' + id + '">Tampa aparafusada</label></div>';
   if (c.tipo === 'conico' && !(c.alfa_graus > 0)) h += '<div class="conv" style="color:var(--warn)">O cone precisa do semiângulo α (até 30°).</div>';
   return h;
@@ -987,7 +1004,7 @@ function telaComponentes(v){
   });
   h += '</div><button class="btn sec" id="maisComp">+ componente</button>';
   h += '<p class="muted" style="margin-top:10px">Este é o único lugar onde o tipo do tampo é informado. O ultrassom usa esta mesma lista.</p>';
-  h += '<p class="muted">Campo em branco = o <b>padrão</b> mostrado, tirado da circunferência (Operação e câmaras). Os padrões são provisórios, a validar pelo Fernando.</p>';
+  h += '<p class="muted">O raio é calculado pela circunferência (Operação e câmaras) e a eficiência da junta é definida no escritório: nenhum dos dois é digitado em campo.</p>';
   $('tela').innerHTML = h;
   $('tela').querySelectorAll('[data-cp]').forEach(el => el.addEventListener('change', () => {
     const c = v.componentes.find(x => x.id === el.dataset.cp); if (!c) return;
@@ -1117,11 +1134,11 @@ registrarArquivo = async function(v, secao, legenda, blob, ext, tipo, mini, item
 // fechamento e envio (banco: sql/402_tapdoc_r03a.sql)
 // ════════════════════════════════════════════════════════════════════════════
 const ITENS_VISUAL = ['Costado', 'Tampos', 'Conexões', 'Base ou suporte', 'Aterramento'];   // decisão 5 (19/10)
+// S112 · C13: termômetro, pressostato e dreno não são objeto de inspeção (pressostato e dreno: oportunidade de venda, anotada em "Observações do vaso")
 const TIPOS_ACESS = { valvula_seguranca:'Válvula de segurança', valvula_alivio:'Válvula de alívio', quebra_vacuo:'Quebra-vácuo',
-  manometro:'Manômetro', manovacuometro:'Manovacuômetro', termometro:'Termômetro', pressostato:'Pressostato', dreno:'Dreno',
-  ihm:'IHM', outro:'Outro' };
+  manometro:'Manômetro', manovacuometro:'Manovacuômetro', ihm:'IHM', outro:'Outro' };
 const VALVULAS = ['valvula_seguranca', 'valvula_alivio', 'quebra_vacuo'];
-const MEDIDORES = ['manometro', 'manovacuometro', 'termometro', 'pressostato'];
+const MEDIDORES = ['manometro', 'manovacuometro'];
 const SIT_ACESS = { ok:'ok', substituir:'substituir', ausente:'ausente', inoperante:'inoperante', retirado:'retirado' };
 const BITOLAS = ['1/8"', '1/4"', '3/8"', '1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"'];
 const MOTIVOS_BORO = ['O fluido do vaso inviabiliza a boroscopia.', 'O vaso não tem conexão para a boroscopia.',
@@ -1191,8 +1208,7 @@ function faltasEnvio(v){
   // S80 · R03b: o ultrassom (mesma ordem e texto do servidor)
   if (!i.medidor_id) f.push('Ultrassom: escolha o medidor de espessura.');
   // S107 · 412: as leituras não travam o envio — o CSV do medidor é anexado no escritório
-  if (!boroValida(i.boroscopia)) f.push('Boroscopia sem resposta.');
-  else if (i.boroscopia.resultado === 'com_anomalia' && !fotosDe(v, 'boroscopia').length) f.push('Boroscopia com anomalia sem foto.');
+  // S112 · 413: a boroscopia é lançada no escritório (o inspetor não a faz no celular): não trava o envio
   if (!testeValido(i.teste)) f.push('Teste de pressão sem resposta.');
   else if (i.teste.resultado === 'reprovado' && !fotosDe(v, 'teste').length) f.push('Teste de pressão reprovado sem foto.');
   fAf.forEach(x => f.push(x));   // S86 · R04a (mesma ordem do servidor: antes da capa)
@@ -1342,7 +1358,6 @@ function resultadoAf(v, a, af){
     }
   }catch(e){ r = { completo:false, faltas:[e.message], avisos:[], aprovadaOk:false }; }
   if (!af.padrao_id) r.faltas.push('Escolha o manômetro padrão.');
-  if (!af.bancada_id) r.faltas.push('Escolha a bancada.');
   if (!(af.lacre_colocado || '').trim()) r.faltas.push('Informe o lacre colocado.');
   r.completo = !r.faltas.length;
   r.resultado = !r.completo ? 'incompleto' : r.aprovadaOk ? 'aprovado' : 'reprovado';
@@ -1390,16 +1405,15 @@ function novaAfericao(v, a){
   if (afDe(v, a)) return afDe(v, a);
   const vv = tipoAf(a) === 'valvula', un = a.unidade_campo || unidadeDe(v);
   const pad = (E.padroes || []).find(p => p.id === ultimoPad()) || (E.padroes || [])[0];
-  const ban = (E.bancadas || []).find(p => p.id === ultimaBan()) || (E.bancadas || [])[0];
   const af = { id:uid(), tipo:vv ? 'valvula' : 'manometro', acessorio_id:a.id, unidade:UN_AF.includes(un) ? un : 'bar',
-    padrao_id:pad ? pad.id : null, bancada_id:ban ? ban.id : null, lacre_retirado:a.lacre_num || null, lacre_colocado:null,
+    padrao_id:pad ? pad.id : null, lacre_retirado:null, lacre_colocado:null,
     validade_meses:vv ? null : 24, realizada_em:new Date().toISOString(),
     ajuste:vv && a.pressao_ajuste_mpa != null ? Number(fmt(window.MotorNR13.deMPa(a.pressao_ajuste_mpa, UN_AF.includes(un) ? un : 'bar'), 3).replace(',', '.')) : null,
     leituras:vv ? { aberturas:[null, null, null], assentamento:null } : { pontos:[] } };
   v.inspecao.afericoes = ((v.inspecao.afericoes) || []).concat([af]); salvar(); gravarAfericao(v, af);
   return af;
 }
-const AF_OK = ['tipo','acessorio_id','padrao_id','bancada_id','unidade','faixa_ini','faixa_fim','resolucao','ajuste','leituras','lacre_retirado','lacre_colocado','validade_meses','realizada_em'];
+const AF_OK = ['tipo','acessorio_id','padrao_id','unidade','faixa_ini','faixa_fim','resolucao','ajuste','leituras','lacre_retirado','lacre_colocado','validade_meses','realizada_em'];
 function gravarAfericao(v, af){
   const d = pegar(af, AF_OK); d.inspecao_id = v.inspecao.id;
   enfileirar(v, 'afer-' + af.id, (af.tipo === 'valvula' ? 'teste de válvula' : 'aferição de manômetro'), { funcao:'tf_insp_afericao_gravar', payload:{ p_id:af.id, p_dados:d } });
@@ -1423,32 +1437,39 @@ function telaAfericao(v){
   h += '<div class="card"><label class="f">Manômetro padrão<select class="t" id="afPad"><option value="">—</option>' + (E.padroes || []).map(p => '<option value="' + esc(p.id) + '"' + (p.id === af.padrao_id ? ' selected' : '') + '>'
       + esc((p.descricao || 'Padrão') + (p.numero_serie ? ' · ' + p.numero_serie : '') + (p.validade ? ' · até ' + String(p.validade).slice(5, 7) + '/' + String(p.validade).slice(0, 4) : '')) + '</option>').join('') + '</select></label>'
     + ((E.padroes || []).length ? '' : '<p class="alerta">Nenhum padrão com certificado válido no pacote. O escritório cadastra em TapDoc › Instrumentos.</p>')
-    + '<label class="f">Bancada<select class="t" id="afBan"><option value="">—</option>' + (E.bancadas || []).map(p => '<option value="' + esc(p.id) + '"' + (p.id === af.bancada_id ? ' selected' : '') + '>'
-      + esc((p.descricao || 'Bancada') + (p.numero_serie ? ' · ' + p.numero_serie : '')) + '</option>').join('') + '</select></label>'
     + '<label class="f">Unidade<select class="t" id="afUn">' + UN_AF.map(u => '<option value="' + u + '"' + (u === un ? ' selected' : '') + '>' + UN_AF_ROT[u] + '</option>').join('') + '</select></label></div>';
   if (vv){
     const L = af.leituras || (af.leituras = { aberturas:[null, null, null], assentamento:null });
-    h += '<div class="card">' + campoNum('Pressão de ajuste (' + UN_AF_ROT[un] + ')', 'afAj', af.ajuste, 'Da plaqueta da válvula ou do lacre anterior')
+    h += '<div class="card">' + campoNum('Pressão de abertura (plaqueta/certificado) (' + UN_AF_ROT[un] + ')', 'afAj', af.ajuste, 'Como está na válvula ou no certificado')
       + '<div class="lin">' + [0, 1, 2].map(k => campoNum('Abertura ' + (k + 1), 'afAb' + k, L.aberturas[k])).join('') + '</div>'
       + campoNum('Assentamento (' + UN_AF_ROT[un] + ')', 'afAs', L.assentamento) + '</div>';
   } else {
-    const L = af.leituras || (af.leituras = { pontos:[] });
-    h += '<div class="card"><div class="lin">' + campoNum('Faixa: início', 'afIni', af.faixa_ini) + campoNum('Faixa: fim', 'afFim', af.faixa_fim) + '</div>'
-      + campoNum('Resolução de leitura (' + UN_AF_ROT[un] + ')', 'afRes', af.resolucao, 'O que dá para ler; por exemplo, meia divisão')
-      + '<label class="f">Pontos (os números do mostrador)<small>Separe por espaço. Mínimo de 3 além do zero, um acima de 75% da faixa.</small><input class="t" id="afPts" value="' + esc(L.pontos.map(p => fmt(p.nominal)).join(' ')) + '"></label>'
-      + '<button class="btn sec" id="afSug">Sugerir 5 pontos</button></div>';
-    L.pontos.forEach((p, k) => {
-      const rp = (r.pontos || []).find(x => x.nominal === Number(p.nominal));
-      h += '<div class="card"><div style="display:flex;gap:8px;align-items:center"><b style="flex:1">Ponto ' + esc(fmt(p.nominal)) + ' ' + UN_AF_ROT[un] + '</b>'
-        + (rp && rp.ok !== undefined ? (rp.ok ? '<span class="chip ok">ok</span>' : '<span class="chip pend">fora</span>') : '') + '</div>'
-        + '<table class="comp" style="width:100%"><tr><th></th><th>Padrão</th><th>Indicado</th></tr>'
-        + [0, 1, 2, 3, 4, 5].map(n => { const l = (p.leituras || [])[n] || {}; return '<tr><td>' + (n < 3 ? 'carga ' + (n + 1) : 'descarga ' + (n - 2)) + '</td>'
-          + '<td><input class="t" inputmode="decimal" data-pp="' + k + '" data-n="' + n + '" data-c="padrao" value="' + esc(l.padrao == null ? fmt(p.nominal) : fmt(l.padrao)) + '"></td>'
-          + '<td><input class="t" inputmode="decimal" data-pp="' + k + '" data-n="' + n + '" data-c="indicado" value="' + esc(l.indicado == null ? '' : fmt(l.indicado)) + '"></td></tr>'; }).join('')
-        + '</table>' + (rp && rp.erroMedio !== undefined ? '<p class="muted" style="margin:6px 0 0">Erro médio ' + fmt(rp.erroMedio, 3) + ' · tolerância ±' + fmt(rp.tol, 3) + ' · U ' + fmt(rp.U, 3) + '</p>' : '') + '</div>';
-    });
+    const L = af.leituras || (af.leituras = { pontos:[] }), es = L.escala || (L.escala = {});
+    // S112 · C4: como no TapDoc do Paulo — escala de indicação, graduações, escala de utilização e resolução; "Gerar calibração" monta os pontos
+    h += '<div class="card"><b>Escala do manômetro</b>'
+      + '<div class="lin">' + campoNum('Escala de indicação: início', 'afIni', af.faixa_ini) + campoNum('Escala de indicação: fim', 'afFim', af.faixa_fim) + '</div>'
+      + campoNum('Quantidade de graduações', 'afGr', es.graduacoes, 'Divide a escala de utilização em partes iguais (ex.: 0 a 20 com 4 graduações: 5, 10, 15, 20)')
+      + '<div class="lin">' + campoNum('Escala de utilização: início', 'afUi', es.uti_ini == null ? af.faixa_ini : es.uti_ini) + campoNum('Escala de utilização: fim', 'afUf', es.uti_fim == null ? af.faixa_fim : es.uti_fim) + '</div>'
+      + campoNum('Resolução (' + UN_AF_ROT[un] + ')', 'afRes', af.resolucao, 'O que dá para ler; por exemplo, meia divisão')
+      + '<button class="btn pri" id="afGerar" style="margin-top:10px">Gerar calibração</button>'
+      + (L.pontos.length ? '<p class="muted" style="margin:8px 0 0">Pontos: ' + L.pontos.map(p => esc(fmt(p.nominal))).join(' · ') + ' ' + UN_AF_ROT[un] + '</p>' : '') + '</div>';
+    // S112 · C3: as leituras na ordem em que se mexe no manômetro — cada ciclo sobe (carga) e desce (descarga) a escala inteira
+    const pts = L.pontos, linha = (k, n) => {
+      const p = pts[k], l = (p.leituras || [])[n] || {};
+      return '<tr><td>' + esc(fmt(p.nominal)) + '</td>'
+        + '<td><input class="t" inputmode="decimal" data-pp="' + k + '" data-n="' + n + '" data-c="padrao" value="' + esc(l.padrao == null ? fmt(p.nominal) : fmt(l.padrao)) + '"></td>'
+        + '<td><input class="t" inputmode="decimal" data-pp="' + k + '" data-n="' + n + '" data-c="indicado" value="' + esc(l.indicado == null ? '' : fmt(l.indicado)) + '"></td></tr>';
+    };
+    const ordem = pts.map((p, k) => k);
+    for (let ci = 0; ci < 3 && pts.length; ci++){
+      h += '<div class="card"><b>Ciclo ' + (ci + 1) + ' · carga (subindo)</b><table class="comp" style="width:100%"><tr><th>Ponto</th><th>Padrão</th><th>Indicado</th></tr>' + ordem.map(k => linha(k, ci)).join('') + '</table></div>';
+      h += '<div class="card"><b>Ciclo ' + (ci + 1) + ' · descarga (descendo)</b><table class="comp" style="width:100%"><tr><th>Ponto</th><th>Padrão</th><th>Indicado</th></tr>' + ordem.slice().reverse().map(k => linha(k, 3 + ci)).join('') + '</table></div>';
+    }
+    if (pts.length && (r.pontos || []).length)
+      h += '<div class="card"><b>Resultado por ponto</b>' + pts.map(p => { const rp = (r.pontos || []).find(x => x.nominal === Number(p.nominal)); return rp ? '<p class="muted" style="margin:6px 0 0">' + esc(fmt(p.nominal)) + ' ' + UN_AF_ROT[un] + ' ' +
+        (rp.ok !== undefined ? (rp.ok ? '<span class="chip ok">ok</span>' : '<span class="chip pend">fora</span>') : '') + (rp.erroMedio !== undefined ? ' · erro médio ' + fmt(rp.erroMedio, 3) + ' · tolerância ±' + fmt(rp.tol, 3) + ' · U ' + fmt(rp.U, 3) : '') + '</p>' : ''; }).join('') + '</div>';
   }
-  h += '<div class="card"><div class="lin">' + campoTexto('Lacre retirado', 'afLr', af.lacre_retirado, 'inputmode="numeric"') + campoTexto('Lacre colocado', 'afLc', af.lacre_colocado, 'inputmode="numeric"') + '</div>'
+  h += '<div class="card">' + campoTexto('Número do lacre', 'afLc', af.lacre_colocado, 'inputmode="numeric"')
     + (vv ? '' : campoNum('Validade do relatório (meses)', 'afVal', af.validade_meses == null ? 24 : af.validade_meses, 'Padrão: 24 meses (2 anos)')) + '</div>';
   h += '<div class="card" id="afResultado"><b>Resultado</b>' + (r.faltas.length ? '<ul>' + r.faltas.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '')
     + (r.avisos.length ? '<div class="alerta" style="margin-top:6px"><ul>' + r.avisos.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '')
@@ -1463,9 +1484,7 @@ function telaAfericao(v){
   };
   const n = x => { const y = num(x); return y == null || Number.isNaN(y) ? null : y; };
   ligar('afPad', el => { af.padrao_id = el.value || null; LS.set('tfdoc_af_pad', af.padrao_id); mudou(true); });
-  ligar('afBan', el => { af.bancada_id = el.value || null; LS.set('tfdoc_af_ban', af.bancada_id); mudou(true); });
   ligar('afUn', el => { af.unidade = el.value; mudou(true); });
-  ligar('afLr', el => { af.lacre_retirado = el.value.trim() || null; mudou(false); });
   ligar('afLc', el => { af.lacre_colocado = el.value.trim() || null; mudou(true); });
   ligar('afVal', el => { const x = n(el.value); if (x == null || x < 1 || x > 120){ U.toast('Validade de 1 a 120 meses.', 'err'); el.value = af.validade_meses; return; } af.validade_meses = Math.round(x); mudou(false); });
   if (vv){
@@ -1473,16 +1492,28 @@ function telaAfericao(v){
     [0, 1, 2].forEach(k => ligar('afAb' + k, el => { af.leituras.aberturas[k] = n(el.value); mudou(true); }));
     ligar('afAs', el => { af.leituras.assentamento = n(el.value); mudou(true); });
   } else {
+    const es = af.leituras.escala || (af.leituras.escala = {});
     ligar('afIni', el => { af.faixa_ini = n(el.value); mudou(true); });
     ligar('afFim', el => { af.faixa_fim = n(el.value); mudou(true); });
     ligar('afRes', el => { af.resolucao = n(el.value); mudou(true); });
+    ligar('afGr', el => { es.graduacoes = n(el.value); mudou(false); });
+    ligar('afUi', el => { es.uti_ini = n(el.value); mudou(false); });
+    ligar('afUf', el => { es.uti_fim = n(el.value); mudou(false); });
     const pts = lista => {
       const velhos = af.leituras.pontos || [];
       af.leituras.pontos = lista.map(x => velhos.find(p => Number(p.nominal) === x) || { nominal:x, leituras:[] });
       mudou(true);
     };
-    ligar('afPts', el => { const l = el.value.split(/[\s;]+/).map(n).filter(x => x != null); pts([...new Set(l)].sort((p, q) => p - q)); });
-    ligar('afSug', () => { if (!(af.faixa_fim > (af.faixa_ini || 0))){ U.toast('Informe a faixa primeiro.', 'err'); return; } pts(sugerirPontos(af.faixa_ini || 0, af.faixa_fim)); }, 'click');
+    // C4: "Gerar calibração" — a quantidade de graduações divide a escala de utilização (início + k × passo, k = 1..graduações)
+    ligar('afGerar', () => {
+      const ui = es.uti_ini == null ? af.faixa_ini : es.uti_ini, uf = es.uti_fim == null ? af.faixa_fim : es.uti_fim, g = es.graduacoes;
+      if (ui == null || uf == null || !(uf > ui)){ U.toast('Informe a escala de utilização (início e fim).', 'err'); return; }
+      if (g == null || !Number.isInteger(g) || g < 1 || g > 20){ U.toast('A quantidade de graduações deve ser um número inteiro de 1 a 20.', 'err'); return; }
+      es.uti_ini = ui; es.uti_fim = uf;
+      const passo = (uf - ui) / g, lista = [];
+      for (let k = 1; k <= g; k++) lista.push(Number((ui + k * passo).toFixed(6)));
+      pts(lista);
+    }, 'click');
     $('tela').querySelectorAll('[data-pp]').forEach(el => el.addEventListener('change', () => {
       const p = af.leituras.pontos[Number(el.dataset.pp)], k = Number(el.dataset.n);
       p.leituras = p.leituras || [];
@@ -1518,11 +1549,12 @@ function telaAcessorios(v){
     h += '<label class="f">Tipo<select class="t" data-k="tipo">' + Object.keys(TIPOS_ACESS).map(t => '<option value="' + t + '"' + (t === a.tipo ? ' selected' : '') + '>' + TIPOS_ACESS[t] + '</option>').join('') + '</select></label>';
     h += '<label class="f">Situação<div class="seg sit" data-sit>' + Object.keys(SIT_ACESS).map(s => '<button data-s="' + s + '" class="' + (a.situacao === s ? 'on' : '') + '">' + SIT_ACESS[s] + '</button>').join('') + '</div></label>';
     if (a.situacao !== 'retirado' && a.situacao !== 'ausente'){
-      h += '<div class="lin">' + campoTexto('TAG', 'ac_tag_' + a.id, a.tag, 'data-k="tag"') + campoTexto('Lacre', 'ac_lac_' + a.id, a.lacre_num, 'data-k="lacre_num" inputmode="numeric"') + '</div>';
+      // S112 · C12: manômetro e válvula não têm TAG · C11: o lacre (o novo) é informado na tela de teste/aferição
+      if (!AFERIVEIS.includes(a.tipo)) h += campoTexto('TAG', 'ac_tag_' + a.id, a.tag, 'data-k="tag"');
       h += '<div class="lin">' + campoTexto('Marca', 'ac_mar_' + a.id, a.marca, 'data-k="marca"') + campoTexto('Modelo', 'ac_mod_' + a.id, a.modelo, 'data-k="modelo"') + '</div>';
       h += '<label class="f">Conexão<select class="t" data-k="conexao"><option value="">—</option>' + BITOLAS.map(b => '<option' + (b === a.conexao ? ' selected' : '') + '>' + esc(b) + '</option>').join('') +
         (a.conexao && BITOLAS.indexOf(a.conexao) < 0 ? '<option selected>' + esc(a.conexao) + '</option>' : '') + '<option value="+">Outra…</option></select></label>';
-      if (VALVULAS.includes(a.tipo)) h += campoPressao('Pressão de ajuste', 'ac_p_' + a.id, a.pressao_ajuste_mpa, u, 'Como está na válvula ou no certificado');
+      if (VALVULAS.includes(a.tipo)) h += campoPressao('Pressão de abertura (plaqueta/certificado)', 'ac_p_' + a.id, a.pressao_ajuste_mpa, u, 'Como está na válvula ou no certificado');
       if (MEDIDORES.includes(a.tipo)) h += campoTexto('Escala', 'ac_esc_' + a.id, a.escala, 'data-k="escala" placeholder="Ex.: 0 a 16 bar"');
       if (cs.length > 1) h += '<label class="f">Câmara<select class="t" data-k="camara_id"><option value="">—</option>' +
         cs.map(c => '<option value="' + esc(c.id) + '"' + (c.id === a.camara_id ? ' selected' : '') + '>' + esc(c.nome) + '</option>').join('') + '</select></label>';
@@ -1786,12 +1818,15 @@ function telaUltrassom(v){
       (m.validade ? ' (até ' + esc(String(m.validade).split('-').reverse().join('/')) + ')' : '') + '</option>').join('') +
     (i.medidor_id && !meds.some(m => m.id === i.medidor_id) ? '<option value="' + esc(i.medidor_id) + '" selected>medidor escolhido (fora da lista)</option>' : '') + '</select></label>';
   h += campoTexto('Pasta no medidor', 'usPasta', i.ultrassom_pasta, 'placeholder="ex.: FD-33"');
-  h += '<button class="btn sec peq" id="usCsv">Importar o CSV do medidor</button></div>';
   const cs = compsMedir(v);
+  // S112 · C9: a digitação das leituras fica escondida; o padrão é o CSV do medidor
+  const manual = !!v._usManual || cs.some(c => leiturasDe(v, c.id).length);
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn sec peq" id="usCsv">Importar o CSV do medidor</button>' +
+       (manual ? '' : '<button class="btn sec peq" id="usManual">Inserir medição manual</button>') + '</div></div>';
   if (!cs.length) h += '<div class="card"><p class="muted">Nenhum componente para medir. Confira a lista em Componentes.</p></div>';
   const multi = ativas(v).length > 1;
-  cs.forEach(c => {
-    const l = leiturasDe(v, c.id), mot = semLeitura(v)[c.id] || '';
+  (manual ? cs : []).forEach(c => {
+    const l = leiturasDe(v, c.id), mot = '';
     const nP = Math.max(l.reduce((a, x) => Math.max(a, x.ponto), 0), (c._pontos || 0), mot ? 0 : 1);
     h += '<div class="card"><div style="display:flex;align-items:center;gap:8px"><b style="flex:1">' + esc(c.nome) + '</b><span class="muted">' + esc(TIPOS_COMP[c.tipo] || c.tipo) +
       (multi && camaraDe(v, c) ? ' · ' + esc(camaraDe(v, c).nome) : '') + '</span></div>';
@@ -1810,15 +1845,16 @@ function telaUltrassom(v){
         h += '</div>';
       }
       if (pode) h += '<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn peq sec" data-usmais="' + esc(c.id) + '">+ ponto</button>' +
-        (!l.length ? '<button class="btn peq" data-ussem="' + esc(c.id) + '">Não deu para medir</button>' : '') + '</div>';
+        '</div>';
     }
     h += '</div>';
   });
-  h += '<p class="muted">Até 4 leituras por ponto, em mm. Vale a menor de todas. Em vermelho: abaixo da espessura requerida (prévia; o oficial sai na revisão).</p>';
-  h += '<p class="info">As leituras aqui são <b>opcionais</b>: o CSV do medidor é anexado no escritório (T07), antes da revisão. No campo, basta escolher o medidor usado.</p>';
+  if (manual) h += '<p class="muted">Até 4 leituras por ponto, em mm. Vale a menor de todas. Em vermelho: abaixo da espessura requerida (prévia; o oficial sai na revisão).</p>';
+  h += '<p class="info">O CSV do medidor é anexado no escritório (T07), antes da revisão. No campo, basta escolher o medidor usado. Use "Inserir medição manual" só se for anotar leituras à mão.</p>';
   $('tela').innerHTML = h;
-  cs.forEach(c => pintarMin(v, c));
-  if (!pode){ $('tela').querySelectorAll('select, #usPasta, #usCsv').forEach(el => { el.disabled = true; }); return; }
+  if (manual) cs.forEach(c => pintarMin(v, c));
+  if (!pode){ $('tela').querySelectorAll('select, #usPasta, #usCsv, #usManual').forEach(el => { el.disabled = true; }); return; }
+  ligar('usManual', () => { v._usManual = true; pintar(); }, 'click');
   ligar('usMed', el => { i.medidor_id = el.value || null; salvar(); gravarUS(v); });
   ligar('usPasta', el => { i.ultrassom_pasta = el.value.trim() || null; salvar(); adiar3('us:' + v.id, 'us', v); });
   $('tela').querySelectorAll('[data-us]').forEach(el => el.addEventListener('change', () => {
