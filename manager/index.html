@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S114</title>
+<title>TapFlow Manager · S116</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2413,7 +2413,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S114';
+const APP_VERSION = 'S116';   // S116 · a Segurança do Trabalho saiu para o TapSeg (seg/, G1); a ficha do RH fica com Dados, Documentos, Ponto, PIN, Admissão e Histórico
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -16859,7 +16859,9 @@ const NAV = [
   // A seção aparece para quem enxerga ao menos um item dela.
   { id:'rh', rot:'RECURSOS HUMANOS', itens:[
     { v:'rhf',  rot:'Funcionários',              ico:'pessoas',  rh:true },
-    { v:'rhs',  rot:'Segurança do Trabalho',     ico:'capacete', rh:true, cont:'nRh' },
+    // S116 · "Segurança do Trabalho" SAIU daqui: mora no TapSeg (seg/). O código
+    // antigo ficou parado neste arquivo, sem porta de entrada (G3: sai na rodada
+    // seguinte à conferência no ar). Endereço antigo `?ir=rhs` abre o seg/ (SEG_SAIU).
     // S53 · quem lança é a caixa "Ausências"; o que foi lançado aparece para
     // TODOS na Agenda (o atestado, para quem não tem a caixa, como "afastado")
     { v:'rhaus',rot:'Ausências',                 ico:'ausencia', mod:'ausencias', estrito:true, cont:'nAus' },
@@ -16996,7 +16998,7 @@ NAV.forEach(g => g.itens.forEach(i => { GRUPO_DE[i.v] = g.rot; }));
 // Gestão fica com os Relatórios; a Equipe Comercial é do TapCRM.
 // S101: CADASTROS saiu desta tabela — o grupo não tem área, aparece em todas.
 const AREA_DO_GRUPO = { quadros:'tapflow', analise:'gestao', operacao:'tapflow', rh:'taprh' };
-const AREA_DA_TELA  = { com:'tapcrm', rhs:'tapseg' };   // as que fogem do grupo
+const AREA_DA_TELA  = { com:'tapcrm' };   // as que fogem do grupo (S116: rhs saiu para o seg/)
 const AREA = {};
 NAV.forEach(g => g.itens.forEach(i => { const a = AREA_DA_TELA[i.v] || AREA_DO_GRUPO[g.id]; if (a) AREA[i.v] = a; }));
 let AREA_ATUAL = 'tapflow';   // Meu perfil, Configurações e CADASTROS ficam na área de onde se veio
@@ -17036,6 +17038,14 @@ function filtrarNavArea(){
 }
 // S82 · as telas do Financeiro saíram do Manager: o caminho é o `fin/`
 const FIN_SAIU = ['finp','fincr','finre','finpg','fincar','finrec','finprz','finb','finrsv','fincat','finrl','ccp'];
+/** S116 · a Segurança do Trabalho mora no TapSeg (seg/). `extra` = o resto do endereço
+ *  (ex.: `func=<pessoa>&fa=aso`). Sem servidor (arquivo aberto do disco) só avisa. */
+function irParaSeg(extra){
+  if (DEMO || !NO_SERVIDOR){ toast('A Segurança do Trabalho agora fica no TapSeg (seg/).', 'err'); return false; }
+  location.href = '../seg/' + (extra ? '?' + extra : '');
+  return true;
+}
+const segLink = extra => '../seg/' + (extra ? '?' + extra : '');
 function irParaFin(v){
   if (DEMO || !NO_SERVIDOR){ toast('O Financeiro agora fica no TapFin (fin/).', 'err'); return false; }
   location.href = '../fin/?ir=' + encodeURIComponent(v);
@@ -17046,6 +17056,7 @@ function irParaFin(v){
 function irPara(v){
   if (v === 'sair'){ sairDaConta(); return; }
   if (FIN_SAIU.includes(v)){ if (irParaFin(v)) return; v = 'age'; }   // S82
+  if (v === 'rhs'){ if (irParaSeg(RH && RH.aba && RH.aba !== 'painel' ? 'aba=' + encodeURIComponent(RH.aba) : '')) return; v = 'rhf'; }   // S116
   // Estado guardado de outro login, ou endereço colado: cai na primeira tela
   // que a pessoa realmente abre, em vez de numa tela sem menu correspondente.
   const item = NAV.reduce((a,g) => a.concat(g.itens), []).find(i => i.v === v);
@@ -20774,13 +20785,11 @@ async function rhFDocs(c, f){
           + '<button class="btn mini" type="button" data-t="' + t + '">' + (L.length ? 'Gerenciar' : 'Anexar') + '</button></span></div>';
       }).join('') + '</div>'
     + ((D.anteriores || []).length ? '<p class="nota">' + D.anteriores.length + ' versão(ões) anterior(es) guardada(s) — abra o tipo para ver ou restaurar.</p>' : '')
-    // S60 · o ASO mora aqui (era uma aba). As regras são as de sempre: Novo ASO, anular, nada se apaga.
-    + '<div class="secTit" id="rhfdAsoTit">ASO</div><div id="rhfdAso"></div>';
+    // S116 · o ASO foi para o TapSeg (G1; M6 de 20/10), junto do EPI e dos treinamentos
+    + '<div class="secTit" id="rhfdAsoTit">ASO</div><p class="nota" style="margin-top:0">O ASO agora fica no TapSeg, na ficha de segurança da pessoa. '
+    + '<a class="lnk" href="' + esc(segLink('func=' + encodeURIComponent(f.usuario.id) + '&fa=aso')) + '">Abrir o ASO no TapSeg →</a></p>';
   c.querySelectorAll('[data-abrir]').forEach(b => b.addEventListener('click', () => rhfdAbrir(b.dataset.abrir)));
   c.querySelectorAll('[data-t]').forEach(b => b.addEventListener('click', () => rhfdModal(f.usuario.id, f.usuario.nome, b.dataset.t, () => rhFDocs(c, f))));
-  const ca = document.getElementById('rhfdAso');
-  if (ca && f.ficha) rhFAso(ca, f);
-  if (RH.focoAso){ RH.focoAso = false; const t = document.getElementById('rhfdAsoTit'); if (t) t.scrollIntoView({ block: 'start' }); }
 }
 
 
@@ -27918,22 +27927,25 @@ function rhDesenharLista(){
     + esc([f.funcao || (f.tem_ficha ? 'sem função' : 'sem ficha de RH'), f.perfil].filter(Boolean).join(' · '))
     + (f.situacao === 'desligado' ? ' · desligado' : '') + '</small></span>'
     + (f.aguardando ? '<span class="rhN" title="entregas aguardando confirmação">' + f.aguardando + '</span>' : '') + '</button>';
-  el.innerHTML = '<div class="rhBarra" style="margin-bottom:8px"><button class="btn pri" type="button" id="rhFEnt">Nova entrega</button>'
+  el.innerHTML = '<div class="rhBarra" style="margin-bottom:8px"><button class="btn pri" type="button" id="rhFEnt" title="abre no TapSeg">Nova entrega de EPI</button>'
     + (nDesl ? '<label class="chk" style="margin:0"><input type="checkbox" id="rhFDes"' + (RH.desligados ? ' checked' : '') + '> desligados (' + nDesl + ')</label>' : '') + '</div>'
     + (com.length ? com.map(lin).join('') : '<p class="nota">Nenhuma ficha aberta' + (q ? ' com essa busca' : '') + '.</p>')
     + (sem.length ? '<div class="secTit">Sem ficha de RH (' + sem.length + ')</div>' + sem.map(lin).join('') : '');
   el.querySelectorAll('[data-u]').forEach(b => b.addEventListener('click', () => {
     RH.sel = b.dataset.u; RH.fichaAba = 'dados'; pintarRHFuncionarios();
   }));
-  document.getElementById('rhFEnt').addEventListener('click', () => rhNovaEntrega(RH.sel));
+  // S116 · a entrega de EPI é do TapSeg
+  document.getElementById('rhFEnt').addEventListener('click', () => irParaSeg('nova=1' + (RH.sel ? '&func=' + encodeURIComponent(RH.sel) : '')));
   const cd = document.getElementById('rhFDes');
   if (cd) cd.addEventListener('change', () => { RH.desligados = cd.checked; rhDesenharLista(); });
 }
 REPINTA.rhf = rhDesenharLista;
 
-const RH_FICHA_ABAS = [ ['dados','Dados'], ['docs','Documentos'], ['tam','Tamanhos e óculos'], ['prev','Previstos'], ['epis','EPIs'],
-  ['trein','Treinamentos'], ['termo','Termo e assinatura'], ['ponto','Ponto e recibo'], ['pin','PIN'], ['adm','Admissão'],
+// S116 · G1: Tamanhos e óculos, Previstos, EPIs, Treinamentos, Termo e o ASO foram para a
+// ficha de SEGURANÇA no TapSeg (seg/?func=<id>); o botão "Segurança desta pessoa →" leva lá.
+const RH_FICHA_ABAS = [ ['dados','Dados'], ['docs','Documentos'], ['ponto','Ponto e recibo'], ['pin','PIN'], ['adm','Admissão'],
   ['hist','Histórico'] ];
+const RH_FICHA_NO_SEG = { tam:'tam', prev:'prev', epis:'epis', trein:'trein', termo:'termo', aso:'aso' };
 async function rhDesenharFicha(){
   const el = document.getElementById('rhFD'); if (!el) return;
   el.innerHTML = '<p class="nota" style="padding:20px">Carregando a ficha…</p>';
@@ -27941,14 +27953,18 @@ async function rhDesenharFicha(){
   try{ f = RH.ficha = await rpc('tf_rh_funcionario', { p_usuario: RH.sel }); }
   catch(e){ return rhFalha(el, e.message, rhDesenharFicha); }
   const fi = f.ficha;
-  // S60 · a aba ASO virou seção de Documentos: link/atalho antigo cai lá
-  if (RH.fichaAba === 'aso'){ RH.fichaAba = 'docs'; RH.focoAso = true; }
+  // S116 · aba que foi para o TapSeg (atalho antigo): abre lá, na mesma pessoa
+  if (RH_FICHA_NO_SEG[RH.fichaAba]){
+    const fa = RH_FICHA_NO_SEG[RH.fichaAba]; RH.fichaAba = 'dados';
+    if (irParaSeg('func=' + encodeURIComponent(RH.sel) + '&fa=' + fa)) return;
+  }
   const abas = fi ? RH_FICHA_ABAS : [['dados','Dados']];
   if (!fi) RH.fichaAba = 'dados';
   el.innerHTML = '<div class="rhFichaCab"><button class="btn mini rhVolta" type="button">‹ Lista</button>'
     + rhSemaforo(f.semaforo) + '<div><b>' + esc(f.usuario.nome) + '</b><small>' + esc([fi && fi.funcao, f.usuario.perfil,
       f.usuario.email].filter(Boolean).join(' · ')) + (fi && fi.situacao === 'desligado' ? ' · DESLIGADO em ' + esc(dataBR(fi.desligado_em)) : '')
-    + '</small></div></div>'
+    + '</small></div>' + (fi ? '<a class="btn mini" style="margin-left:auto" href="' + esc(segLink('func=' + encodeURIComponent(RH.sel)))
+      + '" title="EPIs, tamanhos, treinamentos, ASO e termo — no TapSeg">Segurança desta pessoa →</a>' : '') + '</div>'
     + (f.semaforo && f.semaforo.motivos && f.semaforo.cor !== 'verde' && fi ? '<div class="rhMotivos">' + f.semaforo.motivos.map(esc).join(' · ') + '</div>' : '')
     + (f.avisos && f.avisos.length ? f.avisos.map(a => '<div class="aviso" style="margin:8px 0">' + esc(a.texto)
       + ' <button class="btn mini" type="button" data-visto="' + esc(a.id) + '">Visto</button></div>').join('') : '')
@@ -27962,8 +27978,7 @@ async function rhDesenharFicha(){
     try{ await rpc('tf_rh_aviso_visto', { p_id: b.dataset.visto }); contarRH(); rhDesenharFicha(); }catch(e){ toast(e.message,'err'); }
   })));
   const c = document.getElementById('rhFC');
-  const fn = { dados:rhFDados, tam:rhFTam, prev:rhFPrev, epis:rhFEpis, termo:rhFTermo, ponto:rhFPonto, pin:rhFPin, hist:rhFHist,
-               aso:rhFAso, trein:rhFTrein, adm:rhFAdm, docs:rhFDocs }[RH.fichaAba] || rhFDados;
+  const fn = { dados:rhFDados, ponto:rhFPonto, pin:rhFPin, hist:rhFHist, adm:rhFAdm, docs:rhFDocs }[RH.fichaAba] || rhFDados;
   try{ await fn(c, f); }catch(e){ rhFalha(c, e.message, rhDesenharFicha); }
 }
 const rhRecarregar = async () => { try{ RH.lista = await rpc('tf_rh_funcionarios', {}); }catch(e){} rhDesenharLista(); await rhDesenharFicha(); };
@@ -27978,7 +27993,7 @@ function rhFDados(c, f){
     + '<div class="campo"><label for="fCel">Celular (WhatsApp)</label><input id="fCel" type="tel" inputmode="tel" maxlength="20" placeholder="(37) 99999-1234" value="'
       + esc(fi.celular ? String(fi.celular).replace(/^55/, '') : '') + '"></div></div>'
     + '<label class="chk"><input type="checkbox" id="fOc"' + (fi.usa_oculos_grau ? ' checked' : '') + '> Usa óculos de grau '
-      + '<span class="nota" style="margin:0">— recebe óculos de segurança com lente graduada (só a versão clara); a receita vai em "Tamanhos e óculos"</span></label>'
+      + '<span class="nota" style="margin:0">— recebe óculos de segurança com lente graduada (só a versão clara); a receita vai no TapSeg (Tamanhos e óculos)</span></label>'
     // S43: periodicidade do PCMSO (item 10) e o checklist de admissão (item 12.4)
     + '<div class="dupla"><div class="campo"><label for="fAsoP">Periodicidade do ASO (meses, pelo PCMSO)</label><input id="fAsoP" type="number" min="1" max="60" value="'
       + esc(fi.aso_periodicidade_meses || 12) + '"></div><div class="campo"><label>&nbsp;</label><label class="chk" style="margin:6px 0 0"><input type="checkbox" id="fCk"'
@@ -30278,14 +30293,12 @@ async function rhKitHistorico(){
 function rhFichaClienteExig(cli){
   const cx = document.getElementById('clRhExig'); if (!cx) return;
   cx.innerHTML = '<div class="secTit">Entrada de inspetores (RH)</div><p class="nota" style="margin-top:0">Documentos que este cliente exige para '
-    + 'liberar a entrada — vale para o kit (Recursos Humanos › Segurança do Trabalho › Kit do cliente).</p>'
+    + 'liberar a entrada — vale para o kit (TapSeg › Segurança do Trabalho › Kit do cliente).</p>'
     + '<div class="linhaBtns" style="margin-top:6px"><button class="btn" type="button" id="clRhExigB">Exigências para entrada</button>'
     + '<button class="btn" type="button" id="clRhKitB">Montar kit</button></div>';
-  document.getElementById('clRhExigB').addEventListener('click', () => rhEditarExigencias(cli, null));
-  document.getElementById('clRhKitB').addEventListener('click', () => {
-    RH.kit = Object.assign(RH.kit || { pessoas: [], data: agSoma(isoHoje(), 1), formato: 'zip' }, { cliente: cli, res: null });
-    RH.aba = 'kit'; irPara('rhs');
-  });
+  // S116 · as duas abrem no TapSeg, já neste cliente
+  document.getElementById('clRhExigB').addEventListener('click', () => irParaSeg('cli=' + encodeURIComponent(cli.id) + '&acao=exig'));
+  document.getElementById('clRhKitB').addEventListener('click', () => irParaSeg('cli=' + encodeURIComponent(cli.id) + '&acao=kit'));
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -30469,6 +30482,9 @@ async function iniciar(){
     const sp = new URLSearchParams(location.search);
     const ir = sp.get('ir'), area = sp.get('area');
     if (ir && FIN_SAIU.includes(ir) && irParaFin(ir)) return;   // S82 · endereço antigo do Financeiro
+    if (ir === 'rhs' && irParaSeg('')) return;   // S116 · endereço antigo da Segurança do Trabalho
+    // S116 · o TapSeg abre a ficha do RH de uma pessoa: `?ir=rhf&func=<id>`
+    if (ir === 'rhf' && sp.get('func')){ RH.sel = sp.get('func'); RH.fichaAba = 'dados'; }
     if (ir && NAV.some(g => (g.itens || []).some(i => i.v === ir))) visao = ir;
     // S101 · CADASTROS abre na cor do módulo que mandou (`area=`), ou na de Cadastros
     if (ir && TELAS_CADASTROS.includes(visao))
