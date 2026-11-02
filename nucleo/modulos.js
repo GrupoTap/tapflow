@@ -56,7 +56,7 @@
     { chave: 'tapflow',   titulo: 'TapFlow',    texto: 'OS, quadros e agenda',          cor: '#1D4ED8', href: 'manager/?ir=adm' },   // S87: abre no quadro da Administrativa
     { chave: 'tapcrm',    titulo: 'TapCRM',     texto: 'Negócios e propostas',          cor: '#C2410C', href: 'manager/?ir=com' },
     { chave: 'tapfin',    titulo: 'TapFin',     texto: 'Financeiro e cartões',          cor: '#15803D', href: 'fin/' },
-    { chave: 'taprh',     titulo: 'TapRH',      texto: 'Pessoal, diárias e ponto',      cor: '#6D28D9', href: 'manager/?ir=rhf' },
+    { chave: 'taprh',     titulo: 'TapRH',      texto: 'Pessoal, diárias e ponto',      cor: '#6D28D9', href: 'rh/' },   // S118 · TapRH 1 em pasta própria
     { chave: 'tapseg',    titulo: 'TapSeg',     texto: 'EPI, ASO e treinamentos',       cor: '#BE123C', href: 'seg/' },   // S116 · TapSeg 1 em pasta própria
     { chave: 'tapdoc',    titulo: 'TapDoc',     texto: 'Preparar a inspeção NR-13',     cor: '#A16207', href: 'doc/' },
     { chave: 'cadastros', titulo: 'Cadastros',  texto: 'Clientes e catálogo',           cor: '#334155', href: 'manager/?ir=cad' },
