@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapGestão 1 · Indicadores</title>
+<title>TapGestão 2 · Indicadores</title>
 <meta name="theme-color" content="#4338CA">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22104%22 fill=%22%231B6FA9%22/%3E%3Ctext x=%22256%22 y=%22350%22 font-family=%22Arial,sans-serif%22 font-size=%22300%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EE%3C/text%3E%3C/svg%3E">
 <link rel="manifest" href="../manifest.webmanifest">
@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all';this.onload=null">
 <!-- ════════════════════════════════════════════════════════════════════════
-     TAPGESTÃO · gestao/index.html — os indicadores da Engetap (GE1, 03/11/2026)
+     TAPGESTÃO · gestao/index.html — os indicadores da Engetap (GE1 e GE2, 03/11/2026)
      ------------------------------------------------------------------------
      Desenho: processos/tapgestao-desenho.md (TG1–TG11). Banco: sql/150 (o módulo)
      + 520 (TapFin), 700 (TapCRM), 307 (TapFlow), 415 (TapDoc): cada módulo faz
@@ -29,10 +29,13 @@
      Quem entra: admin, ou quem o admin marcou com o TapGestão em Pessoas e
      acessos (o banco confere em toda função: tf__gestao_pode).
      Endereços: ?m=AAAA-MM (o mês) e ?aba=mes|ano|metas.
+     GE2 (03/11): o mês em andamento e o futuro sem cor (como no ano), "como é
+     calculado" em cada card, módulo que não respondeu avisado no card (151),
+     Enter grava a meta, setas trocam de aba, uma chamada só ao abrir.
      ════════════════════════════════════════════════════════════════════════ -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N2">
-<script src="../nucleo/config.js?v=N2"></script>
-<script src="../nucleo/nucleo.js?v=N2"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N3">
+<script src="../nucleo/config.js?v=N3"></script>
+<script src="../nucleo/nucleo.js?v=N3"></script>
 <script src="../nucleo/modulos.js?v=M1"></script>
 <style>
 :root{
@@ -72,6 +75,7 @@ main{max-width:1240px;margin:0 auto;padding:20px 18px 60px}
 .chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;border:1px solid var(--rule);background:var(--surface);color:var(--ink-2)}
 .chip.fechado{background:var(--ok-soft);border-color:#B7DEC5;color:var(--ok)}
 .chip.atrasado{background:var(--crit-soft);border-color:#EBC0B6;color:var(--crit)}
+.chip.andamento{border-style:dashed}
 .cab .acoes{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
 .btn{background:var(--surface);border:1px solid var(--rule);color:var(--ink);border-radius:5px;padding:7px 13px;font-weight:600;cursor:pointer}
 .btn:hover{border-color:var(--accent)}
@@ -98,6 +102,13 @@ main{max-width:1240px;margin:0 auto;padding:20px 18px 60px}
 .cor.vermelho{background:var(--crit-soft);color:var(--crit)} .cor.cinza{background:var(--cinza-soft);color:#5F6A70}
 .ind .base{font-size:12px;color:var(--ink-3);overflow-wrap:anywhere}
 .ind .obs{font-size:11.5px;color:var(--ink-3);font-style:italic}
+.ind .erro{font-size:12px;color:var(--crit);background:var(--crit-soft);border-radius:4px;padding:4px 8px}
+.ind .como{font-size:11.5px;color:var(--ink-3)}
+.ind .como summary{cursor:pointer;color:var(--accent-ink);list-style:none;display:inline}
+.ind .como summary::-webkit-details-marker{display:none}
+.ind .como summary::after{content:' ▸'} .ind .como[open] summary::after{content:' ▾'}
+.ind .como p{margin:3px 0 0}
+.ind.parcial{border-left-style:dashed}
 .ind .de{font-size:11px;color:var(--ink-3);margin-top:auto;padding-top:4px;font-family:var(--mono);letter-spacing:.02em}
 .nota{color:var(--ink-3);font-size:12.5px;margin-top:14px;max-width:900px}
 .hist{margin-top:10px;font-size:12.5px;color:var(--ink-2)} .hist li{margin:2px 0}
@@ -150,7 +161,7 @@ td.c.fech{box-shadow:inset 0 -2px 0 var(--mod-claro)}
 
 <div class="topo">
   <div class="marca"><span class="q" id="ico" aria-hidden="true"></span><span>Tap<span>Gestão</span></span></div>
-  <div class="selo" id="selo">GESTÃO · GE1</div>
+  <div class="selo" id="selo">GESTÃO · GE2</div>
   <div class="dir"><span id="eu"></span><button class="lnk" type="button" id="btTrocar">Trocar de módulo</button><a href="../" id="btInicio">Início</a></div>
 </div>
 
@@ -196,7 +207,7 @@ td.c.fech{box-shadow:inset 0 -2px 0 var(--mod-claro)}
 
 <script>
 'use strict';
-const APP_VERSION = 'GE1';   // GE1 (03/11/2026): o módulo TapGestão — painel do mês, ano, metas e fechamento
+const APP_VERSION = 'GE2';   // GE2 (03/11/2026): mês em andamento sem cor, "como é calculado", módulo com erro no card, Enter grava a meta · GE1: o módulo
 const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL = _CFG.SUPABASE_URL || '', SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
@@ -221,6 +232,7 @@ function fmt(v, u, curto){
   v = num(v); if (v === null || isNaN(v)) return null;
   if (u === 'rs'){
     if (curto && Math.abs(v) >= 10000) return 'R$ ' + nf1.format(v / 1000) + ' mil';
+    if (curto) return 'R$ ' + nf0.format(v);
     return Nucleo.util.BRL(v);
   }
   if (u === 'pct') return nf1.format(v) + '%';
@@ -240,7 +252,9 @@ function plural(n, um, varios){ n = Number(n) || 0; return n + ' ' + (n === 1 ? 
 function textoBase(i){
   const b = i.base || {};
   switch (i.id){
-    case 'fat': return plural(b.notas, 'nota emitida', 'notas emitidas');
+    case 'fat': { const partes = [];
+      if (b.pelo_tapfin) partes.push(b.pelo_tapfin + ' pelo TapFin'); if (b.fora_do_tapfin) partes.push(b.fora_do_tapfin + ' fora do TapFin'); if (b.so_no_titulo) partes.push(b.so_no_titulo + ' só no título');
+      return plural(b.notas, 'nota emitida', 'notas emitidas') + (partes.length > 1 ? ' (' + partes.join(', ') + ')' : ''); }
     case 'margem': return 'custo variável ' + Nucleo.util.BRL(b.custo_variavel)
       + (Number(b.sem_tipo) > 0 ? ' · sem tipo de custo: ' + Nucleo.util.BRL(b.sem_tipo) + ' (' + plural(b.sem_tipo_titulos, 'título', 'títulos') + ', fora da conta)' : '');
     case 'fat_pessoa': return !Number(b.pessoas) ? 'nenhuma ficha no TapRH no mês (e nenhum sócio sem ficha em Metas)' : nf0.format(b.pessoas) + ' pessoas: ' + (b.clt||0) + ' CLT, ' + (b.estagio||0) + ' estágio, '
@@ -284,24 +298,31 @@ function gravarEndereco(){
 
 /* ── Mês ─────────────────────────────────────────────────────────────────── */
 let pedidoMes = 0;
-async function carregarMes(){
+async function carregarMes(jPronto){
   const alvo = document.getElementById('grade');
   const meu = ++pedidoMes;
   document.getElementById('mesNome').textContent = MESES[E.mes - 1] + ' ' + E.ano;
   document.getElementById('mesProx').disabled = E.ultimoMes && (E.ano * 12 + E.mes) >= E.ultimoMes;
   alvo.innerHTML = '<p class="carregando">Carregando…</p>';
   document.getElementById('mesAviso').innerHTML = ''; document.getElementById('mesHist').innerHTML = '';
-  let j;
-  try{ j = await rpc('tf_gestao_mes', { p_ano:E.ano, p_mes:E.mes }); }
-  catch(e){ if (meu === pedidoMes) erroEm(alvo, e, carregarMes); return; }
-  if (meu !== pedidoMes) return;
+  let j = jPronto;
+  if (!j){
+    try{ j = await rpc('tf_gestao_mes', { p_ano:E.ano, p_mes:E.mes }); }
+    catch(e){ if (meu === pedidoMes) erroEm(alvo, e, () => carregarMes()); return; }
+    if (meu !== pedidoMes) return;
+  }
+  if (j.hoje) E.hoje = j.hoje;
   pintarMes(j);
 }
+// o mês que ainda não terminou: o número é parcial, então não leva cor (nem no mês, nem no ano)
+function mesParcial(j){ const f = j.fechamento || {}; return !f.fechado && !f.terminou; }
+function mesFuturo(j){ const h = String(E.hoje || ''); return (j.ano * 12 + j.mes) > (Number(h.slice(0, 4)) * 12 + Number(h.slice(5, 7))); }
 function pintarMes(j){
   const f = j.fechamento || {};
   const sit = document.getElementById('mesSit');
   if (f.fechado){ sit.className = 'chip fechado'; sit.textContent = 'Fechado em ' + Nucleo.util.dataBR(f.fechado_em) + (f.fechado_por ? ' por ' + f.fechado_por : ''); }
-  else if (!f.terminou){ sit.className = 'chip'; sit.textContent = 'Mês em andamento · números ao vivo'; }
+  else if (mesFuturo(j)){ sit.className = 'chip'; sit.textContent = 'Mês que ainda não começou'; }
+  else if (!f.terminou){ sit.className = 'chip andamento'; sit.textContent = 'Mês em andamento · números parciais, sem cor'; }
   else if (f.atrasado){ sit.className = 'chip atrasado'; sit.textContent = 'Aberto · o prazo era ' + Nucleo.util.dataBR(f.prazo); }
   else { sit.className = 'chip'; sit.textContent = 'Aberto · fechar até ' + Nucleo.util.dataBR(f.prazo); }
   document.getElementById('btFechar').hidden = !f.pode_fechar;
@@ -311,16 +332,21 @@ function pintarMes(j){
       ? '<b>O fechamento de ' + esc(j.nome) + ' está atrasado</b> (o prazo era o 5º dia útil, ' + esc(Nucleo.util.dataBR(f.prazo)) + '). Confira os números e feche o mês.'
       : '<b>Feche ' + esc(j.nome) + ' até ' + esc(Nucleo.util.dataBR(f.prazo)) + '</b> (5º dia útil). Ao fechar, os números ficam guardados como estão agora.') + '</div>';
   }
-  const lista = j.indicadores || [];
+  const lista = j.indicadores || [], parcial = mesParcial(j), futuro = mesFuturo(j);
+  const comErro = lista.filter(i => i.erro).map(i => i.modulo).filter((m, k, a) => a.indexOf(m) === k);
+  if (comErro.length) document.getElementById('mesAviso').innerHTML += '<div class="aviso erro"><b>' + esc(comErro.join(' e ')) + ' não respondeu.</b> Os outros números estão certos; o deste módulo aparece como "sem dado" até alguém consertar (o erro está no card). Enquanto isso, o mês não fecha.</div>';
   document.getElementById('grade').innerHTML = lista.map(i => {
-    const v = fmt(i.valor, i.unidade), cor = i.cor || 'cinza';
-    return '<article class="ind ' + esc(cor) + '" aria-label="' + esc(i.nome) + '">'
+    const v = fmt(i.valor, i.unidade);
+    const cor = (v === null || parcial) ? 'cinza' : (i.cor || 'cinza');
+    const rot = i.erro ? 'não respondeu' : v === null ? (futuro ? 'ainda não começou' : 'sem dado') : parcial ? 'parcial' : (i.meta ? COR_TXT[cor] : 'sem meta');
+    return '<article class="ind ' + esc(cor) + (parcial ? ' parcial' : '') + '" aria-label="' + esc(i.nome) + '">'
       + '<div class="top"><span class="n">' + esc(String(i.num).padStart(2, '0')) + '</span><h3>' + esc(i.nome) + '</h3></div>'
-      + (v === null ? '<div class="valor sem">sem dado</div>' : '<div class="valor">' + esc(v) + '</div>')
-      + '<div class="meta"><span class="cor ' + esc(cor) + '">' + esc(v === null ? 'sem dado' : (i.meta ? COR_TXT[cor] : 'sem meta')) + '</span>'
+      + (v === null ? '<div class="valor sem">' + (i.erro ? 'sem dado' : futuro ? '—' : 'sem dado') + '</div>' : '<div class="valor">' + esc(v) + '</div>')
+      + '<div class="meta"><span class="cor ' + esc(cor) + '">' + esc(rot) + '</span>'
       + (i.meta ? '<span>Meta: ' + esc(textoMeta(i.meta, i.unidade)) + '</span>' : '') + '</div>'
-      + '<div class="base">' + esc(textoBase(i)) + '</div>'
+      + (i.erro ? '<div class="erro">' + esc(i.modulo) + ' não respondeu: ' + esc(i.erro) + '</div>' : '<div class="base">' + esc(textoBase(i)) + '</div>')
       + (i.obs ? '<div class="obs">' + esc(i.obs) + '</div>' : '')
+      + (i.como ? '<details class="como"><summary>como é calculado</summary><p>' + esc(i.como) + '</p></details>' : '')
       + '<div class="de">' + esc(i.modulo || '') + '</div>'
       + '</article>';
   }).join('') || '<p class="carregando">Nenhum indicador.</p>';
@@ -331,7 +357,7 @@ function pintarMes(j){
 function irMes(d){
   let a = E.ano, m = E.mes + d;
   if (m < 1){ m = 12; a--; } if (m > 12){ m = 1; a++; }
-  if (a < 2021) return;
+  if (a < 2021 || (E.ultimoMes && a * 12 + m > E.ultimoMes)) return;
   E.ano = a; E.mes = m; gravarEndereco(); carregarMes();
 }
 async function fecharMes(btn){
@@ -360,6 +386,7 @@ function reabrirMes(){
           try{ await rpc('tf_gestao_reabrir', { p_ano:E.ano, p_mes:E.mes, p_motivo:mot }); Nucleo.janela.fechar(); toast(nome + ' reaberto.', 'ok'); await carregarMes(); }
           catch(e){ toast(e.message || 'Não consegui reabrir.', 'err'); }
         } } ]);
+  setTimeout(() => { const t = document.getElementById('motReab'); if (t) t.focus(); }, 50);
 }
 
 /* ── Ano ─────────────────────────────────────────────────────────────────── */
@@ -378,7 +405,7 @@ async function carregarAno(){
   const L = j.indicadores || [];
   let h = '<div class="cx ano-tab"><table><thead><tr><th class="nm">Indicador</th>' + MES3.map(m => '<th>' + m + '</th>').join('') + '</tr></thead><tbody>';
   L.forEach(i => {
-    h += '<tr><td class="nm">' + esc(String(i.num).padStart(2, '0') + ' · ' + i.nome) + '<br><span style="font-weight:400;color:var(--ink-3);font-size:11.5px">Meta: ' + esc(textoMeta(i.meta, i.unidade)) + '</span></td>';
+    h += '<tr><td class="nm" title="' + esc(i.como || '') + '">' + esc(String(i.num).padStart(2, '0') + ' · ' + i.nome) + '<br><span style="font-weight:400;color:var(--ink-3);font-size:11.5px">Meta: ' + esc(textoMeta(i.meta, i.unidade)) + '</span></td>';
     i.meses.forEach((m, k) => {
       const v = fmt(m.valor, i.unidade, true), a = fmt(i.anterior[k], i.unidade, true), corr = emAndamento(k);
       h += '<td class="c' + (m.fechado ? ' fech' : '') + '"' + (m.fechado ? ' title="mês fechado"' : corr ? ' title="mês em andamento: sem cor até terminar"' : '') + '><span class="v ' + esc(v === null || corr ? '' : m.cor) + '">' + esc(v === null ? '—' : v) + '</span>'
@@ -386,7 +413,7 @@ async function carregarAno(){
     });
     h += '</tr>';
   });
-  h += '</tbody></table></div><p class="nota">Embaixo de cada número, em cinza, o mesmo mês de ' + esc(E.anoVer - 1) + '. Traço = sem dado. Sublinhado roxo = mês fechado. O mês em andamento fica sem cor até terminar.</p>';
+  h += '</tbody></table></div><p class="nota">Embaixo de cada número, em cinza, o mesmo mês de ' + esc(E.anoVer - 1) + '. Traço = sem dado. Sublinhado roxo = mês fechado. O mês em andamento fica sem cor até terminar. Passe o mouse no nome para ver como é calculado.</p>';
   h += '<div class="ano-cards">' + L.map(i => '<div class="acard"><h3>' + esc(String(i.num).padStart(2, '0') + ' · ' + i.nome) + '</h3><div class="g">'
       + i.meses.map((m, k) => { const v = fmt(m.valor, i.unidade, true), a = fmt(i.anterior[k], i.unidade, true);
           return '<div class="m ' + esc(v === null || emAndamento(k) ? '' : m.cor) + '"><small>' + MES3[k] + (m.fechado ? ' ✓' : '') + '</small><b>' + esc(v === null ? '—' : v) + '</b><small>' + esc(a === null ? '—' : a) + '</small></div>'; }).join('')
@@ -399,6 +426,7 @@ let pedidoMetas = 0;
 async function carregarMetas(){
   const alvo = document.getElementById('metasCorpo'); const meu = ++pedidoMetas;
   document.getElementById('mtNome').textContent = E.anoMetas;
+  document.getElementById('mtProx').disabled = E.hoje && E.anoMetas >= Number(String(E.hoje).slice(0, 4)) + 1;
   alvo.innerHTML = '<p class="carregando">Carregando…</p>';
   let j;
   try{ j = await rpc('tf_gestao_metas', { p_ano:E.anoMetas }); }
@@ -433,8 +461,10 @@ async function carregarMetas(){
     });
     const btn = l.querySelector('.mGravar');
     btn.addEventListener('click', () => _semDuploEnvio_(btn, () => gravarMeta(l)));
+    l.querySelectorAll('input').forEach(inp => inp.addEventListener('keydown', ev => { if (ev.key === 'Enter'){ ev.preventDefault(); btn.click(); } }));
   });
   const bc = document.getElementById('btCfg');
+  document.getElementById('cfgSoc').addEventListener('keydown', ev => { if (ev.key === 'Enter'){ ev.preventDefault(); bc.click(); } });
   bc.addEventListener('click', () => _semDuploEnvio_(bc, async () => {
     const n = parseInt(document.getElementById('cfgSoc').value, 10);
     if (isNaN(n) || n < 0 || n > 20){ toast('Sócios sem ficha: de 0 a 20.', 'err'); return; }
@@ -457,14 +487,14 @@ async function gravarMeta(l){
 }
 
 /* ── abas ────────────────────────────────────────────────────────────────── */
-function irAba(a){
+function irAba(a, jMesPronto){
   E.aba = ['mes','ano','metas'].includes(a) ? a : 'mes';
   document.querySelectorAll('.abas button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.aba === E.aba)));
   document.getElementById('secMes').hidden = E.aba !== 'mes';
   document.getElementById('secAno').hidden = E.aba !== 'ano';
   document.getElementById('secMetas').hidden = E.aba !== 'metas';
   gravarEndereco();
-  if (E.aba === 'mes') carregarMes();
+  if (E.aba === 'mes') carregarMes(jMesPronto);
   if (E.aba === 'ano') carregarAno();
   if (E.aba === 'metas') carregarMetas();
 }
@@ -474,7 +504,12 @@ document.getElementById('mesProx').addEventListener('click', () => irMes(1));
 document.getElementById('anoAnt').addEventListener('click', () => { if (E.anoVer > 2021){ E.anoVer--; carregarAno(); } });
 document.getElementById('anoProx').addEventListener('click', () => { E.anoVer++; carregarAno(); });
 document.getElementById('mtAnt').addEventListener('click', () => { if (E.anoMetas > 2021){ E.anoMetas--; carregarMetas(); } });
-document.getElementById('mtProx').addEventListener('click', () => { E.anoMetas++; carregarMetas(); });
+document.getElementById('mtProx').addEventListener('click', () => { if (!document.getElementById('mtProx').disabled){ E.anoMetas++; carregarMetas(); } });
+document.querySelector('.abas').addEventListener('keydown', ev => {
+  if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+  const ordem = ['mes','ano','metas'], k = ordem.indexOf(E.aba), prox = ordem[(k + (ev.key === 'ArrowRight' ? 1 : ordem.length - 1)) % ordem.length];
+  ev.preventDefault(); irAba(prox); document.querySelector('.abas button[data-aba="' + prox + '"]').focus();
+});
 document.getElementById('btFechar').addEventListener('click', ev => fecharMes(ev.currentTarget));
 document.getElementById('btReabrir').addEventListener('click', reabrirMes);
 
@@ -493,21 +528,23 @@ async function iniciar(){
   const hoje = new Date(); let a = hoje.getFullYear(), m = hoje.getMonth() + 1;
   E.ultimoMes = a * 12 + m;
   const pm = /^(\d{4})-(\d{2})$/.exec(p.get('m') || '');
-  if (pm && Number(pm[2]) >= 1 && Number(pm[2]) <= 12){ E.ano = Number(pm[1]); E.mes = Number(pm[2]); }
+  let jPronto = null;
+  if (pm && Number(pm[2]) >= 1 && Number(pm[2]) <= 12 && Number(pm[1]) >= 2021 && Number(pm[1]) <= 2100){ E.ano = Number(pm[1]); E.mes = Number(pm[2]); }
   else {
+    // o mês passado, se ainda não foi fechado (a resposta é reaproveitada: uma chamada só ao abrir)
     let pa = a, pmes = m - 1; if (pmes < 1){ pmes = 12; pa--; }
     try{
       const j = await rpc('tf_gestao_mes', { p_ano:pa, p_mes:pmes });
       E.hoje = j.hoje;
-      if (!(j.fechamento && j.fechamento.fechado)){ E.ano = pa; E.mes = pmes; } else { E.ano = a; E.mes = m; }
+      if (!(j.fechamento && j.fechamento.fechado)){ E.ano = pa; E.mes = pmes; jPronto = j; } else { E.ano = a; E.mes = m; }
     }catch(e){
       if (/não tem acesso ao TapGestão/i.test(e.message || '')){ erroEm(document.getElementById('grade'), e, iniciar); return; }
       E.ano = a; E.mes = m;
     }
   }
   E.hoje = E.hoje || Nucleo.util.isoHoje();
-  E.anoVer = E.ano; E.anoMetas = E.ano;
-  irAba(p.get('aba') || 'mes');
+  E.anoVer = Math.min(E.ano, a); E.anoMetas = E.ano;
+  irAba(p.get('aba') || 'mes', jPronto);
 }
 (function boot(){
   try{ document.getElementById('selo').textContent = 'GESTÃO · ' + APP_VERSION; }catch(e){}

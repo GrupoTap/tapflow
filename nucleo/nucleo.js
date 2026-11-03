@@ -1,19 +1,20 @@
 /* ============================================================================
- * TAPHUB · NÚCLEO COMUM — N2 (N1 + utilitários + fila de envios)
+ * TAPHUB · NÚCLEO COMUM — N3 (N2 + a digital/rosto destravando o PIN: Passkey 1)
  * ----------------------------------------------------------------------------
  * Código que serve a mais de um módulo e por isso NÃO mora dentro de nenhum:
  * sessão, conexão com o banco, PIN e a trava. Regra de negócio nunca entra
  * aqui (fica no módulo e nas funções tf_*). Sem framework, sem build.
  *
  * COMO UM MÓDULO USA (duas linhas no <head> e uma no boot):
- *   <script src="../nucleo/config.js?v=N2"></script>
- *   <script src="../nucleo/nucleo.js?v=N2"></script>
+ *   <script src="../nucleo/config.js?v=N3"></script>
+ *   <script src="../nucleo/nucleo.js?v=N3"></script>
  *   ...
  *   const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
  *   if (g === 'hub') { irParaHub(Nucleo.recado); return; }     // ANTES do iniciar()
  *
- * O N2 aceita tudo o que o N1 aceitava: página que ainda pede ?v=N1 recebe o
- * N2 (o arquivo é um só) e funciona igual. Os utilitários e a fila do N2 estão
+ * O N3 aceita tudo o que o N2 e o N1 aceitavam: página que ainda pede ?v=N2
+ * ou ?v=N1 recebe o N3 (o arquivo é um só) e funciona igual. O N3 só soma a
+ * digital (Passkey 1) na trava e o Nucleo.confirmarPessoa(). Os utilitários e a fila do N2 estão
  * no fim deste arquivo; o contrato está em processos/nucleo-n2-contrato.md.
  *
  * O ?v= NÃO é enfeite: o service worker do Field guarda tudo o que não é
@@ -37,7 +38,7 @@
   'use strict';
   if (window.Nucleo && window.Nucleo.versao) return;
 
-  var VERSAO = 'N2';
+  var VERSAO = 'N3';
   var SCRIPT = (document.currentScript && document.currentScript.src) || '';
   var RAIZ = SCRIPT ? new URL('../', SCRIPT).href : (location.origin + '/');
   var NO_SERVIDOR = location.protocol === 'http:' || location.protocol === 'https:';
@@ -346,33 +347,539 @@
     });
   }
 
-  /** Cobre a tela e pede o PIN. Resolve quando destravou (ou quando mandou para o login). */
+  /* ══════════════════════════════════════════════════════════════════════════
+   * N3 · PASSKEY 1: a digital (ou o rosto) do aparelho destrava a trava do PIN
+   * Desenho: processos/passkey-desenho.md (decisões 1–12, 03/11/2026).
+   *  · Por aparelho LEMBRADO e opcional: depois de acertar o PIN, pergunta
+   *    "Usar digital neste aparelho?" uma vez. Quem recusa segue só com PIN.
+   *  · O PIN nunca some: a trava tem sempre "Usar PIN".
+   *  · Erro de digital não conta em lugar nenhum (o aparelho limita).
+   *  · O sistema guarda só o identificador e a chave PÚBLICA; a digital, o
+   *    rosto e a chave secreta ficam no aparelho (padrão WebAuthn).
+   *  · Destravar confere NO APARELHO (funciona sem sinal): a assinatura é
+   *    conferida aqui com a chave pública. Com sinal, pergunta antes ao banco se
+   *    a digital ainda vale (removida ou aparelho desconectado = usa o PIN).
+   *  · confirmarPessoa(): a função única que a batida do ponto (modo 'local') e
+   *    as assinaturas (modo 'servidor', conferido pela Edge Function
+   *    confirmar-pessoa) vão chamar na etapa de integração (decisão 10).
+   * ════════════════════════════════════════════════════════════════════════ */
+  var K_DFILA = 'tf_destraves_fila';
+  function b64u(buf) { return b64(buf).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function unb64u(t) { t = String(t || '').replace(/-/g, '+').replace(/_/g, '/'); return unb64(t + '==='.slice((t.length + 3) % 4)); }
+
+  function ehIOS() {
+    var ua = navigator.userAgent || '';
+    return /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+  /** O navegador tem digital/rosto (ou Windows Hello) de verdade neste aparelho? */
+  var suporteMemo = null;
+  function suporteDigital() {
+    if (suporteMemo) return suporteMemo;
+    suporteMemo = (function () {
+      try {
+        if (!window.isSecureContext || !window.PublicKeyCredential || !navigator.credentials ||
+            typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') return Promise.resolve(false);
+        return PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function (s) { return !!s; }, function () { return false; });
+      } catch (e) { return Promise.resolve(false); }
+    })();
+    return suporteMemo;
+  }
+
+  // CBOR mínimo: só para achar a chave pública (COSE) dentro do cadastro.
+  function lerCbor(b, p) {
+    var ini = b[p++], maior = ini >> 5, menor = ini & 31, n = menor, i, l, m, x, y;
+    if (menor === 24) n = b[p++];
+    else if (menor === 25) { n = (b[p] << 8) | b[p + 1]; p += 2; }
+    else if (menor === 26) { n = ((b[p] << 24) >>> 0) + (b[p + 1] << 16) + (b[p + 2] << 8) + b[p + 3]; p += 4; }
+    else if (menor > 26) throw new Error('cbor');
+    if (maior === 0) return [n, p];
+    if (maior === 1) return [-1 - n, p];
+    if (maior === 2) return [b.slice(p, p + n), p + n];
+    if (maior === 3) return [new TextDecoder().decode(b.slice(p, p + n)), p + n];
+    if (maior === 4) { l = []; for (i = 0; i < n; i++) { x = lerCbor(b, p); l.push(x[0]); p = x[1]; } return [l, p]; }
+    if (maior === 5) { m = new Map(); for (i = 0; i < n; i++) { x = lerCbor(b, p); y = lerCbor(b, x[1]); m.set(x[0], y[0]); p = y[1]; } return [m, p]; }
+    if (maior === 7) return [menor === 21 ? true : menor === 20 ? false : null, p];
+    throw new Error('cbor');
+  }
+  /** Do cadastro (attestationObject) tira o identificador e a chave pública COSE. */
+  function lerCadastro(att) {
+    var o = lerCbor(new Uint8Array(att), 0)[0], ad = o.get('authData');
+    if (!(ad[32] & 0x40)) throw new Error('O aparelho não devolveu a chave.');
+    var lc = (ad[53] << 8) | ad[54], cred = ad.slice(55, 55 + lc);
+    var ini = 55 + lc, fim = lerCbor(ad, ini)[1], cose = ad.slice(ini, fim);
+    var alg = lerCbor(cose, 0)[0].get(3);
+    return { id: b64u(cred), k: b64u(cose), alg: alg };
+  }
+  function importarChave(k, alg) {
+    var m = lerCbor(unb64u(k), 0)[0];
+    if (alg === -7) return crypto.subtle.importKey('jwk', { kty: 'EC', crv: 'P-256', x: b64u(m.get(-2)), y: b64u(m.get(-3)), ext: true },
+      { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+    return crypto.subtle.importKey('jwk', { kty: 'RSA', n: b64u(m.get(-1)), e: b64u(m.get(-2)), alg: 'RS256', ext: true },
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
+  }
+  function derParaBruta(der) {
+    if (der[0] !== 0x30) return der;
+    var p = (der[1] & 0x80) ? 2 + (der[1] & 0x7f) : 2, r = new Uint8Array(64);
+    for (var i = 0; i < 2; i++) {
+      var l = der[p + 1], v = der.slice(p + 2, p + 2 + l); p += 2 + l;
+      while (v.length > 32 && v[0] === 0) v = v.slice(1);
+      r.set(v, i * 32 + 32 - v.length);
+    }
+    return r;
+  }
+  /** Confere NO APARELHO a resposta da digital (sem sinal também). */
+  function conferirNoAparelho(dig, desafio, a) {
+    var r = a.response, ad = new Uint8Array(r.authenticatorData), cdb = new Uint8Array(r.clientDataJSON), cd;
+    try { cd = JSON.parse(new TextDecoder().decode(cdb)); } catch (e) { return Promise.resolve(false); }
+    if (cd.type !== 'webauthn.get' || cd.challenge !== b64u(desafio) || cd.origin !== location.origin) return Promise.resolve(false);
+    if (!(ad[32] & 0x01) || !(ad[32] & 0x04)) return Promise.resolve(false);      // presença e verificação (digital/rosto)
+    return Promise.all([crypto.subtle.digest('SHA-256', cdb), crypto.subtle.digest('SHA-256', new TextEncoder().encode(location.hostname)),
+                        importarChave(dig.k, dig.alg)]).then(function (x) {
+      var rp = new Uint8Array(x[1]);
+      for (var i = 0; i < 32; i++) if (rp[i] !== ad[i]) return false;
+      var dados = new Uint8Array(ad.length + 32); dados.set(ad); dados.set(new Uint8Array(x[0]), ad.length);
+      var sig = new Uint8Array(r.signature);
+      return dig.alg === -7
+        ? crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, x[2], derParaBruta(sig), dados)
+        : crypto.subtle.verify({ name: 'RSASSA-PKCS1-v1_5' }, x[2], sig, dados);
+    }).catch(function () { return false; });
+  }
+  /** Pede a digital ao aparelho. Devolve a resposta (ou rejeita com 'cancelou'/'falhou'). */
+  function pedirAoAparelho(dig, desafio) {
+    return navigator.credentials.get({ publicKey: {
+      challenge: desafio, rpId: location.hostname, timeout: 60000, userVerification: 'required',
+      allowCredentials: [{ type: 'public-key', id: unb64u(dig.id) }]
+    } }).then(function (a) {
+      if (!a || a.id !== dig.id) throw new Error('falhou');
+      return a;
+    }, function (e) { throw new Error(e && e.name === 'NotAllowedError' ? 'cancelou' : 'falhou'); });
+  }
+
+  /* ── fila dos destraves sem sinal (para o indicador) ─────────────────────── */
+  function registrarDestrave(metodo, c) {
+    var item = { m: metodo, ap: c && c.ap || null, cr: metodo === 'digital' && c && c.dig ? c.dig.id : null, em: new Date().toISOString() };
+    return rpc('tf_destrave_registrar', { p_metodo: item.m, p_aparelho: item.ap, p_credencial: item.cr }).then(function (r) {
+      esvaziarFilaDestraves(); return r;
+    }, function (e) {
+      if (e.rede) { var f = jget(K_DFILA) || []; f.push(item); lsSet(K_DFILA, JSON.stringify(f.slice(-50))); }
+      throw e;
+    });
+  }
+  function esvaziarFilaDestraves() {
+    var f = jget(K_DFILA) || []; if (!f.length) return;
+    lsDel(K_DFILA);
+    f.forEach(function (x) { rpc('tf_destrave_registrar', { p_metodo: x.m, p_aparelho: x.ap, p_credencial: null, p_em: x.em }).catch(function () {}); });
+  }
+
+  /* ── a tela de trava com digital ──────────────────────────────────────────── */
+  var ICONE_DIGITAL = '<svg aria-hidden="true" viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">' +
+    '<path d="M6.5 8.5a6 6 0 0 1 11 0"/><path d="M5 12.5c0-1 .1-1.8.4-2.6"/><path d="M8 18.5c.9-1.6 1.4-3.6 1.4-6a2.6 2.6 0 0 1 5.2 0c0 1-.1 2-.2 2.9"/>' +
+    '<path d="M12 12.5c0 3.2-.9 6-2.6 8"/><path d="M14 18.3c-.3 1-.7 1.9-1.2 2.7"/><path d="M17.3 11.4c.2.7.2 1.3.2 1.6 0 2-.3 3.8-.9 5.5"/><path d="M7.4 21c.4-.5.7-1 1-1.5"/></svg>';
+
+  /**
+   * Abre a tela que confirma a pessoa: digital (se este aparelho tem) com
+   * "Usar PIN" sempre à vista, ou o teclado do PIN.
+   * o: { titulo, sub, dig (cfg.dig ou null), digital(t) → Promise<{ok,msg?,sair?,recado?}>,
+   *      pin(pin,t) → Promise<{ok,msg?,sair?,recado?}>, links: [{txt, fn}] }
+   * Resolve true quando confirmou; false quando cancelou.
+   */
+  function telaConfirmar(o) {
+    return new Promise(function (fim) {
+      var t = abrirTela({ titulo: o.titulo, sub: o.sub, links: (o.links || []).map(function (l) {
+        return { txt: l.txt, fn: function (h) { if (l.cancela) { h.cancelar(); acabou(false); } else l.fn(h); } };
+      }) });
+      var feito = false;
+      function acabou(v) { if (feito) return; feito = true; t.fechar(); fim(v); }
+      var el = t.el, tec = el.querySelector('#tfPinTec'), pts = el.querySelector('#tfPinPts');
+      var bloco = null;
+      if (o.dig) {
+        bloco = document.createElement('div');
+        bloco.className = 'tf-dig-bloco';
+        bloco.innerHTML = '<button type="button" class="tf-bt pri tf-dig" id="tfDigBt">' + ICONE_DIGITAL + '<span>Usar digital</span></button>' +
+          '<button type="button" class="tf-bt tf-usar-pin" id="tfUsarPin">Usar PIN</button>';
+        tec.parentNode.insertBefore(bloco, tec);
+        var alt = document.createElement('button');
+        alt.type = 'button'; alt.className = 'tf-link tf-voltar-dig'; alt.id = 'tfVoltarDig'; alt.textContent = 'Usar digital';
+        tec.parentNode.insertBefore(alt, tec.nextSibling);
+      }
+      function modo(m) {
+        if (!bloco) return;
+        var dig = m === 'digital';
+        bloco.hidden = !dig; tec.hidden = dig; pts.hidden = dig;
+        el.querySelector('#tfVoltarDig').hidden = dig;
+        try { (dig ? el.querySelector('#tfDigBt') : el.querySelector('.tf-k')).focus(); } catch (e) {}
+      }
+      var tentando = false;
+      function tentarDigital() {
+        if (tentando || feito) return;
+        tentando = true; t.msg('Toque no sensor ou olhe para a câmera…');
+        o.digital(t).then(function (r) {
+          tentando = false;
+          if (r.ok) return acabou(true);
+          t.msg(r.msg || '', !!r.msg);
+          if (r.sair) setTimeout(function () { sairParaLogin(r.recado); }, 900);
+          if (r.semDigital) { bloco.hidden = true; bloco = null; tec.hidden = false; pts.hidden = false; el.querySelector('#tfVoltarDig').hidden = true; }
+        }, function () { tentando = false; t.msg('Não reconheceu. Tente de novo ou use o PIN.', true); });
+      }
+      if (bloco) {
+        el.querySelector('#tfDigBt').addEventListener('click', tentarDigital);   // o clique é o "gesto" que o iPhone exige
+        el.querySelector('#tfUsarPin').addEventListener('click', function () { t.msg(''); modo('pin'); });
+        el.querySelector('#tfVoltarDig').addEventListener('click', function () { t.msg(''); modo('digital'); });
+        modo('digital');
+        if (o.autoDigital) setTimeout(tentarDigital, 250);                       // Android e computador abrem sozinhos
+      }
+      (function laco() {
+        t.pin().then(function (pin) {
+          if (pin === null || feito) return;
+          t.ocupado(true); t.msg('');
+          o.pin(pin, t).then(function (r) {
+            t.ocupado(false);
+            if (r.ok) return acabou(true);
+            t.limpar(); t.msg(r.msg || '', true);
+            if (r.sair) { setTimeout(function () { sairParaLogin(r.recado); }, 900); return; }
+            laco();
+          }, function (e) { t.ocupado(false); t.limpar(); t.msg(limpaMsg(e && e.message) || 'Não deu para conferir.', true); laco(); });
+        });
+      })();
+    });
+  }
+
+  /** Destravar com a digital: confere no aparelho; com sinal, o banco diz se ainda vale. */
+  function digitalDestravar(c, s) {
+    var desafio = crypto.getRandomValues(new Uint8Array(32));
+    return pedirAoAparelho(c.dig, desafio).then(function (a) {
+      return conferirNoAparelho(c.dig, desafio, a).then(function (ok) {
+        if (!ok) return { ok: false, msg: 'A resposta do aparelho não conferiu. Use o PIN.' };
+        return registrarDestrave('digital', c).then(function (r) {
+          if (r && r.digital_ativa === false) {
+            delete c.dig; gravarCfg(s.email, c);
+            return { ok: false, semDigital: true, msg: 'A digital deste aparelho foi removida. Use o PIN.' };
+          }
+          return { ok: true };
+        }, function (e) {
+          if (e.status === 401) return { ok: false, sair: true, recado: 'Sua sessão expirou. Entre de novo.' };
+          return { ok: true };                                // sem sinal: vale a conferência do aparelho
+        });
+      });
+    }, function (e) {
+      return { ok: false, msg: e.message === 'cancelou' ? 'Não reconheceu ou foi cancelado. Toque em "Usar digital" de novo ou use o PIN.' : 'Não reconheceu. Tente de novo ou use o PIN.' };
+    });
+  }
+
+  /** Cobre a tela e pede a digital ou o PIN. Resolve quando destravou (ou quando mandou para o login). */
   var destravando = null;
   function pedirDestrave() {
     if (destravando) return destravando;
     var s = sessao(), c = cfgDe(s.email);
     lsSet(K_TRAVADO, '1');
-    var t = abrirTela({
-      titulo: primeiroNome(s) + ', digite seu PIN',
-      links: [
-        { txt: 'Esqueci o PIN (entrar com e-mail e senha)', fn: function () { sairParaLogin('Entre com e-mail e senha. Se esqueceu o PIN, peça para o RH liberar.'); } },
-        { txt: 'Não é você? Trocar de conta', fn: function () { sairParaLogin(''); } }
-      ]
-    });
-    destravando = (function laco() {
-      return t.pin().then(function (pin) {
-        if (pin === null) return false;
-        t.ocupado(true); t.msg('');
-        return conferir(pin, c, s).then(function (r) {
-          t.ocupado(false);
-          if (r.ok) { destravar(); t.fechar(); return true; }
-          t.limpar(); t.msg(r.msg || '', true);
-          if (r.sair) { setTimeout(function () { sairParaLogin(r.recado); }, 900); return false; }
-          return laco();
-        });
+    var pinUsado = null;
+    destravando = suporteDigital().then(function (sup) {
+      var dig = sup && c && c.dig ? c.dig : null;
+      return telaConfirmar({
+        titulo: primeiroNome(s) + (dig ? ', confirme que é você' : ', digite seu PIN'),
+        // iPhone/iPad: o Safari só abre a digital/o rosto com um toque na tela; nos outros, abre sozinho
+        dig: dig, autoDigital: !ehIOS(),
+        digital: function () { return digitalDestravar(c, s); },
+        pin: function (pin) {
+          return conferir(pin, c, s).then(function (r) {
+            if (r.ok) { pinUsado = pin; registrarDestrave('pin', c).catch(function () {}); }
+            return r;
+          });
+        },
+        links: [
+          { txt: 'Esqueci o PIN (entrar com e-mail e senha)', fn: function () { sairParaLogin('Entre com e-mail e senha. Se esqueceu o PIN, peça para o RH liberar.'); } },
+          { txt: 'Não é você? Trocar de conta', fn: function () { sairParaLogin(''); } }
+        ]
       });
-    })().then(function (v) { destravando = null; return v; }, function (e) { destravando = null; throw e; });
+    }).then(function (ok) {
+      if (ok) {
+        destravar();
+        if (pinUsado) oferecerDigital(s, cfgDe(s.email), pinUsado);
+      }
+      return ok;
+    }).then(function (v) { destravando = null; return v; }, function (e) { destravando = null; throw e; });
     return destravando;
+  }
+
+  /* ── cadastrar a digital neste aparelho ──────────────────────────────────── */
+  /** Tela simples com botões que agem DENTRO do clique (o iPhone exige o gesto). */
+  function telaBotoes(titulo, texto, botoes) {
+    return new Promise(function (fim) {
+      fecharTela();
+      var s = sessao(), el = document.createElement('div');
+      el.id = 'tfPin'; el.className = 'tf-pin';
+      el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', titulo);
+      el.style.cssText = 'position:fixed;top:0;right:0;bottom:0;left:0;z-index:2147483000;background:#0E1621;color:#E8EEF5;overflow:auto';
+      el.innerHTML = '<div class="tf-pin-in"><div class="tf-logo" aria-hidden="true">T</div>' +
+        '<div class="tf-marca"><span>Tap</span><b>Hub</b></div>' +
+        '<div class="tf-quem"><span class="tf-av" aria-hidden="true">' + esc(iniciais(s)) + '</span>' +
+        '<div class="tf-tit">' + esc(titulo) + '</div><div class="tf-sub">' + esc(texto) + '</div></div>' +
+        '<div class="tf-msg" id="tfPinMsg" role="alert" aria-live="assertive"></div>' +
+        '<div class="tf-botoes">' + botoes.map(function (b, i) {
+          return '<button type="button" class="tf-bt' + (b.pri ? ' pri' : '') + '" data-b="' + i + '">' + (b.icone ? ICONE_DIGITAL : '') + '<span>' + esc(b.txt) + '</span></button>';
+        }).join('') + '</div></div>';
+      document.body.appendChild(el);
+      document.documentElement.setAttribute('data-tf-trava', '1');
+      tela = { el: el, teclado: function () {}, foco: null };
+      var h = { msg: function (t, e) { var m = el.querySelector('#tfPinMsg'); m.textContent = t || ''; m.className = 'tf-msg' + (e ? ' erro' : ''); },
+                fechar: function (v) { fecharTela(); fim(v); }, el: el };
+      el.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('button[data-b]') : null;
+        if (b && !b.disabled) botoes[Number(b.getAttribute('data-b'))].fn(h, b);
+      });
+      try { el.querySelector('button').focus(); } catch (e) {}
+    });
+  }
+
+  /** Cria a chave no aparelho (pede a digital) e grava a parte PÚBLICA no banco. */
+  function cadastrarDigital(s, c, pin) {
+    var desafio = crypto.getRandomValues(new Uint8Array(32));
+    var usuario = new TextEncoder().encode(String(c.ap).slice(0, 64));      // o nº do aparelho, não dado pessoal
+    return navigator.credentials.create({ publicKey: {
+      rp: { id: location.hostname, name: 'TapFlow' },
+      user: { id: usuario, name: s.email || 'tapflow', displayName: s.nome || s.email || 'TapFlow' },
+      challenge: desafio, timeout: 60000, attestation: 'none',
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' }
+    } }).then(function (cred) {
+      var d = lerCadastro(cred.response.attestationObject);
+      if (d.alg !== -7 && d.alg !== -257) throw new Error('Este aparelho usa um tipo de chave que o sistema não aceita.');
+      return rpc('tf_digital_cadastrar', { p_aparelho: c.ap, p_credencial: d.id, p_chave: d.k, p_alg: d.alg, p_pin: pin }).then(function (r) {
+        if (r && r.status === 'ok') {
+          var n = cfgDe(s.email) || c; n.dig = d; delete n.digNao; gravarCfg(s.email, n);
+          return { status: 'ok' };
+        }
+        return r || { status: 'erro' };
+      });
+    }, function (e) {
+      if (e && e.name === 'InvalidStateError') throw new Error('Este aparelho já tem uma digital do TapFlow. Remova em "Meus aparelhos e digital" e cadastre de novo.');
+      throw new Error(e && e.name === 'NotAllowedError' ? 'Cancelado. Nada foi cadastrado.' : 'O aparelho não conseguiu cadastrar a digital.');
+    });
+  }
+
+  /** Depois de um PIN certo: "Usar digital neste aparelho?" — uma vez por aparelho. */
+  function oferecerDigital(s, c, pin) {
+    if (!c || !c.ap || c.dig || c.digNao || lsGet(K_EFEMERO) === '1' || navigator.onLine === false) return Promise.resolve('nao');
+    return suporteDigital().then(function (sup) {
+      if (!sup) return 'nao';
+      return rpc('tf_digital_situacao', { p_aparelho: c.ap }).then(function (sit) {
+        if (!sit || !sit.aparelho_ok || sit.digital_aqui) return 'nao';
+        if (sit.precisa_autorizacao) {
+          // já usou digital em outro aparelho: aparelho novo só com liberação (não insiste toda vez)
+          if (ssGet('tf_dig_pedido') === '1' || sit.pedido_pendente) return 'nao';
+          ssSet('tf_dig_pedido', '1');
+          return telaBotoes('Digital em aparelho novo',
+            'Você já usou a digital em outro aparelho. Para cadastrar neste, o Bruno ou o Fernando precisam liberar (troca ou perda de celular).',
+            [{ txt: 'Pedir a liberação', pri: true, fn: function (h, b) {
+                b.disabled = true;
+                rpc('tf_digital_pedir').then(function () { h.fechar('pedido'); toast('Pedido enviado. Quando liberarem, abra "Meus aparelhos e digital".', 'ok'); },
+                  function () { b.disabled = false; h.msg('Não deu para pedir agora. Tente de novo.', true); });
+              } },
+             { txt: 'Agora não (seguir com o PIN)', fn: function (h) { h.fechar('nao'); } }]);
+        }
+        return telaBotoes('Usar digital neste aparelho?',
+          'Na próxima vez, destrave com a digital ou o rosto, em vez de digitar o PIN. O PIN continua valendo. A sua digital não sai do aparelho: o sistema guarda só uma chave.',
+          [{ txt: 'Usar digital', pri: true, icone: true, fn: function (h, b) {
+              b.disabled = true; h.msg('Toque no sensor ou olhe para a câmera…');
+              cadastrarDigital(s, c, pin).then(function (r) {
+                if (r.status === 'ok') { h.fechar('ok'); toast('Digital cadastrada neste aparelho.', 'ok'); return; }
+                b.disabled = false;
+                h.msg(r.status === 'precisa_autorizacao' ? 'Este aparelho precisa de liberação do Bruno ou do Fernando.'
+                      : r.status === 'bloqueado' ? 'PIN travado. Tente mais tarde.' : 'Não deu para cadastrar. Tente de novo.', true);
+              }, function (e) { b.disabled = false; h.msg(e.message, true); });
+            } },
+           { txt: 'Não, seguir só com o PIN', fn: function (h) {
+              var n = cfgDe(s.email) || c; n.digNao = true; gravarCfg(s.email, n); h.fechar('nao');
+            } }]);
+      }, function () { return 'nao'; });
+    });
+  }
+
+  /* ── "Meus aparelhos e digital" (aberta pelo nome no topo do hub) ───────── */
+  function quando(t) { try { return new Date(t).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } }
+  function meusAparelhos() {
+    var s = sessao(), c = cfgDe(s.email) || null;
+    fecharTela();
+    var el = document.createElement('div');
+    el.id = 'tfPin'; el.className = 'tf-pin tf-meus';
+    el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', 'Meus aparelhos e digital');
+    el.style.cssText = 'position:fixed;top:0;right:0;bottom:0;left:0;z-index:2147483000;background:#0E1621;color:#E8EEF5;overflow:auto';
+    el.innerHTML = '<div class="tf-pin-in tf-meus-in"><div class="tf-meus-topo"><div class="tf-tit">Meus aparelhos e digital</div>' +
+      '<button type="button" class="tf-link" id="tfMeusFechar">Fechar</button></div>' +
+      '<div class="tf-msg" id="tfPinMsg" role="status" aria-live="polite"></div><div id="tfMeusCorpo" class="tf-meus-corpo">Carregando…</div></div>';
+    document.body.appendChild(el);
+    document.documentElement.setAttribute('data-tf-trava', '1');
+    var teclado = function (e) { if (e.key === 'Escape') fechar(); };
+    tela = { el: el, teclado: teclado, foco: document.activeElement };
+    document.addEventListener('keydown', teclado, true);
+    function fechar() { fecharTela(); }
+    function msg(t, e) { var m = el.querySelector('#tfPinMsg'); m.textContent = t || ''; m.className = 'tf-msg' + (e ? ' erro' : ''); }
+    el.querySelector('#tfMeusFechar').addEventListener('click', fechar);
+    el.querySelector('#tfMeusFechar').focus();
+
+    function desenhar() {
+      c = cfgDe(s.email) || null;
+      var corpo = el.querySelector('#tfMeusCorpo');
+      Promise.all([rpc('tf_minhas_digitais'), suporteDigital()]).then(function (x) {
+        var d = x[0] || {}, sup = x[1], aqui = c && c.ap ? (d.aparelhos || []).filter(function (a) { return a.id === c.ap; })[0] : null;
+        var h = '';
+        // este aparelho
+        h += '<section class="tf-meus-sec"><h3>Este aparelho</h3>';
+        if (!aqui) h += '<p>Este aparelho não está lembrado. A digital só funciona em aparelho lembrado: saia, entre com e-mail e senha e escolha "Lembrar este aparelho".</p>';
+        else if (!sup) h += '<p>Este navegador não tem digital, rosto ou Windows Hello disponível. Continue com o PIN.</p>';
+        else if (aqui.digital) h += '<p><b>Digital ligada</b> desde ' + esc(quando(aqui.digital_em)) + '. A trava pede a digital; o PIN continua valendo.</p>' +
+          '<button type="button" class="tf-bt" data-acao="remover" data-ap="' + esc(aqui.id) + '">Remover a digital deste aparelho</button>';
+        else if (d.ja_cadastrou && !d.liberada) h += d.pedido_pendente
+          ? '<p>Pedido de liberação enviado. Quando o Bruno ou o Fernando liberarem, volte aqui para cadastrar (a liberação vale 24 horas).</p>'
+          : '<p>Você já usou a digital em outro aparelho. Para cadastrar neste, o Bruno ou o Fernando precisam liberar.</p>' +
+            '<button type="button" class="tf-bt pri" data-acao="pedir">Pedir a liberação</button>';
+        else h += '<p>' + (d.liberada ? 'Liberado para cadastrar a digital neste aparelho. ' : '') + 'Destrave com a digital ou o rosto em vez de digitar o PIN.</p>' +
+          '<button type="button" class="tf-bt pri" data-acao="cadastrar">' + ICONE_DIGITAL + '<span>Usar digital neste aparelho</span></button>';
+        h += '</section>';
+        // a lista
+        h += '<section class="tf-meus-sec"><h3>Aparelhos lembrados</h3>';
+        if (!(d.aparelhos || []).length) h += '<p>Nenhum.</p>';
+        (d.aparelhos || []).forEach(function (a) {
+          var meu = c && c.ap === a.id;
+          h += '<div class="tf-ap"><div><b>' + esc(a.nome || 'Aparelho') + '</b>' + (meu ? ' <span class="tf-tag">este</span>' : '') +
+            '<div class="tf-ap-sub">' + (a.digital ? 'Com digital · ' : 'Sem digital · ') + 'último uso ' + esc(quando(a.ultimo_uso || a.criado_em)) + '</div></div>' +
+            '<div class="tf-ap-bts">' + (a.digital && !meu ? '<button type="button" class="tf-link" data-acao="remover" data-ap="' + esc(a.id) + '">Remover digital</button>' : '') +
+            (!meu ? '<button type="button" class="tf-link" data-acao="desconectar" data-ap="' + esc(a.id) + '">Desconectar</button>' : '') + '</div></div>';
+        });
+        h += '<p class="tf-ap-sub">Perdeu o celular? Desconecte-o aqui: ele volta a pedir e-mail e senha, e a digital dele é apagada. ' +
+          'O sistema guarda só uma chave do aparelho, nunca a sua digital ou o seu rosto.</p></section>';
+        corpo.innerHTML = h;
+      }, function (e) {
+        corpo.innerHTML = '<p>Não deu para abrir agora' + (e && e.rede ? ' (sem sinal)' : '') + '.</p><button type="button" class="tf-bt" data-acao="tentar">Tentar de novo</button>';
+      });
+    }
+    // ação que apaga pede um 2º toque no mesmo botão (sem janela do navegador, que trava o app)
+    function certeza(b, txt) {
+      if (b.dataset.certo === '1') return true;
+      b.dataset.certo = '1'; b.textContent = txt; b.classList.add('tf-certo');
+      setTimeout(function () { if (b.isConnected) { delete b.dataset.certo; desenhar(); } }, 5000);
+      return false;
+    }
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('button[data-acao]') : null; if (!b || b.disabled) return;
+      var acao = b.getAttribute('data-acao'), ap = b.getAttribute('data-ap');
+      if (acao === 'tentar') return desenhar();
+      if (acao === 'pedir') {
+        b.disabled = true;
+        return rpc('tf_digital_pedir').then(function () { msg('Pedido enviado.'); desenhar(); }, function (x) { b.disabled = false; msg(limpaMsg(x.message) || 'Não deu.', true); });
+      }
+      if (acao === 'remover') {
+        if (!certeza(b, 'Toque de novo para remover')) return;
+        b.disabled = true;
+        return rpc('tf_digital_remover', { p_aparelho: ap }).then(function () {
+          if (c && c.ap === ap && c.dig) { delete c.dig; c.digNao = true; gravarCfg(s.email, c); }
+          msg('Digital removida.'); desenhar();
+        }, function (x) { b.disabled = false; msg(limpaMsg(x.message) || 'Não deu.', true); });
+      }
+      if (acao === 'desconectar') {
+        if (!certeza(b, 'Toque de novo para desconectar')) return;
+        b.disabled = true;
+        return rpc('tf_aparelho_revogar', { p_aparelho: ap }).then(function () { msg('Aparelho desconectado.'); desenhar(); },
+          function (x) { b.disabled = false; msg(limpaMsg(x.message) || 'Não deu.', true); });
+      }
+      if (acao === 'cadastrar') {
+        // a digital é cadastrada DENTRO deste clique (o iPhone exige); antes, o PIN
+        fecharTela();
+        var pinT = abrirTela({ titulo: 'Digite seu PIN', sub: 'Para ligar a digital neste aparelho.',
+          links: [{ txt: 'Cancelar', fn: function (h) { h.cancelar(); } }] });
+        (function laco() {
+          pinT.pin().then(function (pin) {
+            if (pin === null) { pinT.fechar(); return meusAparelhos(); }
+            pinT.ocupado(true);
+            rpc('tf_meu_pin_conferir', { p_pin: pin, p_aparelho: c.ap }).then(function (j) {
+              pinT.ocupado(false);
+              if (!j || j.status !== 'ok') {
+                pinT.limpar(); pinT.msg(j && j.status === 'pin_errado' ? 'PIN errado. Restam ' + j.restantes + ' tentativas.'
+                  : j && j.status === 'bloqueado' ? 'PIN travado até ' + horaDe(j.ate) + '.' : 'Não deu para conferir.', true);
+                return laco();
+              }
+              pinT.fechar();
+              telaBotoes('Ligar a digital', 'Toque em "Usar digital" e confirme com a digital ou o rosto.',
+                [{ txt: 'Usar digital', pri: true, icone: true, fn: function (h, bt) {
+                    bt.disabled = true; h.msg('Toque no sensor ou olhe para a câmera…');
+                    cadastrarDigital(s, c, pin).then(function (r) {
+                      if (r.status === 'ok') { h.fechar('ok'); meusAparelhos(); toast('Digital cadastrada neste aparelho.', 'ok'); return; }
+                      bt.disabled = false;
+                      h.msg(r.status === 'precisa_autorizacao' ? 'Este aparelho precisa de liberação do Bruno ou do Fernando.' : 'Não deu para cadastrar.', true);
+                    }, function (x) { bt.disabled = false; h.msg(x.message, true); });
+                  } },
+                 { txt: 'Cancelar', fn: function (h) { h.fechar('nao'); meusAparelhos(); } }]);
+            }, function (x) { pinT.ocupado(false); pinT.limpar(); pinT.msg(x.rede ? 'Sem sinal.' : limpaMsg(x.message), true); laco(); });
+          });
+        })();
+      }
+    });
+    desenhar();
+  }
+
+  /* ── confirmarPessoa: a função única (decisão 10: a batida e as assinaturas chamam) ── */
+  /**
+   * Nucleo.confirmarPessoa({ modo, finalidade, referencia, titulo, sub })
+   *   modo 'local'    → confere no aparelho (funciona sem sinal). Para a batida do ponto.
+   *   modo 'servidor' → a digital é conferida pela Edge Function confirmar-pessoa e o PIN
+   *                     pelo banco; a confirmação fica gravada com a hora do servidor.
+   *                     Para as assinaturas (EPI, espelho e Termo Mensal do ponto).
+   * Resolve: { ok:true, metodo:'digital'|'pin', aparelho, em, offline?, confirmacao? (servidor) }
+   *       ou { ok:false, cancelado:true } · { ok:false, semSinal:true } (servidor sem sinal: fica pendente)
+   * A digital só vale num aparelho cadastrado em nome da pessoa (decisão 6).
+   */
+  function confirmarPessoa(o) {
+    o = o || {};
+    var modoS = o.modo === 'servidor', s = sessao(), c = cfgDe(s.email);
+    var fin = String(o.finalidade || (modoS ? '' : 'local'));
+    if (modoS && !/^[a-z_]{2,30}$/.test(fin)) return Promise.reject(new Error('confirmarPessoa: finalidade inválida.'));
+    if (modoS && navigator.onLine === false) return Promise.resolve({ ok: false, semSinal: true });
+    var res = null;
+    return suporteDigital().then(function (sup) {
+      var dig = sup && c && c.dig ? c.dig : null;
+      return telaConfirmar({
+        titulo: o.titulo || 'Confirme que é você', sub: o.sub || '', dig: dig, autoDigital: false,
+        digital: function () {
+          if (!modoS) {
+            var d = crypto.getRandomValues(new Uint8Array(32));
+            return pedirAoAparelho(dig, d).then(function (a) {
+              return conferirNoAparelho(dig, d, a).then(function (ok) {
+                if (!ok) return { ok: false, msg: 'A resposta do aparelho não conferiu. Use o PIN.' };
+                res = { ok: true, metodo: 'digital', aparelho: c.ap, em: new Date().toISOString(), offline: navigator.onLine === false };
+                return { ok: true };
+              });
+            }, function () { return { ok: false, msg: 'Não reconheceu. Tente de novo ou use o PIN.' }; });
+          }
+          return rpc('tf_digital_desafio', { p_finalidade: fin, p_referencia: o.referencia || null }).then(function (x) {
+            return pedirAoAparelho(dig, unb64u(x.desafio)).then(function (a) {
+              var cfg = cfgDoBanco(), h = { apikey: cfg.anon, 'Content-Type': 'application/json', Authorization: 'Bearer ' + sessao().token };
+              return fetch(cfg.url + '/functions/v1/confirmar-pessoa', { method: 'POST', headers: h, signal: comPrazo(20000),
+                body: JSON.stringify({ desafio: x.id, credencial: a.id, cliente: b64u(a.response.clientDataJSON),
+                  autenticador: b64u(a.response.authenticatorData), assinatura: b64u(a.response.signature) }) })
+                .then(function (r) { return r.json().catch(function () { return {}; }); })
+                .then(function (j) {
+                  if (!j || !j.ok) return { ok: false, msg: (j && j.erro) || 'O servidor não confirmou. Use o PIN.' };
+                  res = { ok: true, metodo: 'digital', aparelho: c.ap, em: j.em, confirmacao: j.confirmacao };
+                  return { ok: true };
+                }, function () { return { ok: false, msg: 'Sem sinal. A assinatura fica pendente até ter sinal.' }; });
+            }, function () { return { ok: false, msg: 'Não reconheceu. Tente de novo ou use o PIN.' }; });
+          }, function (e) { return { ok: false, msg: e.rede ? 'Sem sinal. A assinatura fica pendente até ter sinal.' : limpaMsg(e.message) }; });
+        },
+        pin: function (pin) {
+          if (!modoS) return conferir(pin, c, s).then(function (r) {
+            if (r.ok) res = { ok: true, metodo: 'pin', aparelho: c && c.ap || null, em: new Date().toISOString(), offline: !!r.local };
+            return r;
+          });
+          return rpc('tf_confirmar_pin', { p_pin: pin, p_aparelho: c && c.ap || null, p_finalidade: fin, p_referencia: o.referencia || null }).then(function (j) {
+            if (j && j.status === 'ok') { res = { ok: true, metodo: 'pin', aparelho: c && c.ap || null, em: j.em, confirmacao: j.confirmacao }; return { ok: true }; }
+            if (j && j.status === 'pin_errado') return { ok: false, msg: 'PIN errado. Restam ' + j.restantes + ' tentativas.' };
+            if (j && j.status === 'bloqueado') return { ok: false, msg: 'PIN travado até ' + horaDe(j.ate) + '.' };
+            return { ok: false, msg: 'Crie o seu PIN no início do TapHub.' };
+          }, function (e) { return { ok: false, msg: e.rede ? 'Sem sinal. A assinatura fica pendente até ter sinal.' : limpaMsg(e.message) }; });
+        },
+        links: [{ txt: 'Cancelar', cancela: true }]
+      });
+    }).then(function (ok) { return ok && res ? res : { ok: false, cancelado: true }; });
   }
 
   /* ── fluxo de entrada (hub): criar PIN e lembrar o aparelho ────────────── */
@@ -406,7 +913,11 @@
     return rpc('tf_aparelho_registrar', { p_nome: nomeDoAparelho() }).then(function (ap) {
       lsDel(K_EFEMERO);
       var p = window.crypto && crypto.subtle ? guardarResumo(s.email, ap, pin) : (gravarCfg(s.email, { ap: ap }), Promise.resolve());
-      return p.catch(function () { gravarCfg(s.email, { ap: ap }); }).then(function () { destravar(); return 'ok'; });
+      return p.catch(function () { gravarCfg(s.email, { ap: ap }); }).then(function () {
+        destravar();
+        // N3: logo depois de lembrar o aparelho com o PIN, a pergunta da digital (uma vez)
+        return oferecerDigital(s, cfgDe(s.email), pin).catch(function () {}).then(function () { return 'ok'; });
+      });
     });
   }
   function naoLembrar() { lsSet(K_EFEMERO, '1'); destravar(); return 'efemero'; }
@@ -534,6 +1045,10 @@
     },
     fluxoEntrada: fluxoEntrada,
     pedirDestrave: pedirDestrave,
+    // N3 · Passkey 1
+    confirmarPessoa: confirmarPessoa,
+    meusAparelhos: meusAparelhos,
+    suporteDigital: suporteDigital,
     travarAgora: function () { lsSet(K_TRAVADO, '1'); if (cfgDe(sessao().email)) pedirDestrave(); },
     configurar: function (o) { conf.url = o.url || conf.url; conf.anon = o.anon || conf.anon; if (o.app) conf.app = o.app; },
     rpc: rpc, api: api, sessao: sessao, primeiroNome: primeiroNome,
