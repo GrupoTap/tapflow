@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 14 · Financeiro</title>
+<title>TapFin 15 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -291,6 +291,13 @@ button{font:inherit;color:inherit;cursor:pointer}
 /* F14 · o aviso da medição da OS comum no Painel */
 .ccLin.omdLin{grid-template-columns:86px minmax(0,1fr) minmax(0,1.6fr) 110px}
 @media (max-width:640px){ .ccLin.omdLin{grid-template-columns:auto 1fr} .ccLin.omdLin .ccNome{text-align:right} .ccLin.omdLin .ccDesc{grid-column:1/-1} .ccLin.omdLin .n{grid-column:1/-1} }
+/* F15 · Categorias: a coluna do tipo de custo (519) */
+.ccLin.catLin{grid-template-columns:minmax(0,1fr) 210px 120px 78px}
+.ccLin.catLin.rec{grid-template-columns:minmax(0,1fr) 78px}
+.catCusto{width:100%;padding:4px 6px;font-size:13px}
+.catCusto.catSemTipo{border-color:var(--warn,#b7791f);background:var(--warn-soft,#fff8e6)}
+.catAviso{margin:0 0 14px;padding:10px 12px;border-radius:8px;background:var(--warn-soft,#fff8e6);border:1px solid var(--warn,#b7791f);font-size:13px}
+@media (max-width:640px){ .ccLin.catLin{grid-template-columns:minmax(0,1fr) auto} .ccLin.catLin.cab{display:none} .ccLin.catLin .catC{grid-column:1/-1} .ccLin.catLin .n{grid-column:1} }
 .ccLin.cab{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.4px;background:var(--surface-2)}
 .ccLin .d{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2)}
 .ccLin .t{overflow-wrap:anywhere}
@@ -2311,7 +2318,7 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'F14';   // TapFin 14 (a medição da OS comum: avisos no Painel e no painel da OS) · F13: OS de contrato — o S## da publicação é do central
+const APP_VERSION = 'F15';   // TapFin 15 (o tipo de custo de cada subcategoria, 519, para a margem do TapGestão) · F14: a medição da OS comum: avisos no Painel e no painel da OS · F13: OS de contrato — o S## da publicação é do central
 try{ document.getElementById('verBadge').textContent = 'FINANCEIRO · ' + APP_VERSION; }catch(e){}
 
 const esc               = (...a) => Nucleo.util.esc(...a);
@@ -5073,7 +5080,10 @@ async function pintarCategorias(){
   const board = document.getElementById('board');
   board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Categorias e Orçamento</h2>'
     + '<p>As subcategorias começam vazias — vá criando conforme for lançando contas. '
-    +   'O orçamento mensal é o previsto para comparar com o realizado.</p></div>'
+    +   'O orçamento mensal é o previsto para comparar com o realizado.</p>'
+    + '<p><b>Tipo de custo</b> (para a margem de contribuição do TapGestão): <b>variável</b> = cresce com o volume de serviço '
+    +   '(combustível, hospedagem, terceiros, imposto sobre a nota) e entra na margem; <b>fixo</b> = é pago mesmo sem serviço '
+    +   '(aluguel, salários, cursos) e fica de fora; <b>fora dos custos</b> = nem é gasto (empréstimo).</p></div>'
     + '<div id="catCorpo"><p class="nota">Carregando…</p></div></div>';
   await catCarregar();
 }
@@ -5098,15 +5108,28 @@ function catDesenhar(){
     el.innerHTML = '<p class="nota" style="padding:12px">Nenhum grupo encontrado — confira se o Passo 1 do banco foi executado.</p>';
     return;
   }
-  el.innerHTML = G.map(g => {
+  // F15 · sem a 519 no banco a lista não traz "custo_tipo": a tela fica como no F14
+  const comCusto = G.some(g => (g.subcategorias || []).some(s => Object.prototype.hasOwnProperty.call(s, 'custo_tipo')));
+  const semTipo = comCusto ? G.filter(g => g.tipo !== 'r')
+    .reduce((n, g) => n + (g.subcategorias || []).filter(s => !s.custo_tipo).length, 0) : 0;
+  el.innerHTML = (semTipo
+      ? '<div class="catAviso"><b>' + semTipo + (semTipo === 1 ? ' subcategoria de despesa ainda sem' : ' subcategorias de despesa ainda sem')
+        + ' tipo de custo.</b> Enquanto ficar assim, o que for lançado nelas não entra na margem do TapGestão '
+        + '(ele avisa quanto ficou sem classificar).</div>'
+      : '')
+    + G.map(g => {
     const subs = g.subcategorias || [];
     const despesa = g.tipo !== 'r'; // banco guarda 'p' (despesa) / 'r' (receita)
+    const custo = despesa && comCusto;
     return '<div class="painel" style="margin-bottom:14px;padding:14px">'
       + '<h3 style="margin-top:0">' + esc(g.nome)
       +   ' <small style="color:var(--ink-3);font-weight:normal">(' + (despesa ? 'despesa' : 'receita') + ')</small></h3>'
       + (subs.length
-          ? '<div class="ccLin cab"><span>Subcategoria</span><span class="n">' + (despesa ? 'Orçamento/mês' : '') + '</span><span></span></div>'
-            + subs.map(s => '<div class="ccLin"><span>' + esc(s.nome) + '</span>'
+          ? '<div class="ccLin cab' + (custo ? ' catLin' : '') + '"><span>Subcategoria</span>'
+            + (custo ? '<span>Tipo de custo</span>' : '')
+            + '<span class="n">' + (despesa ? 'Orçamento/mês' : '') + '</span><span></span></div>'
+            + subs.map(s => '<div class="ccLin' + (custo ? ' catLin' : '') + '"><span>' + esc(s.nome) + '</span>'
+              + (custo ? '<span class="catC">' + catCustoSelect(s) + '</span>' : '')
               + '<span class="n">' + (despesa
                   ? '<input type="number" step="0.01" class="catOrc" data-sub="' + esc(s.id)
                     + '" value="' + (s.orcamento_mensal != null ? Number(s.orcamento_mensal) : '')
@@ -5129,6 +5152,15 @@ function catDesenhar(){
     }catch(e){ toast(e.message, 'err'); catCarregar(); }
   }));
 
+  el.querySelectorAll('.catCusto').forEach(sel => sel.addEventListener('change', async () => {
+    sel.disabled = true;
+    try{
+      await rpc('tf_fin_subcategoria_custo', { p_id: sel.dataset.sub, p_custo_tipo: sel.value || null });
+      toast('Tipo de custo salvo: ' + (CAT_CUSTO_ROT[sel.value] || 'não classificado') + '.', 'ok');
+      await catCarregar();
+    }catch(e){ toast(e.message, 'err'); catCarregar(); }
+  }));
+
   el.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => _semDuploEnvio_(b, async () => {
     const inp = el.querySelector('.catNovoNome[data-grupo="' + b.dataset.add + '"]');
     const nome = inp.value.trim();
@@ -5144,6 +5176,17 @@ function catDesenhar(){
     const s = g && (g.subcategorias || []).find(x => x.id === b.dataset.editarsub);
     if (s) modalSubcategoria(g, s);
   }));
+}
+
+// F15 · o tipo de custo da subcategoria (519). Vazio = não classificado (não entra na margem).
+const CAT_CUSTO_ROT = { variavel:'variável', fixo:'fixo', fora:'fora dos custos' };
+function catCustoSelect(s){
+  const v = s.custo_tipo || '';
+  return '<select class="catCusto' + (v ? '' : ' catSemTipo') + '" data-sub="' + esc(s.id) + '" aria-label="Tipo de custo de ' + esc(s.nome) + '">'
+    + '<option value=""' + (v ? '' : ' selected') + '>— não classificado —</option>'
+    + ['variavel', 'fixo', 'fora'].map(k => '<option value="' + k + '"' + (v === k ? ' selected' : '') + '>'
+        + (k === 'variavel' ? 'Variável (entra na margem)' : k === 'fixo' ? 'Fixo' : 'Fora dos custos') + '</option>').join('')
+    + '</select>';
 }
 
 function modalSubcategoria(g, s){
