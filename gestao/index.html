@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TapGestão 1 · Indicadores</title>
+<meta name="theme-color" content="#4338CA">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22104%22 fill=%22%231B6FA9%22/%3E%3Ctext x=%22256%22 y=%22350%22 font-family=%22Arial,sans-serif%22 font-size=%22300%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EE%3C/text%3E%3C/svg%3E">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="apple-touch-icon" href="../field/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="TapHub">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all';this.onload=null">
+<!-- ════════════════════════════════════════════════════════════════════════
+     TAPGESTÃO · gestao/index.html — os indicadores da Engetap (GE1, 03/11/2026)
+     ------------------------------------------------------------------------
+     Desenho: processos/tapgestao-desenho.md (TG1–TG11). Banco: sql/150 (o módulo)
+     + 520 (TapFin), 700 (TapCRM), 307 (TapFlow), 415 (TapDoc): cada módulo faz
+     a SUA conta e esta tela só junta, compara com a meta e mostra.
+     · Mês: os 12 indicadores, o valor, a meta e a cor (verde atingiu; amarelo
+       até 10% longe; vermelho pior; cinza sem meta ou sem dado). Fechar o mês
+       (até o 5º dia útil do mês seguinte) guarda os números como estavam;
+       reabrir pede motivo.
+     · Ano: jan a dez de cada indicador, com o ano anterior embaixo.
+     · Metas: por indicador e ano (aumentar, reduzir ou faixa), o responsável e
+       os sócios que não têm ficha no RH (entram na contagem de pessoas).
+     Quem entra: admin, ou quem o admin marcou com o TapGestão em Pessoas e
+     acessos (o banco confere em toda função: tf__gestao_pode).
+     Endereços: ?m=AAAA-MM (o mês) e ?aba=mes|ano|metas.
+     ════════════════════════════════════════════════════════════════════════ -->
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N2">
+<script src="../nucleo/config.js?v=N2"></script>
+<script src="../nucleo/nucleo.js?v=N2"></script>
+<script src="../nucleo/modulos.js?v=M1"></script>
+<style>
+:root{
+  --mod:#4338CA; --mod-escuro:#14143A; --mod-claro:#A9A3EC; --mod-suave:#ECEBFA;
+  --accent:#1B6FA9; --accent-ink:#164C77; --accent-soft:#E3EEF7;
+  --paper:#F1F3F4; --surface:#FFFFFF; --surface-2:#F7F8F9;
+  --ink:#14181B; --ink-2:#515252; --ink-3:#6B767D; --rule:#DFE3E6;
+  --ok:#1E7A42; --ok-soft:#E3F3E8; --warn:#8A5A12; --warn-soft:#FBF0D9; --crit:#A62D18; --crit-soft:#F9E3DE;
+  --cinza:#8A949A; --cinza-soft:#EEF0F1;
+  --sans:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{overflow-x:hidden}
+body{margin:0;background:var(--paper);color:var(--ink);font:13.5px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button{font:inherit}
+.topo{background:var(--mod-escuro);color:#F5F7FC;padding:10px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.marca{font-size:18px;font-weight:700;letter-spacing:-.02em;display:flex;align-items:center;gap:9px}
+.marca .q{width:28px;height:28px;border-radius:7px;background:var(--mod);display:flex;align-items:center;justify-content:center}
+.marca .q svg{width:17px;height:17px}
+.marca span{color:var(--mod-claro)}
+.selo{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#A3A8C8;border:1px solid rgba(255,255,255,.18);border-radius:3px;padding:2px 6px;font-family:var(--mono)}
+.topo .dir{margin-left:auto;display:flex;align-items:center;gap:14px;font-size:12.5px;color:#C7CAE4}
+.topo a,.topo .lnk{color:#C7CAE4;background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+main{max-width:1240px;margin:0 auto;padding:20px 18px 60px}
+.abas{display:flex;gap:2px;border-bottom:1px solid var(--rule);margin-bottom:18px;overflow-x:auto}
+.abas button{background:none;border:0;border-bottom:2px solid transparent;color:var(--ink-3);font-weight:600;padding:9px 14px;cursor:pointer;white-space:nowrap}
+.abas button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--mod)}
+.cab{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.nav-mes{display:flex;align-items:center;gap:4px;background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:3px}
+.nav-mes button{background:none;border:0;width:32px;height:30px;border-radius:4px;cursor:pointer;color:var(--ink-2);font-size:16px}
+.nav-mes button:hover:not(:disabled){background:var(--surface-2)}
+.nav-mes button:disabled{opacity:.35;cursor:default}
+.nav-mes b{min-width:118px;text-align:center;font-size:15px;text-transform:capitalize}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;border:1px solid var(--rule);background:var(--surface);color:var(--ink-2)}
+.chip.fechado{background:var(--ok-soft);border-color:#B7DEC5;color:var(--ok)}
+.chip.atrasado{background:var(--crit-soft);border-color:#EBC0B6;color:var(--crit)}
+.cab .acoes{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.btn{background:var(--surface);border:1px solid var(--rule);color:var(--ink);border-radius:5px;padding:7px 13px;font-weight:600;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.pri:hover{background:#155B8C}
+.btn:disabled{opacity:.55;cursor:default}
+.aviso{border:1px solid var(--rule);background:var(--surface);border-radius:6px;padding:11px 14px;margin:0 0 14px;color:var(--ink-2);max-width:900px}
+.aviso.lembra{border-color:#E7CF9C;background:var(--warn-soft);color:#6A4510}
+.aviso.erro{border-color:#EBC0B6;background:var(--crit-soft);color:#7A2414}
+.legenda{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink-3);margin:0 0 12px}
+.legenda i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:0}
+.grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.ind{background:var(--surface);border:1px solid var(--rule);border-left:4px solid var(--cinza);border-radius:6px;padding:12px 14px 12px 13px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.ind.verde{border-left-color:var(--ok)} .ind.amarelo{border-left-color:#C98A1B} .ind.vermelho{border-left-color:var(--crit)}
+.ind .top{display:flex;align-items:baseline;gap:8px}
+.ind .n{font-family:var(--mono);font-size:11px;color:var(--ink-3);min-width:18px}
+.ind h3{margin:0;font-size:13px;font-weight:600;color:var(--ink-2);line-height:1.3}
+.ind .valor{font-size:24px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin:2px 0 0;overflow-wrap:anywhere}
+.ind .valor.sem{font-size:15px;font-weight:600;color:var(--cinza);font-style:italic}
+.ind .meta{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);flex-wrap:wrap}
+.cor{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;border-radius:999px;padding:1px 8px}
+.cor::before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor}
+.cor.verde{background:var(--ok-soft);color:var(--ok)} .cor.amarelo{background:var(--warn-soft);color:var(--warn)}
+.cor.vermelho{background:var(--crit-soft);color:var(--crit)} .cor.cinza{background:var(--cinza-soft);color:#5F6A70}
+.ind .base{font-size:12px;color:var(--ink-3);overflow-wrap:anywhere}
+.ind .obs{font-size:11.5px;color:var(--ink-3);font-style:italic}
+.ind .de{font-size:11px;color:var(--ink-3);margin-top:auto;padding-top:4px;font-family:var(--mono);letter-spacing:.02em}
+.nota{color:var(--ink-3);font-size:12.5px;margin-top:14px;max-width:900px}
+.hist{margin-top:10px;font-size:12.5px;color:var(--ink-2)} .hist li{margin:2px 0}
+/* ano */
+.cx{overflow-x:auto;border:1px solid var(--rule);border-radius:6px;background:var(--surface)}
+table{border-collapse:collapse;width:100%}
+th,td{padding:6px 8px;border-bottom:1px solid var(--rule);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+thead th{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);background:var(--surface-2);position:sticky;top:0}
+th.nm,td.nm{text-align:left;white-space:normal;min-width:190px;font-weight:600;color:var(--ink-2)}
+td.c{font-size:12.5px;border-left:1px solid #F0F2F3}
+td.c .v{display:block;border-radius:3px;padding:1px 4px}
+td.c .v.verde{background:var(--ok-soft);color:var(--ok)} td.c .v.amarelo{background:var(--warn-soft);color:var(--warn)}
+td.c .v.vermelho{background:var(--crit-soft);color:var(--crit)}
+td.c .a{display:block;font-size:11px;color:var(--ink-3)}
+td.c.fech{box-shadow:inset 0 -2px 0 var(--mod-claro)}
+.ano-cards{display:none}
+.acard{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:10px 12px;margin-bottom:10px}
+.acard h3{margin:0 0 8px;font-size:13px;color:var(--ink-2)}
+.acard .g{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.acard .m{border:1px solid var(--rule);border-radius:4px;padding:4px 6px;font-size:12px;min-width:0}
+.acard .m small{display:block;font-size:10.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em}
+.acard .m b{display:block;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.acard .m.verde{background:var(--ok-soft)} .acard .m.amarelo{background:var(--warn-soft)} .acard .m.vermelho{background:var(--crit-soft)}
+/* metas */
+.mt-l{display:grid;grid-template-columns:minmax(200px,1.6fr) 130px minmax(180px,1.4fr) minmax(130px,1fr) auto;gap:8px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--rule)}
+.mt-l.cab-t{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);background:var(--surface-2);padding-top:7px;padding-bottom:7px}
+.mt-l .nm{font-weight:600;color:var(--ink-2)} .mt-l .nm small{display:block;font-weight:400;color:var(--ink-3);font-size:11.5px}
+.mt-l select,.mt-l input,.cfg input{width:100%;border:1px solid var(--rule);border-radius:4px;padding:6px 8px;font:inherit;background:#fff;color:var(--ink);min-width:0}
+.mt-l .vals{display:flex;gap:6px;align-items:center}
+.mt-l .vals span{font-size:12px;color:var(--ink-3)}
+.mt-lista{background:var(--surface);border:1px solid var(--rule);border-radius:6px;overflow:hidden}
+.cfg{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:12px 14px;margin-top:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;max-width:900px}
+.cfg label{font-weight:600;color:var(--ink-2)} .cfg input{width:90px}
+.cfg small{flex-basis:100%;color:var(--ink-3)}
+.carregando{color:var(--ink-3);padding:30px 0}
+@media (max-width:760px){
+  main{padding:14px 12px 50px}
+  .topo{padding:9px 12px}
+  .ano-tab{display:none} .ano-cards{display:block}
+  .mt-l{grid-template-columns:1fr 1fr;gap:6px 8px}
+  .mt-l .nm{grid-column:1/-1}
+  .mt-l.cab-t{display:none}
+  .mt-l .vals{grid-column:1/-1}
+  .cab .acoes{margin-left:0;width:100%}
+  .grade{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<div class="topo">
+  <div class="marca"><span class="q" id="ico" aria-hidden="true"></span><span>Tap<span>Gestão</span></span></div>
+  <div class="selo" id="selo">GESTÃO · GE1</div>
+  <div class="dir"><span id="eu"></span><button class="lnk" type="button" id="btTrocar">Trocar de módulo</button><a href="../" id="btInicio">Início</a></div>
+</div>
+
+<main>
+  <div id="erroGeral" hidden></div>
+  <div id="conteudo" hidden>
+    <div class="abas" role="tablist">
+      <button type="button" role="tab" data-aba="mes" aria-selected="true">Mês</button>
+      <button type="button" role="tab" data-aba="ano" aria-selected="false">Ano</button>
+      <button type="button" role="tab" data-aba="metas" aria-selected="false">Metas</button>
+    </div>
+
+    <section id="secMes">
+      <div class="cab">
+        <div class="nav-mes"><button type="button" id="mesAnt" aria-label="Mês anterior">‹</button><b id="mesNome">—</b><button type="button" id="mesProx" aria-label="Próximo mês">›</button></div>
+        <span class="chip" id="mesSit"></span>
+        <div class="acoes"><button type="button" class="btn" id="btReabrir" hidden>Reabrir o mês</button><button type="button" class="btn pri" id="btFechar" hidden>Fechar o mês</button></div>
+      </div>
+      <div id="mesAviso"></div>
+      <div class="legenda" aria-hidden="true"><span><i style="background:var(--ok)"></i>atingiu</span><span><i style="background:#C98A1B"></i>até 10% longe</span><span><i style="background:var(--crit)"></i>mais longe</span><span><i style="background:var(--cinza)"></i>sem meta ou sem dado</span></div>
+      <div class="grade" id="grade"><p class="carregando">Carregando…</p></div>
+      <div id="mesHist"></div>
+      <p class="nota">Cada número é calculado pelo módulo de onde vem (TapFin, TapCRM, TapFlow, TapRH, TapDoc). <b>Sem dado</b> quer dizer que o sistema ainda não tinha informação naquele mês, nunca zero. Mês fechado mostra os números como estavam no dia do fechamento.</p>
+    </section>
+
+    <section id="secAno" hidden>
+      <div class="cab">
+        <div class="nav-mes"><button type="button" id="anoAnt" aria-label="Ano anterior">‹</button><b id="anoNome">—</b><button type="button" id="anoProx" aria-label="Próximo ano">›</button></div>
+        <span class="chip">embaixo, em cinza: o mesmo mês do ano anterior</span>
+      </div>
+      <div id="anoCorpo"><p class="carregando">Carregando…</p></div>
+    </section>
+
+    <section id="secMetas" hidden>
+      <div class="cab">
+        <div class="nav-mes"><button type="button" id="mtAnt" aria-label="Ano anterior">‹</button><b id="mtNome">—</b><button type="button" id="mtProx" aria-label="Próximo ano">›</button></div>
+        <span class="chip">a meta vale para cada mês do ano</span>
+      </div>
+      <div id="metasCorpo"><p class="carregando">Carregando…</p></div>
+    </section>
+  </div>
+</main>
+
+<script>
+'use strict';
+const APP_VERSION = 'GE1';   // GE1 (03/11/2026): o módulo TapGestão — painel do mês, ano, metas e fechamento
+const _CFG = window.TF_CONFIG || {};
+const SUPABASE_URL = _CFG.SUPABASE_URL || '', SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
+const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
+const NO_SERVIDOR = location.protocol === 'http:' || location.protocol === 'https:';
+
+const esc = s => (window.Nucleo ? Nucleo.util.esc(s) : String(s == null ? '' : s));
+const toast = (m, t) => { try{ Nucleo.util.toast(m, t); }catch(e){} };
+const rpc = (f, p) => Nucleo.api.rpc(f, p);
+const _semDuploEnvio_ = (btn, fn) => Nucleo.util.semDuploEnvio(btn, fn);
+const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const MES3 = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const COR_TXT = { verde:'atingiu', amarelo:'perto da meta', vermelho:'longe da meta', cinza:'sem meta' };
+
+// o estado da tela vive aqui, fora do DOM
+const E = { aba:'mes', ano:null, mes:null, anoVer:null, anoMetas:null, hoje:null, ultimoMes:null };
+
+/* ── números ─────────────────────────────────────────────────────────────── */
+const nf1 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits:1, maximumFractionDigits:1 });
+const nf0 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits:0 });
+function num(v){ return v === null || v === undefined || v === '' ? null : Number(v); }
+function fmt(v, u, curto){
+  v = num(v); if (v === null || isNaN(v)) return null;
+  if (u === 'rs'){
+    if (curto && Math.abs(v) >= 10000) return 'R$ ' + nf1.format(v / 1000) + ' mil';
+    return Nucleo.util.BRL(v);
+  }
+  if (u === 'pct') return nf1.format(v) + '%';
+  if (u === 'dias') return nf1.format(v) + (curto ? ' d' : ' dias');
+  return nf0.format(v);
+}
+function textoMeta(m, u){
+  if (!m) return 'sem meta';
+  if (m.direcao === 'faixa'){
+    if (m.min != null && m.max != null) return 'entre ' + fmt(m.min, u) + ' e ' + fmt(m.max, u);
+    if (m.min != null) return 'no mínimo ' + fmt(m.min, u);
+    return 'no máximo ' + fmt(m.max, u);
+  }
+  return (m.direcao === 'reduzir' ? 'até ' : 'pelo menos ') + fmt(m.meta, u);
+}
+function plural(n, um, varios){ n = Number(n) || 0; return n + ' ' + (n === 1 ? um : varios); }
+function textoBase(i){
+  const b = i.base || {};
+  switch (i.id){
+    case 'fat': return plural(b.notas, 'nota emitida', 'notas emitidas');
+    case 'margem': return 'custo variável ' + Nucleo.util.BRL(b.custo_variavel)
+      + (Number(b.sem_tipo) > 0 ? ' · sem tipo de custo: ' + Nucleo.util.BRL(b.sem_tipo) + ' (' + plural(b.sem_tipo_titulos, 'título', 'títulos') + ', fora da conta)' : '');
+    case 'fat_pessoa': return !Number(b.pessoas) ? 'nenhuma ficha no TapRH no mês (e nenhum sócio sem ficha em Metas)' : nf0.format(b.pessoas) + ' pessoas: ' + (b.clt||0) + ' CLT, ' + (b.estagio||0) + ' estágio, '
+      + (b.socio||0) + ' sócio(s) com ficha' + (b.socios_sem_ficha ? ' + ' + b.socios_sem_ficha + ' sem ficha' : '')
+      + (b.sem_vinculo ? ', ' + b.sem_vinculo + ' sem vínculo' : '');
+    case 'vencidas': return plural(b.titulos, 'título vencido', 'títulos vencidos') + (b.em ? ' em ' + Nucleo.util.dataBR(b.em) : '');
+    case 'enviadas': return Nucleo.util.BRL(b.valor_rs) + ' em propostas';
+    case 'conversao': return plural(b.aprovadas, 'aprovada', 'aprovadas') + ' · ' + plural(b.recusadas, 'recusada', 'recusadas') + ' · ' + plural(b.vencidas, 'vencida sem resposta', 'vencidas sem resposta');
+    case 'ticket': return Nucleo.util.BRL(b.valor_aprovado) + ' aprovados' + (b.parciais_sem_itens ? ' · ' + plural(b.parciais_sem_itens, 'parcial antiga', 'parciais antigas') + ' sem itens' : '');
+    case 'tempo': return plural(b.aprovadas, 'proposta aprovada', 'propostas aprovadas');
+    case 'equipamentos': return b.os_inspecao != null ? plural(b.os_inspecao, 'OS de inspeção concluída', 'OS de inspeção concluídas') : plural(b.inspecoes_terminadas, 'inspeção terminada', 'inspeções terminadas');
+    case 'prazo': return (b.no_prazo||0) + ' de ' + (b.com_prazo||0) + ' no prazo' + (b.sem_prazo ? ' · ' + plural(b.sem_prazo, 'OS sem prazo', 'OS sem prazo') + ' (fora da conta)' : '');
+    case 'dias_laudo': return plural(b.laudos, 'laudo emitido', 'laudos emitidos');
+    case 'devolvidos': return (b.devolvidas||0) + ' de ' + plural(b.liberadas, 'liberada', 'liberadas');
+  }
+  return '';
+}
+
+/* ── erro geral ──────────────────────────────────────────────────────────── */
+function erroGeral(html){
+  const e = document.getElementById('erroGeral');
+  e.innerHTML = '<div class="aviso erro">' + html + '</div>'; e.hidden = false;
+  document.getElementById('conteudo').hidden = true;
+}
+function erroEm(alvo, e, refazer){
+  const msg = (e && e.message) || 'Erro desconhecido.';
+  if (/não tem acesso ao TapGestão/i.test(msg)){ erroGeral('<b>Você não tem acesso ao TapGestão.</b> Quem entra é o admin ou quem ele marcar em Pessoas e acessos. Volte ao <a href="../">início</a>.'); return; }
+  alvo.innerHTML = '<div class="aviso erro"><b>Não consegui carregar.</b> ' + esc(msg) + ' <button type="button" class="btn" id="btDeNovo">Tentar de novo</button></div>';
+  const b = document.getElementById('btDeNovo'); if (b) b.addEventListener('click', refazer);
+}
+
+/* ── endereço ────────────────────────────────────────────────────────────── */
+function gravarEndereco(){
+  try{
+    const u = new URL(location.href);
+    u.searchParams.set('aba', E.aba);
+    if (E.ano && E.mes) u.searchParams.set('m', E.ano + '-' + String(E.mes).padStart(2, '0'));
+    history.replaceState(null, '', u.toString());
+  }catch(e){}
+}
+
+/* ── Mês ─────────────────────────────────────────────────────────────────── */
+let pedidoMes = 0;
+async function carregarMes(){
+  const alvo = document.getElementById('grade');
+  const meu = ++pedidoMes;
+  document.getElementById('mesNome').textContent = MESES[E.mes - 1] + ' ' + E.ano;
+  document.getElementById('mesProx').disabled = E.ultimoMes && (E.ano * 12 + E.mes) >= E.ultimoMes;
+  alvo.innerHTML = '<p class="carregando">Carregando…</p>';
+  document.getElementById('mesAviso').innerHTML = ''; document.getElementById('mesHist').innerHTML = '';
+  let j;
+  try{ j = await rpc('tf_gestao_mes', { p_ano:E.ano, p_mes:E.mes }); }
+  catch(e){ if (meu === pedidoMes) erroEm(alvo, e, carregarMes); return; }
+  if (meu !== pedidoMes) return;
+  pintarMes(j);
+}
+function pintarMes(j){
+  const f = j.fechamento || {};
+  const sit = document.getElementById('mesSit');
+  if (f.fechado){ sit.className = 'chip fechado'; sit.textContent = 'Fechado em ' + Nucleo.util.dataBR(f.fechado_em) + (f.fechado_por ? ' por ' + f.fechado_por : ''); }
+  else if (!f.terminou){ sit.className = 'chip'; sit.textContent = 'Mês em andamento · números ao vivo'; }
+  else if (f.atrasado){ sit.className = 'chip atrasado'; sit.textContent = 'Aberto · o prazo era ' + Nucleo.util.dataBR(f.prazo); }
+  else { sit.className = 'chip'; sit.textContent = 'Aberto · fechar até ' + Nucleo.util.dataBR(f.prazo); }
+  document.getElementById('btFechar').hidden = !f.pode_fechar;
+  document.getElementById('btReabrir').hidden = !f.fechado;
+  if (f.pode_fechar){
+    document.getElementById('mesAviso').innerHTML = '<div class="aviso lembra">' + (f.atrasado
+      ? '<b>O fechamento de ' + esc(j.nome) + ' está atrasado</b> (o prazo era o 5º dia útil, ' + esc(Nucleo.util.dataBR(f.prazo)) + '). Confira os números e feche o mês.'
+      : '<b>Feche ' + esc(j.nome) + ' até ' + esc(Nucleo.util.dataBR(f.prazo)) + '</b> (5º dia útil). Ao fechar, os números ficam guardados como estão agora.') + '</div>';
+  }
+  const lista = j.indicadores || [];
+  document.getElementById('grade').innerHTML = lista.map(i => {
+    const v = fmt(i.valor, i.unidade), cor = i.cor || 'cinza';
+    return '<article class="ind ' + esc(cor) + '" aria-label="' + esc(i.nome) + '">'
+      + '<div class="top"><span class="n">' + esc(String(i.num).padStart(2, '0')) + '</span><h3>' + esc(i.nome) + '</h3></div>'
+      + (v === null ? '<div class="valor sem">sem dado</div>' : '<div class="valor">' + esc(v) + '</div>')
+      + '<div class="meta"><span class="cor ' + esc(cor) + '">' + esc(v === null ? 'sem dado' : (i.meta ? COR_TXT[cor] : 'sem meta')) + '</span>'
+      + (i.meta ? '<span>Meta: ' + esc(textoMeta(i.meta, i.unidade)) + '</span>' : '') + '</div>'
+      + '<div class="base">' + esc(textoBase(i)) + '</div>'
+      + (i.obs ? '<div class="obs">' + esc(i.obs) + '</div>' : '')
+      + '<div class="de">' + esc(i.modulo || '') + '</div>'
+      + '</article>';
+  }).join('') || '<p class="carregando">Nenhum indicador.</p>';
+  const re = (f.reaberturas || []);
+  if (re.length) document.getElementById('mesHist').innerHTML = '<ul class="hist">' + re.map(r =>
+    '<li>Reaberto em ' + esc(Nucleo.util.dataBR(r.reaberto_em)) + (r.por ? ' por ' + esc(r.por) : '') + ': “' + esc(r.motivo) + '”</li>').join('') + '</ul>';
+}
+function irMes(d){
+  let a = E.ano, m = E.mes + d;
+  if (m < 1){ m = 12; a--; } if (m > 12){ m = 1; a++; }
+  if (a < 2021) return;
+  E.ano = a; E.mes = m; gravarEndereco(); carregarMes();
+}
+async function fecharMes(btn){
+  const nome = MESES[E.mes - 1] + ' ' + E.ano;
+  const sim = await Nucleo.janela.confirmar('Fechar ' + nome + '?',
+    '<p>Os 12 números ficam <b>guardados como estão agora</b>, com a base, a meta e a cor. Nota, baixa ou estorno lançados depois não mudam o mês fechado.</p><p>Para mudar depois, alguém do TapGestão reabre o mês escrevendo o motivo.</p>', 'Fechar o mês');
+  if (!sim) return;
+  await _semDuploEnvio_(btn, async () => {
+    try{
+      const r = await rpc('tf_gestao_fechar', { p_ano:E.ano, p_mes:E.mes });
+      toast(nome + ' fechado' + (r && r.atrasado ? ' (depois do prazo).' : '.'), 'ok');
+      await carregarMes();
+    }catch(e){ toast(e.message || 'Não consegui fechar.', 'err'); }
+  });
+}
+function reabrirMes(){
+  const nome = MESES[E.mes - 1] + ' ' + E.ano;
+  Nucleo.janela.abrir('Reabrir ' + nome,
+    '<p>Os números voltam a ser calculados ao vivo. Escreva por que o mês está sendo reaberto (fica no histórico).</p>'
+    + '<label for="motReab" style="display:block;font-weight:600;margin:10px 0 4px">Motivo</label>'
+    + '<textarea id="motReab" rows="3" style="width:100%;border:1px solid var(--rule);border-radius:4px;padding:8px;font:inherit" maxlength="500"></textarea>',
+    [ { label:'Cancelar', onClick:() => Nucleo.janela.fechar() },
+      { label:'Reabrir o mês', pri:true, onClick: async () => {
+          const mot = (document.getElementById('motReab').value || '').trim();
+          if (mot.length < 5){ toast('Escreva o motivo (pelo menos 5 letras).', 'err'); return; }
+          try{ await rpc('tf_gestao_reabrir', { p_ano:E.ano, p_mes:E.mes, p_motivo:mot }); Nucleo.janela.fechar(); toast(nome + ' reaberto.', 'ok'); await carregarMes(); }
+          catch(e){ toast(e.message || 'Não consegui reabrir.', 'err'); }
+        } } ]);
+}
+
+/* ── Ano ─────────────────────────────────────────────────────────────────── */
+let pedidoAno = 0;
+// o mês que ainda não terminou: o número é parcial, então não leva cor no ano
+function emAndamento(k){ const h = String(E.hoje || ''); return Number(h.slice(0, 4)) === E.anoVer && Number(h.slice(5, 7)) === k + 1; }
+async function carregarAno(){
+  const alvo = document.getElementById('anoCorpo'); const meu = ++pedidoAno;
+  document.getElementById('anoNome').textContent = E.anoVer;
+  document.getElementById('anoProx').disabled = E.hoje && E.anoVer >= Number(String(E.hoje).slice(0, 4));
+  alvo.innerHTML = '<p class="carregando">Carregando o ano (calcula mês a mês, pode levar alguns segundos)…</p>';
+  let j;
+  try{ j = await rpc('tf_gestao_ano', { p_ano:E.anoVer }); }
+  catch(e){ if (meu === pedidoAno) erroEm(alvo, e, carregarAno); return; }
+  if (meu !== pedidoAno) return;
+  const L = j.indicadores || [];
+  let h = '<div class="cx ano-tab"><table><thead><tr><th class="nm">Indicador</th>' + MES3.map(m => '<th>' + m + '</th>').join('') + '</tr></thead><tbody>';
+  L.forEach(i => {
+    h += '<tr><td class="nm">' + esc(String(i.num).padStart(2, '0') + ' · ' + i.nome) + '<br><span style="font-weight:400;color:var(--ink-3);font-size:11.5px">Meta: ' + esc(textoMeta(i.meta, i.unidade)) + '</span></td>';
+    i.meses.forEach((m, k) => {
+      const v = fmt(m.valor, i.unidade, true), a = fmt(i.anterior[k], i.unidade, true), corr = emAndamento(k);
+      h += '<td class="c' + (m.fechado ? ' fech' : '') + '"' + (m.fechado ? ' title="mês fechado"' : corr ? ' title="mês em andamento: sem cor até terminar"' : '') + '><span class="v ' + esc(v === null || corr ? '' : m.cor) + '">' + esc(v === null ? '—' : v) + '</span>'
+        + '<span class="a">' + esc(a === null ? '—' : a) + '</span></td>';
+    });
+    h += '</tr>';
+  });
+  h += '</tbody></table></div><p class="nota">Embaixo de cada número, em cinza, o mesmo mês de ' + esc(E.anoVer - 1) + '. Traço = sem dado. Sublinhado roxo = mês fechado. O mês em andamento fica sem cor até terminar.</p>';
+  h += '<div class="ano-cards">' + L.map(i => '<div class="acard"><h3>' + esc(String(i.num).padStart(2, '0') + ' · ' + i.nome) + '</h3><div class="g">'
+      + i.meses.map((m, k) => { const v = fmt(m.valor, i.unidade, true), a = fmt(i.anterior[k], i.unidade, true);
+          return '<div class="m ' + esc(v === null || emAndamento(k) ? '' : m.cor) + '"><small>' + MES3[k] + (m.fechado ? ' ✓' : '') + '</small><b>' + esc(v === null ? '—' : v) + '</b><small>' + esc(a === null ? '—' : a) + '</small></div>'; }).join('')
+      + '</div></div>').join('') + '</div>';
+  alvo.innerHTML = h;
+}
+
+/* ── Metas ───────────────────────────────────────────────────────────────── */
+let pedidoMetas = 0;
+async function carregarMetas(){
+  const alvo = document.getElementById('metasCorpo'); const meu = ++pedidoMetas;
+  document.getElementById('mtNome').textContent = E.anoMetas;
+  alvo.innerHTML = '<p class="carregando">Carregando…</p>';
+  let j;
+  try{ j = await rpc('tf_gestao_metas', { p_ano:E.anoMetas }); }
+  catch(e){ if (meu === pedidoMetas) erroEm(alvo, e, carregarMetas); return; }
+  if (meu !== pedidoMetas) return;
+  const UN = { rs:'R$', pct:'%', dias:'dias', qtd:'qtd.' };
+  let h = '<div class="mt-lista"><div class="mt-l cab-t"><span>Indicador</span><span>Direção</span><span>Meta</span><span>Responsável</span><span></span></div>';
+  (j.metas || []).forEach(m => {
+    const dir = m.direcao || m.direcao_padrao;
+    h += '<div class="mt-l" data-id="' + esc(m.id) + '">'
+      + '<div class="nm">' + esc(String(m.num).padStart(2, '0') + ' · ' + m.nome) + '<small>' + (m.direcao ? 'gravada' + (m.atualizado_por ? ' por ' + esc(m.atualizado_por) : '') + ' em ' + esc(Nucleo.util.dataBR(m.atualizado_em)) : 'sem meta') + '</small></div>'
+      + '<select aria-label="Direção de ' + esc(m.nome) + '" class="mDir">'
+      + ['aumentar','reduzir','faixa'].map(d => '<option value="' + d + '"' + (d === dir ? ' selected' : '') + '>' + ({aumentar:'aumentar (≥)', reduzir:'reduzir (≤)', faixa:'faixa'})[d] + '</option>').join('') + '</select>'
+      + '<div class="vals">'
+      + '<input type="number" step="any" inputmode="decimal" class="mMeta" aria-label="Meta de ' + esc(m.nome) + '" placeholder="meta" value="' + esc(m.meta == null ? '' : m.meta) + '"' + (dir === 'faixa' ? ' hidden' : '') + '>'
+      + '<input type="number" step="any" inputmode="decimal" class="mMin" aria-label="Mínimo de ' + esc(m.nome) + '" placeholder="mínimo" value="' + esc(m.min == null ? '' : m.min) + '"' + (dir === 'faixa' ? '' : ' hidden') + '>'
+      + '<input type="number" step="any" inputmode="decimal" class="mMax" aria-label="Máximo de ' + esc(m.nome) + '" placeholder="máximo" value="' + esc(m.max == null ? '' : m.max) + '"' + (dir === 'faixa' ? '' : ' hidden') + '>'
+      + '<span>' + esc(UN[m.unidade] || '') + '</span></div>'
+      + '<input type="text" class="mResp" aria-label="Responsável por ' + esc(m.nome) + '" placeholder="responsável" maxlength="80" value="' + esc(m.responsavel || '') + '">'
+      + '<button type="button" class="btn mGravar">Gravar</button></div>';
+  });
+  h += '</div><p class="nota">Deixe a meta em branco e grave para tirar a meta do indicador (ele fica cinza). Percentual em número: 80 = 80%. A cor do painel: verde atingiu, amarelo até 10% longe, vermelho mais longe.</p>';
+  h += '<div class="cfg"><label for="cfgSoc">Sócios sem ficha no RH</label><input type="number" id="cfgSoc" min="0" max="20" step="1" value="' + esc(j.socios_sem_ficha || 0) + '">'
+     + '<button type="button" class="btn" id="btCfg">Gravar</button>'
+     + '<small>Entram na conta de pessoas ocupadas (indicador 3). Quem já tem ficha no TapRH com vínculo "sócio" é contado sozinho: não some aqui de novo.</small></div>';
+  alvo.innerHTML = h;
+  alvo.querySelectorAll('.mt-l[data-id]').forEach(l => {
+    const sel = l.querySelector('.mDir');
+    sel.addEventListener('change', () => {
+      const fx = sel.value === 'faixa';
+      l.querySelector('.mMeta').hidden = fx; l.querySelector('.mMin').hidden = !fx; l.querySelector('.mMax').hidden = !fx;
+    });
+    const btn = l.querySelector('.mGravar');
+    btn.addEventListener('click', () => _semDuploEnvio_(btn, () => gravarMeta(l)));
+  });
+  const bc = document.getElementById('btCfg');
+  bc.addEventListener('click', () => _semDuploEnvio_(bc, async () => {
+    const n = parseInt(document.getElementById('cfgSoc').value, 10);
+    if (isNaN(n) || n < 0 || n > 20){ toast('Sócios sem ficha: de 0 a 20.', 'err'); return; }
+    try{ await rpc('tf_gestao_config_gravar', { p_socios_sem_ficha:n }); toast('Gravado.', 'ok'); }
+    catch(e){ toast(e.message || 'Não consegui gravar.', 'err'); }
+  }));
+}
+function lerNum(el){ const t = String(el.value || '').trim().replace(',', '.'); if (t === '') return null; const v = Number(t); return isNaN(v) ? NaN : v; }
+async function gravarMeta(l){
+  const dir = l.querySelector('.mDir').value;
+  const meta = lerNum(l.querySelector('.mMeta')), mn = lerNum(l.querySelector('.mMin')), mx = lerNum(l.querySelector('.mMax'));
+  if ([meta, mn, mx].some(v => Number.isNaN(v))){ toast('Número inválido.', 'err'); return; }
+  try{
+    const r = await rpc('tf_gestao_meta_gravar', { p_ano:E.anoMetas, p_indicador:l.dataset.id, p_direcao:dir,
+      p_meta: dir === 'faixa' ? null : meta, p_min: dir === 'faixa' ? mn : null, p_max: dir === 'faixa' ? mx : null,
+      p_responsavel: l.querySelector('.mResp').value || null });
+    toast(r && r.apagada ? 'Meta tirada.' : 'Meta gravada.', 'ok');
+    await carregarMetas();
+  }catch(e){ toast(e.message || 'Não consegui gravar.', 'err'); }
+}
+
+/* ── abas ────────────────────────────────────────────────────────────────── */
+function irAba(a){
+  E.aba = ['mes','ano','metas'].includes(a) ? a : 'mes';
+  document.querySelectorAll('.abas button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.aba === E.aba)));
+  document.getElementById('secMes').hidden = E.aba !== 'mes';
+  document.getElementById('secAno').hidden = E.aba !== 'ano';
+  document.getElementById('secMetas').hidden = E.aba !== 'metas';
+  gravarEndereco();
+  if (E.aba === 'mes') carregarMes();
+  if (E.aba === 'ano') carregarAno();
+  if (E.aba === 'metas') carregarMetas();
+}
+document.querySelectorAll('.abas button').forEach(b => b.addEventListener('click', () => irAba(b.dataset.aba)));
+document.getElementById('mesAnt').addEventListener('click', () => irMes(-1));
+document.getElementById('mesProx').addEventListener('click', () => irMes(1));
+document.getElementById('anoAnt').addEventListener('click', () => { if (E.anoVer > 2021){ E.anoVer--; carregarAno(); } });
+document.getElementById('anoProx').addEventListener('click', () => { E.anoVer++; carregarAno(); });
+document.getElementById('mtAnt').addEventListener('click', () => { if (E.anoMetas > 2021){ E.anoMetas--; carregarMetas(); } });
+document.getElementById('mtProx').addEventListener('click', () => { E.anoMetas++; carregarMetas(); });
+document.getElementById('btFechar').addEventListener('click', ev => fecharMes(ev.currentTarget));
+document.getElementById('btReabrir').addEventListener('click', reabrirMes);
+
+/* ── início ──────────────────────────────────────────────────────────────── */
+function irParaHub(recado){
+  try{ sessionStorage.setItem('tf_recado', recado || ''); }catch(e){}
+  location.href = '../?para=tapgestao';
+}
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+  window.addEventListener('load', () => { navigator.serviceWorker.register('../sw.js', { scope: '../' }).catch(() => {}); });
+}
+async function iniciar(){
+  document.getElementById('conteudo').hidden = false;
+  const p = new URLSearchParams(location.search);
+  // o mês de abertura: o pedido no endereço; senão o mês passado, se ainda não foi fechado; senão o mês corrente
+  const hoje = new Date(); let a = hoje.getFullYear(), m = hoje.getMonth() + 1;
+  E.ultimoMes = a * 12 + m;
+  const pm = /^(\d{4})-(\d{2})$/.exec(p.get('m') || '');
+  if (pm && Number(pm[2]) >= 1 && Number(pm[2]) <= 12){ E.ano = Number(pm[1]); E.mes = Number(pm[2]); }
+  else {
+    let pa = a, pmes = m - 1; if (pmes < 1){ pmes = 12; pa--; }
+    try{
+      const j = await rpc('tf_gestao_mes', { p_ano:pa, p_mes:pmes });
+      E.hoje = j.hoje;
+      if (!(j.fechamento && j.fechamento.fechado)){ E.ano = pa; E.mes = pmes; } else { E.ano = a; E.mes = m; }
+    }catch(e){
+      if (/não tem acesso ao TapGestão/i.test(e.message || '')){ erroEm(document.getElementById('grade'), e, iniciar); return; }
+      E.ano = a; E.mes = m;
+    }
+  }
+  E.hoje = E.hoje || Nucleo.util.isoHoje();
+  E.anoVer = E.ano; E.anoMetas = E.ano;
+  irAba(p.get('aba') || 'mes');
+}
+(function boot(){
+  try{ document.getElementById('selo').textContent = 'GESTÃO · ' + APP_VERSION; }catch(e){}
+  if (!window.Nucleo || !Nucleo.api || !Nucleo.api.rpc || !Nucleo.janela){
+    erroGeral('<b>Não consegui carregar o núcleo.</b> Recarregue a página. Se continuar, falta a pasta <code>nucleo/</code> no ar.'); return;
+  }
+  if (window.TapModulos){
+    TapModulos.aplicar('tapgestao');
+    document.getElementById('ico').innerHTML = TapModulos.icone('tapgestao', '', '#fff');
+    TapModulos.trocador(document.getElementById('btTrocar'), 'tapgestao');
+  } else document.getElementById('btTrocar').hidden = true;
+  if (DEMO){ erroGeral('<b>Modo demonstração.</b> O TapGestão só funciona aberto pelo TapFlow no ar (o login fica no início).'); return; }
+  const s = (typeof Nucleo.sessao === 'function' && Nucleo.sessao()) || {};
+  if (!s.token){ if (NO_SERVIDOR) irParaHub(''); return; }
+  if (NO_SERVIDOR && typeof Nucleo.porteiro === 'function'){
+    const g = Nucleo.porteiro({ app:'tapgestao', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
+    if (g === 'hub'){ irParaHub(Nucleo.recado); return; }
+  }
+  document.getElementById('eu').textContent = s.nome || s.email || '';
+  iniciar();
+})();
+</script>
+</body>
+</html>

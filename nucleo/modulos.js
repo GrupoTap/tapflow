@@ -22,6 +22,8 @@
  * hub). A lista fica guardada no aparelho para abrir sem sinal.
  * Arquivo novo: não mexe no nucleo.js (N2) nem obriga trocar o ?v= dele.
  * ⚠ Mudou este arquivo? Troque o ?v=M1 em todas as páginas e nos sw.js.
+ *   (Card novo sem mudar o ?v= — como no S116, S118, S119 e no GE1 — vale porque o sw.js da
+ *   raiz busca o nucleo/ na rede primeiro; aparelho sem sinal vê o card no próximo acesso.)
  * ========================================================================== */
 (function () {
   'use strict';
@@ -45,6 +47,7 @@
     tapdoc: '<rect x="5.5" y="4.5" width="13" height="16.5" rx="2"/><path d="M9 4.5V3.2h6v1.3"/><path d="M8.8 10.5l1.4 1.4 2.6-2.6M14.5 11h1.5M8.8 16l1.4 1.4 2.6-2.6M14.5 16.5h1.5"/>',
     cadastros: '<ellipse cx="12" cy="6" rx="7" ry="2.8"/><path d="M5 6v12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8V6"/><path d="M5 12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8"/>',
     gestao: '<path d="M4 20h16"/><rect x="5.5" y="11" width="3" height="7" rx=".8"/><rect x="10.5" y="6" width="3" height="12" rx=".8"/><rect x="15.5" y="13" width="3" height="5" rx=".8"/>',
+    tapgestao: '<path d="M4 17.5a8 8 0 1 1 16 0"/><path d="M12 17.5l3.6-4.6"/><circle cx="12" cy="17.5" r="1.3"/><path d="M6.6 10.6l1 .8M12 7.5v1.3M17.4 10.6l-1 .8"/>',
     campo: '<path d="M9 3.5 4 6v13l5-2.5 6 3 5-2.5V4l-5 2.5z"/><path d="M9 3.5v13M15 6.5v13"/>',
     seg: '<rect x="4" y="3" width="16" height="18" rx="2.2"/><path d="M9.5 3v2.2h5V3"/><circle cx="12" cy="11" r="2.6"/><path d="M7.8 17.5c.6-2 2.3-3.2 4.2-3.2s3.6 1.2 4.2 3.2"/>',
     tapweb: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/>',
@@ -61,6 +64,7 @@
     { chave: 'tapdoc',    titulo: 'TapDoc',     texto: 'Preparar a inspeção NR-13',     cor: '#A16207', href: 'doc/' },
     { chave: 'cadastros', titulo: 'Cadastros',  texto: 'Clientes e catálogo',           cor: '#334155', href: 'manager/?ir=cad' },
     { chave: 'gestao',    titulo: 'Gestão',     texto: 'Relatórios',                    cor: '#A21CAF', href: 'manager/?ir=rel' },   // S87: os quadros passaram ao TapFlow
+    { chave: 'tapgestao', titulo: 'TapGestão',  texto: 'Indicadores, metas e o mês',    cor: '#4338CA', href: 'gestao/' },   // GE1 · TapGestão 1 (03/11/2026)
     { chave: 'campo',     titulo: 'Campo',      texto: 'Levantamento, mesmo sem sinal', cor: '#0E7490', href: 'field/' },
     // "Minha área" (antes "Minha Segurança"): o autoatendimento de quem não usa o Campo.
     { chave: 'seg',       titulo: 'Minha área', texto: 'EPI, ponto e diárias',          cor: '#5B7189', href: 'field/' }
