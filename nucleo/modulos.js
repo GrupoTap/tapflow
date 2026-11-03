@@ -54,7 +54,7 @@
   // A ordem é a dos cards do hub. `chave` = a porta do servidor (tf_hub_modulos).
   var LISTA = [
     { chave: 'tapflow',   titulo: 'TapFlow',    texto: 'OS, quadros e agenda',          cor: '#1D4ED8', href: 'manager/?ir=adm' },   // S87: abre no quadro da Administrativa
-    { chave: 'tapcrm',    titulo: 'TapCRM',     texto: 'Negócios e propostas',          cor: '#C2410C', href: 'manager/?ir=com' },
+    { chave: 'tapcrm',    titulo: 'TapCRM',     texto: 'Negócios e propostas',          cor: '#C2410C', href: 'crm/' },   // S119 · TapCRM 1 em pasta própria
     { chave: 'tapfin',    titulo: 'TapFin',     texto: 'Financeiro e cartões',          cor: '#15803D', href: 'fin/' },
     { chave: 'taprh',     titulo: 'TapRH',      texto: 'Pessoal, diárias e ponto',      cor: '#6D28D9', href: 'rh/' },   // S118 · TapRH 1 em pasta própria
     { chave: 'tapseg',    titulo: 'TapSeg',     texto: 'EPI, ASO e treinamentos',       cor: '#BE123C', href: 'seg/' },   // S116 · TapSeg 1 em pasta própria
