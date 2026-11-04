@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapRH 6 · Recursos Humanos</title>
+<title>TapRH 7 · Recursos Humanos</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2428,7 +2428,7 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'RH6';   // TapRH 6 (611): o termo de ciência e a advertência em texto formal (T2/A2) na aba Saúde e no PDF · TapRH 5 (Ponto Etapa 2A a 2D, 606 a 609): comparar com o EzPoint (Importar EzPoint), rescisão (Escalas e regras), prazo de guarda das fotos (Parâmetros) · aba Saúde (semáforo por pessoa, avisos, termo de ciência, advertência preparada para o Bruno decidir, PDF do termo), orientação do almoço em Escalas e regras · aba Fechamento (intenção, horas pagas, liberar, assinatura da empresa, Discordo, cobrar pelo WhatsApp, PDF assinado, resumo para o contador, folgas compensatórias) · aba Parâmetros, data do acordo de banco por pessoa, espelho com a tolerância, 100%, noturno, almoço a pagar e o banco por lote · TapRH 4 (S126): o espelho em PDF com a logo, quadros, uma coluna por batida, ajustes e assinaturas; o nome do arquivo no padrão do escritório; folga e atestado de parte do dia (605) · TapRH 3 (Ponto 1A): aba Ponto (Espelhos, Escalas e regras, Importar EzPoint), só para quem aprova o ponto · TapRH 2 (S124): o RH deixa de liberar PIN (decisão 11 do recuperar-acesso: quem libera é "Autoriza acesso") · TapRH 1 (separado do Manager S117) — o S## da publicação é da rodada que publica
+const APP_VERSION = 'RH7';   // TapRH 7 (612): os documentos do gov.br em Escalas e regras (conferir, aceitar, recusar, versão da Engetap) · TapRH 6 (611): o termo de ciência e a advertência em texto formal (T2/A2) na aba Saúde e no PDF · TapRH 5 (Ponto Etapa 2A a 2D, 606 a 609): comparar com o EzPoint (Importar EzPoint), rescisão (Escalas e regras), prazo de guarda das fotos (Parâmetros) · aba Saúde (semáforo por pessoa, avisos, termo de ciência, advertência preparada para o Bruno decidir, PDF do termo), orientação do almoço em Escalas e regras · aba Fechamento (intenção, horas pagas, liberar, assinatura da empresa, Discordo, cobrar pelo WhatsApp, PDF assinado, resumo para o contador, folgas compensatórias) · aba Parâmetros, data do acordo de banco por pessoa, espelho com a tolerância, 100%, noturno, almoço a pagar e o banco por lote · TapRH 4 (S126): o espelho em PDF com a logo, quadros, uma coluna por batida, ajustes e assinaturas; o nome do arquivo no padrão do escritório; folga e atestado de parte do dia (605) · TapRH 3 (Ponto 1A): aba Ponto (Espelhos, Escalas e regras, Importar EzPoint), só para quem aprova o ponto · TapRH 2 (S124): o RH deixa de liberar PIN (decisão 11 do recuperar-acesso: quem libera é "Autoriza acesso") · TapRH 1 (separado do Manager S117) — o S## da publicação é da rodada que publica
 try{ document.getElementById('verBadge').textContent = 'RH · ' + APP_VERSION; }catch(e){}
 
 const esc               = (...a) => Nucleo.util.esc(...a);
@@ -6026,6 +6026,7 @@ async function ptFotosDia(usuario, dia){
 async function ptEscalas(corpo){
   try{ PT.cfg = await rpc('tf_ponto_config_ver', {}); }catch(e){ return rhFalha(corpo, e.message, pintarPonto); }
   let OR = null; try{ OR = await rpc('tf_ponto_orientacoes', {}); }catch(e){}   // 2C (608): sem ela, a coluna não aparece
+  let GV = null; try{ GV = await rpc('tf_ponto_gov_equipe', {}); }catch(e){}   // RH7 (612): sem ela, a seção não aparece
   const P = PT.pessoas || [], semEscala = P.filter(p => p.bate_ponto && !p.escala).length;
   const escTxt = e => !e ? '<span class="ptSem">sem escala</span>'
     : esc((e.dias || []).map(n => PT_SEM[n]).join(', ')) + ' · ' + esc(String(e.entrada).slice(0, 5)) + '–' + esc(String(e.saida).slice(0, 5))
@@ -6051,6 +6052,7 @@ async function ptEscalas(corpo){
         + '<td>' + (p.vinculo === 'clt' && p.situacao === 'ativo' ? '<button class="btn mini" type="button" data-esc="' + esc(p.usuario_id) + '">Nova escala…</button>' : '')
           + (p.vinculo === 'clt' ? ' <button class="btn mini" type="button" data-resc="' + esc(p.usuario_id) + '">Rescisão…</button>' : '') + '</td></tr>').join('')
     + '</tbody></table></div>'
+    + (GV ? ptGovSecao(GV) : '')
     + '<h3 class="ptH3">Dados da empresa no comprovante</h3>'
     + '<p class="nota">Vão em cada comprovante de batida (Portaria 671, art. 80): nome, CNPJ e endereço do local de trabalho.</p>'
     + '<div class="ptForm"><label>Nome<input id="ptEmpN" maxlength="120"></label>'
@@ -6082,6 +6084,75 @@ async function ptEscalas(corpo){
   corpo.querySelectorAll('[data-resc]').forEach(b => b.addEventListener('click', () => ptRescisaoModal(P.find(x => x.usuario_id === b.dataset.resc))));   // 2D · P22
   corpo.querySelectorAll('[data-orient]').forEach(b => b.addEventListener('click', () => { const p = P.find(x => x.usuario_id === b.dataset.orient);
     ptOrientacaoModal(Object.assign({}, p, { orientacao: OR[p.usuario_id] || null }), () => pintarPonto()); }));
+  if (GV) ptGovLigar(corpo, GV);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// RH7 · OS DOCUMENTOS DO GOV.BR (612) — o acordo de banco de horas e o termo de adesão que cada CLT assina no
+// gov.br e envia pelo TapField. Aceitar grava a data no acordo ou na orientação do almoço (Bruno, 04/11: D1–D6).
+// Nada se apaga: o envio recusado e o aceito ficam guardados para sempre (D4).
+const PT_GOV_ROT = { acordo: 'Acordo de banco de horas', adesao: 'Termo de adesão' };
+function ptGovCel(p, tipo){
+  const s = p[tipo] || {};
+  const t = { para_assinar: '<span class="ptSem">não enviou</span>', recusado: '<span class="ptSit crit">recusado</span> <small>' + esc(s.motivo_recusa || '') + '</small>',
+              enviado: '<span class="ptSit aviso">enviado em ' + esc(ptDHBR(s.enviado_em).slice(0, 10)) + '</span>',
+              aceito: '<span class="ptSit ok">aceito · assinado em ' + esc(dataBR(s.data_valida)) + '</span>' }[s.situacao] || '—';
+  const bt = [];
+  if (s.pdf_path) bt.push('<button class="btn mini" type="button" data-gvver="' + esc(s.pdf_path) + '" data-gvnome="' + esc(PT_GOV_ROT[tipo] + ' - ' + p.nome + '.pdf') + '">Ver</button>');
+  if (s.situacao === 'enviado') bt.push('<button class="btn mini pri" type="button" data-gvconf="' + esc(s.id) + '" data-gvtipo="' + tipo + '" data-gvp="' + esc(p.usuario_id) + '">Conferir…</button>');
+  if (s.situacao === 'aceito') bt.push(s.empresa_pdf_path
+    ? '<button class="btn mini" type="button" data-gvver="' + esc(s.empresa_pdf_path) + '" data-gvnome="' + esc(PT_GOV_ROT[tipo] + ' - ' + p.nome + ' (assinado pela Engetap).pdf') + '">Com a Engetap</button>'
+    : '<label class="btn mini" title="O PDF que você assinou no gov.br por cima do que o funcionário enviou">Enviar com a assinatura da Engetap<input type="file" accept="application/pdf,.pdf" hidden data-gvemp="' + esc(s.id) + '" data-gvp="' + esc(p.usuario_id) + '" data-gvtipo="' + tipo + '"></label>');
+  return t + (bt.length ? '<br>' + bt.join(' ') : '');
+}
+function ptGovSecao(GV){
+  const ok = t => GV.filter(p => (p[t] || {}).situacao === 'aceito').length;
+  return '<h3 class="ptH3">Documentos do gov.br</h3>'
+    + '<p class="nota">Cada CLT baixa no TapField o acordo de banco de horas e o termo de adesão já preenchidos, assina no gov.br e envia de volta. '
+    + 'Confira e aceite: a data da assinatura entra sozinha em "Acordo de banco" e em "Orientação do almoço". Prazo: 30/11. '
+    + 'Acordos aceitos: <b>' + ok('acordo') + ' de ' + GV.length + '</b> · termos de adesão aceitos: <b>' + ok('adesao') + ' de ' + GV.length + '</b>.</p>'
+    + '<div class="rhfdWrap"><table class="tbl ptTab"><thead><tr><th>Pessoa</th><th>Acordo de banco de horas</th><th>Termo de adesão</th></tr></thead><tbody>'
+    + GV.map(p => '<tr><td><b>' + esc(p.nome) + '</b></td><td>' + ptGovCel(p, 'acordo') + '</td><td>' + ptGovCel(p, 'adesao') + '</td></tr>').join('')
+    + '</tbody></table></div>';
+}
+function ptGovLigar(corpo, GV){
+  corpo.querySelectorAll('[data-gvver]').forEach(b => b.addEventListener('click', () => ptBaixarArq(b.dataset.gvver, b.dataset.gvnome)));
+  corpo.querySelectorAll('[data-gvconf]').forEach(b => b.addEventListener('click', () => {
+    const p = GV.find(x => x.usuario_id === b.dataset.gvp), s = p[b.dataset.gvtipo];
+    ptGovConferir(p, b.dataset.gvtipo, s); }));
+  corpo.querySelectorAll('[data-gvemp]').forEach(inp => inp.addEventListener('change', async () => {
+    const f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
+    try{
+      if (f.size > 5 * 1024 * 1024) throw new Error('o arquivo passa de 5 MB');
+      const buf = await f.arrayBuffer(), h = await ptSha256(buf);
+      const caminho = 'espelhos/' + inp.dataset.gvp + '/gov-' + inp.dataset.gvtipo + '-' + h.slice(0, 12) + '.pdf';
+      const r = await Nucleo.storage.enviar('ponto', caminho, new Blob([buf], { type: 'application/pdf' }));
+      if (r !== 'ok' && r !== 'ja_existia') throw new Error('o armazenamento recusou');
+      await rpc('tf_ponto_gov_empresa_pdf', { p_id: inp.dataset.gvemp, p_path: caminho, p_hash: h });
+      toast('Versão com a assinatura da Engetap guardada.'); pintarPonto();
+    }catch(e){ toast('Não consegui guardar: ' + e.message, 'err'); }
+  }));
+}
+function ptGovConferir(p, tipo, s){
+  abrirModal(PT_GOV_ROT[tipo] + ' · ' + p.nome,
+    '<p class="nota">Abra o PDF enviado e confira: é o documento certo, com o nome da pessoa e a assinatura dela pelo gov.br. '
+    + 'Para validar a assinatura, use <b>validar.iti.gov.br</b>. Ao aceitar, a data abaixo vai para "' + (tipo === 'acordo' ? 'Acordo de banco' : 'Orientação do almoço') + '".</p>'
+    + '<p><button class="btn" type="button" id="ptGvVer">Abrir o PDF enviado</button></p>'
+    + '<label class="ptCampo">Assinado pelo funcionário em<input type="date" id="ptGvD" max="' + esc(isoHoje()) + '" value="' + esc(s.assinado_em || '') + '"></label>'
+    + (s.assinado_em ? '<p class="nota">Data lida na assinatura do PDF. Confira no validador.</p>' : '<p class="nota">O PDF não trouxe a data: informe a do validador.</p>')
+    + '<label class="ptCampo">Se recusar, por quê (o funcionário vê)<input id="ptGvM" maxlength="300" placeholder="Ex.: o PDF não tem a assinatura do gov.br"></label>'
+    + '<p class="nota" id="ptGvMsg" style="color:var(--crit)"></p>',
+    [{ label: 'Fechar', onClick: fecharModal },
+     { label: 'Recusar', onClick: async () => {
+        try{ await rpc('tf_ponto_gov_recusar', { p_id: s.id, p_motivo: document.getElementById('ptGvM').value }); fecharModal(); toast('Recusado: volta para a pessoa enviar de novo.'); pintarPonto(); }
+        catch(e){ document.getElementById('ptGvMsg').textContent = e.message; } } },
+     { label: 'Aceitar', pri: true, onClick: async () => {
+        const d = document.getElementById('ptGvD').value;
+        if (!d){ document.getElementById('ptGvMsg').textContent = 'Informe a data da assinatura.'; return; }
+        try{ await rpc('tf_ponto_gov_aceitar', { p_id: s.id, p_data: d }); fecharModal();
+             toast('Aceito. A data foi para "' + (tipo === 'acordo' ? 'Acordo de banco' : 'Orientação do almoço') + '".'); PT.pessoas = null; pintarPonto(); }
+        catch(e){ document.getElementById('ptGvMsg').textContent = e.message; } } }]);
+  document.getElementById('ptGvVer').addEventListener('click', () => ptBaixarArq(s.pdf_path, PT_GOV_ROT[tipo] + ' - ' + p.nome + '.pdf'));
 }
 
 
