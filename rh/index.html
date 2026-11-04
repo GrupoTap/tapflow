@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapRH 3 · Recursos Humanos</title>
+<title>TapRH 4 · Recursos Humanos</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2418,7 +2418,7 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'RH3';   // TapRH 3 (Ponto 1A): aba Ponto (Espelhos, Escalas e regras, Importar EzPoint), só para quem aprova o ponto · TapRH 2 (S124): o RH deixa de liberar PIN (decisão 11 do recuperar-acesso: quem libera é "Autoriza acesso") · TapRH 1 (separado do Manager S117) — o S## da publicação é da rodada que publica
+const APP_VERSION = 'RH4';   // TapRH 4 (S126): o espelho em PDF com a logo, quadros, uma coluna por batida, ajustes e assinaturas; o nome do arquivo no padrão do escritório; folga e atestado de parte do dia (605) · TapRH 3 (Ponto 1A): aba Ponto (Espelhos, Escalas e regras, Importar EzPoint), só para quem aprova o ponto · TapRH 2 (S124): o RH deixa de liberar PIN (decisão 11 do recuperar-acesso: quem libera é "Autoriza acesso") · TapRH 1 (separado do Manager S117) — o S## da publicação é da rodada que publica
 try{ document.getElementById('verBadge').textContent = 'RH · ' + APP_VERSION; }catch(e){}
 
 const esc               = (...a) => Nucleo.util.esc(...a);
@@ -5598,7 +5598,7 @@ function ptEspelhoDesenhar(){
   const pdfs = (PT.espPdf || []).filter(x => String(x.competencia).slice(0, 7) === String(PT.mes).slice(0, 7));
   let h = '<div class="rhBarra ptEspBar"><button class="btn" type="button" id="ptPdf">PDF do espelho</button>'
     + (pend.length ? '<button class="btn pri" type="button" id="ptAprTodos">Aprovar todos os pedidos do mês (' + pend.length + ')</button>' : '')
-    + (pdfs.length ? '<span class="nota">PDF salvo: ' + pdfs.map(x => '<a href="#" data-pdf="' + esc(x.pdf_path) + '">v' + x.versao + ' · '
+    + (pdfs.length ? '<span class="nota">PDF salvo: ' + pdfs.map(x => '<a href="#" data-pdf="' + esc(x.pdf_path) + '" data-arq="' + esc(x.arquivo || '') + '">v' + x.versao + ' · '
         + esc(dataBR(String(x.gerado_em).slice(0, 10))) + '</a>').join(' · ') + '</span>' : '') + '</div>'
     + '<div class="ptCards">'
     + cartao('Trabalhadas', ptHm(T.feitos_min))
@@ -5624,7 +5624,7 @@ function ptEspelhoDesenhar(){
     else if (!d.util && !bats.length) obs.push(Number(d.sem) >= 6 ? 'sem expediente' : 'sem escala');
     else if (d.hoje) obs.push('hoje (em andamento)');
     else if (d.futuro && !bats.length) obs.push('ainda não chegou');
-    (d.ausencia || []).forEach(a => obs.push({ ferias: 'férias', folga: 'folga', atestado: 'atestado' }[a.tipo] + (a.parte ? ' (parte do dia)' : '')));
+    (d.ausencia || []).forEach(a => obs.push(ptAusRot(a)));
     if (d.impar) obs.push('batida faltando');
     (d.ez || []).filter(x => Number(x.tipo) === 2).forEach(() => obs.push('falta (EzPoint)'));
     (d.ez || []).filter(x => Number(x.tipo) === 3).forEach(x => obs.push('banco EzPoint ' + (Number(x.mov) === 1 ? '+' : '-') + ptHm(x.minutos)));
@@ -5655,7 +5655,7 @@ function ptEspelhoDesenhar(){
   area.querySelectorAll('[data-apr]').forEach(b => b.addEventListener('click', () => _semDuploEnvio_(b, () => ptDecidir([b.dataset.apr], true, null, ptEspelhoCarregar))));
   area.querySelectorAll('[data-rec]').forEach(b => b.addEventListener('click', () => ptRecusarModal([b.dataset.rec], ptEspelhoCarregar)));
   area.querySelectorAll('[data-incl]').forEach(b => b.addEventListener('click', () => ptIncluirModal(PT.sel, b.dataset.incl)));
-  area.querySelectorAll('[data-pdf]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); ptBaixarArq(a.dataset.pdf, 'espelho.pdf'); }));
+  area.querySelectorAll('[data-pdf]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); ptBaixarArq(a.dataset.pdf, a.dataset.arq || 'espelho.pdf'); }));
   document.getElementById('ptPdf').addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, ptEspelhoPdf));
   const bT = document.getElementById('ptAprTodos');
   if (bT) bT.addEventListener('click', () => {
@@ -5736,33 +5736,106 @@ function ptPdfLib(){
   return carrega('../doc/vendor/pdfmake.min.js').then(() => carrega('../doc/vendor/vfs_fonts.js')).then(() => window.pdfMake);
 }
 
-/** P5: o espelho do mês em PDF, guardado por versão (conferência; a assinatura vem com o fechamento, Etapa 2). */
+/** P5: o espelho do mês em PDF, guardado por versão (conferência; a assinatura vem com o fechamento, Etapa 2).
+ *  RH4: cabeçalho com a logo, quadros da empresa e do funcionário, resumo, uma coluna por batida, ajustes do mês
+ *  e linhas de assinatura; o arquivo se chama "MM - Relatório Espelho Ponto (Mês) - Nome Completo.pdf" (605). */
+const PT_AZUL = '#1B6FA9';
+function ptAusRot(a){
+  const nome = { ferias: 'férias', folga: 'folga', atestado: 'atestado', recesso: 'recesso' }[a.tipo] || a.tipo;
+  return nome + (a.parte ? (a.ini ? ' ' + a.ini + '–' + a.fim : ' (parte do dia)') : '') + (a.tipo === 'folga' ? ' (banco)' : '');
+}
 async function ptEspelhoPdf(){
   const E = PT.esp; if (!E) return;
   try{
-    const pm = await ptPdfLib(), P = E.pessoa || {}, T = E.totais || {}, PED = PT.espPed || [];
+    const pm = await ptPdfLib(), P = E.pessoa || {}, T = E.totais || {}, PED = (PT.espPed || []).filter(x => x.status !== 'cancelado');
     const cfgE = await rpc('tf_ponto_config_ver', {});
-    const linhas = (E.dias || []).map(d => {
+    const cnpj = (cfgE.empresa_cnpj || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+    const dif = (Number(T.feitos_min) || 0) - (Number(T.carga_min) || 0);
+    const nAjuste = (E.dias || []).reduce((n, d) => n + (d.batidas || []).filter(b => b.origem === 'tf_ajuste' || b.origem === 'ez_incluida').length, 0);
+    const esc0 = P.escala || null;
+    const hTxt = m => { m = Number(m) || 0; return Math.floor(m / 60) + 'h' + (m % 60 ? String(m % 60).padStart(2, '0') : ''); };
+    const diasTxt = d => (d || []).join(',') === '1,2,3,4,5' ? 'seg a sex' : (d || []).map(n => PT_SEM[n]).join(', ');
+    const escTxt = esc0 ? diasTxt(esc0.dias) + ' · ' + esc0.entrada + '–' + esc0.saida + ' · '
+        + hTxt(esc0.carga_min) + ' por dia · almoço de ' + hTxt(esc0.almoco_min) + ' a ' + hTxt(esc0.almoco_max) : 'sem escala';
+    const cinza = '#F1F3F5', verde = '#1F7A4D', verm = '#B42318', borda = '#D0D7DE';
+    const rot = t => ({ text: t, fontSize: 6.5, color: '#5B6770', bold: true, characterSpacing: 0.4 });
+    const caixa = (titulo, linhas) => ({ table: { widths: ['*'], body: [[{ stack: [rot(titulo)].concat(linhas), margin: [6, 5, 6, 5] }]] },
+      layout: { hLineColor: borda, vLineColor: borda, hLineWidth: () => 0.6, vLineWidth: () => 0.6 } });
+    const cartao = (r, v, cor) => ({ stack: [rot(r), { text: v, fontSize: 12, bold: true, color: cor || '#14181B', margin: [0, 2, 0, 0] }], margin: [6, 5, 6, 5] });
+    // uma coluna por batida (as 4 do dia); as que passarem de 4 (hotel, viagem) vão em "Outras"
+    const cel = b => b ? { text: b.h + (b.origem === 'tf_ajuste' || b.origem === 'ez_incluida' ? '*' : '') + (b.offline ? '°' : ''),
+      color: (b.origem === 'tf_ajuste' || b.origem === 'ez_incluida') ? '#8A5A00' : '#14181B' } : '';
+    const corpo = [[ 'Dia', 'Entrada', 'Saída alm.', 'Volta', 'Saída', 'Outras', 'Feitas', 'Saldo', 'Observação' ]
+      .map((t, k) => ({ text: t, bold: true, color: '#FFFFFF', fillColor: PT_AZUL, fontSize: 7.5, alignment: k >= 6 && k <= 7 ? 'right' : 'left' }))];
+    (E.dias || []).forEach(d => {
       const bats = (d.batidas || []).filter(b => !/desconsiderada$/.test(b.origem));
       const ob = [];
-      if (d.feriado) ob.push('feriado'); (d.ausencia || []).forEach(a => ob.push(a.tipo)); if (d.impar) ob.push('batida faltando');
-      PED.filter(x => x.dia === d.dia && x.status !== 'cancelado').forEach(x => ob.push((PT_PTIPO[x.tipo] || x.tipo).toLowerCase() + ' (' + x.status.replace('_', ' ') + ')'));
-      return [ptDia(d.dia) + ' ' + PT_SEM[Number(d.sem)],
-        bats.map(b => b.h + (b.origem === 'tf_ajuste' || b.origem === 'ez_incluida' ? '*' : '') + (b.offline ? '°' : '')).join('  '),
-        bats.length ? ptHm(d.feitos_min) : '', ptSaldo(d.saldo_min) === '—' ? '' : ptSaldo(d.saldo_min), ob.join('; ')];
+      if (d.feriado) ob.push('feriado · ' + d.feriado);
+      (d.ausencia || []).forEach(a => ob.push(ptAusRot(a)));
+      if (d.impar) ob.push('batida faltando');
+      PED.filter(x => x.dia === d.dia && x.status !== 'aprovado').forEach(x => ob.push((PT_PTIPO[x.tipo] || x.tipo).toLowerCase() + ' (' + x.status.replace('_', ' ') + ')'));
+      const fds = !d.util && !bats.length;
+      const fill = fds || d.feriado ? cinza : null;
+      const s = d.saldo_min, sTxt = ptSaldo(s) === '—' ? '' : ptSaldo(s);
+      const linha = [
+        { text: ptDia(d.dia) + ' ' + PT_SEM[Number(d.sem)], bold: !fds && !d.futuro, color: d.futuro && !bats.length ? '#9AA4AD' : '#14181B' },
+        cel(bats[0]), cel(bats[1]), cel(bats[2]), cel(bats[3]),
+        { text: bats.slice(4).map(b => b.h).join(' '), fontSize: 7 },
+        { text: bats.length ? ptHm(d.feitos_min) : '', alignment: 'right' },
+        { text: sTxt, alignment: 'right', bold: !!sTxt, color: s > 0 ? verde : s < 0 ? verm : '#14181B' },
+        { text: ob.join('; '), fontSize: 7, color: '#3D4852' } ];
+      if (fill) linha.forEach(c => { if (typeof c === 'object') c.fillColor = fill; });
+      corpo.push(linha.map(c => typeof c === 'string' ? { text: c, fillColor: fill || undefined } : c));
     });
-    const doc = { pageSize: 'A4', pageMargins: [28, 28, 28, 34], defaultStyle: { fontSize: 8.5 },
-      footer: (pg, n) => ({ text: 'Página ' + pg + ' de ' + n + ' · gerado pelo TapRH em ' + new Date().toLocaleString('pt-BR'), fontSize: 7, color: '#666', margin: [28, 8, 28, 0] }),
+    const ajustes = PED.filter(x => x.status === 'aprovado' || x.status === 'pendente' || x.status === 'aguardando_funcionario' || x.status === 'recusado');
+    const doc = { pageSize: 'A4', pageMargins: [28, 26, 28, 34], defaultStyle: { fontSize: 8, color: '#14181B' },
+      info: { title: P.arquivo || 'Espelho de ponto', author: cfgE.empresa_nome || 'Engetap', creator: 'TapRH' },
+      footer: (pg, n) => ({ columns: [
+          { text: 'Espelho para conferência. O banco de horas (tolerância, lotes) e a assinatura pelo app entram no fechamento do mês.', fontSize: 6.5, color: '#6B7780' },
+          { text: 'Página ' + pg + ' de ' + n + ' · TapRH · ' + new Date().toLocaleString('pt-BR'), fontSize: 6.5, color: '#6B7780', alignment: 'right', width: 170 } ],
+        margin: [28, 10, 28, 0] }),
       content: [
-        { text: 'Espelho de ponto · ' + ptMesRot(E.mes), bold: true, fontSize: 13 },
-        { text: (cfgE.empresa_nome || '') + (cfgE.empresa_cnpj ? ' · CNPJ ' + cfgE.empresa_cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : ''), margin: [0, 2, 0, 0] },
-        { text: (P.nome || '') + (P.funcao ? ' · ' + P.funcao : '') + (P.matricula ? ' · matrícula ' + P.matricula : ''), bold: true, margin: [0, 6, 0, 8] },
-        { table: { headerRows: 1, widths: [48, '*', 40, 40, 150], body: [[{ text: 'Dia', bold: true }, { text: 'Batidas', bold: true }, { text: 'Feitas', bold: true },
-            { text: 'Saldo', bold: true }, { text: 'Observação', bold: true }]].concat(linhas) }, layout: 'lightHorizontalLines' },
-        { text: 'Trabalhadas ' + ptHm(T.feitos_min) + ' · carga dos dias úteis ' + ptHm(T.carga_min) + ' · diferença simples '
-            + ptSaldo((Number(T.feitos_min) || 0) - (Number(T.carga_min) || 0)), margin: [0, 10, 0, 2], bold: true },
-        { text: '* incluída por ajuste · ° batida sem internet, subiu depois. Espelho para conferência: o cálculo do banco de horas (tolerância, lotes) '
-            + 'e a assinatura do funcionário entram no fechamento do mês.', fontSize: 7.5, color: '#444' } ] };
+        { columns: [
+            { image: LOGO_ENGETAP, width: 150 },
+            { stack: [{ text: 'ESPELHO DE PONTO', fontSize: 15, bold: true, color: PT_AZUL, alignment: 'right' },
+                      { text: ptMesRot(E.mes).replace(/^./, c => c.toUpperCase()), fontSize: 11, alignment: 'right', margin: [0, 2, 0, 0] }] } ] },
+        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 539, y2: 0, lineWidth: 1.5, lineColor: PT_AZUL }], margin: [0, 8, 0, 8] },
+        { columns: [
+            caixa('EMPRESA', [{ text: cfgE.empresa_nome || '', bold: true, margin: [0, 2, 0, 0] }, { text: cnpj ? 'CNPJ ' + cnpj : '' },
+                              { text: cfgE.empresa_endereco || '', fontSize: 7.5, color: '#3D4852' }]),
+            caixa('FUNCIONÁRIO', [{ text: P.nome_completo || P.nome || '', bold: true, margin: [0, 2, 0, 0] },
+                                  { text: [P.funcao, P.cpf ? 'CPF ' + P.cpf : '', P.matricula ? 'matrícula ' + P.matricula : ''].filter(Boolean).join(' · ') },
+                                  { text: (P.admissao ? 'admissão ' + dataBR(P.admissao) + ' · ' : '') + 'escala: ' + escTxt, fontSize: 7.5, color: '#3D4852' }]) ],
+          columnGap: 8 },
+        { table: { widths: ['*', '*', '*', '*', '*'], body: [[
+            cartao('TRABALHADAS', ptHm(T.feitos_min)), cartao('CARGA DO MÊS', ptHm(T.carga_min)),
+            cartao('DIFERENÇA', ptSaldo(dif), dif > 0 ? verde : dif < 0 ? verm : null),
+            cartao('DIAS COM BATIDA FALTANDO', String(T.dias_impares || 0), Number(T.dias_impares) ? verm : null),
+            cartao('BATIDAS POR AJUSTE', String(nAjuste)) ]] },
+          layout: { hLineColor: borda, vLineColor: borda, hLineWidth: () => 0.6, vLineWidth: () => 0.6 }, margin: [0, 8, 0, 8] },
+        { table: { headerRows: 1, widths: [40, 34, 38, 34, 34, 36, 32, 34, '*'], body: corpo },
+          layout: { hLineColor: () => '#E1E5EA', vLineColor: () => '#FFFFFF', hLineWidth: () => 0.5, vLineWidth: () => 0,
+                    paddingTop: () => 2.2, paddingBottom: () => 2.2 } },
+        { text: '* incluída por ajuste   ° batida sem internet, subiu depois   (banco) folga: as horas saem do banco de horas',
+          fontSize: 6.5, color: '#6B7780', margin: [0, 4, 0, 0] }
+      ].concat(ajustes.length ? [
+        { text: 'AJUSTES E JUSTIFICATIVAS DO MÊS', bold: true, fontSize: 8.5, color: PT_AZUL, margin: [0, 12, 0, 4] },
+        { table: { headerRows: 1, widths: [34, 110, '*', 120], body: [['Dia', 'Pedido', 'Texto do funcionário', 'Situação']
+            .map(t => ({ text: t, bold: true, fontSize: 7, color: '#5B6770' }))].concat(ajustes.map(x => [
+              ptDia(x.dia),
+              (PT_PTIPO[x.tipo] || x.tipo) + (x.tipo === 'esqueci' ? ' · ' + (x.tipo_batida_rot || '') + ' ' + (x.hora || '') : '')
+                + (x.origem === 'escritorio' ? ' (lançado pelo escritório)' : ''),
+              { text: '“' + (x.texto_final || '') + '”' + (x.categoria ? ' · ' + x.categoria : ''), fontSize: 7 },
+              { text: ({ aprovado: 'aprovado', recusado: 'recusado', pendente: 'aguardando', aguardando_funcionario: 'esperando o funcionário' }[x.status] || x.status)
+                  + (x.decidido_por_nome ? ' · ' + x.decidido_por_nome : '') + (x.decidido_em ? ' · ' + ptDia(String(x.decidido_em).slice(0, 10)) : ''), fontSize: 7 } ])) },
+          layout: 'lightHorizontalLines' } ] : [])
+      .concat([
+        { columns: [
+            { stack: [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 230, y2: 0, lineWidth: 0.6 }] },
+                      { text: P.nome_completo || P.nome || '', fontSize: 7.5, margin: [0, 3, 0, 0] }, { text: 'Funcionário', fontSize: 7, color: '#6B7780' }] },
+            { stack: [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 230, y2: 0, lineWidth: 0.6 }] },
+                      { text: cfgE.empresa_nome || 'Engetap', fontSize: 7.5, margin: [0, 3, 0, 0] }, { text: 'Empresa', fontSize: 7, color: '#6B7780' }] } ],
+          columnGap: 60, margin: [0, 34, 0, 0], unbreakable: true } ]) };
     const blob = await new Promise(ok => pm.createPdf(doc).getBlob(ok));
     const hash = await ptSha256(await blob.arrayBuffer());
     const caminho = 'espelhos/' + PT.sel + '/' + String(E.mes).slice(0, 7) + '-' + hash.slice(0, 12) + '.pdf';
@@ -5771,10 +5844,17 @@ async function ptEspelhoPdf(){
     const g = await rpc('tf_ponto_espelho_gravar', { p_usuario: PT.sel, p_mes: E.mes, p_pdf_path: caminho, p_hash: hash,
       p_resumo: { feitos_min: T.feitos_min, carga_min: T.carga_min, pedidos: PED.length } });
     toast('Espelho salvo (versão ' + g.versao + ').');
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'espelho-' + String(E.mes).slice(0, 7) + '-' + (P.nome || '').split(' ')[0] + '.pdf';
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = ptNomeArq(P.arquivo, E.mes, P.nome);
     document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
     ptEspelhoCarregar();
   }catch(e){ toast('Não consegui gerar o PDF: ' + e.message, 'err'); }
+}
+// o nome vem do banco (605); sem ele (banco antigo), monta aqui no mesmo padrão
+function ptNomeArq(arq, mes, nome){
+  if (arq) return arq;
+  const m = Number(String(mes).slice(5, 7));
+  return String(m).padStart(2, '0') + ' - Relatório Espelho Ponto (' + PT_MESES[m - 1].replace(/^./, c => c.toUpperCase()) + ') - '
+    + String(nome || '').replace(/[\\/:*?"<>|]/g, '') + '.pdf';
 }
 
 // ── PEDIDOS (tela 7) ────────────────────────────────────────────────────────
