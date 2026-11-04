@@ -1,19 +1,20 @@
 /* ============================================================================
- * TAPHUB · NÚCLEO COMUM — N3 (N2 + a digital/rosto destravando o PIN: Passkey 1)
+ * TAPHUB · NÚCLEO COMUM — N4 (N3 + recuperar o PIN: "Pedir PIN novo" e a troca do PIN provisório)
  * ----------------------------------------------------------------------------
  * Código que serve a mais de um módulo e por isso NÃO mora dentro de nenhum:
  * sessão, conexão com o banco, PIN e a trava. Regra de negócio nunca entra
  * aqui (fica no módulo e nas funções tf_*). Sem framework, sem build.
  *
  * COMO UM MÓDULO USA (duas linhas no <head> e uma no boot):
- *   <script src="../nucleo/config.js?v=N3"></script>
- *   <script src="../nucleo/nucleo.js?v=N3"></script>
+ *   <script src="../nucleo/config.js?v=N4"></script>
+ *   <script src="../nucleo/nucleo.js?v=N4"></script>
  *   ...
  *   const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
  *   if (g === 'hub') { irParaHub(Nucleo.recado); return; }     // ANTES do iniciar()
  *
- * O N3 aceita tudo o que o N2 e o N1 aceitavam: página que ainda pede ?v=N2
- * ou ?v=N1 recebe o N3 (o arquivo é um só) e funciona igual. O N3 só soma a
+ * O N4 aceita tudo o que o N3, o N2 e o N1 aceitavam (o arquivo é um só). O N4 só
+ * soma o "Pedir PIN novo" e a troca do PIN provisório (207, desenho
+ * processos/recuperar-acesso-desenho.md). O N3 tinha somado a
  * digital (Passkey 1) na trava e o Nucleo.confirmarPessoa(). Os utilitários e a fila do N2 estão
  * no fim deste arquivo; o contrato está em processos/nucleo-n2-contrato.md.
  *
@@ -38,7 +39,7 @@
   'use strict';
   if (window.Nucleo && window.Nucleo.versao) return;
 
-  var VERSAO = 'N3';
+  var VERSAO = 'N4';
   var SCRIPT = (document.currentScript && document.currentScript.src) || '';
   var RAIZ = SCRIPT ? new URL('../', SCRIPT).href : (location.origin + '/');
   var NO_SERVIDOR = location.protocol === 'http:' || location.protocol === 'https:';
@@ -159,6 +160,16 @@
     return derivar(pin, sal, L.iter).then(function (h) {
       gravarCfg(email, { ap: ap, ver: { s: sal, i: L.iter, h: h } });
     });
+  }
+  // N4: o PIN mudou (troca do provisório): o resumo local passa a ser o do PIN novo,
+  // sem perder o resto da configuração do aparelho (a digital, por exemplo).
+  function atualizarResumo(email, pin) {
+    var c = cfgDe(email);
+    if (!c || !(window.crypto && crypto.subtle)) return Promise.resolve();
+    var sal = b64(crypto.getRandomValues(new Uint8Array(16)));
+    return derivar(pin, sal, L.iter).then(function (h) {
+      c.ver = { s: sal, i: L.iter, h: h }; gravarCfg(email, c);
+    }).catch(function () {});
   }
   function nomeDoAparelho() {
     var ua = navigator.userAgent || '', n = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' :
@@ -325,6 +336,14 @@
     }, function () { return { ok: false, msg: 'Este navegador não consegue conferir o PIN sem sinal.' }; });
   }
 
+  var MSG_PIN_VENCIDO = 'O PIN provisório venceu (24 horas). Toque em "Esqueci o PIN: pedir um novo".';
+  var MSG_PEDIDO_PIN = 'Pedido enviado ao Bruno e ao Fernando. Quando receber o PIN provisório, digite aqui.';
+  /** N4 · "Esqueci o PIN: pedir um novo" (decisão 2). h = a tela do PIN. */
+  function pedirPinNovo(h) {
+    h.msg('Enviando o pedido…');
+    return rpc('tf_acesso_pedir_pin').then(function () { h.msg(MSG_PEDIDO_PIN); },
+      function (e) { h.msg(e.rede ? 'Sem sinal. Tente de novo com internet.' : (limpaMsg(e.message) || 'Não deu para pedir agora.'), true); });
+  }
   function conferir(pin, c, s) {
     return rpc('tf_meu_pin_conferir', { p_pin: pin, p_aparelho: c && c.ap || null }).then(function (j) {
       if (j && j.status === 'ok') {
@@ -339,6 +358,9 @@
       }
       if (j && j.status === 'pin_errado') return { ok: false, msg: 'PIN errado. Restam ' + j.restantes + ' tentativas.' };
       if (j && j.status === 'bloqueado') return { ok: false, msg: 'PIN travado até ' + horaDe(j.ate) + '. Espere ou entre com e-mail e senha.' };
+      // N4 (207): o PIN provisório confere, mas só serve para criar o PIN da pessoa
+      if (j && j.status === 'trocar_pin') return { ok: false, trocar: true, msg: 'Este é o PIN provisório: crie o seu PIN na trava do TapHub.' };
+      if (j && j.status === 'pin_vencido') return { ok: false, msg: MSG_PIN_VENCIDO };
       return { ok: false, sair: true, recado: 'Crie o seu PIN para continuar.' };
     }, function (e) {
       if (e.rede) return conferirLocal(pin, c);
@@ -580,14 +602,27 @@
         // iPhone/iPad: o Safari só abre a digital/o rosto com um toque na tela; nos outros, abre sozinho
         dig: dig, autoDigital: !ehIOS(),
         digital: function () { return digitalDestravar(c, s); },
-        pin: function (pin) {
+        pin: function (pin, t) {
           return conferir(pin, c, s).then(function (r) {
             if (r.ok) { pinUsado = pin; registrarDestrave('pin', c).catch(function () {}); }
+            // N4: digitou o PIN provisório → cria o PIN dele ali mesmo, na trava
+            if (r.trocar && t) {
+              t.ocupado(false); t.limpar(); t.msg('');
+              return criarPin(t, pin).then(function (novo) {
+                if (!novo) return { ok: false, msg: 'Crie o seu PIN para continuar.' };
+                return atualizarResumo(s.email, novo).then(function () {
+                  pinUsado = novo; registrarDestrave('pin', c).catch(function () {});
+                  toast('PIN novo criado.', 'ok');
+                  return { ok: true };
+                });
+              });
+            }
             return r;
           });
         },
         links: [
-          { txt: 'Esqueci o PIN (entrar com e-mail e senha)', fn: function () { sairParaLogin('Entre com e-mail e senha. Se esqueceu o PIN, peça para o RH liberar.'); } },
+          { txt: 'Esqueci o PIN: pedir um novo', fn: function (h) { pedirPinNovo(h); } },
+          { txt: 'Entrar com e-mail e senha', fn: function () { sairParaLogin('Entre com e-mail e senha.'); } },
           { txt: 'Não é você? Trocar de conta', fn: function () { sairParaLogin(''); } }
         ]
       });
@@ -874,6 +909,8 @@
             if (j && j.status === 'ok') { res = { ok: true, metodo: 'pin', aparelho: c && c.ap || null, em: j.em, confirmacao: j.confirmacao }; return { ok: true }; }
             if (j && j.status === 'pin_errado') return { ok: false, msg: 'PIN errado. Restam ' + j.restantes + ' tentativas.' };
             if (j && j.status === 'bloqueado') return { ok: false, msg: 'PIN travado até ' + horaDe(j.ate) + '.' };
+            if (j && j.status === 'trocar_pin') return { ok: false, msg: 'Este é o PIN provisório: crie o seu PIN na trava do TapHub antes.' };
+            if (j && j.status === 'pin_vencido') return { ok: false, msg: MSG_PIN_VENCIDO };
             return { ok: false, msg: 'Crie o seu PIN no início do TapHub.' };
           }, function (e) { return { ok: false, msg: e.rede ? 'Sem sinal. A assinatura fica pendente até ter sinal.' : limpaMsg(e.message) }; });
         },
@@ -883,9 +920,11 @@
   }
 
   /* ── fluxo de entrada (hub): criar PIN e lembrar o aparelho ────────────── */
-  function criarPin(t) {
-    // pede duas vezes; devolve o PIN criado no servidor
-    t.titulo('Crie o seu PIN', '6 números. Ele destrava o TapHub neste aparelho e confirma assinaturas.');
+  function criarPin(t, provisorio) {
+    // pede duas vezes; devolve o PIN criado no servidor.
+    // N4: com o PIN provisório (207), ele vai como "PIN atual" e o novo tem que ser diferente.
+    t.titulo('Crie o seu PIN', provisorio ? 'O PIN provisório confere. Agora crie o seu: 6 números, diferente do provisório.'
+                             : '6 números. Ele destrava o TapHub neste aparelho e confirma assinaturas.');
     return (function laco() {
       return t.pin().then(function (p1) {
         if (p1 === null) return null;
@@ -895,11 +934,14 @@
           if (p2 === null) return null;
           t.limpar();
           if (p1 !== p2) { t.titulo('Crie o seu PIN'); t.msg('Os dois PINs não batem. Comece de novo.', true); return laco(); }
+          if (provisorio && p1 === provisorio) { t.titulo('Crie o seu PIN'); t.msg('O PIN novo tem que ser diferente do provisório.', true); return laco(); }
           t.ocupado(true);
-          return rpc('tf_meu_pin_definir', { p_pin_novo: p1 }).then(function (r) {
+          return rpc('tf_meu_pin_definir', provisorio ? { p_pin_novo: p1, p_pin_atual: provisorio } : { p_pin_novo: p1 }).then(function (r) {
             t.ocupado(false);
             if (r && r.status === 'ok') return p1;
-            t.titulo('Crie o seu PIN'); t.msg('Não deu para criar o PIN.', true); return laco();
+            t.titulo('Crie o seu PIN');
+            t.msg(r && r.status === 'pin_vencido' ? MSG_PIN_VENCIDO : 'Não deu para criar o PIN.', true);
+            return laco();
           }, function (e) {
             t.ocupado(false); t.titulo('Crie o seu PIN');
             t.msg(e.rede ? 'Sem sinal. Tente de novo com internet.' : limpaMsg(e.message), true);
@@ -922,6 +964,35 @@
   }
   function naoLembrar() { lsSet(K_EFEMERO, '1'); destravar(); return 'efemero'; }
 
+  /** N4 · a pessoa tem PIN provisório (207): digita o provisório e cria o dela.
+   *  Devolve o PIN novo, ou null ("Agora não"). */
+  function trocarPinProvisorio() {
+    var t = abrirTela({ titulo: 'Digite o PIN provisório', sub: 'O que o Bruno ou o Fernando te passou. Depois você cria o seu.',
+      links: [{ txt: 'Esqueci o PIN: pedir um novo', fn: function (h) { pedirPinNovo(h); } },
+              { txt: 'Agora não', fn: function (h) { h.cancelar(); } }] });
+    return (function laco() {
+      return t.pin().then(function (pin) {
+        if (pin === null) { t.fechar(); return null; }
+        t.ocupado(true);
+        return rpc('tf_meu_pin_conferir', { p_pin: pin, p_aparelho: null }).then(function (j) {
+          t.ocupado(false); t.limpar();
+          if (j && j.status === 'trocar_pin') {
+            t.msg('');
+            return criarPin(t, pin).then(function (novo) { t.fechar(); toast('PIN novo criado.', 'ok'); return novo; });
+          }
+          if (j && j.status === 'ok') { t.fechar(); return pin; }   // já tinha trocado em outro aparelho
+          t.msg(j && j.status === 'pin_errado' ? 'PIN errado. Restam ' + j.restantes + ' tentativas.'
+                : j && j.status === 'bloqueado' ? 'PIN travado até ' + horaDe(j.ate) + '.'
+                : j && j.status === 'pin_vencido' ? MSG_PIN_VENCIDO : 'Não deu para conferir.', true);
+          return laco();
+        }, function (e) {
+          t.ocupado(false); t.limpar(); t.msg(e.rede ? 'Sem sinal. Tente de novo com internet.' : limpaMsg(e.message), true);
+          return laco();
+        });
+      });
+    })();
+  }
+
   /**
    * Depois de entrar com a senha (ou com sessão antiga e sem PIN neste aparelho):
    * cria o PIN se não tem e pergunta se lembra o aparelho.
@@ -930,9 +1001,14 @@
   function fluxoEntrada() {
     var s = sessao(), c = cfgDe(s.email);
     function seguir() {
-      return rpc('tf_meu_pin_situacao').then(function (sit) {
+      // N4: banco sem a 207 → tf_minha_troca dá erro e tudo segue como no N3
+      var troca = rpc('tf_minha_troca').catch(function () { return null; });
+      return Promise.all([rpc('tf_meu_pin_situacao'), troca]).then(function (x) {
+        var sit = x[0], tr = x[1];
         var pinNovo = null;
-        var pronto = (!sit || !sit.tem_pin)
+        var pronto = (tr && tr.pin)
+          ? trocarPinProvisorio().then(function (p) { pinNovo = p; return p !== null; })
+          : (!sit || !sit.tem_pin)
           ? (function () {
               var t = abrirTela({ titulo: 'Crie o seu PIN', links: [] });
               return criarPin(t).then(function (p) { t.fechar(); pinNovo = p; return p !== null; });
@@ -947,7 +1023,8 @@
             if (pinNovo) return lembrarAparelho(s, pinNovo);
             // já tinha PIN: confirma com ele antes de registrar o aparelho
             var t = abrirTela({ titulo: 'Digite seu PIN', sub: 'Para lembrar este aparelho.',
-              links: [{ txt: 'Não lembrar neste aparelho', fn: function (h) { h.cancelar(); } }] });
+              links: [{ txt: 'Não lembrar neste aparelho', fn: function (h) { h.cancelar(); } },
+                      { txt: 'Esqueci o PIN: pedir um novo', fn: function (h) { pedirPinNovo(h); } }] });
             return (function laco() {
               return t.pin().then(function (pin) {
                 if (pin === null) { t.fechar(); return naoLembrar(); }
@@ -956,8 +1033,17 @@
                   t.ocupado(false);
                   if (j && j.status === 'ok') { t.fechar(); return lembrarAparelho(s, pin); }
                   t.limpar();
+                  // N4: o provisório chegou depois do login: cria o PIN e lembra o aparelho com ele
+                  if (j && j.status === 'trocar_pin') {
+                    t.msg('');
+                    return criarPin(t, pin).then(function (novo) {
+                      if (!novo) { t.fechar(); return naoLembrar(); }
+                      t.fechar(); return lembrarAparelho(s, novo);
+                    });
+                  }
                   t.msg(j && j.status === 'pin_errado' ? 'PIN errado. Restam ' + j.restantes + ' tentativas.'
-                        : j && j.status === 'bloqueado' ? 'PIN travado até ' + horaDe(j.ate) + '.' : 'Não deu para conferir.', true);
+                        : j && j.status === 'bloqueado' ? 'PIN travado até ' + horaDe(j.ate) + '.'
+                        : j && j.status === 'pin_vencido' ? MSG_PIN_VENCIDO : 'Não deu para conferir.', true);
                   return laco();
                 }, function (e) {
                   t.ocupado(false); t.limpar(); t.msg(e.rede ? 'Sem sinal. Tente de novo com internet.' : limpaMsg(e.message), true);
