@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapRH 5 · Recursos Humanos</title>
+<title>TapRH 6 · Recursos Humanos</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2428,7 +2428,7 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'RH5';   // TapRH 5 (Ponto Etapa 2A a 2D, 606 a 609): comparar com o EzPoint (Importar EzPoint), rescisão (Escalas e regras), prazo de guarda das fotos (Parâmetros) · aba Saúde (semáforo por pessoa, avisos, termo de ciência, advertência preparada para o Bruno decidir, PDF do termo), orientação do almoço em Escalas e regras · aba Fechamento (intenção, horas pagas, liberar, assinatura da empresa, Discordo, cobrar pelo WhatsApp, PDF assinado, resumo para o contador, folgas compensatórias) · aba Parâmetros, data do acordo de banco por pessoa, espelho com a tolerância, 100%, noturno, almoço a pagar e o banco por lote · TapRH 4 (S126): o espelho em PDF com a logo, quadros, uma coluna por batida, ajustes e assinaturas; o nome do arquivo no padrão do escritório; folga e atestado de parte do dia (605) · TapRH 3 (Ponto 1A): aba Ponto (Espelhos, Escalas e regras, Importar EzPoint), só para quem aprova o ponto · TapRH 2 (S124): o RH deixa de liberar PIN (decisão 11 do recuperar-acesso: quem libera é "Autoriza acesso") · TapRH 1 (separado do Manager S117) — o S## da publicação é da rodada que publica
+const APP_VERSION = 'RH6';   // TapRH 6 (611): o termo de ciência e a advertência em texto formal (T2/A2) na aba Saúde e no PDF · TapRH 5 (Ponto Etapa 2A a 2D, 606 a 609): comparar com o EzPoint (Importar EzPoint), rescisão (Escalas e regras), prazo de guarda das fotos (Parâmetros) · aba Saúde (semáforo por pessoa, avisos, termo de ciência, advertência preparada para o Bruno decidir, PDF do termo), orientação do almoço em Escalas e regras · aba Fechamento (intenção, horas pagas, liberar, assinatura da empresa, Discordo, cobrar pelo WhatsApp, PDF assinado, resumo para o contador, folgas compensatórias) · aba Parâmetros, data do acordo de banco por pessoa, espelho com a tolerância, 100%, noturno, almoço a pagar e o banco por lote · TapRH 4 (S126): o espelho em PDF com a logo, quadros, uma coluna por batida, ajustes e assinaturas; o nome do arquivo no padrão do escritório; folga e atestado de parte do dia (605) · TapRH 3 (Ponto 1A): aba Ponto (Espelhos, Escalas e regras, Importar EzPoint), só para quem aprova o ponto · TapRH 2 (S124): o RH deixa de liberar PIN (decisão 11 do recuperar-acesso: quem libera é "Autoriza acesso") · TapRH 1 (separado do Manager S117) — o S## da publicação é da rodada que publica
 try{ document.getElementById('verBadge').textContent = 'RH · ' + APP_VERSION; }catch(e){}
 
 const esc               = (...a) => Nucleo.util.esc(...a);
@@ -6417,17 +6417,27 @@ function ptTermoSit(t){
   const dias = Math.floor((Date.now() - new Date(t.criado_em).getTime()) / 864e5);
   return '<span class="ptSit aviso">' + (t.lido_em ? 'lido, sem a ciência' : 'enviado, não lido') + '</span>' + (!t.lido_em && dias >= 1 ? ' <small>há ' + dias + (dias === 1 ? ' dia' : ' dias') + '</small>' : '');
 }
+/** 611 (T2/A2): o texto formal (partes, seções numeradas, dias com saída e volta). */
+function ptTermoFormalH(X){
+  return '<p><b>' + esc(String(X.titulo || '').toUpperCase() + ' Nº ' + (X.numero || '')) + '</b><br>' + esc(X.assunto || '') + '</p>'
+    + (X.partes || []).map(p => '<p><b>' + esc(p[0]) + ':</b> ' + esc(p[1]) + '</p>').join('')
+    + (X.secoes || []).map(s => '<p style="margin-top:10px"><b>' + esc(s.t) + '</b></p>' + (s.p || []).map(t => '<p>' + esc(t) + '</p>').join('')
+      + (s.tabela ? '<p>' + (X.dias || []).map(d => '<span class="ptChip">' + esc(ptDia(d.dia)) + ' · ' + esc(d.saida || '—') + '–' + esc(d.volta || '—') + ' · ' + esc(d.min) + ' min</span>').join(' ') + '</p>' : '')
+      + (s.nota ? '<p class="nota">' + esc(s.nota) + '</p>' : '')
+      + (s.itens || []).map(i => '<p>• ' + esc(i) + '</p>').join('')).join('')
+    + '<p style="margin-top:10px">' + esc(X.local || '') + '</p>';
+}
 /** O termo ou a advertência: o texto que a pessoa leu, a ciência e as ações do escritório. */
 async function ptTermoModal(id, depois){
   let T; try{ T = await rpc('tf_ponto_termo_ver', { p_id: id }); }catch(e){ toast(e.message, 'err'); return; }
   const X = T.texto || {}, adv = T.tipo === 'advertencia';
   const corpoH = '<p class="nota">' + ptTermoSit(T) + '</p>'
-    + '<div class="ptTermoTx"><p><b>' + esc(X.abertura || '') + '</b></p><p>' + esc(X.resumo || '') + '</p><p>' + (T.dias || []).map(d => '<span class="ptChip">' + esc(ptDia(d.dia)) + ' · ' + esc(d.min) + ' min</span>').join(' ') + '</p>'
+    + (X.formal ? '<div class="ptTermoTx">' + ptTermoFormalH(X) + '</div>' : '<div class="ptTermoTx"><p><b>' + esc(X.abertura || '') + '</b></p><p>' + esc(X.resumo || '') + '</p><p>' + (T.dias || []).map(d => '<span class="ptChip">' + esc(ptDia(d.dia)) + ' · ' + esc(d.min) + ' min</span>').join(' ') + '</p>'
     + (X.nota ? '<p class="nota">' + esc(X.nota) + '</p>' : '')
     + (X.saude ? '<p><b>' + esc(X.saude_tit) + '</b></p>' + X.saude.map(s => '<p>• <b>' + esc(s.t) + '</b> ' + esc(s.d) + '</p>').join('') : '')
     + '<p><b>' + esc(X.empresa_tit || '') + '</b></p><p>' + esc(X.empresa || '') + (X.nao_punicao ? ' <b>' + esc(X.nao_punicao) + '</b>' : '') + '</p>'
-    + '<p><b>' + esc(X.lei_tit || '') + '</b></p>' + (X.lei || []).map(l => '<p>' + esc(l) + '</p>').join('') + '</div>'
-    + (T.versao_funcionario ? '<p><b>Versão do funcionário:</b> “' + esc(T.versao_funcionario) + '”</p>' : '')
+    + '<p><b>' + esc(X.lei_tit || '') + '</b></p>' + (X.lei || []).map(l => '<p>' + esc(l) + '</p>').join('') + '</div>')
+    + (T.versao_funcionario ? '<p><b>' + (X.formal ? 'Manifestação do empregado' : 'Versão do funcionário') + ':</b> “' + esc(T.versao_funcionario) + '”</p>' : '')
     + (T.quer_conversar ? '<p class="ptSem"><b>Pediu para conversar.</b></p>' : '')
     + (adv && T.situacao === 'sugerida' ? '<p class="nota">Preparada pelo sistema porque o almoço curto se repetiu no mês seguinte ao termo de ciência. <b>Só vale se você aplicar.</b> '
         + 'Aplicada, ela vai para o celular do funcionário, que confirma a ciência (não precisa concordar). Advertência não desconta salário (CLT art. 474 trata da suspensão; a advertência não tem artigo próprio: vale por ser gradual e logo depois do fato).</p>'
@@ -6444,13 +6454,40 @@ async function ptTermoModal(id, depois){
   if (T.situacao !== 'sugerida' && T.situacao !== 'descartada') B.push({ label: T.pdf_path && T.situacao === 'ciente' ? 'PDF (de novo)' : 'PDF', onClick: () => ptTermoPdf(T) });
   abrirModal((adv ? 'Advertência escrita' : 'Termo de ciência') + ' nº ' + T.numero + ' · ' + T.nome, corpoH, B);
 }
+/** O fim do PDF (manifestação, ciência, base): igual no T1 e no T2. */
+function ptTermoRodapePdf(X, T, p, adv){
+  return [p((X.formal ? 'Manifestação do empregado: ' : 'Versão do funcionário: ') + (T.versao_funcionario ? '“' + T.versao_funcionario + '”' : X.formal ? '(nenhuma)' : '(não escreveu)') + (T.quer_conversar ? ' · pediu para conversar' : ''), { margin: [0, 10, 0, 4] }),
+        p(T.ciente_em ? 'Ciência registrada por ' + T.nome + ' com ' + (T.ciente_metodo === 'digital' ? 'a digital' : 'o PIN') + ' em ' + ptDHBR(T.ciente_em) + ' (hora do servidor, de Brasília), no aparelho ' + (T.ciente_aparelho_nome || T.ciente_aparelho || '—') + '. “Estou ciente” registra que recebeu, não que concorda.'
+          : 'Ainda sem a ciência do funcionário.', { color: T.ciente_em ? '#1F7A4D' : '#B42318', fontSize: 8.5 }),
+        adv && T.decidido_por ? p('Aplicada por ' + T.decidido_por + ' em ' + ptDHBR(T.decidido_em).slice(0, 10) + '.', { fontSize: 8.5 }) : '',
+        p('Texto ' + (X.versao || '') + '. Assinatura eletrônica pelo aplicativo (digital ou PIN), aceita no termo de adesão assinado no gov.br (MP 2.200-2/2001, art. 10 §2º). '
+          + 'Orientação: CLT art. 157 II; intervalo: CLT art. 71.', { fontSize: 6.5, color: '#6B7780', margin: [0, 12, 0, 0] })];
+}
+/** 611 (T2/A2): o corpo do PDF em texto formal. */
+function ptTermoFormalPdf(X, T, p, adv){
+  const L = [
+    { text: String(X.titulo || '').toUpperCase() + ' Nº ' + (X.numero || T.numero), bold: true, fontSize: 13, alignment: 'center', color: PT_AZUL },
+    { text: X.assunto || '', bold: true, fontSize: 10, alignment: 'center', margin: [0, 2, 0, 10] },
+    { table: { widths: [70, '*'], body: (X.partes || []).map(r => [{ text: r[0], bold: true, fontSize: 9 }, { text: r[1], fontSize: 9 }]) }, layout: 'lightHorizontalLines', margin: [0, 0, 0, 8] }];
+  (X.secoes || []).forEach(s => {
+    L.push(p(s.t, { bold: true, margin: [0, 6, 0, 3] }));
+    (s.p || []).forEach(t => L.push(p(t, { alignment: 'justify' })));
+    if (s.tabela) L.push({ table: { headerRows: 1, widths: ['*', '*', '*', '*'], body: [['Dia', 'Saída', 'Volta', 'Intervalo'].map(t => ({ text: t, bold: true, fontSize: 8.5 }))]
+        .concat((X.dias || []).map(d => [ptDia(d.dia), d.saida || '—', d.volta || '—', d.min + ' min'].map(t => ({ text: String(t), fontSize: 8.5 })))) }, layout: 'lightHorizontalLines', margin: [0, 2, 0, 4] },
+      p('Total: ' + (X.total || '') + ' não usufruídas.', { fontSize: 8.5 }));
+    if (s.nota) L.push(p(s.nota, { fontSize: 8, color: '#5B6770' }));
+    (s.itens || []).forEach(i => L.push(p('• ' + i, { margin: [10, 0, 0, 2] })));
+  });
+  L.push(p(X.local || '', { margin: [0, 10, 0, 0] }));
+  return L;
+}
 /** PDF do termo ou da advertência, com o texto gravado e o registro da ciência; fica guardado no sistema. */
 async function ptTermoPdf(T){
   try{
     const [pm, cfgE] = await Promise.all([ptPdfLib(), rpc('tf_ponto_config_ver', {})]);
     const X = T.texto || {}, adv = T.tipo === 'advertencia';
     const p = (t, o) => Object.assign({ text: t, fontSize: 9, lineHeight: 1.3, margin: [0, 0, 0, 5] }, o || {});
-    const content = [
+    const content = X.formal ? ptTermoFormalPdf(X, T, p, adv).concat(ptTermoRodapePdf(X, T, p, adv)) : [
       { text: (cfgE.empresa_nome || 'Engetap') + ' · ' + (X.titulo || '') + ' · Nº ' + T.numero, bold: true, fontSize: 12, color: PT_AZUL },
       { text: T.nome + ' · ' + ptMesRot(T.competencia) + ' · gerado em ' + ptDHBR(T.criado_em).slice(0, 10), fontSize: 8.5, margin: [0, 2, 0, 10] },
       p(X.abertura || '', { bold: true, fontSize: 10.5 }), p(X.resumo || ''),
@@ -6460,12 +6497,7 @@ async function ptTermoPdf(T){
       .concat(X.saude ? [p(X.saude_tit, { bold: true, margin: [0, 6, 0, 3] })].concat(X.saude.map(s => p([{ text: s.t + ' ', bold: true }, s.d], { margin: [8, 0, 0, 3] }))) : [])
       .concat([p(X.empresa_tit || '', { bold: true, margin: [0, 6, 0, 3] }), p((X.empresa || '') + (X.nao_punicao ? ' ' + X.nao_punicao : '')),
         p(X.lei_tit || '', { bold: true, margin: [0, 6, 0, 3] })].concat((X.lei || []).map(l => p(l, { fontSize: 8.5 }))))
-      .concat([p('Versão do funcionário: ' + (T.versao_funcionario ? '“' + T.versao_funcionario + '”' : '(não escreveu)') + (T.quer_conversar ? ' · pediu para conversar' : ''), { margin: [0, 10, 0, 4] }),
-        p(T.ciente_em ? 'Ciência registrada por ' + T.nome + ' com ' + (T.ciente_metodo === 'digital' ? 'a digital' : 'o PIN') + ' em ' + ptDHBR(T.ciente_em) + ' (hora do servidor, de Brasília), no aparelho ' + (T.ciente_aparelho_nome || T.ciente_aparelho || '—') + '. “Estou ciente” registra que recebeu, não que concorda.'
-          : 'Ainda sem a ciência do funcionário.', { color: T.ciente_em ? '#1F7A4D' : '#B42318', fontSize: 8.5 }),
-        adv && T.decidido_por ? p('Aplicada por ' + T.decidido_por + ' em ' + ptDHBR(T.decidido_em).slice(0, 10) + '.', { fontSize: 8.5 }) : '',
-        p('Texto ' + (X.versao || '') + '. Assinatura eletrônica pelo aplicativo (digital ou PIN), aceita no termo de adesão assinado no gov.br (MP 2.200-2/2001, art. 10 §2º). '
-          + 'Orientação: CLT art. 157 II; intervalo: CLT art. 71.', { fontSize: 6.5, color: '#6B7780', margin: [0, 12, 0, 0] })]);
+      .concat(ptTermoRodapePdf(X, T, p, adv));
     const blob = await new Promise(ok => pm.createPdf({ pageSize: 'A4', pageMargins: [36, 32, 36, 32], content: content.filter(Boolean) }).getBlob(ok));
     const hash = await ptSha256(await blob.arrayBuffer());
     const caminho = 'espelhos/' + T.usuario_id + '/' + String(T.competencia).slice(0, 7) + '-' + (adv ? 'advertencia' : 'termo') + '-' + T.numero + '-' + hash.slice(0, 8) + '.pdf';
