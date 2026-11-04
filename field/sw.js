@@ -24,7 +24,7 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S44-T13';   // S44: o espelho baixa com o nome no padrão do escritório · S43: o ponto no alto do Eu (batida com foto, local e PIN, comprovante) · S42: só o núcleo N4 ("Pedir PIN novo" e a troca do PIN provisório) · S41: só o núcleo N3 (a digital na trava, Passkey 1) · S40: as logomarcas no boletim e "Enviar pelo WhatsApp" / "Baixar o PDF" · S39: a medição da OS (e o gerador de PDF guardado para o campo) · S113: TapDoc 12 (414: reabrir o que enviou; válvula com 3 ciclos) e o motor R00.4 · S112: TapDoc 11 (413: posição primeiro, aferição por ciclo e por escala, sem bancada/boroscopia/E/R em campo) · S107: TapDoc 10 (412: as leituras não travam o envio) · S94: TapDoc 9 (R06a: o ambiente na Localização) · S86: TapDoc 8 (R04a: aferição em campo) e o motor R00.3
+const VERSAO = 'S45-T14';   // S45: os avisos com o app fechado (push) · o meu espelho e banco no ponto, e folgar ou trabalhar nas datas a negociar · S44: o espelho baixa com o nome no padrão do escritório · S43: o ponto no alto do Eu (batida com foto, local e PIN, comprovante) · S42: só o núcleo N4 ("Pedir PIN novo" e a troca do PIN provisório) · S41: só o núcleo N3 (a digital na trava, Passkey 1) · S40: as logomarcas no boletim e "Enviar pelo WhatsApp" / "Baixar o PDF" · S39: a medição da OS (e o gerador de PDF guardado para o campo) · S113: TapDoc 12 (414: reabrir o que enviou; válvula com 3 ciclos) e o motor R00.4 · S112: TapDoc 11 (413: posição primeiro, aferição por ciclo e por escala, sem bancada/boroscopia/E/R em campo) · S107: TapDoc 10 (412: as leituras não travam o envio) · S94: TapDoc 9 (R06a: o ambiente na Localização) · S86: TapDoc 8 (R04a: aferição em campo) e o motor R00.3
 const CACHE  = 'tapflow-field-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -150,5 +150,26 @@ self.addEventListener('fetch', ev => {
       return r;
     }).catch(() => null);
     return guardado || (await daRede) || new Response('', { status: 504 });
+  })());
+});
+
+
+/* ── S45 · Ponto 2E: os avisos com o app fechado ─────────────────────────────
+ * O servidor (Edge Function `avisar`) manda a mensagem cifrada; o navegador decifra e entrega aqui.
+ * O toque abre o TapField no Eu (#ponto), reaproveitando uma janela já aberta. */
+self.addEventListener('push', ev => {
+  let d = {};
+  try { d = ev.data ? ev.data.json() : {}; } catch (e) { d = { corpo: ev.data ? ev.data.text() : '' }; }
+  ev.waitUntil(self.registration.showNotification(d.titulo || 'TapField', {
+    body: d.corpo || '', tag: d.tag || undefined, renotify: !!d.tag, icon: 'icons/icon-192.png', badge: 'icons/favicon-32.png',
+    data: { url: d.url || './' } }));
+});
+self.addEventListener('notificationclick', ev => {
+  ev.notification.close();
+  const alvo = new URL((ev.notification.data && ev.notification.data.url) || './', self.registration.scope).href;
+  ev.waitUntil((async () => {
+    const L = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of L) if (c.url.startsWith(self.registration.scope)) { try { await c.navigate(alvo); } catch (e) {} return c.focus(); }
+    return self.clients.openWindow(alvo);
   })());
 });

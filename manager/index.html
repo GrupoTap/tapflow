@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S119</title>
+<title>TapFlow Manager · S127</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2415,7 +2415,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S119';   // S119 · o comercial saiu para o TapCRM (crm/) e as propostas para o nucleo/propostas.js; saiu o código parado do RH · S118 · o RH saiu para o TapRH (rh/) e saiu o código parado da Segurança · S117 · saiu o código parado do Financeiro (o TapFin é a fonte desde o TapFin 1) · S116 · a Segurança do Trabalho saiu para o TapSeg (seg/)
+const APP_VERSION = 'S127';   // S127 · Configurações › Feriados ganha o tipo de cada data (feriado, dispensa, folga a negociar pelo banco, dia normal) e a marca de ponto facultativo (Ponto Etapa 2A, 606) · S119 · o comercial saiu para o TapCRM (crm/) e as propostas para o nucleo/propostas.js; saiu o código parado do RH · S118 · o RH saiu para o TapRH (rh/) e saiu o código parado da Segurança · S117 · saiu o código parado do Financeiro (o TapFin é a fonte desde o TapFin 1) · S116 · a Segurança do Trabalho saiu para o TapSeg (seg/)
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -18716,15 +18716,21 @@ async function cfgFeriados(){
   try{ L = DEMO ? [] : await rpc('tf_feriados', { p_ano: FER_ANO }); }
   catch(e){ c.innerHTML = '<div class="aviso">Não deu para ler os feriados (falta rodar o <b>104_s49.sql</b>?): ' + esc(e.message) + '</div>'; return; }
   const ABR = { nacional:'Nacional', estadual:'Estadual', municipal:'Municipal' };
+  const FTIPO = { feriado:'Feriado', dispensa:'Dispensa dada pela Engetap', folga_banco:'Folga a negociar pelo banco', normal:'Dia normal (a Engetap trabalha)' };
   c.innerHTML = '<div class="painel"><h3 style="margin-top:0">Feriados</h3>'
-    + '<p class="nota">Dia útil é de segunda a sexta (o turno), sem os feriados desta lista. Vale para o prazo da Folha de Ponto e do '
-    + 'Demonstrativo (5º dia útil) e para a meta em dias úteis das OS. Carnaval e Corpus Christi são ponto facultativo e a Sexta-feira da '
-    + 'Paixão é municipal — entram aqui se a Engetap não trabalhar nesses dias. Mudar um feriado não muda prazo que já venceu.</p>'
+    + '<p class="nota">Dia útil é de segunda a sexta (o turno), sem as datas desta lista. Vale para o prazo da Folha de Ponto e do '
+    + 'Demonstrativo (5º dia útil), para a meta em dias úteis das OS e para o ponto. Cada data tem um <b>tipo</b>: '
+    + '<b>feriado</b> (quem trabalha recebe 100% ou folga compensatória), <b>dispensa dada pela Engetap</b> (folga sem desconto), '
+    + '<b>folga a negociar pelo banco</b> (cada um escolhe no celular, até a véspera, folgar com débito no banco ou trabalhar) e '
+    + '<b>dia normal</b> (ponto facultativo da Prefeitura que a Engetap não dá: conta como dia útil). Para a Agenda e as Ausências, '
+    + 'todo tipo que não é “dia normal” continua sendo dia sem trabalho. Os pontos facultativos da Prefeitura ficam marcados como '
+    + '“opcional” e o tipo se escolhe a cada ano. Feriado municipal segue a data do calendário anual da Prefeitura. Mudar uma data não muda prazo que já venceu.</p>'
     + '<div class="rhBarra"><div class="s49Mes"><button type="button" class="btn mini" id="feA" aria-label="Ano anterior">‹</button><b>' + FER_ANO
     + '</b><button type="button" class="btn mini" id="feP" aria-label="Ano seguinte">›</button></div>'
     + '<button class="btn pri" type="button" id="feNovo">Inserir feriado</button></div>'
     + '<div class="ccLista">' + (L.length ? L.map(x => '<div class="rhLin"><span class="t"><b>' + esc(dataBR(x.no_ano).slice(0,5)) + ' ' + S49_DIA_SEM(x.no_ano) + '</b> · '
-      + esc(x.nome) + '<small>' + esc(ABR[x.abrangencia] || x.abrangencia) + (x.repete ? ' · repete todo ano' : ' · só em ' + String(x.data).slice(0,4))
+      + esc(x.nome) + ' <span class="chip' + (x.tipo === 'normal' ? '' : x.tipo === 'feriado' ? ' atr' : ' ok') + '">' + esc(FTIPO[x.tipo || 'feriado'] || x.tipo) + '</span>'
+      + (x.opcional ? ' <span class="chip">opcional</span>' : '') + '<small>' + esc(ABR[x.abrangencia] || x.abrangencia) + (x.repete ? ' · repete todo ano' : ' · só em ' + String(x.data).slice(0,4))
       + (x.por ? ' · por ' + esc(x.por) : '') + '</small></span><span class="a"><button class="btn mini" type="button" data-fe="' + esc(x.id) + '">Editar</button>'
       + '<button class="btn mini perigo" type="button" data-fx="' + esc(x.id) + '">Excluir</button></span></div>').join('')
       : '<p class="nota" style="padding:10px">Nenhum feriado em ' + FER_ANO + '.</p>') + '</div></div>';
@@ -18746,14 +18752,25 @@ function feForm(x){
     + '<div class="campo"><label for="ffA">Abrangência</label><select id="ffA">' + ['nacional','estadual','municipal'].map(k =>
       '<option value="' + k + '"' + ((x ? x.abrangencia : 'municipal') === k ? ' selected' : '') + '>' + k.charAt(0).toUpperCase() + k.slice(1) + '</option>').join('') + '</select></div></div>'
     + '<div class="campo"><label for="ffN">Nome</label><input id="ffN" type="text" maxlength="80" autocomplete="off" name="ffn_nofill" value="' + esc(x ? x.nome : '') + '"></div>'
+    + '<div class="campo"><label for="ffT">Tipo para o ponto</label><select id="ffT">' + [['feriado','Feriado (quem trabalha recebe 100% ou folga compensatória)'],
+        ['dispensa','Dispensa dada pela Engetap (folga sem desconto)'], ['folga_banco','Folga a negociar pelo banco (cada um escolhe no celular)'],
+        ['normal','Dia normal (ponto facultativo que a Engetap não dá)']].map(([k, r]) =>
+      '<option value="' + k + '"' + ((x ? (x.tipo || 'feriado') : 'feriado') === k ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></div>'
+    + '<label class="chk"><input type="checkbox" id="ffO"' + (x && x.opcional ? ' checked' : '') + '> Ponto facultativo da Prefeitura (opcional: escolher o tipo a cada ano)</label>'
     + '<label class="chk"><input type="checkbox" id="ffR"' + (x && x.repete ? ' checked' : '') + '> Repete todo ano na mesma data</label>'
     + '<p class="nota">Data móvel (Carnaval, Paixão, Corpus Christi) se cadastra ano a ano, sem "repete".</p>'
     + '<p class="nota" id="ffMsg" style="color:var(--crit)"></p>',
     [{ label:'Cancelar', onClick: fecharModal },
      { label:'Gravar', pri:true, onClick: async () => {
-        try{ await rpc('tf_feriado_salvar', { p_id: x ? x.id : null, p_data: document.getElementById('ffD').value,
+        try{ const r = await rpc('tf_feriado_salvar', { p_id: x ? x.id : null, p_data: document.getElementById('ffD').value,
                p_nome: document.getElementById('ffN').value, p_abrangencia: document.getElementById('ffA').value,
                p_repete: document.getElementById('ffR').checked });
+             // S127 · o tipo e o "opcional" (606); banco sem a 606: grava como antes e avisa
+             const tp = document.getElementById('ffT').value, op = document.getElementById('ffO').checked;
+             if (r && r.id && (tp !== ((x && x.tipo) || 'feriado') || op !== !!(x && x.opcional))){
+               try{ await rpc('tf_feriado_tipo', { p_id: r.id, p_tipo: tp, p_opcional: op }); }
+               catch(e2){ fecharModal(); toast('Data gravada, mas o tipo não (falta rodar a 606 no Supabase?): ' + e2.message, 'err'); cfgFeriados(); return; }
+             }
              fecharModal(); toast('Feriado gravado.', 'ok'); cfgFeriados(); }
         catch(e){ document.getElementById('ffMsg').textContent = e.message; }
      }}]);
