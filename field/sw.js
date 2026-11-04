@@ -24,7 +24,7 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S42-T13';   // S42: só o núcleo N4 ("Pedir PIN novo" e a troca do PIN provisório) · S41: só o núcleo N3 (a digital na trava, Passkey 1) · S40: as logomarcas no boletim e "Enviar pelo WhatsApp" / "Baixar o PDF" · S39: a medição da OS (e o gerador de PDF guardado para o campo) · S113: TapDoc 12 (414: reabrir o que enviou; válvula com 3 ciclos) e o motor R00.4 · S112: TapDoc 11 (413: posição primeiro, aferição por ciclo e por escala, sem bancada/boroscopia/E/R em campo) · S107: TapDoc 10 (412: as leituras não travam o envio) · S94: TapDoc 9 (R06a: o ambiente na Localização) · S86: TapDoc 8 (R04a: aferição em campo) e o motor R00.3
+const VERSAO = 'S43-T13';   // S43: o ponto no alto do Eu (batida com foto, local e PIN, comprovante) · S42: só o núcleo N4 ("Pedir PIN novo" e a troca do PIN provisório) · S41: só o núcleo N3 (a digital na trava, Passkey 1) · S40: as logomarcas no boletim e "Enviar pelo WhatsApp" / "Baixar o PDF" · S39: a medição da OS (e o gerador de PDF guardado para o campo) · S113: TapDoc 12 (414: reabrir o que enviou; válvula com 3 ciclos) e o motor R00.4 · S112: TapDoc 11 (413: posição primeiro, aferição por ciclo e por escala, sem bancada/boroscopia/E/R em campo) · S107: TapDoc 10 (412: as leituras não travam o envio) · S94: TapDoc 9 (R06a: o ambiente na Localização) · S86: TapDoc 8 (R04a: aferição em campo) e o motor R00.3
 const CACHE  = 'tapflow-field-' + VERSAO;
 
 const ESSENCIAIS = [
