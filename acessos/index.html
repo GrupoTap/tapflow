@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pessoas e acessos · A4</title>
+<title>Pessoas e acessos · A5</title>
 <meta name="theme-color" content="#0C1420">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22104%22 fill=%22%231B6FA9%22/%3E%3Ctext x=%22256%22 y=%22350%22 font-family=%22Arial,sans-serif%22 font-size=%22300%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EE%3C/text%3E%3C/svg%3E">
 <link rel="manifest" href="../manifest.webmanifest">
@@ -24,10 +24,16 @@
      · seção "Digital": quem tem digital e em qual aparelho, os pedidos de
        aparelho novo, "Liberar aparelho novo" (um cadastro, 24 h, vai para o
        histórico), "Remover digital" e o indicador de quem destrava com PIN.
+     A5 (S124 · Recuperar senha e PIN, processos/recuperar-acesso-desenho.md, banco 207):
+     · a caixa passa a se chamar "Autoriza acesso" (digital, senha e PIN);
+     · seção "Pedidos de senha e PIN": os pedidos abertos, "Gerar senha
+       provisória" / "Gerar PIN provisório" (mostrado UMA vez, vale 24 h),
+       "Descartar" e quem ainda não trocou o provisório;
+     · "senha/PIN" na linha de cada pessoa: redefinir sem pedido.
      ════════════════════════════════════════════════════════════════════════ -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N3">
-<script src="../nucleo/config.js?v=N3"></script>
-<script src="../nucleo/nucleo.js?v=N3"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N4">
+<script src="../nucleo/config.js?v=N4"></script>
+<script src="../nucleo/nucleo.js?v=N4"></script>
 <script src="../nucleo/modulos.js?v=M1"></script>
 <style>
 :root{
@@ -91,24 +97,36 @@ tr.inativo td{opacity:.55}
 .lnkp{background:none;border:0;color:var(--accent-ink);font:inherit;cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:2px;text-align:left}
 .tag.sem{border-color:#7A5A20;color:#F5C97A}
 tr.semmod td{background:#1E2232}
+/* A5 · pedidos de senha e PIN */
+.prov{font:700 26px/1.2 'JetBrains Mono',ui-monospace,Consolas,monospace;letter-spacing:.08em;background:var(--surface-2);
+  border:1px solid var(--rule);border-radius:6px;padding:14px 16px;text-align:center;margin:10px 0;color:#fff;user-select:all}
+.lnkp.rd{font-size:12px;margin-left:6px;color:var(--ink-3)}
+.lnkp.rd:hover{color:var(--accent-ink)}
+.venceu{color:var(--crit)}
 </style>
 </head>
 <body>
 
 <div class="topo">
   <div class="marca">Tap<span>Hub</span></div>
-  <div class="selo" id="selo">ACESSOS · A4</div>
+  <div class="selo" id="selo">ACESSOS · A5</div>
   <div class="dir"><span id="eu"></span><a href="../" id="btInicio">Início</a></div>
 </div>
 
 <main>
   <h1>Pessoas e acessos</h1>
-  <p class="sub">Quem tem o módulo entra e faz tudo nele; quem não tem nem vê o card. O <b>PLH</b> confere material, aprova o cálculo e decide a troca de material em campo. A coluna <b>Digital</b> (autoriza digital) libera a digital em aparelho novo (troca ou perda de celular). O <b>Admin</b> vem do perfil.</p>
+  <p class="sub">Quem tem o módulo entra e faz tudo nele; quem não tem nem vê o card. O <b>PLH</b> confere material, aprova o cálculo e decide a troca de material em campo. A coluna <b>Acesso</b> (autoriza acesso) libera a digital em aparelho novo e atende os pedidos de senha e PIN esquecidos. O <b>Admin</b> vem do perfil.</p>
   <p class="etapa" id="etapa">Este quadro decide os cards do início, o menu "Trocar de módulo", as telas do Manager e quem entra no TapFin. <b>Ainda pela regra de hoje:</b> no TapDoc do escritório, as ações de conferência continuam com o admin, até a próxima rodada.</p>
 
   <div id="erroGeral" hidden></div>
 
   <div id="conteudo" hidden>
+    <section id="pedidos" hidden>
+      <h2 style="font-size:16px;margin:0 0 4px">Pedidos de senha e PIN</h2>
+      <p class="nota" style="margin:0 0 10px">Quem esqueceu a senha ou o PIN pede pelo TapHub. Gere a <b>provisória</b> e passe para a pessoa (pessoalmente ou por mensagem): ela aparece <b>uma vez só</b>, vale <b>24 horas</b>, e no primeiro uso a pessoa é obrigada a criar a dela. Gerar a senha tira a pessoa de todos os aparelhos. Para redefinir sem pedido, use <b>senha/PIN</b> ao lado do nome, na tabela abaixo. Ninguém redefine a própria.</p>
+      <div class="cx"><table id="tPedidos"></table></div>
+      <div id="provisorios"></div>
+    </section>
     <div class="barra">
       <input type="search" id="filtro" placeholder="Procurar pessoa, e-mail ou perfil" aria-label="Procurar pessoa"><span class="porp" id="contagem"></span>
       <span style="margin-left:auto;display:flex;gap:8px"><button class="btn" type="button" id="btNovoPerfil">Novo perfil</button><button class="btn" type="button" id="btHist" aria-expanded="false">Ver histórico</button></span>
@@ -118,7 +136,7 @@ tr.semmod td{background:#1E2232}
 
     <section id="secDig">
       <h2 style="font-size:16px;margin:26px 0 4px">Digital (trava do PIN)</h2>
-      <p class="nota" style="margin:0 0 10px">A digital (ou o rosto) destrava o TapFlow no aparelho da pessoa. O sistema guarda só uma chave do aparelho, nunca a digital. O 1º cadastro é livre; aparelho novo (troca ou perda de celular) só com a liberação de quem tem <b>Autoriza digital</b>: vale para <b>um</b> cadastro, por <b>24 horas</b>, e fica no histórico. As colunas PIN e Digital contam os destraves dos últimos 30 dias: quem usa muito o PIN aparece marcado.</p>
+      <p class="nota" style="margin:0 0 10px">A digital (ou o rosto) destrava o TapFlow no aparelho da pessoa. O sistema guarda só uma chave do aparelho, nunca a digital. O 1º cadastro é livre; aparelho novo (troca ou perda de celular) só com a liberação de quem tem <b>Autoriza acesso</b>: vale para <b>um</b> cadastro, por <b>24 horas</b>, e fica no histórico. As colunas PIN e Digital contam os destraves dos últimos 30 dias: quem usa muito o PIN aparece marcado.</p>
       <div class="cx"><table id="tDig"></table></div>
     </section>
 
@@ -132,7 +150,7 @@ tr.semmod td{background:#1E2232}
 
 <script>
 'use strict';
-const APP_VERSION = 'A4';   // A4 (S123): a caixa "Autoriza digital" e a seção Digital (Passkey 1) · A3 (S91): uma tela só
+const APP_VERSION = 'A5';   // A5 (S124): "Autoriza acesso" e os pedidos de senha e PIN (207) · A4 (S123): a seção Digital (Passkey 1) · A3 (S91): uma tela só
 const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL = _CFG.SUPABASE_URL || '', SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
@@ -162,7 +180,7 @@ async function carregar(){
     return;
   }
   document.getElementById('conteudo').hidden = false;
-  desenharPessoas(); desenharHistorico(); carregarDigital();
+  desenharPessoas(); desenharHistorico(); carregarDigital(); carregarPedidos();
 }
 
 /* ── Pessoas ─────────────────────────────────────────────────────────────── */
@@ -175,11 +193,13 @@ function desenharPessoas(){
   const lista = D.pessoas.filter(p => !f || [p.nome, p.email, p.perfil_nome].join(' ').toLowerCase().includes(f))
                          .sort((a, b) => (semMod(b) - semMod(a)) || a.nome.localeCompare(b.nome, 'pt-BR'));
   document.getElementById('contagem').textContent = lista.length + ' de ' + D.pessoas.length + ' pessoa(s)';
-  let h = '<thead><tr><th>Pessoa</th><th>Perfil</th>' + cabecalhoModulos() + '<th class="m sep">PLH</th><th class="m" title="Autoriza digital: libera a digital em aparelho novo (troca ou perda de celular)">Digital</th><th class="m">Admin</th></tr></thead><tbody>';
+  let h = '<thead><tr><th>Pessoa</th><th>Perfil</th>' + cabecalhoModulos() + '<th class="m sep">PLH</th><th class="m" title="Autoriza acesso: libera a digital em aparelho novo e atende os pedidos de senha e PIN">Acesso</th><th class="m">Admin</th></tr></thead><tbody>';
   if (!lista.length) h += '<tr><td colspan="' + (D.modulos.length + 5) + '" class="vazio">Ninguém com esse nome.</td></tr>';
   lista.forEach(p => {
     h += '<tr data-id="' + esc(p.id) + '"' + (semMod(p) ? ' class="semmod"' : '') + '><td><div class="nm">' + esc(p.nome)
-       + (semMod(p) ? ' <span class="tag sem">sem módulos: marque o que ela usa</span>' : '') + '</div><div class="em">' + esc(p.email || '') + '</div></td>'
+       + (semMod(p) ? ' <span class="tag sem">sem módulos: marque o que ela usa</span>' : '') + '</div><div class="em">' + esc(p.email || '')
+       + (PD && PD.pode_atender && p.id !== PD.eu ? ' <button class="lnkp rd" type="button" data-redefinir="' + esc(p.id) + '" title="Gerar senha ou PIN provisório">senha/PIN</button>' : '')
+       + '</div></td>'
        + '<td class="pf"><button class="lnkp" type="button" data-perfilde="' + esc(p.id) + '" title="Trocar o perfil ou editar">' + esc(p.perfil_nome || p.perfil) + '</button></td>';
     if (!p.escritorio){
       h += '<td class="so-campo sep" colspan="' + D.modulos.length + '">Só campo: entra pela escala da OS</td>';
@@ -192,7 +212,7 @@ function desenharPessoas(){
     h += '<td class="m sep"><input type="checkbox" data-pessoa="' + esc(p.id) + '" data-poder="plh"' + (p.poderes.includes('plh') ? ' checked' : '')
        + ' aria-label="' + esc('PLH para ' + p.nome) + '"></td>'
        + '<td class="m"><input type="checkbox" data-pessoa="' + esc(p.id) + '" data-poder="digital"' + (p.poderes.includes('digital') ? ' checked' : '')
-       + ' aria-label="' + esc('Autoriza digital: ' + p.nome) + '"></td>'
+       + ' aria-label="' + esc('Autoriza acesso: ' + p.nome) + '"></td>'
        + '<td class="m">' + (p.admin ? '<span class="tag adm" title="Vem do perfil: clique no perfil para mudar">admin</span>' : '<span class="porp">—</span>') + '</td></tr>';
   });
   document.getElementById('tPessoas').innerHTML = h + '</tbody>';
@@ -207,10 +227,10 @@ document.getElementById('tPessoas').addEventListener('change', async ev => {
   try{
     if (c.dataset.poder){
       await rpc('tf_acessos_poder', { p_usuario: p.id, p_poder: c.dataset.poder, p_tem: tem });
-      const pd = c.dataset.poder, rot = pd === 'plh' ? 'PLH' : '"Autoriza digital"';
+      const pd = c.dataset.poder, rot = pd === 'plh' ? 'PLH' : '"Autoriza acesso"';
       p.poderes = tem ? p.poderes.concat(pd) : p.poderes.filter(x => x !== pd);
       toast(rot + (tem ? ' dado a ' : ' tirado de ') + p.nome, 'ok');
-      if (pd === 'digital') carregarDigital();
+      if (pd === 'digital'){ carregarDigital(); carregarPedidos(); }
     } else {
       const k = c.dataset.mod;
       await rpc('tf_acessos_modulo', { p_usuario: p.id, p_modulo: k, p_tem: tem });
@@ -354,6 +374,85 @@ document.getElementById('tDig').addEventListener('click', ev => {
   }
 });
 
+/* ── A5 · Pedidos de senha e PIN (207) ──────────────────────────────────── */
+let PD = null;
+const NOME_TIPO = { senha:'senha', pin:'PIN' };
+async function carregarPedidos(){
+  const sec = document.getElementById('pedidos');
+  try{ PD = await rpc('tf_acesso_pedidos', {}); }
+  catch(e){ PD = null; sec.hidden = true; return; }        // banco sem a 207: a seção nem aparece
+  sec.hidden = !PD.pode_atender;
+  desenharPessoas();                                        // o "senha/PIN" de cada linha depende do PD
+  if (!PD.pode_atender) return;
+  const t = document.getElementById('tPedidos');
+  let h = '<thead><tr><th>Pessoa</th><th>Esqueceu</th><th>Pediu em</th><th></th></tr></thead><tbody>';
+  if (!PD.pedidos.length) h += '<tr><td colspan="4" class="vazio">Nenhum pedido aberto.</td></tr>';
+  PD.pedidos.forEach(x => {
+    h += '<tr class="semmod"><td><div class="nm">' + esc(x.nome) + '</div><div class="em">' + esc(x.email || '') + '</div></td>'
+       + '<td>' + esc(x.tipo === 'senha' ? 'a senha' : 'o PIN') + '</td><td>' + esc(quando(x.pedido_em)) + '</td><td style="white-space:nowrap">'
+       + (x.usuario_id === PD.eu ? '<span class="porp">peça a outra pessoa com "Autoriza acesso"</span>'
+          : '<button class="btn pri" type="button" data-gerar="' + esc(x.usuario_id) + '" data-tipo="' + esc(x.tipo) + '">Gerar ' + esc(x.tipo === 'senha' ? 'senha' : 'PIN') + ' provisório' + (x.tipo === 'senha' ? 'a' : '') + '</button>')
+       + ' <button class="lnkp" type="button" data-descartar="' + esc(x.id) + '">descartar</button></td></tr>';
+  });
+  t.innerHTML = h + '</tbody>';
+  const pv = document.getElementById('provisorios');
+  pv.innerHTML = PD.provisorios.length
+    ? '<p class="nota" style="margin:12px 0 4px"><b>Esperando a pessoa trocar:</b></p><ul class="mud">' + PD.provisorios.map(x =>
+        '<li>' + esc(x.nome) + ': ' + esc(NOME_TIPO[x.tipo]) + ' provisóri' + (x.tipo === 'senha' ? 'a' : 'o') + ' gerad' + (x.tipo === 'senha' ? 'a' : 'o')
+        + (x.por ? ' por ' + esc(x.por) : '') + ' em ' + esc(quando(x.criado_em)) + ' · '
+        + (x.vencido ? '<span class="venceu">venceu sem ser usad' + (x.tipo === 'senha' ? 'a' : 'o') + ' (gere outr' + (x.tipo === 'senha' ? 'a' : 'o') + ')</span>' : 'vale até ' + esc(quando(x.expira_em)))
+        + '</li>').join('') + '</ul>'
+    : '';
+  if (location.hash === '#pedidos' && !sec.dataset.rolou){ sec.dataset.rolou = '1'; sec.scrollIntoView({ block:'start' }); }
+}
+function confirmarGerar(id, tipo){
+  const p = (D.pessoas.find(x => x.id === id)) || (PD.pedidos.find(x => x.usuario_id === id) || {});
+  const nome = p.nome || 'esta pessoa';
+  const corpo = tipo === 'senha'
+    ? '<p style="margin:0">O sistema sorteia uma <b>senha provisória</b> para ' + esc(nome) + ', que vale <b>24 horas</b>. ' + esc(nome)
+      + ' <b>sai de todos os aparelhos</b> agora e, ao entrar com ela, cria a própria senha. A senha antiga deixa de valer.</p>'
+    : '<p style="margin:0">O sistema sorteia um <b>PIN provisório</b> para ' + esc(nome) + ', que vale <b>24 horas</b>. Ao digitá-lo na trava, '
+      + esc(nome) + ' cria o próprio PIN. O PIN antigo deixa de valer; a digital do aparelho continua.</p>';
+  Nucleo.janela.confirmar(tipo === 'senha' ? 'Gerar senha provisória?' : 'Gerar PIN provisório?', corpo, 'Gerar', false).then(async ok => {
+    if (!ok) return;
+    try{
+      const r = await rpc('tf_acesso_redefinir', { p_usuario: id, p_tipo: tipo });
+      mostrarProvisorio(r);
+      await carregarPedidos(); recarregarHistorico();
+    }catch(e){ toast(e.message || 'Não gerou.', 'erro'); }
+  });
+}
+function mostrarProvisorio(r){
+  const senha = r.tipo === 'senha';
+  Nucleo.janela.abrir(senha ? 'Senha provisória de ' + r.nome : 'PIN provisório de ' + r.nome,
+    '<p style="margin:0">Passe para <b>' + esc(r.nome) + '</b> pessoalmente ou por mensagem. Vale até <b>' + esc(quando(r.expira_em)) + '</b>.</p>'
+    + '<div class="prov" id="provTxt">' + esc(r.provisorio) + '</div>'
+    + '<p style="margin:0;color:var(--crit)"><b>Anote ou copie agora:</b> depois de fechar esta janela ela não aparece de novo.</p>'
+    + '<p class="porp" style="margin:8px 0 0">' + (senha ? 'No TapHub: entrar com o e-mail e esta senha → criar a senha dela.' : 'Na trava do TapHub: digitar este PIN → criar o PIN dela.') + '</p>',
+    [{ label:'Copiar', onClick: () => { try{ Nucleo.util.copiar(r.provisorio, 'Copiado.'); }catch(e){} } },
+     { label:'Fechar', pri:true, onClick: () => { Nucleo.janela.fechar(); document.getElementById('mBody').innerHTML = ''; } }]);
+}
+document.getElementById('tPedidos').addEventListener('click', ev => {
+  const g = ev.target.closest('[data-gerar]'), d = ev.target.closest('[data-descartar]');
+  if (g) return confirmarGerar(g.dataset.gerar, g.dataset.tipo);
+  if (d){
+    Nucleo.janela.confirmar('Descartar o pedido?', '<p>O pedido sai da lista sem gerar nada (por exemplo: já resolvido pessoalmente).</p>', 'Descartar', true)
+      .then(async ok => {
+        if (!ok) return;
+        try{ await rpc('tf_acesso_descartar', { p_pedido: d.dataset.descartar }); toast('Pedido descartado.', 'ok'); await carregarPedidos(); }
+        catch(e){ toast(e.message || 'Não descartou.', 'erro'); }
+      });
+  }
+});
+document.getElementById('tPessoas').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-redefinir]'); if (!b) return;
+  const p = D.pessoas.find(x => x.id === b.dataset.redefinir); if (!p) return;
+  Nucleo.janela.abrir('Redefinir o acesso de ' + p.nome, '<p style="margin:0">Gere uma senha ou um PIN provisório para <b>' + esc(p.nome) + '</b> (vale 24 horas). No primeiro uso, a pessoa é obrigada a criar a própria.</p>',
+    [{ label:'Cancelar', onClick: () => Nucleo.janela.fechar() },
+     { label:'PIN provisório', onClick: () => { Nucleo.janela.fechar(); confirmarGerar(p.id, 'pin'); } },
+     { label:'Senha provisória', pri:true, onClick: () => { Nucleo.janela.fechar(); confirmarGerar(p.id, 'senha'); } }]);
+});
+
 /* ── Histórico ──────────────────────────────────────────────────────────── */
 function quando(t){ try{ return new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }); }catch(e){ return t; } }
 function desenharHistorico(){
@@ -364,11 +463,11 @@ function desenharHistorico(){
     if (x.tipo === 'carga') oque = esc(x.obs || 'carga inicial');
     else if (x.tipo === 'perfil') oque = ({ criou:'criado', mudou:'mudou', excluiu:'excluído' }[x.acao] || x.acao) + (x.obs ? ': ' + esc(x.obs) : '');
     else {
-      if (x.tipo === 'poder' && x.chave === 'digital_aparelho'){
+      if (x.tipo === 'poder' && ['digital_aparelho','senha_provisoria','pin_provisorio','senha_trocada','pin_trocado'].includes(x.chave)){
         h += '<tr><td>' + quando(x.em) + '</td><td>' + esc(x.pessoa || '—') + '</td><td><span class="' + (x.acao === 'deu' ? 'ganha' : 'perde') + '">' + esc(x.obs || '') + '</span></td><td>' + esc(x.por || 'sistema') + '</td></tr>';
         return;
       }
-      const nome = x.tipo === 'poder' ? (x.chave === 'digital' ? '"Autoriza digital"' : x.chave.toUpperCase()) : nomeMod(x.chave);
+      const nome = x.tipo === 'poder' ? (x.chave === 'digital' ? '"Autoriza acesso"' : x.chave.toUpperCase()) : nomeMod(x.chave);
       oque = '<span class="' + (x.acao === 'deu' ? 'ganha' : 'perde') + '">' + (x.acao === 'deu' ? 'ganhou ' : 'perdeu ') + esc(nome) + '</span>'
            + (x.alvo === 'perfil' ? ' <span class="porp">(no padrão)</span>' : '');
     }
