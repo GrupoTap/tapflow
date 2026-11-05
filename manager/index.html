@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow Manager · S127</title>
+<title>TapFlow Manager · S130</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2415,7 +2415,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S127';   // S127 · Configurações › Feriados ganha o tipo de cada data (feriado, dispensa, folga a negociar pelo banco, dia normal) e a marca de ponto facultativo (Ponto Etapa 2A, 606) · S119 · o comercial saiu para o TapCRM (crm/) e as propostas para o nucleo/propostas.js; saiu o código parado do RH · S118 · o RH saiu para o TapRH (rh/) e saiu o código parado da Segurança · S117 · saiu o código parado do Financeiro (o TapFin é a fonte desde o TapFin 1) · S116 · a Segurança do Trabalho saiu para o TapSeg (seg/)
+const APP_VERSION = 'S130';   // S130 · Contratos, a mobilização do mês (308): a visita abre sem vaso; o dia de campo tem tipo (Serviço, Reunião, Treinamento, Aguardando liberação) e só o de Serviço ganha letra e pasta; aba Vasos na OS do contrato (+ Vaso do contrato, + Vaso novo a conferir, Conferir, Tirar); Fiscal e Gestor do fornecedor no contrato; "entra sozinho na medição" nos itens; selo "vaso a conferir" na medição · S127 · Configurações › Feriados ganha o tipo de cada data (feriado, dispensa, folga a negociar pelo banco, dia normal) e a marca de ponto facultativo (Ponto Etapa 2A, 606) · S119 · o comercial saiu para o TapCRM (crm/) e as propostas para o nucleo/propostas.js; saiu o código parado do RH · S118 · o RH saiu para o TapRH (rh/) e saiu o código parado da Segurança · S117 · saiu o código parado do Financeiro (o TapFin é a fonte desde o TapFin 1) · S116 · a Segurança do Trabalho saiu para o TapSeg (seg/)
 // o crachá lê a constante: escrever a versão à mão no HTML já deixou o app
 // dizendo S6 rodando S7, e é o número que eu peço quando algo dá errado
 try{ document.getElementById('verBadge').textContent = 'MANAGER · ' + APP_VERSION; }catch(e){}
@@ -3344,6 +3344,7 @@ function montarTabsOS(card){
 
 function pintarDrawer(){
   if (abaDrawer === 'dias' && ehContrato(osAberta.card)) return ctrPintarDias();
+  if (abaDrawer === 'vasos' && ehContrato(osAberta.card)) return ctrPintarVasosOS();   // S130
   if (abaDrawer === 'med' && ehContrato(osAberta.card)) return ctrPintarMedicao();
   if (abaDrawer === 'osmed' && osmedTem()) return osmedPintar();   // S114
   if (abaDrawer === 'cliente')  return pintarClienteOS();
@@ -17437,6 +17438,7 @@ function ctrAbaResumo(el){
     + '<div class="ctrGrade">'
     + ctrCampo('Objeto', esc(c.objeto || '')) + ctrCampo('Contrato no cliente', esc(c.contrato_cliente || '')) + ctrCampo('Área / unidade', esc(c.area || ''))
     + ctrCampo('Fiscal do cliente', esc(c.fiscal || '')) + ctrCampo('Gestor do cliente', esc(c.gestor || ''))
+    + ctrCampo('Fiscal – Fornecedor (boletim)', esc(c.fiscal_fornecedor || '')) + ctrCampo('Gestor – Fornecedor (boletim)', esc(c.gestor_fornecedor || ''))
     + ctrCampo('ART', esc([c.art_numero, c.art_data ? dataBR(c.art_data) : ''].filter(Boolean).join(' · ')))
     + ctrCampo('Valor previsto', c.valor_previsto == null ? '' : esc(BRL(c.valor_previsto))) + ctrCampo('Medido no ano', esc(BRL(P.medido_ano)))
     + ctrCampo('Usa pedido de compra', c.usa_pedido ? 'sim' : 'não')
@@ -17467,12 +17469,15 @@ function ctrAbaItens(el){
   const P = CTR.painel, c = P.contrato, vivos = P.itens.filter(i => i.vivo), velhos = P.itens.filter(i => !i.vivo);
   const edita = ctrPodeEsc() && c.situacao !== 'encerrado' && c.situacao !== 'cancelado';
   el.innerHTML = (edita ? '<div class="ctrAcoes"><button class="btn pri" type="button" id="itNovo">+ Item</button></div>' : '')
-    + '<p class="nota" style="margin-top:0">O preço não se edita: um preço novo é uma linha nova (aditivo), com data e motivo. A faixa vale em (mín, máx]: o valor exato fica na faixa de baixo.</p>'
-    + (vivos.length ? '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Código</th><th>Item</th><th>Serviço</th><th>Faixa</th><th>Conta</th><th>Un.</th><th class="num">Preço</th><th class="num">Previsto</th><th></th></tr></thead><tbody>'
+    + '<p class="nota" style="margin-top:0">O preço não se edita: um preço novo é uma linha nova (aditivo), com data e motivo. A faixa vale em (mín, máx]: o valor exato fica na faixa de baixo. '
+    + '«Na medição»: o TapWeb e os itens por visita/dia marcados «sozinho» entram na montagem da medição; desmarcados, só por «Linha à mão» (ex.: na Gerdau, só o Sistema de Gestão Completo).</p>'
+    + (vivos.length ? '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Código</th><th>Item</th><th>Serviço</th><th>Faixa</th><th>Conta</th><th>Un.</th><th class="num">Preço</th><th class="num">Previsto</th><th title="Entra sozinho na montagem da medição (TapWeb e itens por visita/dia)">Na medição</th><th></th></tr></thead><tbody>'
       + vivos.map(i => '<tr><td class="mono">' + esc(i.codigo_cliente || '—') + '</td><td>' + esc(i.descricao) + (i.bitola ? ' <small>(' + esc(i.bitola) + ')</small>' : '') + '</td>'
         + '<td>' + esc(ctrServ(i.servico)) + '</td><td>' + esc(i.faixa || '—') + '</td><td>' + esc(ctrConta(i.como_conta)) + '</td><td>' + esc(i.unidade || '') + '</td>'
         + '<td class="num">' + (i.preco == null ? '<span class="mini warn">sem preço</span>' : esc(BRL(i.preco))) + '</td>'
         + '<td class="num">' + esc(ctrQtd(i.qtd_prevista)) + '</td>'
+        + '<td>' + (ctrItemAuto(i) ? (edita ? '<label class="ctrMarca" style="margin:0" title="Desmarcado: o item só entra na medição por «Linha à mão»"><input type="checkbox" data-au="' + esc(i.id) + '"' + (i.auto_medicao !== false ? ' checked' : '') + '> sozinho</label>'
+                                         : (i.auto_medicao !== false ? 'sozinho' : '<span class="mini">só à mão</span>')) : '<small class="nota" style="margin:0">pelo vaso/RDO</small>') + '</td>'
         + '<td class="a">' + (edita ? (i.preco == null ? '<button class="btn mini" data-pr="' + esc(i.id) + '" type="button">Definir preço</button>'
               : '<button class="btn mini" data-ad="' + esc(i.id) + '" type="button">Aditivo</button>')
             + '<button class="btn mini" data-pv="' + esc(i.id) + '" type="button">Previsto</button>' : '') + '</td></tr>').join('')
@@ -17486,7 +17491,11 @@ function ctrAbaItens(el){
   el.querySelectorAll('[data-ad]').forEach(b => b.addEventListener('click', () => modalAditivo(c, P.itens.find(i => i.id === b.dataset.ad))));
   el.querySelectorAll('[data-pr]').forEach(b => b.addEventListener('click', () => modalPrecoItem(P.itens.find(i => i.id === b.dataset.pr))));
   el.querySelectorAll('[data-pv]').forEach(b => b.addEventListener('click', () => modalPrevisto(P.itens.find(i => i.id === b.dataset.pv))));
+  el.querySelectorAll('[data-au]').forEach(c => c.addEventListener('change', () => ctrAcao(() => rpc('tf_contrato_item_auto', { p_item: c.dataset.au, p_auto: c.checked }),
+    c.checked ? 'O item entra sozinho na medição.' : 'O item só entra na medição por «Linha à mão».')));
 }
+/** S130 (308, M10) · os itens que a montagem põe sozinha sem vaso nem RDO: TapWeb e os itens por visita/dia. */
+const ctrItemAuto = i => ['tapweb_modulo', 'tapweb_completo'].includes(i.servico) || ['visita', 'dia'].includes(i.como_conta);
 
 function modalItemContrato(c){
   abrirModal('Item do contrato',
@@ -17545,15 +17554,17 @@ function ctrAbaVasos(el){
   el.innerHTML = (edita ? '<div class="ctrAcoes"><button class="btn pri" type="button" id="vsNovo">+ Incluir vaso</button></div>' : '')
     + '<p class="nota" style="margin-top:0">Os vasos que o contrato cobre. O volume vem do TapWeb/TapDoc; vaso sem volume não tem como escolher a faixa de preço.</p>'
     + (vivos.length ? '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>TAG</th><th>Tipo</th><th class="num">Volume (m³)</th><th>Faixa do exame</th><th>Próx. venc.</th><th></th></tr></thead><tbody>'
-      + vivos.map(v => '<tr><td class="mono">' + esc(v.tag) + (v.nome ? ' <small>' + esc(v.nome) + '</small>' : '') + '</td><td>' + esc(v.tipo || '') + '</td>'
+      + vivos.map(v => '<tr><td class="mono">' + esc(v.tag) + (v.nome ? ' <small>' + esc(v.nome) + '</small>' : '') + (v.provisorio ? ' <span class="mini warn">a conferir</span>' : '') + '</td><td>' + esc(v.tipo || '') + '</td>'
         + '<td class="num">' + (v.sem_volume ? '<span class="mini warn">sem volume</span>' : esc(ctrQtd(v.volume))) + '</td>'
         + '<td>' + esc(v.faixa_exame || '—') + '</td>'
         + '<td>' + esc([v.venc_insp_externa, v.venc_insp_interna, v.venc_calib_valvula, v.venc_calib_manometro].filter(Boolean).sort()[0] ? dataBR([v.venc_insp_externa, v.venc_insp_interna, v.venc_calib_valvula, v.venc_calib_manometro].filter(Boolean).sort()[0]) : '—') + '</td>'
-        + '<td class="a">' + (edita ? '<button class="btn mini" data-rm="' + esc(v.equipamento_id) + '" type="button">Tirar</button>' : '') + '</td></tr>').join('')
+        + '<td class="a">' + (v.provisorio && ctrPodeConferir() ? '<button class="btn mini pri" data-cf="' + esc(v.equipamento_id) + '" type="button">Conferir</button>' : '')
+        + (edita ? '<button class="btn mini" data-rm="' + esc(v.equipamento_id) + '" type="button">Tirar</button>' : '') + '</td></tr>').join('')
       + '</tbody></table></div>' : '<p class="nota">Nenhum vaso no contrato ainda.</p>')
     + (fora.length ? '<details style="margin-top:14px"><summary class="secTit" style="display:inline">Vasos que saíram (' + fora.length + ')</summary><ul class="nota">'
       + fora.map(v => '<li>' + esc(v.tag) + ' — ' + esc(dataBR(v.removido_em)) + (v.motivo_remocao ? ': ' + esc(v.motivo_remocao) : '') + '</li>').join('') + '</ul></details>' : '');
   const nv = document.getElementById('vsNovo'); if (nv) nv.addEventListener('click', () => modalVasoContrato(c));
+  el.querySelectorAll('[data-cf]').forEach(b => b.addEventListener('click', () => { const v = vivos.find(x => x.equipamento_id === b.dataset.cf); modalConferirVaso(v.equipamento_id, v, ctrRecarregar); }));
   el.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => {
     const v = vivos.find(x => x.equipamento_id === b.dataset.rm);
     abrirModal('Tirar o vaso ' + v.tag + ' do contrato',
@@ -17590,9 +17601,9 @@ function ctrAbaVisitas(el){
   const P = CTR.painel, c = P.contrato;
   el.innerHTML = '<div class="ctrAcoes">' + (ctrPodeVisita() && c.situacao === 'ativo' ? '<button class="btn pri" type="button" id="vsNova">+ Nova visita</button>' : '') + '</div>'
     + '<p class="nota" style="margin-top:0">Cada visita é uma OS (<span class="mono">OS-' + esc(c.numero) + '-M<i>nn</i></span>) com a sua medição. O número da medição é o da visita.</p>'
-    + (P.visitas.length ? '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>OS</th><th>Situação</th><th>Dias de campo</th><th>Medição</th><th class="num">Valor</th><th></th></tr></thead><tbody>'
-      + P.visitas.map(v => '<tr><td class="mono">' + esc(v.numero) + '</td><td>' + esc(v.status) + '</td>'
-        + '<td>' + (v.dias && v.dias.length ? v.dias.map(d => esc(dataBR(d.dia).slice(0, 5)) + (d.letra ? ' <b>' + esc(d.letra) + '</b>' : '') + (d.numero ? ' · RDO ' + String(d.numero).padStart(3, '0') : '')).join('<br>') : '—') + '</td>'
+    + (P.visitas.length ? '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>OS</th><th>Situação</th><th class="num">Vasos</th><th>Dias de campo</th><th>Medição</th><th class="num">Valor</th><th></th></tr></thead><tbody>'
+      + P.visitas.map(v => '<tr><td class="mono">' + esc(v.numero) + '</td><td>' + esc(v.status) + '</td><td class="num">' + esc(v.vasos == null ? '' : String(v.vasos)) + '</td>'
+        + '<td>' + (v.dias && v.dias.length ? v.dias.map(d => esc(dataBR(d.dia).slice(0, 5)) + (d.letra ? ' <b>' + esc(d.letra) + '</b>' : '') + ((d.tipo || 'servico') !== 'servico' ? ' <small>(' + esc(ctrTipoRot(d.tipo)) + ')</small>' : '') + (d.numero ? ' · RDO ' + String(d.numero).padStart(3, '0') : '')).join('<br>') : '—') + '</td>'
         + '<td>' + (v.medicao_numero ? ctrMob(v.medicao_numero) + ' · ' + esc(v.medicao_situacao) : '—') + '</td><td class="num">' + (v.valor == null ? '—' : esc(BRL(v.valor))) + '</td>'
         + '<td class="a"><button class="btn mini" data-os="' + esc(v.os_id) + '" type="button">Abrir OS</button></td></tr>').join('') + '</tbody></table></div>'
       : '<p class="nota">Nenhuma visita ainda.</p>');
@@ -17603,15 +17614,16 @@ async function modalNovaVisita(contratoId){
   let P = CTR.painel && CTR.painel.contrato.id === contratoId ? CTR.painel : null;
   try{ if (!P) P = await rpc('tf_contrato_painel', { p_id: contratoId }); }catch(e){ return toast(e.message, 'err'); }
   const vivos = P.vasos.filter(v => !v.removido_em);
-  if (!vivos.length) return toast('O contrato não tem vasos. Inclua os vasos na aba Vasos primeiro.', 'err');
+  const mesDesc = 'Mobilização de ' + CTR_MESES_NOME[new Date().getMonth()];
+  // S130 (308, M1): a visita é o mês; os vasos são opcionais e entram durante o mês (aba Vasos da OS)
   abrirModal('Nova visita — ' + P.contrato.numero,
-    '<p class="nota" style="margin-top:0">Marque os vasos que serão atendidos nesta visita. A OS nasce já com o fluxo do contrato (agendar, preparar, executar, RDO, medição).</p>'
-    + '<div class="ctrMarcas">' + vivos.map(v => '<label class="ctrMarca"><input type="checkbox" value="' + esc(v.equipamento_id) + '"> <b class="mono">' + esc(v.tag) + '</b> '
-      + esc(v.nome || '') + (v.sem_volume ? ' · <i>sem volume</i>' : ' · ' + esc(ctrQtd(v.volume)) + ' m³') + '</label>').join('') + '</div>'
-    + '<div class="campo" style="margin-top:10px"><label for="nvDesc">Descrição (opcional)</label><input id="nvDesc" type="text" autocomplete="off"></div>',
+    '<div class="aviso" style="margin-top:0">A visita é o mês inteiro: cada ida ao cliente é um dia de campo dentro dela (com o RDO). Os vasos podem ficar para depois: entram pela aba <b>Vasos</b> da OS, quando o cliente liberar.</div>'
+    + '<div class="campo"><label for="nvDesc">Descrição</label><input id="nvDesc" type="text" autocomplete="off" value="' + esc(mesDesc) + '"></div>'
+    + (vivos.length ? '<details class="ctrNvVasos"><summary class="secTit" style="display:inline;cursor:pointer">Já sabe os vasos? Marque aqui (opcional)</summary>'
+      + '<div class="ctrMarcas" style="margin-top:6px">' + vivos.map(v => '<label class="ctrMarca"><input type="checkbox" value="' + esc(v.equipamento_id) + '"> <b class="mono">' + esc(v.tag) + '</b> '
+      + esc(v.nome || '') + (v.sem_volume ? ' · <i>sem volume</i>' : ' · ' + esc(ctrQtd(v.volume)) + ' m³') + (v.provisorio ? ' · <span class="mini warn">a conferir</span>' : '') + '</label>').join('') + '</div></details>' : ''),
     [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Abrir a visita', pri: true, onClick: async () => {
       const ids = [...document.querySelectorAll('#mBody .ctrMarcas input:checked')].map(i => i.value);
-      if (!ids.length) return toast('Marque ao menos um vaso.', 'err');
       try{
         const r = await rpc('tf_contrato_nova_visita', { p_contrato: contratoId, p_vasos: ids.map(id => ({ equipamento_id: id, servicos: ['inspecao_vaso'] })), p_descricao: ctrVal('nvDesc') || null });
         fecharModal(); toast('Visita ' + r.numero + ' aberta.', 'ok');
@@ -17770,6 +17782,8 @@ async function modalContrato(c){
     + '<div class="campo"><label for="ctArea">Área / unidade</label><input id="ctArea" type="text" autocomplete="off" value="' + esc(novo ? '' : c.area || '') + '"></div>'
     + '<div class="dupla"><div class="campo"><label for="ctFis">Fiscal do cliente</label><select id="ctFis">' + ctrOpts(ctts, novo ? null : c.fiscal_id, '— escolha —') + '</select></div>'
     + '<div class="campo"><label for="ctGes">Gestor do cliente</label><select id="ctGes">' + ctrOpts(ctts, novo ? null : c.gestor_id, '—') + '</select></div></div>'
+    + '<div class="dupla"><div class="campo"><label for="ctFisF">Fiscal – Fornecedor (rodapé do boletim; contato do cliente)</label><select id="ctFisF">' + ctrOpts(ctts, novo ? null : c.fiscal_fornecedor_id, '—') + '</select></div>'
+    + '<div class="campo"><label for="ctGesF">Gestor – Fornecedor (rodapé do boletim; Engetap)</label><select id="ctGesF">' + ctrOpts((EQUIPE || []).filter(u => u.ativo !== false), novo ? null : c.gestor_fornecedor_id, '—') + '</select></div></div>'
     + '<div class="dupla"><div class="campo"><label for="ctArt">ART (número)</label><input id="ctArt" type="text" autocomplete="off" value="' + esc(novo ? '' : c.art_numero || '') + '"></div>'
     + '<div class="campo"><label for="ctArtD">ART (data)</label><input id="ctArtD" type="date" value="' + esc(novo ? '' : c.art_data || '') + '"></div></div>'
     + '<div class="dupla"><div class="campo"><label for="ctVal">Valor previsto no ano (R$)</label><input id="ctVal" type="text" inputmode="decimal" autocomplete="off" value="' + esc(novo || c.valor_previsto == null ? '' : String(c.valor_previsto).replace('.', ',')) + '"></div>'
@@ -17781,11 +17795,13 @@ async function modalContrato(c){
     + ctrCamposDrive('ct', novo ? {} : c);
   let ctts = [];
   try{ if (!novo) ctts = await ctrContatos(cliId); }catch(e){}
+  try{ if (!EQUIPE.length && !DEMO) await carregarEquipe(); }catch(e){}   // S130 · o gestor do fornecedor é uma pessoa da Engetap
   abrirModal(novo ? 'Novo contrato' : 'Dados do contrato ' + c.numero, corpo(ctts), [
     { label: 'Cancelar', onClick: fecharModal },
     { label: 'Gravar', pri: true, onClick: async () => {
         const d = { numero: ctrIni(ctrVal('ctNum')), contrato_cliente: ctrVal('ctCC'), inicio: ctrVal('ctIni'), fim: ctrVal('ctFim') || null, objeto: ctrVal('ctObj'), area: ctrVal('ctArea'),
                     fiscal_id: ctrVal('ctFis') || null, gestor_id: ctrVal('ctGes') || null, art_numero: ctrVal('ctArt'), art_data: ctrVal('ctArtD') || null,
+                    fiscal_fornecedor_id: ctrVal('ctFisF') || null, gestor_fornecedor_id: ctrVal('ctGesF') || null,
                     valor_previsto: ctrNum(ctrVal('ctVal')), usa_pedido: document.getElementById('ctPed').checked, observacoes: ctrVal('ctObs') };
         const links = ctrLerDrive('ct'); if (links === false) return;
         if (novo){ d.cliente_id = ctrVal('ctCli'); d.prox_letra = ctrVal('ctL'); d.prox_rdo = ctrNum(ctrVal('ctR')); d.prox_medicao = ctrNum(ctrVal('ctM'));
@@ -17801,6 +17817,7 @@ async function modalContrato(c){
       const id = ev.target.value; let L = [];
       try{ if (id) L = await ctrContatos(id); }catch(e){}
       document.getElementById('ctFis').innerHTML = ctrOpts(L, null, '— escolha —'); document.getElementById('ctGes').innerHTML = ctrOpts(L, null, '—');
+      document.getElementById('ctFisF').innerHTML = ctrOpts(L, null, '—');
     });
   }
 }
@@ -17906,15 +17923,20 @@ const ctrHora = h => h ? String(h).slice(0, 5) : '';
 const ctrRdoNum = r => r.numero == null ? '' : String(r.numero).padStart(3, '0') + '/' + r.ano_numero;
 const ctrDocsOk = () => { if (!window.Documentos){ toast('O gerador de documentos (nucleo/documentos.js) não está no ar nesta versão.', 'err'); return false; } return true; };
 const ctrSit = { marcado: 'marcado', preenchido: 'RDO preenchido', desmarcado: 'desmarcado' };
+// S130 (308, M2) · o tipo do dia de campo; só o de Serviço ganha letra e pasta do dia (M4)
+const CTR_TIPOS = [['servico', 'Serviço'], ['reuniao', 'Reunião'], ['treinamento', 'Treinamento'], ['aguardando', 'Aguardando liberação']];
+const ctrTipoRot = k => (CTR_TIPOS.find(x => x[0] === (k || 'servico')) || [k, k])[1];
+const ctrOptsTipo = sel => CTR_TIPOS.map(([k, r]) => '<option value="' + k + '"' + (k === (sel || 'servico') ? ' selected' : '') + '>' + esc(r) + '</option>').join('');
+const CTR_MESES_NOME = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 
 function ctrAbaDoCard(card){
   // a OS de contrato não tem proposta, itens nem custos: as abas dela são outras
   if (ehContrato(card)){ if (['itens', 'proposta', 'custos'].includes(abaDrawer)) abaDrawer = 'tarefas'; }
-  else if (['dias', 'med'].includes(abaDrawer)) abaDrawer = 'tarefas';
+  else if (['dias', 'med', 'vasos'].includes(abaDrawer)) abaDrawer = 'tarefas';
 }
 function ctrTabsOS(card){
   return ehContrato(card)
-    ? [['tarefas', 'Tarefas'], ['dias', 'Dias de campo'], ['med', 'Medição'], ['cliente', 'Cliente'], ['arquivos', 'Arquivos'], ['hist', 'Histórico']]
+    ? [['tarefas', 'Tarefas'], ['dias', 'Dias de campo'], ['vasos', 'Vasos'], ['med', 'Medição'], ['cliente', 'Cliente'], ['arquivos', 'Arquivos'], ['hist', 'Histórico']]
     : null;
 }
 const ctrTarefa = id => ((osAberta && osAberta.tarefas) || []).find(t => t.tarefa_id === id);
@@ -17943,8 +17965,8 @@ async function ctrPintarDias(){
   const fechada = card.status_os === 'concluida';
   body.innerHTML = '<div class="ctrAcoes"><button class="btn pri" type="button" id="dcMarca">+ Marcar dia de campo</button>'
     + (abertaT06 && vivos.length ? '<button class="btn" type="button" id="dcEnc">Encerrar a execução</button>' : '') + '</div>'
-    + '<p class="nota" style="margin-top:0">Cada dia de campo é uma linha na agenda de quem vai. A letra do dia (A…Z, ZA…) e o nº do RDO saem quando o dia é realizado e o RDO preenchido. '
-    + 'Quem marca, desmarca e preenche é a equipe da visita (e o admin).</p>'
+    + '<p class="nota" style="margin-top:0">Cada saída do escritório é um dia de campo, com o RDO (o nº do RDO sai ao concluir). Só o dia de <b>Serviço</b> ganha a letra (A…Z, ZA…) e a pasta no Drive; reunião, treinamento e aguardando liberação não. '
+    + 'Os vasos entram na aba <b>Vasos</b>, a qualquer hora até encerrar a execução. Quem marca, desmarca e preenche é a equipe da visita (e o admin).</p>'
     + (vivos.length ? vivos.map(r => ctrLinhaDia(r)).join('') : '<p class="nota">Nenhum dia marcado ainda. Marcar o primeiro dia conclui o "Agendar serviço".</p>')
     + (fora.length ? '<details style="margin-top:12px"><summary class="secTit" style="display:inline">Dias desmarcados (' + fora.length + ')</summary><ul class="nota">'
         + fora.map(r => '<li>' + esc(dataBR(r.dia)) + ' — ' + esc(r.motivo_desmarcou || 'sem motivo') + '</li>').join('') + '</ul></details>' : '');
@@ -17974,11 +17996,14 @@ function ctrLinhaDia(r){
   const sel = r.situacao === 'preenchido';
   return '<div class="rdoLin ' + r.situacao + '"><div class="rdoTop"><b>' + esc(dataBR(r.dia)) + (r.hora ? ' ' + esc(ctrHora(r.hora)) : '') + '</b>'
     + (r.minutos ? ' · ' + esc(minHora(r.minutos)) : '') + ' <span class="mini ' + (sel ? 'ok' : 'warn') + '">' + esc(ctrSit[r.situacao] || r.situacao) + '</span>'
+    + ' <span class="mini' + ((r.tipo || 'servico') === 'servico' ? '' : ' warn') + '" title="Tipo do dia">' + esc(ctrTipoRot(r.tipo)) + '</span>'
+    + (r.realizado_em && !r.letra ? ' <span class="mini" title="Dia realizado (sem letra: não é de Serviço)">realizado</span>' : '')
     + (r.letra ? ' <span class="mini ag" title="Letra do dia">dia ' + esc(r.letra) + '</span>' : '')
     + (r.numero ? ' <span class="mini ct" title="Número do RDO">RDO ' + esc(ctrRdoNum(r)) + '</span>' : '') + '</div>'
     + '<div class="nota" style="margin:2px 0 6px">' + esc(equipe) + ctrDriveSitDia(r) + '</div><div class="ctrAcoes">'
     + '<button class="btn mini" type="button" data-rd="' + esc(r.id) + '" data-ac="rdo">' + (sel ? 'Ver / corrigir o RDO' : 'Preencher o RDO') + '</button>'
-    + (!r.letra ? '<button class="btn mini" type="button" data-rd="' + esc(r.id) + '" data-ac="real" title="Dar o dia como realizado (gera a letra)">Dia realizado</button>' : '')
+    + (!r.letra && !r.realizado_em ? '<button class="btn mini" type="button" data-rd="' + esc(r.id) + '" data-ac="real" title="' + ((r.tipo || 'servico') === 'servico' ? 'Dar o dia como realizado (gera a letra e a pasta do dia)' : 'Dar o dia como realizado (sem letra: não é dia de Serviço)') + '">Dia realizado</button>' : '')
+    + (!sel && !r.letra ? '<button class="btn mini" type="button" data-rd="' + esc(r.id) + '" data-ac="tipo" title="Serviço, Reunião, Treinamento ou Aguardando liberação">Trocar o tipo</button>' : '')
     + (r.letra && !r.pasta_drive && ctrDriveId(CTRO.drive && CTRO.drive.drive_proposta) ? '<button class="btn mini" type="button" data-rd="' + esc(r.id) + '" data-ac="pasta" title="Criar a pasta deste dia dentro da pasta da proposta do ano, no Drive">Criar pasta no Drive</button>' : '')
     + (!sel ? '<button class="btn mini" type="button" data-rd="' + esc(r.id) + '" data-ac="desm">Desmarcar</button>' : '')
     + (sel ? '<button class="btn mini" type="button" data-rd="' + esc(r.id) + '" data-ac="word"' + (ctrModelo('rdo') ? '' : ' disabled title="O contrato não tem o modelo do RDO (aba Modelos)"') + '>Word</button>'
@@ -17997,6 +18022,7 @@ function ctrAcaoDia(ac, r){
   if (ac === 'rdo') return modalRDO(r);
   if (ac === 'desm') return modalDesmarcar(r);
   if (ac === 'real') return ctrRealizado(r, false);
+  if (ac === 'tipo') return modalTipoDia(r);
   if (ac === 'word' || ac === 'pdf') return ctrGerarRDO(r, ac);
   if (ac === 'pasta') return ctrCriarPastaDia(r, false);
   if (ac === 'drive') return ctrEnviarRDODrive(r, false);
@@ -18019,7 +18045,7 @@ async function ctrRealizado(r, forcar){
           + '.</p><p class="nota">As letras seguem a ordem dos dias. Dar a letra a este dia mesmo assim?</p>', 'Dar a letra assim mesmo')) return;
       return ctrRealizado(r, true);
     }
-    toast('Dia realizado' + (x.letra ? ' — letra ' + x.letra : '') + '.', 'ok');
+    toast('Dia realizado' + (x.letra ? ' — letra ' + x.letra : ' (' + ctrTipoRot(x.tipo || r.tipo) + ': sem letra e sem pasta)') + '.', 'ok');
     if (x.letra) await ctrCriarPastaDia(Object.assign({}, r, { letra: x.letra }), true);   // S111: a pasta do dia no Drive
     ctrPintarDias();
   }catch(e){ toast(e.message, 'err'); }
@@ -18070,11 +18096,13 @@ function modalDiaCampo(){
     + '<div class="campo"><label for="dcHora">Hora de início</label><input id="dcHora" type="time" value="08:00"></div></div>'
     + '<div class="dupla"><div class="campo"><label for="dcMin">Tempo previsto (min)</label><input id="dcMin" type="text" inputmode="numeric" value="480"></div>'
     + '<div class="campo"><label for="dcDono">Responsável do dia</label><select id="dcDono">' + ctrOptsPessoas(eu, '— escolha —') + '</select></div></div>'
+    + '<div class="campo"><label for="dcTipo">Tipo do dia</label><select id="dcTipo">' + ctrOptsTipo('servico') + '</select>'
+    + '<p class="nota" style="margin:4px 0 0">Só o dia de <b>Serviço</b> (inspeção, calibração, teste…) ganha a letra e a pasta no Drive. Reunião, treinamento e aguardando liberação têm RDO e diária, sem letra. Dá para trocar até concluir o RDO.</p></div>'
     + '<div class="secTit">Apoios (opcional)</div><div class="ctrMarcas">' + (EQUIPE || []).filter(u => u.perfil === 'auxiliar' || u.perfil === 'inspetor' || u.perfil === 'admin').map(u =>
         '<label class="ctrMarca"><input type="checkbox" value="' + esc(u.id) + '"> ' + esc(u.nome) + '</label>').join('') + '</div>',
     [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Marcar', pri: true, onClick: async () => {
       const apoios = [...document.querySelectorAll('#mBody .ctrMarcas input:checked')].map(i => i.value);
-      try{ await rpc('tf_dia_campo_marcar', { p_os: osAberta.card.os_id, p_dia: ctrVal('dcDia'), p_hora: ctrVal('dcHora') || null, p_minutos: ctrNum(ctrVal('dcMin')), p_dono: ctrVal('dcDono') || null, p_apoios: apoios });
+      try{ await rpc('tf_dia_campo_marcar', { p_os: osAberta.card.os_id, p_dia: ctrVal('dcDia'), p_hora: ctrVal('dcHora') || null, p_minutos: ctrNum(ctrVal('dcMin')), p_dono: ctrVal('dcDono') || null, p_apoios: apoios, p_tipo: ctrVal('dcTipo') || 'servico' });
            fecharModal(); toast('Dia de campo marcado.', 'ok'); await ctrRepintarOS(); }
       catch(e){ toast(e.message, 'err'); } } }]);
 }
@@ -18083,6 +18111,122 @@ function modalDesmarcar(r){
     [{ label: 'Voltar', onClick: fecharModal }, { label: 'Desmarcar', cls: 'perigo', onClick: async () => {
       try{ await rpc('tf_dia_campo_desmarcar', { p_rdo: r.id, p_motivo: ctrVal('dmMot') }); fecharModal(); toast('Dia desmarcado.', 'ok'); await ctrRepintarOS(); }
       catch(e){ toast(e.message, 'err'); } } }]);
+}
+
+/** S130 (308, M2/M4) · trocar o tipo do dia até o RDO ser concluído; virar Serviço num dia já realizado dá a letra (e a pasta) na hora. */
+function modalTipoDia(r){
+  abrirModal('Tipo do dia ' + dataBR(r.dia),
+      '<div class="campo"><label for="tdTipo">Tipo do dia</label><select id="tdTipo">' + ctrOptsTipo(r.tipo) + '</select></div>'
+    + '<p class="nota" style="margin:0">Liberaram o serviço à tarde? Troque «Aguardando liberação» por «Serviço»: o dia ganha a letra e a pasta do Drive na hora. Depois da letra, o dia fica como Serviço.</p>',
+    [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Gravar', pri: true, onClick: async () => {
+      try{
+        const x = await rpc('tf_dia_campo_tipo', { p_rdo: r.id, p_tipo: ctrVal('tdTipo') });
+        fecharModal(); toast('Tipo do dia: ' + ctrTipoRot(ctrVal('tdTipo') || x.tipo) + (x.letra ? ' — letra ' + x.letra : '') + '.', 'ok');
+        if (x.letra) await ctrCriarPastaDia(Object.assign({}, r, { letra: x.letra }), true);
+        await ctrRepintarOS();
+      }catch(e){ toast(e.message, 'err'); } } }]);
+}
+
+// ── OS DE CONTRATO › VASOS (S130 · 308, M5–M7) ─────────────────────────────
+// Os vasos da visita do mês: entram a qualquer hora até "Encerrar a execução" (do contrato ou novos,
+// "a conferir"); saem por engano só antes da coleta no TapDoc. O banco é quem trava.
+const CTRV = { lista: [], contrato: [] };
+const ctrExecAberta = () => { const t = ctrTarefa('T06'); return !t || !['completo', 'dispensado'].includes(t.status); };
+const ctrPodeConferir = () => ctrPodeEsc() || ctrPodeVisita();
+async function ctrPintarVasosOS(){
+  const body = document.getElementById('dBody'), card = osAberta.card;
+  body.innerHTML = '<p class="nota">Carregando…</p>';
+  try{
+    await ctrCarregarOS();
+    CTRV.lista = await get('contrato_visita_vasos?select=equipamento_id,servicos,incluido_em,equipamentos(tag,nome,volume_m3,provisorio,localizacao)&os_id=eq.' + card.os_id + '&removido_em=is.null&order=incluido_em');
+  }catch(e){ body.innerHTML = ''; const p = document.createElement('p'); p.className = 'nota'; p.style.color = 'var(--crit)'; p.textContent = e.message; body.appendChild(p); return; }
+  if (osAberta.card !== card || abaDrawer !== 'vasos') return;
+  const aberta = ctrExecAberta() && card.status_os !== 'concluida';
+  const L = CTRV.lista || [];
+  const aConf = L.filter(v => v.equipamentos && v.equipamentos.provisorio).length;
+  body.innerHTML = '<div class="ctrAcoes">'
+    + (aberta ? '<button class="btn pri" type="button" id="vvDo">+ Vaso do contrato</button><button class="btn" type="button" id="vvNovo">+ Vaso novo</button>' : '') + '</div>'
+    + '<p class="nota" style="margin-top:0">' + (aberta ? 'Os vasos entram durante o mês, até «Encerrar a execução». Cada vaso ganha a inspeção no TapDoc e vai para a medição. Vaso que não está no contrato: «+ Vaso novo» (TAG e volume); ele fica <b>a conferir</b> e a medição só fecha depois da conferência.'
+                                    : 'A execução desta visita foi encerrada: os vasos não mudam mais aqui.') + '</p>'
+    + (aConf ? '<div class="aviso">' + aConf + ' vaso(s) a conferir (TAG e volume). A medição não fecha enquanto houver vaso a conferir.</div>' : '')
+    + (L.length ? '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>TAG</th><th class="num">Volume (m³)</th><th>Entrou</th><th></th></tr></thead><tbody>'
+      + L.map(v => { const e = v.equipamentos || {};
+          return '<tr><td><b class="mono">' + esc(e.tag || '?') + '</b>' + (e.nome ? ' <small>' + esc(e.nome) + '</small>' : '') + (e.localizacao ? ' <small>· ' + esc(e.localizacao) + '</small>' : '')
+            + (e.provisorio ? ' <span class="mini warn">a conferir</span>' : '') + '</td>'
+            + '<td class="num">' + (e.volume_m3 == null ? '<span class="mini warn">sem volume</span>' : esc(ctrQtd(e.volume_m3))) + '</td>'
+            + '<td>' + esc(dataBR(String(v.incluido_em || '').slice(0, 10))) + '</td>'
+            + '<td class="a">' + (e.provisorio && ctrPodeConferir() ? '<button class="btn mini pri" type="button" data-vc="' + esc(v.equipamento_id) + '">Conferir</button>' : '')
+            + (aberta ? '<button class="btn mini" type="button" data-vt="' + esc(v.equipamento_id) + '">Tirar</button>' : '') + '</td></tr>'; }).join('')
+      + '</tbody></table></div>'
+      : '<p class="nota">Nenhum vaso nesta visita ainda.</p>');
+  const on = (id, f) => { const b = document.getElementById(id); if (b) b.addEventListener('click', f); };
+  on('vvDo', modalVasoDaVisita);
+  on('vvNovo', modalVasoNovo);
+  body.querySelectorAll('[data-vc]').forEach(b => b.addEventListener('click', () => { const v = L.find(x => x.equipamento_id === b.dataset.vc); modalConferirVaso(v.equipamento_id, v.equipamentos || {}, ctrPintarVasosOS); }));
+  body.querySelectorAll('[data-vt]').forEach(b => b.addEventListener('click', () => { const v = L.find(x => x.equipamento_id === b.dataset.vt); modalTirarVasoVisita(v); }));
+}
+async function modalVasoDaVisita(){
+  let C = [];
+  try{ C = await get('contrato_vasos?select=equipamento_id,equipamentos(tag,nome,volume_m3,provisorio)&contrato_id=eq.' + CTRO.os.contrato_id + '&removido_em=is.null'); }
+  catch(e){ return toast(e.message, 'err'); }
+  const ja = new Set((CTRV.lista || []).map(v => v.equipamento_id));
+  const livres = C.filter(v => !ja.has(v.equipamento_id)).sort((a, b) => String((a.equipamentos || {}).tag).localeCompare(String((b.equipamentos || {}).tag), 'pt-BR', { numeric: true }));
+  if (!livres.length) return toast('Todos os vasos do contrato já estão nesta visita. Vaso que não está no contrato: «+ Vaso novo».', 'err');
+  abrirModal('Vaso do contrato — ' + (osAberta.card.numero || ''),
+      '<div class="campo"><label for="vvBusca">Procurar pela TAG</label><input id="vvBusca" type="text" autocomplete="off" placeholder="ex.: VP-12"></div>'
+    + '<div class="ctrMarcas" id="vvLista">' + livres.map(v => { const e = v.equipamentos || {};
+        return '<label class="ctrMarca" data-tag="' + esc(String(e.tag || '').toLowerCase()) + '"><input type="checkbox" value="' + esc(v.equipamento_id) + '"> <b class="mono">' + esc(e.tag || '?') + '</b> ' + esc(e.nome || '')
+          + (e.volume_m3 == null ? ' · <i>sem volume</i>' : ' · ' + esc(ctrQtd(e.volume_m3)) + ' m³') + (e.provisorio ? ' · <span class="mini warn">a conferir</span>' : '') + '</label>'; }).join('') + '</div>',
+    [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Incluir na visita', pri: true, onClick: async () => {
+      const ids = [...document.querySelectorAll('#vvLista input:checked')].map(i => i.value);
+      if (!ids.length) return toast('Marque ao menos um vaso.', 'err');
+      let n = 0, volta = false;
+      try{ for (const id of ids){ const x = await rpc('tf_contrato_visita_incluir_vaso', { p_os: osAberta.card.os_id, p_equipamento: id, p_servicos: [] }); n++; if (x && x.preparacao_reaberta) volta = true; }
+           fecharModal(); toast(n + ' vaso(s) incluído(s) na visita.' + (volta ? ' A preparação (T05) voltou para o escritório.' : ''), 'ok'); }
+      catch(e){ toast((n ? n + ' incluído(s); ' : '') + e.message, 'err'); }
+      await ctrRepintarOS(); } }]);
+  const bx = document.getElementById('vvBusca');
+  bx.addEventListener('input', () => { const q = bx.value.trim().toLowerCase(); document.querySelectorAll('#vvLista [data-tag]').forEach(l => { l.hidden = !!q && !l.dataset.tag.includes(q); }); });
+  bx.focus();
+}
+function modalVasoNovo(){
+  abrirModal('Vaso novo (fora do contrato)',
+      '<p class="nota" style="margin-top:0">Para vaso que ainda não está no contrato (vaso novo na planta). Ele entra no contrato e nesta visita <b>a conferir</b>: só é cobrado depois que o escritório ou o inspetor conferir a TAG e o volume.</p>'
+    + '<div class="dupla"><div class="campo"><label for="vnTag">TAG</label><input id="vnTag" type="text" autocomplete="off"></div>'
+    + '<div class="campo"><label for="vnVol">Volume (m³)</label><input id="vnVol" type="text" inputmode="decimal" autocomplete="off" placeholder="ex.: 2,5"></div></div>'
+    + '<div class="campo"><label for="vnLoc">Local (opcional)</label><input id="vnLoc" type="text" autocomplete="off" placeholder="ex.: casa de compressores"></div>',
+    [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Cadastrar e incluir', pri: true, onClick: async () => {
+      const vol = ctrNum(ctrVal('vnVol'));
+      if (!ctrVal('vnTag')) return toast('Informe a TAG do vaso.', 'err');
+      if (vol == null || vol <= 0) return toast('Informe o volume do vaso (m³): sem ele não há faixa de preço.', 'err');
+      try{ const x = await rpc('tf_contrato_vaso_novo', { p_os: osAberta.card.os_id, p_tag: ctrVal('vnTag'), p_volume: vol, p_localizacao: ctrVal('vnLoc') || null });
+           fecharModal(); CTR.equip = {}; toast('Vaso ' + x.tag + ' cadastrado e incluído na visita (a conferir).', 'ok'); await ctrRepintarOS(); }
+      catch(e){ toast(e.message, 'err'); } } }]);
+  document.getElementById('vnTag').focus();
+}
+/** Conferir o vaso novo (TAG e volume): tira o "a conferir". Serve à OS e à ficha do contrato. */
+function modalConferirVaso(eqId, e, depois){
+  abrirModal('Conferir o vaso ' + (e.tag || ''),
+      '<p class="nota" style="margin-top:0">Confira a TAG e o volume na placa ou no prontuário. O volume escolhe a faixa de preço do exame.</p>'
+    + '<div class="dupla"><div class="campo"><label for="cvTag">TAG</label><input id="cvTag" type="text" autocomplete="off" value="' + esc(e.tag || '') + '"></div>'
+    + '<div class="campo"><label for="cvVol">Volume (m³)</label><input id="cvVol" type="text" inputmode="decimal" autocomplete="off" value="' + esc(e.volume_m3 == null && e.volume == null ? '' : ctrQtd(e.volume_m3 != null ? e.volume_m3 : e.volume)) + '"></div></div>',
+    [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Conferido', pri: true, onClick: async () => {
+      const vol = ctrNum(ctrVal('cvVol'));
+      if (vol == null || vol <= 0) return toast('Informe o volume do vaso (m³).', 'err');
+      try{ const x = await rpc('tf_contrato_vaso_conferir', { p_equipamento: eqId, p_tag: ctrVal('cvTag'), p_volume: vol });
+           fecharModal(); CTR.equip = {};
+           toast('Vaso conferido.' + (x && x.volume_mudou ? ' O volume mudou: se a medição já foi montada, use «Refazer a montagem».' : ''), 'ok');
+           if (depois) await depois(); }
+      catch(e){ toast(e.message, 'err'); } } }]);
+}
+function modalTirarVasoVisita(v){
+  const e = v.equipamentos || {};
+  abrirModal('Tirar o vaso ' + (e.tag || '') + ' da visita',
+      '<p class="nota" style="margin-top:0">Só para vaso marcado por engano, antes da coleta no TapDoc. O vaso continua no contrato.</p>'
+    + '<div class="campo"><label for="tvMot">Motivo</label><input id="tvMot" type="text" autocomplete="off" placeholder="ex.: marcado por engano"></div>',
+    [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Tirar', cls: 'perigo', onClick: async () => {
+      try{ await rpc('tf_contrato_visita_tirar_vaso', { p_os: osAberta.card.os_id, p_equipamento: v.equipamento_id, p_motivo: ctrVal('tvMot') }); fecharModal(); toast('Vaso tirado da visita.', 'ok'); await ctrRepintarOS(); }
+      catch(err){ toast(err.message, 'err'); } } }]);
 }
 
 // ── O RDO ───────────────────────────────────────────────────────────────────
@@ -18162,6 +18306,8 @@ async function ctrPintarMedicao(){
     CTRO.itens = CTRO.med ? await get('medicao_itens?select=*&medicao_id=eq.' + CTRO.med.id + '&order=ordem') : [];
     CTRO.civis = CTRO.os && CTRO.os.contrato_id ? await get('contrato_itens?select=id,codigo_cliente,servico,descricao,faixa_min,faixa_max,preco,unidade&contrato_id=eq.' + CTRO.os.contrato_id + '&substituido_por=is.null&order=ordem') : [];
     CTRO.pend = CTRO.med && CTRO.med.situacao === 'rascunho' && CTRO.itens.length ? await rpc('tf_medicao_pendencias', { p_medicao: CTRO.med.id }) : [];
+    const eqs = [...new Set(CTRO.itens.map(i => i.equipamento_id).filter(Boolean))];   // S130 · vaso a conferir (M7)
+    CTRO.aConferir = new Set(eqs.length ? (await get('equipamentos?select=id&provisorio=is.true&id=in.(' + eqs.join(',') + ')')).map(e => e.id) : []);
   }catch(e){ body.innerHTML = ''; const p = document.createElement('p'); p.className = 'nota'; p.style.color = 'var(--crit)'; p.textContent = e.message; body.appendChild(p); return; }
   if (osAberta.card !== card || abaDrawer !== 'med') return;
   const m = CTRO.med, k02 = ctrTarefa('K02'), k03 = ctrTarefa('K03');
@@ -18185,7 +18331,8 @@ async function ctrPintarMedicao(){
     + CTRO.itens.map(it => '<div class="mdL' + (it.incluido ? '' : ' off') + '">'
       + '<label class="mdChk" title="Cobrar esta linha"><input type="checkbox" data-in="' + esc(it.id) + '"' + (it.incluido ? ' checked' : '') + (rasc ? '' : ' disabled') + ' aria-label="Cobrar esta linha"></label>'
       + '<div class="mdTx"><b class="mono">' + esc(it.codigo || '—') + '</b> ' + esc(it.descricao) + (it.tag ? ' <span class="mini">' + esc(it.tag) + '</span>' : '')
-      + (it.falta_volume ? ' <span class="mini warn">informe o volume</span>' : '') + (it.sem_preco ? ' <span class="mini crit">sem preço</span>' : '') + '</div>'
+      + (it.falta_volume ? ' <span class="mini warn">informe o volume</span>' : '') + (it.sem_preco ? ' <span class="mini crit">sem preço</span>' : '')
+      + (it.equipamento_id && CTRO.aConferir && CTRO.aConferir.has(it.equipamento_id) ? ' <span class="mini warn" title="Vaso novo: confira a TAG e o volume na aba Vasos">vaso a conferir</span>' : '') + '</div>'
       + '<div class="mdQt">' + (rasc ? '<input type="text" inputmode="decimal" class="mdQ" data-q="' + esc(it.id) + '" value="' + esc(ctrQtd(it.quantidade)) + '" aria-label="Quantidade">' : '<b>' + esc(ctrQtd(it.quantidade)) + '</b>') + '</div>'
       + '<div class="mdTt">' + (it.total == null ? '—' : esc(BRL(it.total))) + '</div>'
       + '<div class="mdSub">' + (rasc ? '<select data-rd2="' + esc(it.id) + '" aria-label="Dia / RDO">' + optRdo(it) + '</select>' : (it.dia ? esc(dataBR(it.dia).slice(0, 5)) : ''))
