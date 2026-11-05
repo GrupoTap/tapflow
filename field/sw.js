@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S48-T17';   // S48: o ponto com o EzPoint, o ajuste pelo celular, a câmera dentro do app e o atestado de vários dias; o uniforme na Minha Segurança · S47: os documentos do gov.br (acordo e termo de adesão) · S46: o termo de ciência em texto formal · S45: os avisos com o app fechado (push) · o meu espelho e banco no ponto, e folgar ou trabalhar nas datas a negociar · S44: o espelho baixa com o nome no padrão do escritório · S43: o ponto no alto do Eu (batida com foto, local e PIN, comprovante) · S42: só o núcleo N4 ("Pedir PIN novo" e a troca do PIN provisório) · S41: só o núcleo N3 (a digital na trava, Passkey 1) · S40: as logomarcas no boletim e "Enviar pelo WhatsApp" / "Baixar o PDF" · S39: a medição da OS (e o gerador de PDF guardado para o campo) · S113: TapDoc 12 (414: reabrir o que enviou; válvula com 3 ciclos) e o motor R00.4 · S112: TapDoc 11 (413: posição primeiro, aferição por ciclo e por escala, sem bancada/boroscopia/E/R em campo) · S107: TapDoc 10 (412: as leituras não travam o envio) · S94: TapDoc 9 (R06a: o ambiente na Localização) · S86: TapDoc 8 (R04a: aferição em campo) e o motor R00.3
+const VERSAO = 'S49-T18';   // S49: núcleo N6 e modulos M2 (Relatar problema), a coluna Banco, o uniforme (itens 11–13 e 16), TapField
+// const VERSAO = 'S48-T17';   // S48: o ponto com o EzPoint, o ajuste pelo celular, a câmera dentro do app e o atestado de vários dias; o uniforme na Minha Segurança · S47: os documentos do gov.br (acordo e termo de adesão) · S46: o termo de ciência em texto formal · S45: os avisos com o app fechado (push) · o meu espelho e banco no ponto, e folgar ou trabalhar nas datas a negociar · S44: o espelho baixa com o nome no padrão do escritório · S43: o ponto no alto do Eu (batida com foto, local e PIN, comprovante) · S42: só o núcleo N4 ("Pedir PIN novo" e a troca do PIN provisório) · S41: só o núcleo N3 (a digital na trava, Passkey 1) · S40: as logomarcas no boletim e "Enviar pelo WhatsApp" / "Baixar o PDF" · S39: a medição da OS (e o gerador de PDF guardado para o campo) · S113: TapDoc 12 (414: reabrir o que enviou; válvula com 3 ciclos) e o motor R00.4 · S112: TapDoc 11 (413: posição primeiro, aferição por ciclo e por escala, sem bancada/boroscopia/E/R em campo) · S107: TapDoc 10 (412: as leituras não travam o envio) · S94: TapDoc 9 (R06a: o ambiente na Localização) · S86: TapDoc 8 (R04a: aferição em campo) e o motor R00.3
 const CACHE  = 'tapflow-field-' + VERSAO;
 
 const ESSENCIAIS = [
@@ -40,11 +41,11 @@ const ESSENCIAIS = [
   // IDÊNTICO ao do <script> do index.html, com o ?v= (c.match compara a consulta inteira).
   // Sem isto o Field sem sinal abriria sem o núcleo. Trocou o ?v= no index.html? Troque aqui também.
   // S34: N2 (fila de envios e utilitários)
-  '../nucleo/nucleo.js?v=N5',
-  '../nucleo/nucleo.css?v=N5',
-  '../nucleo/config.js?v=N5',
+  '../nucleo/nucleo.js?v=N6',
+  '../nucleo/nucleo.css?v=N6',
+  '../nucleo/config.js?v=N6',
   // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo"
-  '../nucleo/modulos.js?v=M1',
+  '../nucleo/modulos.js?v=M2',
   // S35 · TapDoc 1: a coleta da inspeção (página própria, abre sem sinal)
   './doc/',
   // S80 · TapDoc 4: o motor de cálculo para a prévia sem sinal. Mesmo ?v= do <script> de doc/index.html.

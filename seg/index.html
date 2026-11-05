@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapSeg 3 · Segurança do Trabalho</title>
+<title>TapSeg 4 · Segurança do Trabalho</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2302,11 +2302,11 @@ th.num .tfThFixo{text-align:right}
 <!-- S63 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js.
      S76 · ?v=N2, igual ao hub e ao Field (o N2 aceita tudo do N1: o Manager já rodava o N2 com o
      endereço ?v=N1). O sw.js da raiz guarda estes três endereços: trocou aqui, troca lá (é do central). -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N5">
-<script src="../nucleo/config.js?v=N5"></script>
-<script src="../nucleo/nucleo.js?v=N5"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N6">
+<script src="../nucleo/config.js?v=N6"></script>
+<script src="../nucleo/nucleo.js?v=N6"></script>
 <!-- S82 · H10: a tabela única dos módulos (cor, miniatura, menu "Trocar de módulo"). Mudou o ?v=? Troque no sw.js da raiz também (é do central). -->
-<script src="../nucleo/modulos.js?v=M1"></script>
+<script src="../nucleo/modulos.js?v=M2"></script>
 </head>
 <body data-app="tapseg">
 
@@ -2373,7 +2373,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'G3';   // G3 (S131) · Uniforme (U1–U8): catálogo de EPI e uniforme, tamanhos em dois blocos, uniformes recebidos, previstos com quantidade · G2 (S118) · "Ficha do RH →" abre o TapRH (rh/) · G1 = TapSeg 1 (separado do Manager S114) — o S## da publicação é da rodada que publica
+const APP_VERSION = 'G4';   // G4 (626, S132) · ajustes do uniforme: previsto "1 de 3" na ficha, no painel e na nova entrega (item #14), estoque de uniforme em peças (#15), "item" nas mensagens (#17); TapHub nas telas (#10)
+// const APP_VERSION = 'G3';   // G3 (S131) · Uniforme (U1–U8): catálogo de EPI e uniforme, tamanhos em dois blocos, uniformes recebidos, previstos com quantidade · G2 (S118) · "Ficha do RH →" abre o TapRH (rh/) · G1 = TapSeg 1 (separado do Manager S114) — o S## da publicação é da rodada que publica
 try{ document.getElementById('verBadge').textContent = 'SEGURANÇA · ' + APP_VERSION; }catch(e){}
 
 const esc               = (...a) => Nucleo.util.esc(...a);
@@ -2676,7 +2677,7 @@ function semAcesso(){
   document.getElementById('board').innerHTML = '<div class="vazio" style="padding:40px 20px;max-width:520px">'
     + '<h3 style="margin:0 0 8px">Você não tem acesso ao TapSeg</h3>'
     + '<p>Quem libera é o administrador, em <b>Pessoas e acessos</b> (no início do TapHub). '
-    + 'Use <b>Trocar de módulo</b> para voltar ao TapFlow.</p></div>';
+    + 'Use <b>Trocar de módulo</b> para voltar ao TapHub.</p></div>';
 }
 
 
@@ -2802,7 +2803,7 @@ function rhWhats(celular, nome, itens){
   if (!celular) return null;
   const campo = new URL('../field/', location.href).href;
   const txt = 'Olá, ' + String(nome || '').split(' ')[0] + '! Tem entrega de EPI esperando a sua confirmação no '
-    + 'TapFlow Field (Minha Segurança): ' + itens + '. Abra o app, confira e confirme com o seu PIN. '
+    + 'TapField (Minha Segurança): ' + itens + '. Abra o app, confira e confirme com o seu PIN. '
     + 'Se não recebeu, toque em "Não recebi". ' + campo;
   return 'https://wa.me/' + celular + '?text=' + encodeURIComponent(txt);
 }
@@ -3115,12 +3116,14 @@ async function rhNovaEntrega(uid){
     let f = ficha && ficha.usuario.id === sel.value ? ficha : null;
     try{ if (!f) f = await rpc('tf_rh_funcionario', { p_usuario: sel.value }); }catch(e){ toast(e.message,'err'); return; }
     (f.tamanhos || []).forEach(t => { if (t.tamanho) tamanhos[t.epi_id] = t.tamanho; });
-    previstos = (f.previstos || []).filter(p => p.epi_id && !p.nao_se_aplica && !p.tem_entrega);
+    // G4 · item #14: uniforme continua previsto enquanto faltar peça ("1 de 3")
+    previstos = (f.previstos || []).filter(p => p.epi_id && !p.nao_se_aplica && (p.uniforme && p.quantidade ? (Number(p.entregues) || 0) < p.quantidade : !p.tem_entrega));
     const cx = document.getElementById('rhNPrev');
     if (previstos.length){
       cx.innerHTML = '<p class="nota" style="margin:0 0 6px">Previstos para esta pessoa ainda sem entrega — toque para acrescentar:</p><div class="chips"></div>';
       previstos.forEach(p => { const b = document.createElement('button'); b.type = 'button'; b.className = 'fchip';
-        b.textContent = '+ ' + p.nome; b.addEventListener('click', () => { addLinha(p.epi_id); b.remove(); });
+        b.textContent = '+ ' + p.nome + (p.uniforme && p.quantidade ? ' (faltam ' + (p.quantidade - (Number(p.entregues) || 0)) + ')' : '');
+        b.addEventListener('click', () => { addLinha(p.epi_id); b.remove(); });
         cx.querySelector('.chips').appendChild(b); });
     }
     const ag = (f.entregas || []).filter(x => x.status === 'aguardando').length;
@@ -3151,7 +3154,7 @@ async function rhGravarEntrega(epis){
       ca: d.querySelector('.nM').value === 'entrega_inicial' ? (d.querySelector('.nCA').value || null) : null,
       devolucao_id: d.querySelector('.nUni').value || null });   // S44 · a unidade avaliada
   }
-  if (!itens.length){ msg.textContent = 'Escolha ao menos um EPI.'; return; }
+  if (!itens.length){ msg.textContent = 'Escolha ao menos um item.'; return; }
   if (document.querySelector('#rhNLinhas .rhNL[data-sem-saldo="1"]')){
     msg.textContent = 'Há item sem saldo no estoque (em vermelho). Dê entrada ou faça a contagem antes — ou tire a linha.'; return;
   }
@@ -3164,7 +3167,7 @@ async function rhGravarEntrega(epis){
     abrirModal('Entrega lançada',
       '<p style="margin-top:0"><b>' + r.n + ' item(ns)</b> para <b>' + esc(f.usuario.nome) + '</b>, aguardando a confirmação dele.</p>'
       + ((r.avisos || []).length ? '<div class="aviso">' + r.avisos.map(esc).join('<br>') + '</div>' : '')
-      + '<p>Peça para ele abrir o <b>TapFlow Field › Minha Segurança</b>, conferir e confirmar com o PIN. '
+      + '<p>Peça para ele abrir o <b>TapField › Minha Segurança</b>, conferir e confirmar com o PIN. '
       + 'Sem confirmação em 2 dias, a entrega fica vermelha no painel.</p>'
       + (w ? '<p><a class="btn pri" target="_blank" rel="noopener" href="' + esc(w) + '">Avisar pelo WhatsApp</a></p>'
            : '<p class="nota">Cadastre o celular na ficha para avisar pelo WhatsApp com um toque.</p>'),
@@ -3459,7 +3462,7 @@ async function rhAbrirArquivo(id){
   try{
     const a = await rpc('tf_rh_arquivo', { p_id: id });
     const w = window.open('', '_blank');
-    if (!w){ toast('O navegador bloqueou a janela nova — libere pop-ups para o TapFlow.', 'err'); return; }
+    if (!w){ toast('O navegador bloqueou a janela nova — libere pop-ups para o TapHub.', 'err'); return; }
     const blob = await (await fetch(a.conteudo)).blob();
     w.location.href = URL.createObjectURL(blob);
   }catch(e){ toast(e.message, 'err'); }
@@ -3491,7 +3494,10 @@ function rhFPrev(c, f){
       + (unis.length ? unis.map(e => '<div class="rhPrev"><label class="chk" style="margin:0"><input type="checkbox" data-e="' + esc(e.id) + '"' + (pe[e.id] ? ' checked' : '')
           + '> ' + esc(e.nome) + '</label><label class="nota" style="margin:0">quantidade <input type="number" min="1" max="20" class="mini" style="width:64px" data-q="'
           + esc(e.id) + '" value="' + esc((pe[e.id] && pe[e.id].quantidade) || '') + '"></label>'
-          + (pe[e.id] ? (pe[e.id].tem_entrega ? '<span class="rhSt confirmado">entregue</span>' : '<span class="rhSt nao_recebido">sem entrega</span>') : '') + '</div>').join('')
+          // G4 · item #14 da lista: uniforme cobrado pela quantidade ("1 de 3")
+          + (pe[e.id] ? (pe[e.id].nao_se_aplica ? '<span class="rhSt cancelada">não se aplica</span>'
+              : (Number(pe[e.id].entregues) || 0) >= (Number(pe[e.id].quantidade) || 1) ? '<span class="rhSt confirmado">entregue' + (pe[e.id].quantidade > 1 ? ' (' + pe[e.id].entregues + ' de ' + pe[e.id].quantidade + ')' : '') + '</span>'
+              : '<span class="rhSt nao_recebido">' + (Number(pe[e.id].entregues) || 0) + ' de ' + (pe[e.id].quantidade || 1) + '</span>') : '') + '</div>').join('')
         : '<p class="nota">Nenhum uniforme no catálogo.</p>')
       + '<div class="secTit">Treinamentos previstos</div>'
       + RH.trein.filter(t => t.ativo || pt[t.id]).map(t => lin(t.id, t.nome, pt[t.id], 't', false)).join('')
@@ -3664,7 +3670,7 @@ async function rhImprimirTermo(f){
   doc.text('Assinatura do(a) funcionário(a) · ' + funcao, 105, q.y + q.h + 10.5, { align:'center' });
   doc.setFontSize(7); doc.setTextColor(130);
   // S43 · a versão do texto no pé: é ela que diz, depois, qual termo cada um assinou
-  doc.text(empresa + ' · TapFlow · termo gerado em ' + rhDT(new Date().toISOString()) + ' · texto versão '
+  doc.text(empresa + ' · TapHub · termo gerado em ' + rhDT(new Date().toISOString()) + ' · texto versão '
     + ((textos.termo_adesao || {}).versao || 1), 105, 290, { align:'center' });
   doc.save('Termo de adesão EPI - ' + (f ? f.usuario.nome : 'em branco') + '.pdf');
 }
@@ -4161,8 +4167,9 @@ async function rhPainel(corpo){
   // 6 · EPIs e treinamentos previstos ainda não cumpridos — AGRUPADOS por pessoa (1.3)
   const pp = (p.previstos_pendentes || []);
   const nPes = new Set(pp.map(x => x.usuario_id)).size;
-  blocos += sec('EPIs previstos ainda sem entrega', pp.length,
-    rhAgrupado(pp, x => x.epi, uid => '<button class="btn mini" type="button" data-entregar="' + esc(uid) + '">Lançar entrega</button>'),
+  // G4 · item #14: uniforme mostra "1 de 3" (peças entregues de previstas)
+  blocos += sec('EPIs e uniformes previstos ainda sem entrega', pp.length,
+    rhAgrupado(pp, x => x.uniforme && x.quantidade ? x.epi + ' (' + (x.entregues || 0) + ' de ' + x.quantidade + ')' : x.epi, uid => '<button class="btn mini" type="button" data-entregar="' + esc(uid) + '">Lançar entrega</button>'),
     nPes + (nPes === 1 ? ' pessoa' : ' pessoas') + ' · quem tem mais pendências primeiro · toque no nome para ver os itens');
   const tp = (p.treinamentos_pendentes || []);
   blocos += sec('Treinamentos previstos sem registro', tp.length, rhAgrupado(tp, x => x.treinamento));
@@ -4365,8 +4372,8 @@ async function rhSepararPedido(x, depois){
 function rhWhatsDev(celular, nome, itens){
   if (!celular) return null;
   const campo = new URL('../field/', location.href).href;
-  const txt = 'Olá, ' + String(nome || '').split(' ')[0] + '! Registramos a devolução dos seus EPIs no TapFlow: ' + itens
-    + '. Abra o TapFlow Field (Minha Segurança), confira e confirme com o seu PIN. Se algo não confere, toque em "Não concordo". ' + campo;
+  const txt = 'Olá, ' + String(nome || '').split(' ')[0] + '! Registramos a devolução dos seus EPIs no TapHub: ' + itens
+    + '. Abra o TapField (Minha Segurança), confira e confirme com o seu PIN. Se algo não confere, toque em "Não concordo". ' + campo;
   return 'https://wa.me/' + celular + '?text=' + encodeURIComponent(txt);
 }
 
@@ -4447,7 +4454,7 @@ async function rhRegistrarDevolucao(uid, contexto, depois){
             const w = rhWhatsDev(r.celular, r.funcionario, r.itens);
             abrirModal('Devolução registrada',
               '<p style="margin-top:0"><b>' + r.n + ' item(ns)</b>: ' + esc(r.itens) + '.</p>'
-              + '<p>Agora é com <b>' + esc(r.funcionario) + '</b>: abrir o <b>TapFlow Field › Minha Segurança</b> e confirmar com o PIN.</p>'
+              + '<p>Agora é com <b>' + esc(r.funcionario) + '</b>: abrir o <b>TapField › Minha Segurança</b> e confirmar com o PIN.</p>'
               + (r.tem_pin ? '' : '<div class="aviso">Ele ainda não tem PIN. Se não for criar, use <b>"Sem a confirmação dele"</b> (no painel ou na aba Devoluções).</div>')
               + (w ? '<p><a class="btn pri" target="_blank" rel="noopener" href="' + esc(w) + '">Avisar pelo WhatsApp</a></p>' : ''),
               [ { label:'Fechar', onClick: () => { fecharModal(); depois && depois(); } } ]);
@@ -4663,11 +4670,11 @@ async function rhEstoque(corpo){
         return '<div class="rhEstC ' + cls + '" title="' + esc(l.quem ? 'Usam: ' + l.quem : '') + '"><b>' + esc(l.tamanho || 'un.') + '</b>'
           + '<span class="q">' + l.novo + '</span>' + (Number(l.reaproveitado) ? '<small>+' + l.reaproveitado + ' reapr.</small>' : '')
           + (l.minimo != null ? '<small>mín ' + l.minimo + '</small>' : '')
-          + (l.usam ? '<small class="' + (falta ? 'falta' : '') + '">usam ' + l.usam + '</small>' : '') + '</div>';
+          + (l.usam ? '<small class="' + (falta ? 'falta' : '') + '">' + (e.uniforme ? l.usam + (l.usam === 1 ? ' peça' : ' peças') : 'usam ' + l.usam) + '</small>' : '') + '</div>';   // G4 · #15: uniforme conta peças
       }).join('') + '</div>';
       const sug = (e.linhas || []).filter(l => l.usam > Number(l.novo) + Number(l.reaproveitado));
       if (!e.controlado) lin += '<p class="nota" style="margin:2px 0 0">ainda sem contagem — o 0 é "nada lançado", não "caixa vazia"; a entrega segue sem baixa até a primeira contagem</p>';
-      if (sug.length) lin += '<p class="nota rhSug">Sugestão de compra: ' + sug.map(l => l.usam + ' pessoa(s) usam '
+      if (sug.length) lin += '<p class="nota rhSug">Sugestão de compra: ' + sug.map(l => l.usam + (e.uniforme ? ' peça(s) previstas de ' : ' pessoa(s) usam ')
         + (e.tem_tamanho ? e.nome.split(' ')[0].toLowerCase() + ' ' + l.tamanho : e.nome.toLowerCase()) + ' e há '
         + (Number(l.novo) + Number(l.reaproveitado))).map(esc).join(' · ') + '</p>';
     }
@@ -4978,7 +4985,7 @@ async function rhAbrirSessao(id){
 function rhWhatsLista(celular, nome, s){
   const campo = new URL('../field/', location.href).href;
   const txt = 'Olá, ' + String(nome || '').split(' ')[0] + '! Confirme a sua presença no ' + s.tema + ' de ' + dataBR(s.data)
-    + ' no TapFlow Field (Minha Segurança), com o seu PIN. ' + campo;
+    + ' no TapField (Minha Segurança), com o seu PIN. ' + campo;
   return 'https://wa.me/' + celular + '?text=' + encodeURIComponent(txt);
 }
 
@@ -5006,12 +5013,12 @@ async function rhListaDoc(jsPDF, sessaoId, soUsuarios, soConfirmados){
   const img = (uid, x, yy, w, h) => { const u = ass && ass[uid], d = dims[uid]; if (!u || !d) return false;
     const e = Math.min(w / d.w, h / d.h); try{ doc.addImage(u, 'PNG', x + (w - d.w * e) / 2, yy + (h - d.h * e) / 2, d.w * e, d.h * e); return true; }catch(er){ return false; } };
   const rod = () => { doc.setFont('helvetica','normal'); doc.setFontSize(6.8); doc.setTextColor(90);
-    doc.text('Lista gerada em ' + rhDT(new Date().toISOString()).replace(' ', ' às ') + ' pelo TapFlow, com as presenças confirmadas no celular de cada participante.', M, 285);
+    doc.text('Lista gerada em ' + rhDT(new Date().toISOString()).replace(' ', ' às ') + ' pelo TapHub, com as presenças confirmadas no celular de cada participante.', M, 285);
     if (rodapeTxt) doc.text(doc.splitTextToSize(rodapeTxt, W - 16), M, 289);
     doc.text('pág. ' + pag, 210 - M, 289, { align:'right' }); doc.setTextColor(0); };
   try{ doc.addImage(LOGO_ENGETAP, 'JPEG', M, y, 44, 10.7); }catch(e){}
   doc.setFont('helvetica','bold'); doc.setFontSize(12.5); doc.text('LISTA DE PRESENÇA EM TREINAMENTO', 210 - M, y + 5, { align:'right' });
-  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.text('Registro eletrônico — TapFlow', 210 - M, y + 9.5, { align:'right' });
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.text('Registro eletrônico — TapHub', 210 - M, y + 9.5, { align:'right' });
   y += 15; doc.setDrawColor(170); doc.line(M, y, 210 - M, y); y += 5;
   const campo = (k, v, x, yy, w) => { doc.setFont('helvetica','bold'); doc.setFontSize(8.3); doc.text(k, x, yy);
     const kw = doc.getTextWidth(k) + 1.5; doc.setFont('helvetica','normal');
@@ -5239,7 +5246,7 @@ async function rhDocsEmpresa(corpo){
         x.escaneado ? 'parece ESCANEADO — peça o original digital assinado (o cliente consegue validar a assinatura)' : '',
         x.arquivo_nome, 'lançado por ' + (x.lancado_por_nome || '?')].filter(Boolean).join(' · ')) + '</small></span>'
       + '<span class="a"><button class="btn mini" type="button" data-a="abrir">Abrir</button>'
-      + (x.anulado_em ? '' : '<button class="btn mini" type="button" data-a="aviso" title="Mudar com quantos dias de antecedência o TapFlow avisa">Aviso</button>'
+      + (x.anulado_em ? '' : '<button class="btn mini" type="button" data-a="aviso" title="Mudar com quantos dias de antecedência o TapHub avisa">Aviso</button>'
                            + '<button class="btn mini" type="button" data-a="anular">Anular</button>') + '</span>';
     d.querySelector('[data-a=abrir]').addEventListener('click', () => rhAbrirArquivo(x.arquivo_id));
     const bav = d.querySelector('[data-a=aviso]');
@@ -5262,7 +5269,7 @@ function rhNovoDocEmpresa(depois){
     // digitado, a tela sugere pelo ciclo (início → validade) e o banco usa a
     // mesma conta
     + '<div class="campo"><label for="dcAv">Avisar com quantos dias de antecedência</label>'
-    + '<input id="dcAv" type="number" min="0" max="730" step="1" inputmode="numeric" placeholder="preencha as datas — o TapFlow sugere">'
+    + '<input id="dcAv" type="number" min="0" max="730" step="1" inputmode="numeric" placeholder="preencha as datas — o TapHub sugere">'
     + '<small class="nota" id="dcAvN" style="display:block;margin-top:3px"></small></div>'
     + '<div class="campo"><label for="dcA">Arquivo (PDF de preferência; até 15 MB)</label><input id="dcA" type="file" accept="application/pdf,image/*"></div>'
     + '<div id="dcEsc"></div><p class="nota" id="rhMsg" style="color:var(--crit)"></p>',
@@ -5306,7 +5313,7 @@ function rhNovoDocEmpresa(depois){
 function rhDocAviso(x, depois){
   const sg = rhAvisoSugerido(x.vigencia_inicio, x.validade);
   abrirModal('Aviso de vencimento — ' + x.tipo,
-    '<p style="margin-top:0">Válido até <b>' + esc(dataBR(x.validade)) + '</b>. Com quantos dias de antecedência o TapFlow avisa?</p>'
+    '<p style="margin-top:0">Válido até <b>' + esc(dataBR(x.validade)) + '</b>. Com quantos dias de antecedência o TapHub avisa?</p>'
     + '<div class="campo"><label for="avD">Dias de antecedência</label><input id="avD" type="number" min="0" max="730" step="1" '
     + 'inputmode="numeric" value="' + esc(x.aviso_dias == null ? '' : x.aviso_dias) + '"></div>'
     + (sg != null ? '<p class="nota">Pelo ciclo deste documento a sugestão seria <b>' + sg + ' dias</b>.</p>' : '')
@@ -5850,7 +5857,7 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
   }
   // sem sessão: o login mora no hub
   if (NO_SERVIDOR){ irParaHub(''); return; }
-  document.getElementById('board').innerHTML = '<p style="padding:24px">Abra pelo TapFlow (o login fica no hub).</p>';
+  document.getElementById('board').innerHTML = '<p style="padding:24px">Abra pelo TapHub (o login fica no hub).</p>';
 })();
 </script>
 </body>

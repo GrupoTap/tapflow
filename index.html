@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>TapHub · H12</title>
+<title>Início · TapHub · H13</title>
 <meta name="theme-color" content="#0C1420">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -35,10 +35,10 @@
 -->
 <link rel="manifest" href="manifest.webmanifest">
 <!-- H6 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
-<link rel="stylesheet" href="nucleo/nucleo.css?v=N5">
-<script src="nucleo/config.js?v=N5"></script>
-<script src="nucleo/nucleo.js?v=N5"></script>
-<script src="nucleo/modulos.js?v=M1"></script>
+<link rel="stylesheet" href="nucleo/nucleo.css?v=N6">
+<script src="nucleo/config.js?v=N6"></script>
+<script src="nucleo/nucleo.js?v=N6"></script>
+<script src="nucleo/modulos.js?v=M2"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="TapHub">
@@ -238,7 +238,7 @@ h1{font-size:27px;margin:0 0 22px;letter-spacing:-.02em}
 <div class="topo">
   <div class="marca"><span class="logo" style="color:#fff">T</span><div>Tap<span>Hub</span></div></div>
   <div class="casa-top">Engetap</div>
-  <div class="selo" id="selo">HUB · H12</div>
+  <div class="selo" id="selo">INÍCIO · H13</div>
   <div class="dir" id="quemSou" hidden>
     <button type="button" class="chip" id="btMeus" title="Meus aparelhos e digital"><span><b id="euNome"></b> <span class="perf">· <span id="euPerfil"></span></span></span><span class="av" id="euIni"></span></button>
     <button class="lnk" id="btSair">Sair</button>
@@ -250,6 +250,7 @@ h1{font-size:27px;margin:0 0 22px;letter-spacing:-.02em}
   <h1>Em que vamos trabalhar hoje?</h1>
   <p class="sub" id="subtitulo"></p>
   <a class="pedidos" id="faixaPedidos" href="acessos/#pedidos" hidden></a>
+  <a class="pedidos" id="faixaRelatos" href="acessos/#relatos" hidden></a>
   <div class="cards" id="cards"></div>
   <a class="adm-acessos" id="admAcessos" href="acessos/" hidden><b>Pessoas e acessos</b><span>quem vê cada módulo e o PLH · só o admin</span></a>
   <div id="semNada" hidden>
@@ -268,6 +269,7 @@ h1{font-size:27px;margin:0 0 22px;letter-spacing:-.02em}
     <button class="lnk" type="button" id="instNao">agora não</button>
   </div>
   <p class="nota" id="nota"></p>
+  <p class="nota"><button type="button" class="lnk" id="btRelatar">Relatar problema ou sugerir</button></p>
 </main>
 
 <div class="login" id="login" hidden>
@@ -323,10 +325,11 @@ h1{font-size:27px;margin:0 0 22px;letter-spacing:-.02em}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';
 
-const APP_VERSION = 'H12';   // H12 (S124): "Esqueci minha senha", a troca da senha provisória e a faixa dos pedidos (207) · letra clara nos campos
+const APP_VERSION = 'H13';   // H13 (S132): o sistema se chama TapHub nas telas (item #10 da lista); a tela de entrada é "Início"; "Relatar problema ou sugerir" (item #1, 209)
+// const APP_VERSION = 'H12';   // H12 (S124): "Esqueci minha senha", a troca da senha provisória e a faixa dos pedidos (207) · letra clara nos campos
 // H11 (S88): o link "Pessoas e acessos" do admin (Acessos P1)
 // S123 (sw H11-S123) · Passkey 1: o nome no topo abre "Meus aparelhos e digital" (Nucleo.meusAparelhos, núcleo N3)
-try{ document.getElementById('selo').textContent = 'HUB · ' + APP_VERSION; }catch(e){}
+try{ document.getElementById('selo').textContent = 'INÍCIO · ' + APP_VERSION; }catch(e){}   // H13 · item #10 da lista: a tela de entrada se chama "Início"
 
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
@@ -694,6 +697,18 @@ async function pintarPedidos(){
     f.innerHTML = '<b>' + n + (n === 1 ? ' pedido' : ' pedidos') + ' de acesso</b> (senha ou PIN esquecido) esperando você · abrir';
     f.hidden = n === 0;
   }catch(e){ f.hidden = true; }
+  pintarRelatos();
+}
+/* H13 · item #1 da lista (209, R8): a faixa "N relatos novos" só para quem tem "Recebe relatos"
+   (o banco devolve 0 para os outros; banco sem a 209 → nada). */
+async function pintarRelatos(){
+  const f = document.getElementById('faixaRelatos');
+  if (DEMO || !sessao.token){ f.hidden = true; return; }
+  try{
+    const n = Number(await api('/rest/v1/rpc/tf_relatos_contar', { method:'POST', body:{} })) || 0;
+    f.innerHTML = '<b>' + n + (n === 1 ? ' relato novo' : ' relatos novos') + '</b> de problema ou sugestão da equipe · abrir';
+    f.hidden = n === 0;
+  }catch(e){ f.hidden = true; }
 }
 
 document.getElementById('frm').addEventListener('submit', async ev => {
@@ -727,6 +742,8 @@ document.getElementById('frm').addEventListener('submit', async ev => {
 });
 
 // S123 · Passkey 1: "Meus aparelhos e digital" (a tela é do núcleo N3; a N1c, quando vier, a incorpora)
+// H13 · item #1: relatar também pelo início (o núcleo abre a tela; está em todos os módulos pelo menu "Trocar de módulo")
+document.getElementById('btRelatar').addEventListener('click', () => { if (window.Nucleo && Nucleo.relatar) Nucleo.relatar({ modulo: 'inicio', tela: 'Início' }); });
 document.getElementById('btMeus').addEventListener('click', () => {
   if (autoIndo){ clearTimeout(autoIndo); autoIndo = null; }
   if (DEMO || !window.Nucleo || typeof Nucleo.meusAparelhos !== 'function'){ return; }
@@ -758,13 +775,13 @@ function pintarConvite(){
   if (!cx || nao || instalado()){ if (cx) cx.hidden = true; return; }
   const t = document.getElementById('instTxt'), b = document.getElementById('instSim');
   if (promptInst){
-    t.innerHTML = '<b>Instale o TapFlow neste aparelho.</b> Fica um ícone na tela inicial e ele abre em '
+    t.innerHTML = '<b>Instale o TapHub neste aparelho.</b> Fica um ícone na tela inicial e ele abre em '
       + 'tela cheia, como um app — sem a barra do navegador.';
     b.hidden = false; cx.hidden = false;
   } else if (ehIOS()){
     // O Safari do iPhone não tem o botão: o caminho é o menu Compartilhar.
     t.innerHTML = '<b>No iPhone:</b> toque em <b>Compartilhar</b> (o quadrado com a seta para cima) e depois '
-      + 'em <b>Adicionar à Tela de Início</b>. O TapFlow passa a abrir em tela cheia, com o ícone da Engetap.';
+      + 'em <b>Adicionar à Tela de Início</b>. O TapHub passa a abrir em tela cheia, com o ícone da Engetap.';
     b.hidden = true; cx.hidden = false;
   } else cx.hidden = true;
 }

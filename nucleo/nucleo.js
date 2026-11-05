@@ -6,8 +6,8 @@
  * aqui (fica no módulo e nas funções tf_*). Sem framework, sem build.
  *
  * COMO UM MÓDULO USA (duas linhas no <head> e uma no boot):
- *   <script src="../nucleo/config.js?v=N5"></script>
- *   <script src="../nucleo/nucleo.js?v=N5"></script>
+ *   <script src="../nucleo/config.js?v=N6"></script>
+ *   <script src="../nucleo/nucleo.js?v=N6"></script>
  *   ...
  *   const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
  *   if (g === 'hub') { irParaHub(Nucleo.recado); return; }     // ANTES do iniciar()
@@ -39,7 +39,8 @@
   'use strict';
   if (window.Nucleo && window.Nucleo.versao) return;
 
-  var VERSAO = 'N5';   // N5 (S131): o IndexedDB reabre quando o iPhone fecha a ligação
+  var VERSAO = 'N6';   // N6 (S132): "Relatar problema ou sugerir" em todos os módulos (209; item #1 da lista) e os últimos erros do app para irem junto
+  // var VERSAO = 'N5';   // N5 (S131): o IndexedDB reabre quando o iPhone fecha a ligação
   var SCRIPT = (document.currentScript && document.currentScript.src) || '';
   var RAIZ = SCRIPT ? new URL('../', SCRIPT).href : (location.origin + '/');
   var NO_SERVIDOR = location.protocol === 'http:' || location.protocol === 'https:';
@@ -671,8 +672,8 @@
     var desafio = crypto.getRandomValues(new Uint8Array(32));
     var usuario = new TextEncoder().encode(String(c.ap).slice(0, 64));      // o nº do aparelho, não dado pessoal
     return navigator.credentials.create({ publicKey: {
-      rp: { id: location.hostname, name: 'TapFlow' },
-      user: { id: usuario, name: s.email || 'tapflow', displayName: s.nome || s.email || 'TapFlow' },
+      rp: { id: location.hostname, name: 'TapHub' },
+      user: { id: usuario, name: s.email || 'tapflow', displayName: s.nome || s.email || 'TapHub' },
       challenge: desafio, timeout: 60000, attestation: 'none',
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
       authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' }
@@ -687,7 +688,7 @@
         return r || { status: 'erro' };
       });
     }, function (e) {
-      if (e && e.name === 'InvalidStateError') throw new Error('Este aparelho já tem uma digital do TapFlow. Remova em "Meus aparelhos e digital" e cadastre de novo.');
+      if (e && e.name === 'InvalidStateError') throw new Error('Este aparelho já tem uma digital do TapHub. Remova em "Meus aparelhos e digital" e cadastre de novo.');
       throw new Error(e && e.name === 'NotAllowedError' ? 'Cancelado. Nada foi cadastrado.' : 'O aparelho não conseguiu cadastrar a digital.');
     });
   }
@@ -1134,6 +1135,8 @@
     // N3 · Passkey 1
     confirmarPessoa: confirmarPessoa,
     meusAparelhos: meusAparelhos,
+    relatar: relatar,                                  // N6 · "Relatar problema ou sugerir" (209)
+    errosRecentes: function () { return ERROS.slice(); },
     suporteDigital: suporteDigital,
     travarAgora: function () { lsSet(K_TRAVADO, '1'); if (cfgDe(sessao().email)) pedirDestrave(); },
     configurar: function (o) { conf.url = o.url || conf.url; conf.anon = o.anon || conf.anon; if (o.app) conf.app = o.app; },
@@ -1627,6 +1630,139 @@
     if (ABRE_COM[t]) return ABRE_COM[t];
     for (var k in ABRE_COM) if (Object.prototype.hasOwnProperty.call(ABRE_COM, k) && t.indexOf(k + ':') === 0) return ABRE_COM[k];
     return null;
+  }
+
+
+  /* ── N6 · "Relatar problema ou sugerir" (209; item #1 da lista; desenho R1–R10) ──
+     O botão mora aqui e aparece em todos os módulos (pelo menu "Trocar de módulo"
+     do modulos.js e pela aba Eu do Field). Vai junto, sem a pessoa digitar: o
+     módulo, a tela, a versão do app, o aparelho e os últimos erros (R4). Até 2
+     prints da galeria (R5), no bucket privado `relatos`. Cada um vê só os seus,
+     com a resposta (R6). */
+  var ERROS = [];
+  function anotarErro(m) {
+    try {
+      var t = String(m || '').replace(/\s+/g, ' ').slice(0, 300);
+      if (!t) return;
+      ERROS.push({ m: t, em: new Date().toISOString() });
+      if (ERROS.length > 10) ERROS.shift();
+    } catch (e) {}
+  }
+  window.addEventListener('error', function (e) {
+    anotarErro((e && e.message ? e.message : 'erro') + (e && e.filename ? ' @ ' + String(e.filename).split('/').pop() + ':' + (e.lineno || '') : ''));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e && e.reason; anotarErro('promise: ' + (r && (r.message || r.statusText) ? (r.message || r.statusText) : String(r || '')));
+  });
+  function subDoToken(t) {
+    try { var p = String(t || '').split('.')[1]; return JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/'))).sub || ''; } catch (e) { return ''; }
+  }
+  function aparelhoTexto() {
+    var ua = navigator.userAgent || '', so = /iPhone|iPad|iPod/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac/.test(ua) ? 'Mac' : 'computador';
+    var nav = /EdgA?\//.test(ua) ? 'Edge' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /Firefox\//.test(ua) ? 'Firefox' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'navegador';
+    var app = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone ? ' · app instalado' : '';
+    var v = (ua.match(/Android ([0-9.]+)/) || ua.match(/OS ([0-9_]+) like Mac/) || [])[1];
+    return so + (v ? ' ' + String(v).replace(/_/g, '.') : '') + ' · ' + nav + app + ' · ' + (innerWidth || 0) + 'px';
+  }
+  function contextoRelato(o) {
+    o = o || {};
+    var versao = o.versao; if (!versao) { try { versao = (typeof APP_VERSION !== 'undefined' && APP_VERSION) ? String(APP_VERSION) : ''; } catch (e) { versao = ''; } }
+    var modulo = o.modulo || document.documentElement.getAttribute('data-modulo') || (location.pathname.match(/\/([a-z]+)\/(?:index\.html)?$/) || [])[1] || 'inicio';
+    var tit = String(document.title || '').split('·')[0].trim();
+    return { modulo: modulo, tela: o.tela || document.title || '', versao: (tit && versao && tit.indexOf(versao) < 0 ? tit + ' ' : '') + versao + ' · núcleo ' + VERSAO,
+             aparelho: aparelhoTexto(), erros: ERROS.slice(-10) };
+  }
+  function relatar(o) {
+    o = o || {};
+    var s = sessao();
+    if (!s.token) { toast('Entre no sistema para relatar.', 'err'); return; }
+    fecharTela();
+    var el = document.createElement('div');
+    el.id = 'tfPin'; el.className = 'tf-pin tf-meus tf-relato';
+    el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', 'Relatar problema ou sugerir');
+    el.style.cssText = 'position:fixed;top:0;right:0;bottom:0;left:0;z-index:2147483000;background:#0E1621;color:#E8EEF5;overflow:auto';
+    el.innerHTML = '<div class="tf-pin-in tf-meus-in"><div class="tf-meus-topo"><div class="tf-tit">Relatar problema ou sugerir</div>' +
+      '<button type="button" class="tf-link" id="tfRelFechar">Fechar</button></div>' +
+      '<div class="tf-msg" id="tfPinMsg" role="status" aria-live="polite"></div>' +
+      '<section class="tf-meus-sec"><h3>O que você quer contar?</h3>' +
+      '<div class="tf-rel-tipos"><label class="tf-rel-tipo"><input type="radio" name="tfRelTipo" value="problema" checked> Problema</label>' +
+      '<label class="tf-rel-tipo"><input type="radio" name="tfRelTipo" value="sugestao"> Sugestão</label></div>' +
+      '<label class="tf-rel-rot" for="tfRelTxt">O que aconteceu (ou o que você sugere)</label>' +
+      '<textarea id="tfRelTxt" rows="5" maxlength="4000" placeholder="Ex.: toquei em Bater o ponto e a tela ficou branca."></textarea>' +
+      '<label class="tf-rel-rot" for="tfRelImg">Print da tela (opcional, até 2 imagens da galeria)</label>' +
+      '<input type="file" id="tfRelImg" accept="image/*" multiple>' +
+      '<p id="tfRelImgs"></p>' +
+      '<p>Vai junto, sem você digitar: o módulo e a tela em que você está, a versão do app e o tipo de aparelho. ' +
+      'Só você e quem cuida dos relatos (Bruno e Fernando) veem o que você mandar.</p>' +
+      '<button type="button" class="tf-bt pri" id="tfRelEnviar">Enviar</button></section>' +
+      '<section class="tf-meus-sec"><h3>Seus relatos</h3><div id="tfRelLista">Carregando…</div></section></div>';
+    if (!document.getElementById('tf-rel-css')) {
+      var st = document.createElement('style'); st.id = 'tf-rel-css';
+      st.textContent = '.tf-rel-tipos{display:flex;gap:10px;margin:4px 0 10px}.tf-rel-tipo{flex:1;display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #263445;border-radius:10px;font-size:15px;cursor:pointer}' +
+        '.tf-rel-tipo:has(input:checked){border-color:#5AA9E6;background:#172231}.tf-rel-rot{display:block;font-size:13px;color:#8796A8;margin:10px 0 4px}' +
+        '.tf-relato textarea{width:100%;box-sizing:border-box;font:inherit;font-size:15px;padding:10px;border-radius:10px;border:1px solid #263445;background:#0E1621;color:#E8EEF5;resize:vertical}' +
+        '.tf-relato input[type=file]{width:100%;color:#C9D4E0;font-size:13px}.tf-rel-it{border-top:1px solid #263445;padding:10px 0}.tf-rel-it:first-child{border-top:0;padding-top:0}' +
+        '.tf-rel-it b{display:block;font-size:14px}.tf-rel-it small{display:block;color:#8796A8;font-size:12px;margin-top:2px}.tf-rel-it .tf-rel-resp{margin:6px 0 0;padding:8px 10px;background:#172231;border-radius:8px;font-size:14px;color:#E8EEF5}' +
+        '.tf-rel-sit{display:inline-block;font-size:11px;padding:2px 7px;border-radius:999px;background:#263445;color:#C9D4E0;margin-left:6px}.tf-rel-sit.novo{background:#3B4A1F;color:#D9F0A3}.tf-rel-sit.respondido{background:#1F3B5A;color:#BFE0FF}';
+      document.head.appendChild(st);
+    }
+    document.body.appendChild(el);
+    document.documentElement.setAttribute('data-tf-trava', '1');
+    var teclado = function (e) { if (e.key === 'Escape') fecharTela(); };
+    tela = { el: el, teclado: teclado, foco: document.activeElement };
+    document.addEventListener('keydown', teclado, true);
+    function msg(t, e) { var m = el.querySelector('#tfPinMsg'); m.textContent = t || ''; m.className = 'tf-msg' + (e ? ' erro' : ''); }
+    el.querySelector('#tfRelFechar').addEventListener('click', function () { fecharTela(); });
+    var SIT = { novo: 'enviado', respondido: 'respondido', melhoria: 'virou melhoria', descartado: 'encerrado' };
+    function lista() {
+      var cx = el.querySelector('#tfRelLista');
+      rpcM('tf_relatos_meus', {}).then(function (L) {
+        if (!(L || []).length) { cx.innerHTML = '<p>Você ainda não mandou nenhum relato.</p>'; return; }
+        cx.innerHTML = L.map(function (r) {
+          return '<div class="tf-rel-it"><b>' + (r.tipo === 'problema' ? 'Problema' : 'Sugestão') + '<span class="tf-rel-sit ' + esc(r.situacao) + '">' + esc(SIT[r.situacao] || r.situacao) + '</span></b>' +
+            '<small>' + esc(quando(r.criado_em)) + (r.tela ? ' · ' + esc(r.tela) : '') + '</small>' +
+            '<div>' + esc(r.texto) + '</div>' +
+            (r.resposta ? '<div class="tf-rel-resp"><b>Resposta' + (r.respondido_por ? ' de ' + esc(r.respondido_por) : '') + (r.respondido_em ? ' em ' + esc(quando(r.respondido_em)) : '') + ':</b> ' + esc(r.resposta) + '</div>' : '') +
+            (r.situacao === 'melhoria' ? '<small>Entrou na lista de melhorias' + (r.melhoria_num ? ' (item ' + esc(r.melhoria_num) + ')' : '') + '.</small>' : '') + '</div>';
+        }).join('');
+      }, function (e) { cx.innerHTML = '<p>Não deu para abrir a lista agora' + (e && e.rede ? ' (sem sinal)' : '') + '.</p>'; });
+    }
+    var imgs = [];
+    el.querySelector('#tfRelImg').addEventListener('change', function (e) {
+      imgs = Array.prototype.slice.call(e.target.files || []).filter(function (f) { return /^image\//.test(f.type); }).slice(0, 2);
+      el.querySelector('#tfRelImgs').textContent = imgs.length ? imgs.map(function (f) { return f.name; }).join(' · ') + (e.target.files.length > 2 ? ' (só as 2 primeiras)' : '') : '';
+    });
+    el.querySelector('#tfRelEnviar').addEventListener('click', function () {
+      var bt = this, tipo = (el.querySelector('input[name=tfRelTipo]:checked') || {}).value || 'problema';
+      var txt = el.querySelector('#tfRelTxt').value.trim();
+      if (txt.length < 10) { msg('Conte o que aconteceu com um pouco mais de detalhe.', true); el.querySelector('#tfRelTxt').focus(); return; }
+      if (navigator.onLine === false) { msg('Sem sinal: o relato precisa de internet para ser enviado. Tente de novo com sinal.', true); return; }
+      bt.disabled = true; msg('Enviando…');
+      var id, caminhos = [], uid = subDoToken(s.token);   // o id da pessoa vem do próprio token (a sessão não o guarda)
+      rpcM('tf_relato_criar', { p_tipo: tipo, p_texto: txt, p_contexto: contextoRelato(o) }).then(function (r) {
+        id = r && r.id;
+        if (!id || !imgs.length) return;
+        return imgs.reduce(function (p, f, i) {
+          return p.then(function () {
+            return reduzirFoto(f, { lado: 1280, qualidade: 0.8 }).then(function (b) {
+              var cam = uid + '/' + id + '/' + (i + 1) + '.jpg';
+              return storageEnviar('relatos', cam, b).then(function () { caminhos.push(cam); });
+            }).catch(function () { /* o print falhou: o relato vai sem ele */ });
+          });
+        }, Promise.resolve()).then(function () {
+          if (caminhos.length) return rpcM('tf_relato_prints', { p_id: id, p_paths: caminhos });
+        });
+      }).then(function () {
+        el.querySelector('#tfRelTxt').value = ''; el.querySelector('#tfRelImg').value = ''; el.querySelector('#tfRelImgs').textContent = ''; imgs = [];
+        msg('Relato enviado. Obrigado! A resposta aparece aqui embaixo' + (caminhos.length ? '' : (id && imgs.length ? ' (o print não subiu)' : '')) + '.');
+        toast('Relato enviado.', 'ok');
+        lista();
+      }, function (e) {
+        msg((e && e.message) || 'Não deu para enviar agora.', true);
+      }).then(function () { bt.disabled = false; });
+    });
+    lista();
+    el.querySelector('#tfRelTxt').focus();
   }
 
   api_.versao = VERSAO;

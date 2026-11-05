@@ -1,5 +1,5 @@
 /* ============================================================================
- * nucleo/modulos.js · M1 — os módulos do sistema num lugar só
+ * nucleo/modulos.js · M2 — os módulos do sistema num lugar só
  * ----------------------------------------------------------------------------
  * H10 (23/10/2026, chat central). Desenho: processos/hub-h10-layout-desenho.md.
  *
@@ -10,7 +10,7 @@
  * módulo" abre o menu de UMA coluna com os módulos que a pessoa pode abrir.
  *
  * Como usar numa página (depois do nucleo.js):
- *   <script src="../nucleo/modulos.js?v=M1"></script>
+ *   <script src="../nucleo/modulos.js?v=M2"></script>
  *   TapModulos.aplicar('tapfin');               // a moldura (variáveis CSS)
  *   TapModulos.trocador(botao, 'tapfin');       // o botão abre o menu
  *   (no Manager, que tem várias áreas: trocador(botao, () => chaveDaAreaAtual))
@@ -21,13 +21,13 @@
  * Quem pode abrir o quê vem do SERVIDOR (tf_hub_modulos, a mesma regra do
  * hub). A lista fica guardada no aparelho para abrir sem sinal.
  * Arquivo novo: não mexe no nucleo.js (N2) nem obriga trocar o ?v= dele.
- * ⚠ Mudou este arquivo? Troque o ?v=M1 em todas as páginas e nos sw.js.
+ * ⚠ Mudou este arquivo? Troque o ?v=M2 em todas as páginas e nos sw.js.
  *   (Card novo sem mudar o ?v= — como no S116, S118, S119 e no GE1 — vale porque o sw.js da
  *   raiz busca o nucleo/ na rede primeiro; aparelho sem sinal vê o card no próximo acesso.)
  * ========================================================================== */
 (function () {
   'use strict';
-  var VERSAO = 'M1';
+  var VERSAO = 'M2';   // M2 (S132): "Relatar problema ou sugerir" no menu (item #1 da lista)
 
   // A raiz do app: este arquivo mora em <raiz>/nucleo/.
   var RAIZ = (function () {
@@ -129,6 +129,7 @@
     + '.tm-cab{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#78838A;padding:4px 8px 8px}'
     + '.tm-i{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;text-decoration:none;color:inherit;position:relative;outline:0}'
     + '.tm-i:hover,.tm-i:focus-visible{background:#F1F3F4}'
+    + 'button.tm-i{width:100%;border:0;background:none;font:inherit;cursor:pointer}'
     + '.tm-i.at{background:var(--tm-suave,#EEF2F6);box-shadow:inset 0 0 0 1px var(--tm-borda,#CBD5E1)}'
     + '.tm-q{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}'
     + '.tm-q svg{width:18px;height:18px}'
@@ -167,6 +168,12 @@
     h += '<div class="tm-sep"></div><a class="tm-i" role="menuitem" href="' + esc(RAIZ) + '" data-chave="inicio">'
       + '<span class="tm-q" style="background:#1F2937">' + icone('inicio', '', '#fff') + '</span>'
       + '<span class="tm-t"><b>Início</b><small>Voltar ao TapHub</small></span></a>';
+    // M2 (S132) · item #1 da lista: "Relatar problema ou sugerir" em todos os módulos (núcleo N6, 209)
+    if (window.Nucleo && typeof Nucleo.relatar === 'function') {
+      h += '<button type="button" class="tm-i tm-rel" role="menuitem" data-chave="relatar">'
+        + '<span class="tm-q" style="background:#B45309"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H8l-4 4V5Z"/><path d="M12 8v4"/><path d="M12 14.5h.01"/></svg></span>'
+        + '<span class="tm-t"><b>Relatar problema ou sugerir</b><small>Com o print da tela, se quiser</small></span></button>';
+    }
     return h;
   }
   function posicionar(menu, botao) {
@@ -195,6 +202,10 @@
     };
     aberto = { fundo: fundo, menu: menu, botao: botao, tecla: tecla };
     fundo.addEventListener('click', fechar);
+    menu.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('.tm-rel') : null;
+      if (b) { e.preventDefault(); var m = atual; fechar(); try { Nucleo.relatar({ modulo: m }); } catch (x) {} }
+    });
     document.addEventListener('keydown', tecla, true);
     botao.setAttribute('aria-expanded', 'true');
     var a = menu.querySelector('.tm-i.at') || menu.querySelector('.tm-i'); if (a) a.focus();
