@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapSeg 2 · Segurança do Trabalho</title>
+<title>TapSeg 3 · Segurança do Trabalho</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2302,9 +2302,9 @@ th.num .tfThFixo{text-align:right}
 <!-- S63 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js.
      S76 · ?v=N2, igual ao hub e ao Field (o N2 aceita tudo do N1: o Manager já rodava o N2 com o
      endereço ?v=N1). O sw.js da raiz guarda estes três endereços: trocou aqui, troca lá (é do central). -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N4">
-<script src="../nucleo/config.js?v=N4"></script>
-<script src="../nucleo/nucleo.js?v=N4"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N5">
+<script src="../nucleo/config.js?v=N5"></script>
+<script src="../nucleo/nucleo.js?v=N5"></script>
 <!-- S82 · H10: a tabela única dos módulos (cor, miniatura, menu "Trocar de módulo"). Mudou o ?v=? Troque no sw.js da raiz também (é do central). -->
 <script src="../nucleo/modulos.js?v=M1"></script>
 </head>
@@ -2373,7 +2373,7 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'G2';   // G2 (S118) · "Ficha do RH →" abre o TapRH (rh/) · G1 = TapSeg 1 (separado do Manager S114) — o S## da publicação é da rodada que publica
+const APP_VERSION = 'G3';   // G3 (S131) · Uniforme (U1–U8): catálogo de EPI e uniforme, tamanhos em dois blocos, uniformes recebidos, previstos com quantidade · G2 (S118) · "Ficha do RH →" abre o TapRH (rh/) · G1 = TapSeg 1 (separado do Manager S114) — o S## da publicação é da rodada que publica
 try{ document.getElementById('verBadge').textContent = 'SEGURANÇA · ' + APP_VERSION; }catch(e){}
 
 const esc               = (...a) => Nucleo.util.esc(...a);
@@ -2841,7 +2841,7 @@ async function rhfdFetch(url, opts){
 
 const RH_ABAS = [ ['painel','Painel'], ['entregas','Entregas'], ['pedidos','Pedidos'], ['estoque','Estoque'], ['devol','Devoluções'],
   ['trein','Treinamentos'], ['docs','Documentos da empresa'], ['kit','Kit do cliente'],
-  ['epis','Catálogo de EPI'], ['textos','Textos e termo'], ['quem','Quem vê'] ];
+  ['epis','Catálogo de EPI e uniforme'], ['textos','Textos e termo'], ['quem','Quem vê'] ];
 
 async function pintarRHSeguranca(){
   visao = 'rhs';
@@ -2904,7 +2904,7 @@ function rhListaEntregas(el, L, comNome, depois){
     const st = anul ? 'anulada' : RH_STATUS[e.status] || e.status;
     const sub = [];
     sub.push('entregue em ' + dataBR(e.data_entrega) + (e.anterior_ao_sistema ? ' (anterior ao sistema)' : ''));
-    sub.push('CA ' + e.ca);
+    sub.push(e.uniforme ? 'uniforme (não é EPI)' : 'CA ' + e.ca);
     if (e.fabricacao) sub.push('fab. ' + rhMes(e.fabricacao) + (e.limite_em ? ' · limite ' + rhMes(e.limite_em) : ''));
     if (e.serie_lote) sub.push('série/lote ' + e.serie_lote);
     if (e.condicao === 'reaproveitado') sub.push('reaproveitado');
@@ -3003,8 +3003,8 @@ async function rhNovaEntrega(uid){
   if (!pessoas.length){ toast('Abra a ficha de RH de alguém antes (Funcionários).', 'err'); irPara('rhf'); return; }
   const epis = (cat.epis || []).filter(e => e.ativo && !e.componente && !e.livre_acesso);
   const optEpi = '<option value="">— escolha o EPI —</option>' + epis.map(e => '<option value="' + esc(e.id) + '">'
-    + esc(e.nome) + (e.ca ? ' · CA ' + esc(e.ca) : ' · SEM CA') + '</option>').join('');
-  abrirModal('Nova entrega de EPI',
+    + esc(e.nome) + (e.uniforme ? ' · uniforme' : e.ca ? ' · CA ' + esc(e.ca) : ' · SEM CA') + '</option>').join('');
+  abrirModal('Nova entrega de EPI ou uniforme',
       '<div class="campo"><label for="rhNF">Funcionário</label><select id="rhNF">'
     + '<option value="">— escolha —</option>' + pessoas.map(f => '<option value="' + esc(f.usuario_id) + '">' + esc(f.nome)
       + (f.funcao ? ' · ' + esc(f.funcao) : '') + (f.tem_pin ? '' : ' (ainda sem PIN)') + '</option>').join('') + '</select></div>'
@@ -3050,7 +3050,8 @@ async function rhNovaEntrega(uid){
       d.querySelector('.nSerC').hidden = !(x && x.pede_serie);
       d.querySelectorAll('.nIniC').forEach(c => c.hidden = !ini);
       const av = [];
-      if (x && !x.ca) av.push('Este EPI está SEM CA no catálogo — o banco não deixa entregar. Preencha em Catálogo de EPI.');
+      if (x && x.uniforme) av.push('Uniforme (não é EPI): não tem CA, é confirmado com o PIN no celular e não entra na Ficha de EPI.');
+      if (x && !x.ca && !x.uniforme) av.push('Este EPI está SEM CA no catálogo — o banco não deixa entregar. Preencha em Catálogo de EPI.');
       if (x && x.ca_validade && x.ca_validade < isoHoje()) av.push('O CA ' + x.ca + ' venceu em ' + dataBR(x.ca_validade)
         + '. EPI comprado com CA válido segue em uso; o aviso é para a próxima compra.');
       if (x && x.sob_encomenda) av.push('Item sob encomenda (óculos graduado): confira a receita na ficha antes de entregar.');
@@ -3175,11 +3176,16 @@ async function rhCatalogo(corpo){
   const r = await rpc('tf_rh_epis', {}); RH.epis = r.epis; RH.trein = r.treinamentos;
   corpo.innerHTML = '<div class="rhBarra"><p class="nota" style="margin:0;flex:1">Catálogo PRÓPRIO do RH — não é o Catálogo do '
     + 'Comercial (aquele é o que a Engetap vende). O CA é digitado; a consulta automática da base do governo chega na R7.</p>'
-    + '<button class="btn pri" type="button" id="rhEpiNovo">Novo EPI</button></div><div class="ccLista" id="rhEpiL"></div>';
+    + '<button class="btn pri" type="button" id="rhEpiNovo">Novo item</button></div>'
+    + '<p class="nota">Uniforme do dia a dia (camisa de malha, calça jeans) não é EPI (NR-06, item 6.3): não tem CA e não entra na Ficha de EPI nem no Kit do cliente. '
+    + 'Marque "Uniforme (não é EPI)" no item. O conjunto com CA continua sendo EPI.</p>'
+    + '<div class="secTit">EPI</div><div class="ccLista" id="rhEpiL"></div><div class="secTit">Uniforme</div><div class="ccLista" id="rhUniL"></div>';
   document.getElementById('rhEpiNovo').addEventListener('click', () => rhEditarEpi(null, pintarRHSeguranca));
-  const el = document.getElementById('rhEpiL');
+  const el = document.getElementById('rhEpiL'), elU = document.getElementById('rhUniL');
+  if (!RH.epis.some(e => e.uniforme)) elU.innerHTML = '<p class="nota" style="margin:0">Nenhum uniforme cadastrado.</p>';
   RH.epis.forEach(e => {
     const d = document.createElement('div'); d.className = 'rhLin' + (e.ativo ? '' : ' riscada');
+
     const car = [];
     if (e.tem_tamanho) car.push('tamanhos: ' + (e.tamanhos || []).join(', '));
     if (e.livre_acesso) car.push('livre acesso (sem registro individual)');
@@ -3189,16 +3195,17 @@ async function rhCatalogo(corpo){
     if (e.pede_fabricacao) car.push('pede fabricação');
     if (e.pede_serie) car.push('pede série/lote');
     if (e.sob_encomenda) car.push('sob encomenda');
-    const caTxt = e.componente || e.livre_acesso ? '' : (e.ca ? 'CA ' + e.ca + (e.ca_validade ? ' · validade ' + dataBR(e.ca_validade) : '') : 'SEM CA');
+    if (e.uniforme) car.push(e.logomarca ? 'com logomarca: devolve no desligamento' : 'sem logomarca');
+    const caTxt = e.uniforme ? 'uniforme' : e.componente || e.livre_acesso ? '' : (e.ca ? 'CA ' + e.ca + (e.ca_validade ? ' · validade ' + dataBR(e.ca_validade) : '') : 'SEM CA');
     d.innerHTML = '<span class="t"><b></b> <span class="rhCa"></span><small></small></span><span class="a">'
       + '<button class="btn mini" type="button">Editar</button></span>';
     d.querySelector('b').textContent = e.nome + (e.ativo ? '' : ' (desativado)');
     const c = d.querySelector('.rhCa'); c.textContent = caTxt;
-    if (!e.ca && !e.componente && !e.livre_acesso) c.classList.add('falta');
+    if (!e.ca && !e.componente && !e.livre_acesso && !e.uniforme) c.classList.add('falta');
     else if (e.ca_validade && e.ca_validade < isoHoje()) c.classList.add('falta');
     d.querySelector('small').textContent = [e.fabricante].concat(car).filter(Boolean).join(' · ');
     d.querySelector('button').addEventListener('click', () => rhEditarEpi(e, pintarRHSeguranca));
-    el.appendChild(d);
+    (e.uniforme ? elU : el).appendChild(d);
   });
 }
 
@@ -3206,16 +3213,18 @@ function rhEditarEpi(e, depois){
   e = e || { ativo:true, tamanhos:[] };
   const ck = (id, rot, v, dica) => '<label class="chk" style="margin-bottom:6px"><input type="checkbox" id="' + id + '"'
     + (v ? ' checked' : '') + '> ' + rot + (dica ? ' <span class="nota" style="margin:0">— ' + dica + '</span>' : '') + '</label>';
-  abrirModal(e.id ? 'Editar EPI' : 'Novo EPI',
+  abrirModal(e.id ? (e.uniforme ? 'Editar uniforme' : 'Editar EPI') : 'Novo item do catálogo',
       '<div class="campo"><label for="eN">Nome</label><input id="eN" type="text" maxlength="120" value="' + esc(e.nome || '') + '"></div>'
-    + '<div class="dupla"><div class="campo"><label for="eCA">CA (número)</label><input id="eCA" type="text" inputmode="numeric" maxlength="9" value="' + esc(e.ca || '') + '"></div>'
+    + ck('eUn', 'Uniforme (não é EPI)', e.uniforme, 'camisa, calça do dia a dia: sem CA, fora da Ficha de EPI e do Kit do cliente')
+    + '<div id="eUnC">' + ck('eLg', 'Com logomarca: pedir devolução no desligamento', e.logomarca, 'sem desconto no salário (CLT art. 462)') + '</div>'
+    + '<div class="dupla eSoEpi"><div class="campo"><label for="eCA">CA (número)</label><input id="eCA" type="text" inputmode="numeric" maxlength="9" value="' + esc(e.ca || '') + '"></div>'
     + '<div class="campo"><label for="eCV">Validade do CA</label><input id="eCV" type="date" value="' + esc(e.ca_validade || '') + '"></div></div>'
-    + '<div class="campo"><label for="eF">Fabricante</label><input id="eF" type="text" maxlength="120" value="' + esc(e.fabricante || '') + '"></div>'
+    + '<div class="campo eSoEpi"><label for="eF">Fabricante</label><input id="eF" type="text" maxlength="120" value="' + esc(e.fabricante || '') + '"></div>'
     + '<div class="campo"><label for="eD">Descrição</label><input id="eD" type="text" maxlength="300" value="' + esc(e.descricao || '') + '"></div>'
     + '<div class="campo"><label for="eO">Orientações de uso deste EPI (aparecem na confirmação)</label><textarea id="eO" rows="2" maxlength="800">' + esc(e.orientacoes || '') + '</textarea></div>'
     + ck('eTT', 'Tem tamanho', e.tem_tamanho)
     + '<div class="campo" id="eTamC"><label for="eTam">Tamanhos (separados por vírgula)</label><input id="eTam" type="text" value="' + esc((e.tamanhos || []).join(', ')) + '"></div>'
-    + ck('eLA', 'Livre acesso', e.livre_acesso, 'NR-06 6.5.1.2: fica na caixa, sem registro individual (ex.: creme protetor)')
+    + '<div class="eSoEpi">' + ck('eLA', 'Livre acesso', e.livre_acesso, 'NR-06 6.5.1.2: fica na caixa, sem registro individual (ex.: creme protetor)')
     + ck('eRe', 'Reaproveitável na devolução', e.reaproveitavel, 'volta ao estoque como reaproveitado depois de avaliado')
     // S44 · R4: as peças que o reaproveitamento troca (saem do estoque na avaliação)
     + '<div class="campo" id="ePRC"><label>Peças trocadas no reaproveitamento</label>'
@@ -3225,8 +3234,8 @@ function rhEditarEpi(e, depois){
     + ck('ePF', 'Pede data de fabricação na entrega', e.pede_fabricacao, 'capacete, cinto')
     + ck('ePS', 'Pede nº de série/lote', e.pede_serie, 'cinto')
     + ck('eSE', 'Item individual / sob encomenda', e.sob_encomenda, 'óculos graduado')
-    + ck('eCo', 'Peça de reposição', e.componente, 'não se entrega sozinha (suspensão, kit higiene)')
-    + '<div class="dupla"><div class="campo"><label for="eLM">Limite do fabricante (meses)</label><input id="eLM" type="number" min="1" max="240" value="' + esc(e.limite_meses || '') + '"></div>'
+    + ck('eCo', 'Peça de reposição', e.componente, 'não se entrega sozinha (suspensão, kit higiene)') + '</div>'
+    + '<div class="dupla"><div class="campo eSoEpi"><label for="eLM">Limite do fabricante (meses)</label><input id="eLM" type="number" min="1" max="240" value="' + esc(e.limite_meses || '') + '"></div>'
     + '<div class="campo"><label for="eOr">Ordem na lista</label><input id="eOr" type="number" value="' + esc(e.ordem || 100) + '"></div></div>'
     + ck('eAt', 'Ativo', e.ativo !== false)
     + '<p class="nota" id="rhMsg" style="color:var(--crit)"></p>',
@@ -3239,14 +3248,17 @@ function rhEditarEpi(e, depois){
             livre_acesso: g('eLA').checked, reaproveitavel: g('eRe').checked, pede_fabricacao: g('ePF').checked,
             pede_serie: g('ePS').checked, sob_encomenda: g('eSE').checked, componente: g('eCo').checked,
             limite_meses: g('eLM').value, ordem: g('eOr').value, ativo: g('eAt').checked,
-            pecas_reuso: g('eRe').checked ? Array.from(document.querySelectorAll('.ePR:checked')).map(c => c.value) : [] };
+            pecas_reuso: g('eRe').checked ? Array.from(document.querySelectorAll('.ePR:checked')).map(c => c.value) : [],
+            uniforme: g('eUn').checked, logomarca: g('eUn').checked && g('eLg').checked };
           try{ await rpc('tf_rh_salvar_epi', { p_id: e.id || null, p_dados: dados });
-               fecharModal(); toast('EPI salvo.', 'ok'); depois(); }
+               fecharModal(); toast(dados.uniforme ? 'Uniforme salvo.' : 'EPI salvo.', 'ok'); depois(); }
           catch(er){ g('rhMsg').textContent = er.message; }
       } } ]);
   const tt = document.getElementById('eTT'), re = document.getElementById('eRe');
-  const acerta = () => { document.getElementById('eTamC').hidden = !tt.checked; document.getElementById('ePRC').hidden = !re.checked; };
-  tt.addEventListener('change', acerta); re.addEventListener('change', acerta); acerta();
+  const un = document.getElementById('eUn');
+  const acerta = () => { document.getElementById('eTamC').hidden = !tt.checked; document.getElementById('ePRC').hidden = !re.checked || un.checked;
+    document.getElementById('eUnC').hidden = !un.checked; document.querySelectorAll('.eSoEpi').forEach(x => { x.hidden = un.checked; }); };
+  tt.addEventListener('change', acerta); re.addEventListener('change', acerta); un.addEventListener('change', acerta); acerta();
 }
 
 const RH_TEXTOS_ORDEM = ['empresa','ficha_epi','orientacoes_uso','rodape_ficha','termo_adesao','termo_ponto_recibo'];
@@ -3396,12 +3408,15 @@ const rhRecarregar = async () => { try{ RH.lista = await rpc('tf_rh_funcionarios
 
 function rhFTam(c, f){
   const recs = (f.arquivos || []).filter(a => a.tipo === 'receita');
-  c.innerHTML = '<div class="secTit" style="margin-top:4px">Tamanhos</div>'
-    + (f.tamanhos.length ? '<div class="rhTamGrade">' + f.tamanhos.map(t => '<div class="campo"><label for="tm_' + esc(t.epi_id) + '">'
+  const tamGrade = L => '<div class="rhTamGrade">' + L.map(t => '<div class="campo"><label for="tm_' + esc(t.epi_id) + '">'
       + esc(t.epi_nome) + '</label><select id="tm_' + esc(t.epi_id) + '" data-epi="' + esc(t.epi_id) + '"><option value="">—</option>'
       + (t.opcoes || []).map(o => '<option' + (o === t.tamanho ? ' selected' : '') + '>' + esc(o) + '</option>').join('')
-      + '</select>' + (t.por ? '<div class="dica">' + esc(t.por) + ', ' + esc(rhDT(t.atualizado_em)) + '</div>' : '') + '</div>').join('') + '</div>'
-      : '<p class="nota">Nenhum EPI do catálogo está marcado "tem tamanho".</p>')
+      + '</select>' + (t.por ? '<div class="dica">' + esc(t.por) + ', ' + esc(rhDT(t.atualizado_em)) + '</div>' : '') + '</div>').join('') + '</div>';
+  const tE = f.tamanhos.filter(t => !t.uniforme), tU = f.tamanhos.filter(t => t.uniforme);   // G3 · U2: EPI e Uniforme
+  c.innerHTML = '<div class="secTit" style="margin-top:4px">Tamanhos · EPI</div>'
+    + (tE.length ? tamGrade(tE) : '<p class="nota">Nenhum EPI do catálogo está marcado "tem tamanho".</p>')
+    + '<div class="secTit">Tamanhos · Uniforme</div>'
+    + (tU.length ? tamGrade(tU) : '<p class="nota">Nenhum uniforme com tamanho no catálogo (camisa P a XGG, calça 36 a 52: cadastre em Catálogo de EPI e uniforme).</p>')
     + '<p class="nota">O funcionário também muda os próprios tamanhos pelo Field; cada troca fica no histórico e avisa aqui.</p>'
     + '<div class="secTit">Óculos de grau</div>'
     + '<p style="margin:0 0 8px">' + (f.ficha.usa_oculos_grau ? '<b>Usa óculos de grau</b> — recebe óculos de segurança com lente graduada.'
@@ -3454,7 +3469,8 @@ function rhFPrev(c, f){
   const cat = RH.epis, trein = RH.trein;
   const carregar = async () => { if (!RH.epis){ const r = await rpc('tf_rh_epis', {}); RH.epis = r.epis; RH.trein = r.treinamentos; } };
   return carregar().then(() => {
-    const epis = RH.epis.filter(e => e.ativo && !e.componente && !e.livre_acesso);
+    const epis = RH.epis.filter(e => e.ativo && !e.componente && !e.livre_acesso && !e.uniforme);
+    const unis = RH.epis.filter(e => e.ativo && e.uniforme);
     const pe = {}; const pt = {};
     (f.previstos || []).forEach(p => { if (p.epi_id) pe[p.epi_id] = p; else pt[p.treinamento_id] = p; });
     // Sugestão automática (item 2): na primeira vez, o que ele já recebeu
@@ -3471,6 +3487,12 @@ function rhFPrev(c, f){
     c.innerHTML = (sugerir ? '<div class="aviso ok">Sugestão pelo que ele já recebeu — confira e salve.</div>' : '')
       + '<div class="secTit" style="margin-top:4px">EPIs previstos</div>'
       + epis.map(e => lin(e.id, e.nome, pe[e.id], 'e', sugerir && recebidos.has(e.id))).join('')
+      + '<div class="secTit">Uniforme</div>'
+      + (unis.length ? unis.map(e => '<div class="rhPrev"><label class="chk" style="margin:0"><input type="checkbox" data-e="' + esc(e.id) + '"' + (pe[e.id] ? ' checked' : '')
+          + '> ' + esc(e.nome) + '</label><label class="nota" style="margin:0">quantidade <input type="number" min="1" max="20" class="mini" style="width:64px" data-q="'
+          + esc(e.id) + '" value="' + esc((pe[e.id] && pe[e.id].quantidade) || '') + '"></label>'
+          + (pe[e.id] ? (pe[e.id].tem_entrega ? '<span class="rhSt confirmado">entregue</span>' : '<span class="rhSt nao_recebido">sem entrega</span>') : '') + '</div>').join('')
+        : '<p class="nota">Nenhum uniforme no catálogo.</p>')
       + '<div class="secTit">Treinamentos previstos</div>'
       + RH.trein.filter(t => t.ativo || pt[t.id]).map(t => lin(t.id, t.nome, pt[t.id], 't', false)).join('')
       + '<p class="nota">Definidos por funcionário, pela sua experiência (não há matriz função × EPI). "Não se aplica" cala o aviso só '
@@ -3484,6 +3506,12 @@ function rhFPrev(c, f){
       const es = [...c.querySelectorAll('input[data-e]:checked')].map(i => i.dataset.e);
       const ts = [...c.querySelectorAll('input[data-t]:checked')].map(i => i.dataset.t);
       try{ const r = await rpc('tf_rh_definir_previstos', { p_usuario: f.usuario.id, p_epis: es, p_treinamentos: ts });
+           // G3 · U5: a quantidade de cada uniforme marcado
+           for (const q of c.querySelectorAll('input[data-q]')){
+             if (!es.includes(q.dataset.q)) continue;
+             const n = q.value ? Number(q.value) : null, ant = (pe[q.dataset.q] || {}).quantidade || null;
+             if (n !== ant) await rpc('tf_rh_previsto_quantidade', { p_usuario: f.usuario.id, p_epi: q.dataset.q, p_quantidade: n });
+           }
            toast('Previstos salvos (+' + r.incluidos + ' / −' + r.tirados + ').', 'ok'); await rhRecarregar(); }
       catch(e){ toast(e.message, 'err'); }
     }));
@@ -3520,6 +3548,8 @@ function rhFEpis(c, f){
     + '<p class="nota" style="margin-top:0">A ficha é montada <b>na hora</b> com as entregas <b>confirmadas</b>. A do cliente não mostra as anuladas; '
     + 'a completa mostra, riscadas, com data, quem anulou e o motivo. Pendentes de confirmação não entram em nenhuma.</p>'
     + '<div class="ccLista" id="feL"></div>'
+    + '<div class="secTit">Uniformes recebidos</div><p class="nota" style="margin-top:0">Uniforme não é EPI: não entra na Ficha de EPI nem no Kit do cliente. '
+    + 'Na saída, devolve só as peças com logomarca, sem desconto (CLT art. 462).</p><div class="ccLista" id="feU"></div>'
     + (devs.length ? '<div class="secTit">Devoluções</div><div class="ccLista">' + devs.map(d => '<div class="rhLin' + (d.status === 'cancelada' ? ' riscada' : '')
         + '"><span class="t"><b>' + esc(d.epi_nome) + '</b> — ' + esc(RH_DESTINO[d.destino]) + ' em ' + esc(dataBR(d.data)) + '<small>'
         + esc([RH_DEV_ST[d.status] || d.status, d.status === 'confirmada' ? rhDT(d.confirmado_em) : '',
@@ -3532,8 +3562,11 @@ function rhFEpis(c, f){
       : '<p class="nota">Nenhuma ficha de papel anexada.</p>')
     + '<div class="linhaBtns"><label class="btn" style="cursor:pointer">Anexar ficha de papel escaneada'
     + '<input type="file" id="feArq" accept="image/*,application/pdf" hidden></label></div>';
-  rhListaEntregas(document.getElementById('feL'), (f.entregas || []).map(e => Object.assign({ celular: f.ficha.celular,
-    funcionario: f.usuario.nome }, e)), false, rhRecarregar);
+  const ents = (f.entregas || []).map(e => Object.assign({ celular: f.ficha.celular, funcionario: f.usuario.nome }, e));
+  rhListaEntregas(document.getElementById('feL'), ents.filter(e => !e.uniforme), false, rhRecarregar);
+  const uL = ents.filter(e => e.uniforme);
+  if (uL.length) rhListaEntregas(document.getElementById('feU'), uL, false, rhRecarregar);
+  else document.getElementById('feU').innerHTML = '<p class="nota" style="margin:0">Nenhum uniforme entregue.</p>';
   document.getElementById('feNova').addEventListener('click', () => rhNovaEntrega(f.usuario.id));
   const bdv = document.getElementById('feDev');
   if (bdv) bdv.addEventListener('click', () => rhRegistrarDevolucao(f.usuario.id, 'avulsa', rhRecarregar));
@@ -4042,7 +4075,8 @@ async function rhPainel(corpo){
     + '<button class="btn" type="button" data-at="entrada">Entrada de estoque</button>'
     + '<button class="btn" type="button" data-at="kit">Montar kit</button>'
     + '<button class="btn" type="button" data-at="lista">Nova lista de treinamento</button>'
-    + '<button class="btn" type="button" data-at="func">Funcionários</button></div>';
+    + '<button class="btn" type="button" data-at="func">Funcionários</button></div>'
+    + (p.contagem ? '<p class="nota">Catálogo: ' + (p.contagem.epi || 0) + ' EPI · ' + (p.contagem.uniforme || 0) + ' uniforme(s) (uniforme não é EPI e não entra na Ficha de EPI).</p>' : '');
   const sec = (tit, n, html, nota) => n ? '<div class="rhSec"><div class="rhSecT">' + tit + ' <span class="rhN">' + n
     + '</span>' + (nota ? '<span class="nota">' + nota + '</span>' : '') + '</div><div class="ccLista">' + html + '</div></div>' : '';
   let blocos = '';
@@ -4076,7 +4110,7 @@ async function rhPainel(corpo){
   const ag = (p.aguardando || []);
   blocos += sec('Entregas aguardando a confirmação do funcionário', ag.length, ag.map(e =>
     '<div class="rhLin' + (Number(e.dias_aguardando) > 2 ? ' velha' : '') + '" data-ent="' + esc(e.id) + '">'
-    + '<span class="t"><b>' + esc(e.funcionario) + '</b> — ' + esc(e.epi_nome) + ' ×' + e.quantidade
+    + '<span class="t"><b>' + esc(e.funcionario) + '</b> — ' + esc(e.epi_nome) + (e.uniforme ? ' <span class="rhSt aguardando">uniforme</span>' : '') + ' ×' + e.quantidade
     + (e.tamanho ? ' (' + esc(e.tamanho) + ')' : '') + '<small>' + (e.entregue_em ? 'entregue em ' + esc(rhDT(e.entregue_em)) : 'lançada em ' + esc(rhDT(e.lancado_em)))
     + ' · há ' + e.dias_aguardando + ' dia(s)' + (Number(e.dias_aguardando) > 2 ? ' — passou de 2 dias' : '')
     + (e.pedido_id ? ' · pedido pelo Field' : '') + '</small></span>'
@@ -4637,7 +4671,7 @@ async function rhEstoque(corpo){
         + (e.tem_tamanho ? e.nome.split(' ')[0].toLowerCase() + ' ' + l.tamanho : e.nome.toLowerCase()) + ' e há '
         + (Number(l.novo) + Number(l.reaproveitado))).map(esc).join(' · ') + '</p>';
     }
-    d.innerHTML = '<div class="rhEstCab"><b>' + esc(e.nome) + '</b> <span class="rhCa">' + esc(e.ca ? 'CA ' + e.ca : tipo) + '</span>'
+    d.innerHTML = '<div class="rhEstCab"><b>' + esc(e.nome) + '</b> <span class="rhCa">' + esc(e.uniforme ? 'uniforme' : e.ca ? 'CA ' + e.ca : tipo) + '</span>'
       + (tipo && e.ca ? ' <span class="nota" style="margin:0">' + esc(tipo) + '</span>' : '')
       + '<span class="a"><button class="btn mini" type="button" data-e="ent">Entrada</button>'
       + '<button class="btn mini" type="button" data-e="min">Mínimo</button>'

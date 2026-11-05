@@ -6,8 +6,8 @@
  * aqui (fica no módulo e nas funções tf_*). Sem framework, sem build.
  *
  * COMO UM MÓDULO USA (duas linhas no <head> e uma no boot):
- *   <script src="../nucleo/config.js?v=N4"></script>
- *   <script src="../nucleo/nucleo.js?v=N4"></script>
+ *   <script src="../nucleo/config.js?v=N5"></script>
+ *   <script src="../nucleo/nucleo.js?v=N5"></script>
  *   ...
  *   const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
  *   if (g === 'hub') { irParaHub(Nucleo.recado); return; }     // ANTES do iniciar()
@@ -39,7 +39,7 @@
   'use strict';
   if (window.Nucleo && window.Nucleo.versao) return;
 
-  var VERSAO = 'N4';
+  var VERSAO = 'N5';   // N5 (S131): o IndexedDB reabre quando o iPhone fecha a ligação
   var SCRIPT = (document.currentScript && document.currentScript.src) || '';
   var RAIZ = SCRIPT ? new URL('../', SCRIPT).href : (location.origin + '/');
   var NO_SERVIDOR = location.protocol === 'http:' || location.protocol === 'https:';
@@ -1385,26 +1385,48 @@
     return novo;
   }
 
+  // N5 (S131): o iPhone fecha a ligação com o IndexedDB quando o app vai para segundo plano (câmera do sistema,
+  // tela bloqueada) e a próxima transação dava "The database connection is closing". Agora a ligação fechada é
+  // esquecida (onclose/onversionchange) e, se a transação falhar mesmo assim, reabre e tenta uma vez de novo.
   var IDB = {
     _p: null,
     abrir: function () {
       if (this._p) return this._p;
+      var self = this;
       this._p = new Promise(function (ok, err) {
         var r = indexedDB.open('tapflow_field', 1);
         r.onupgradeneeded = function () { if (!r.result.objectStoreNames.contains('fotos')) r.result.createObjectStore('fotos'); };
-        r.onsuccess = function () { ok(r.result); };
-        r.onerror = function () { err(r.error || new Error('IndexedDB indisponível')); };
+        r.onsuccess = function () {
+          var db = r.result;
+          db.onclose = function () { if (self._db === db) { self._p = null; self._db = null; } };
+          db.onversionchange = function () { try { db.close(); } catch (e) {} if (self._db === db) { self._p = null; self._db = null; } };
+          self._db = db; ok(db);
+        };
+        r.onerror = function () { self._p = null; err(r.error || new Error('IndexedDB indisponível')); };
       });
       return this._p;
     },
-    _tx: function (modo, fn) {
+    _uma: function (modo, fn) {
       return this.abrir().then(function (db) {
         return new Promise(function (ok, err) {
           var t = db.transaction('fotos', modo);
           var p = fn(t.objectStore('fotos'));
           t.oncomplete = function () { ok(p && p.result !== undefined ? p.result : undefined); };
           t.onerror = function () { err(t.error); };
+          t.onabort = function () { err(t.error || new Error('IndexedDB: transação abortada')); };
         });
+      });
+    },
+    _tx: function (modo, fn) {
+      var self = this;
+      return this._uma(modo, fn).catch(function (e) {
+        // ligação fechada pelo sistema: esquece, reabre e tenta uma vez de novo
+        if (e && (e.name === 'InvalidStateError' || /clos/i.test(String(e.message || '')))) {
+          try { if (self._db) self._db.close(); } catch (x) {}
+          self._p = null; self._db = null;
+          return self._uma(modo, fn);
+        }
+        throw e;
       });
     },
     put: function (k, v) { return this._tx('readwrite', function (st) { return st.put(v, k); }); },
