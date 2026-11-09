@@ -1,5 +1,5 @@
 /* ============================================================================
- * nucleo/modulos.js · M3 — os módulos do sistema num lugar só
+ * nucleo/modulos.js · M4 — os módulos do sistema num lugar só
  * ----------------------------------------------------------------------------
  * H10 (23/10/2026, chat central). Desenho: processos/hub-h10-layout-desenho.md.
  *
@@ -10,7 +10,7 @@
  * módulo" abre o menu de UMA coluna com os módulos que a pessoa pode abrir.
  *
  * Como usar numa página (depois do nucleo.js):
- *   <script src="../nucleo/modulos.js?v=M3"></script>
+ *   <script src="../nucleo/modulos.js?v=M4"></script>
  *   TapModulos.aplicar('tapfin');               // a moldura (variáveis CSS)
  *   TapModulos.trocador(botao, 'tapfin');       // o botão abre o menu
  *   (no Manager, que tem várias áreas: trocador(botao, () => chaveDaAreaAtual))
@@ -21,13 +21,14 @@
  * Quem pode abrir o quê vem do SERVIDOR (tf_hub_modulos, a mesma regra do
  * hub). A lista fica guardada no aparelho para abrir sem sinal.
  * Arquivo novo: não mexe no nucleo.js (N2) nem obriga trocar o ?v= dele.
- * ⚠ Mudou este arquivo? Troque o ?v=M3 em todas as páginas e nos sw.js.
+ * ⚠ Mudou este arquivo? Troque o ?v=M4 em todas as páginas e nos sw.js.
  *   (Card novo sem mudar o ?v= — como no S116, S118, S119 e no GE1 — vale porque o sw.js da
  *   raiz busca o nucleo/ na rede primeiro; aparelho sem sinal vê o card no próximo acesso.)
  * ========================================================================== */
 (function () {
   'use strict';
-  var VERSAO = 'M3';   // M3 (S134): o card Cadastros abre o TapHub Cadastros (cadastros/), não mais o Manager (K1)
+  var VERSAO = 'M4';   // M4 (S136): no celular da empresa (210) o menu não mostra a "Minha área" (EPI, ponto e diárias)
+  // var VERSAO = 'M3';   // M3 (S134): o card Cadastros abre o TapHub Cadastros (cadastros/), não mais o Manager (K1)
   // M2 (S132): "Relatar problema ou sugerir" no menu (item #1 da lista)
 
   // A raiz do app: este arquivo mora em <raiz>/nucleo/.
@@ -162,7 +163,11 @@
   }
   function montarMenu(lista, atual) {
     var h = '<div class="tm-cab">Trocar de módulo</div>';
-    var ms = LISTA.filter(function (m) { return lista ? lista.indexOf(m.chave) >= 0 : m.chave === atual; });
+    var emp = false; try { emp = !!(window.Nucleo && Nucleo.empresa && Nucleo.empresa.atual()); } catch (e) {}
+    var ms = LISTA.filter(function (m) {
+      if (emp && m.chave === 'seg') return false;   // M4 · celular da empresa: sem a "Minha área"
+      return lista ? lista.indexOf(m.chave) >= 0 : m.chave === atual;
+    });
     if (!ms.length) h += '<div class="tm-vazio">Sem sinal: abra o TapHub para ver os módulos.</div>';
     ms.forEach(function (m) { h += item(m, atual); });
     if (lista === null) h += '<div class="tm-vazio">Sem sinal: a lista completa aparece quando a conexão voltar.</div>';

@@ -1,17 +1,18 @@
 /* ============================================================================
- * TAPHUB · NÚCLEO COMUM — N4 (N3 + recuperar o PIN: "Pedir PIN novo" e a troca do PIN provisório)
+ * TAPHUB · NÚCLEO COMUM — N7 (N6 + o celular da empresa: "Quem vai usar?", sem digital/ponto/assinatura, fila por quem fez)
  * ----------------------------------------------------------------------------
  * Código que serve a mais de um módulo e por isso NÃO mora dentro de nenhum:
  * sessão, conexão com o banco, PIN e a trava. Regra de negócio nunca entra
  * aqui (fica no módulo e nas funções tf_*). Sem framework, sem build.
  *
  * COMO UM MÓDULO USA (duas linhas no <head> e uma no boot):
- *   <script src="../nucleo/config.js?v=N6"></script>
- *   <script src="../nucleo/nucleo.js?v=N6"></script>
+ *   <script src="../nucleo/config.js?v=N7"></script>
+ *   <script src="../nucleo/nucleo.js?v=N7"></script>
  *   ...
  *   const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
  *   if (g === 'hub') { irParaHub(Nucleo.recado); return; }     // ANTES do iniciar()
  *
+ * N7 (S136): o celular da empresa — ver o bloco "N7 · CELULAR DA EMPRESA" logo abaixo da sessão.
  * O N4 aceita tudo o que o N3, o N2 e o N1 aceitavam (o arquivo é um só). O N4 só
  * soma o "Pedir PIN novo" e a troca do PIN provisório (207, desenho
  * processos/recuperar-acesso-desenho.md). O N3 tinha somado a
@@ -39,7 +40,8 @@
   'use strict';
   if (window.Nucleo && window.Nucleo.versao) return;
 
-  var VERSAO = 'N6';   // N6 (S132): "Relatar problema ou sugerir" em todos os módulos (209; item #1 da lista) e os últimos erros do app para irem junto
+  var VERSAO = 'N7';   // N7 (S136): o celular da empresa (210; desenho processos/aparelho-empresa-desenho.md, A1–A12)
+  // var VERSAO = 'N6';   // N6 (S132): "Relatar problema ou sugerir" em todos os módulos (209; item #1 da lista) e os últimos erros do app para irem junto
   // var VERSAO = 'N5';   // N5 (S131): o IndexedDB reabre quando o iPhone fecha a ligação
   var SCRIPT = (document.currentScript && document.currentScript.src) || '';
   var RAIZ = SCRIPT ? new URL('../', SCRIPT).href : (location.origin + '/');
@@ -50,7 +52,8 @@
 
   var K_SESSAO = 'tf_sessao', K_TRAVA = 'tf_trava', K_TRAVADO = 'tf_travado',
       K_DESTRAV = 'tf_destrav', K_OCULTO = 'tf_oculto', K_TENT = 'tf_pin_tent',
-      K_EFEMERO = 'tf_efemero', K_VOLTAS = 'tf_hub_voltas';
+      K_EFEMERO = 'tf_efemero', K_VOLTAS = 'tf_hub_voltas',
+      K_EMP = 'tf_empresa', K_SESSOES = 'tf_sessoes';   // N7 · celular da empresa
 
   var conf = { url: '', anon: '', app: '', demo: false };
 
@@ -75,7 +78,140 @@
 
   /* ── sessão ────────────────────────────────────────────────────────────── */
   function sessao() { return jget(K_SESSAO) || {}; }
-  function gravarSessao(s) { lsSet(K_SESSAO, JSON.stringify(s)); }
+  function gravarSessao(s) { lsSet(K_SESSAO, JSON.stringify(s)); lembrarSessaoEmp(s); }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+   * N7 · CELULAR DA EMPRESA (banco 210; desenho processos/aparelho-empresa-desenho.md)
+   * O celular que fica com a dupla de inspeção (ou o da administração) é marcado
+   * aqui (tf_empresa = { id, nome }) quando a 1ª pessoa entra e escolhe "É um
+   * celular da empresa". A partir daí:
+   *  · cada pessoa que já entrou nele fica guardada (tf_sessoes, por e-mail) e
+   *    volta com o NOME + o PIN dela ("Quem vai usar?"), sem e-mail e senha (A5);
+   *  · sem digital, sem ponto, sem assinaturas e sem a parte "Eu" (A2–A4);
+   *  · a fila envia cada coisa COM A SESSÃO DE QUEM FEZ, mesmo que outra pessoa
+   *    esteja usando o celular (A7) — então o "feito por" é a própria conta;
+   *  · o celular conta ao banco a fila de envios (A9: aviso de 24 h).
+   * ⚠ As sessões guardadas: a de quem está usando é SEMPRE a tf_sessao (a cópia
+   *   em tf_sessoes dela pode estar velha); a dos outros, a cópia. Trocar de
+   *   pessoa copia a tf_sessao para tf_sessoes ANTES de trocar — senão o token de
+   *   renovação velho seria usado de novo e o Supabase derrubaria a sessão.
+   * ════════════════════════════════════════════════════════════════════════ */
+  function empresa() { var e = jget(K_EMP); return e && e.id ? e : null; }
+  function sessoesEmp() { return jget(K_SESSOES) || {}; }
+  function gravarSessoesEmp(m) { lsSet(K_SESSOES, JSON.stringify(m || {})); }
+  function lembrarSessaoEmp(s) {
+    if (!empresa() || !s || !s.email || !s.token) return;
+    var m = sessoesEmp(), k = String(s.email).toLowerCase(), velha = m[k] || {};
+    m[k] = Object.assign({}, s, { _soEnvio: !!velha._soEnvio && !s._entrou, _em: Date.now() });
+    delete m[k]._entrou;
+    gravarSessoesEmp(m);
+  }
+  function sessaoDeEmp(email) {
+    var m = sessoesEmp(), k = String(email || '').toLowerCase();
+    if (!k) return null;
+    var atual = sessao();
+    if (atual.email && String(atual.email).toLowerCase() === k) return atual;
+    return m[k] || null;
+  }
+  /** Renova o token de uma pessoa que NÃO está usando o celular (só a cópia dela). */
+  var renovandoEmp = {};
+  function renovarEmp(email) {
+    var k = String(email || '').toLowerCase(), m = sessoesEmp(), s = m[k];
+    if (!s || !s.refresh) return Promise.resolve(false);
+    if (renovandoEmp[k]) return renovandoEmp[k];
+    var c = cfgDoBanco();
+    renovandoEmp[k] = fetch(c.url + '/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST', headers: { apikey: c.anon, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: s.refresh }), signal: comPrazo(12000)
+    }).then(function (r) { return r.json().then(function (j) { return [r.ok, j]; }); })
+      .then(function (x) {
+        if (!x[0] || !x[1] || !x[1].access_token) return false;
+        var m2 = sessoesEmp(); if (!m2[k]) return false;
+        m2[k].token = x[1].access_token; if (x[1].refresh_token) m2[k].refresh = x[1].refresh_token;
+        gravarSessoesEmp(m2); return true;
+      })
+      .catch(function () { return false; })
+      .then(function (ok) { setTimeout(function () { delete renovandoEmp[k]; }, 0); return ok; });
+    return renovandoEmp[k];
+  }
+  /** "Quem vai usar?": quem já entrou neste celular (sem quem saiu de vez). */
+  function pessoasEmp() {
+    var m = sessoesEmp(), L = [];
+    Object.keys(m).forEach(function (k) { var s = m[k]; if (s && !s._soEnvio && s.token) L.push({ email: s.email || k, nome: s.nome || s.email || k }); });
+    return L.sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome), 'pt-BR'); });
+  }
+  /** Trocar de pessoa: guarda a sessão de quem está usando e volta ao início ("Quem vai usar?"). */
+  function trocarPessoa() {
+    var s = sessao();
+    if (empresa() && s.email && s.token) lembrarSessaoEmp(s);
+    lsDel(K_SESSAO); lsDel(K_TRAVADO); lsDel(K_DESTRAV);
+    ssSet('tf_recado', '');
+    location.href = RAIZ + '?trocar=1';
+  }
+  /** Escolheu o nome: a sessão guardada dela volta, e a trava pede o PIN dela. */
+  function entrarComo(email) {
+    var m = sessoesEmp(), k = String(email || '').toLowerCase(), s = m[k];
+    if (!s || !s.token) return false;
+    lsSet(K_SESSAO, JSON.stringify(s));
+    lsSet(K_TRAVADO, '1'); lsDel(K_DESTRAV);
+    return true;
+  }
+  /** Quantos envios da fila são desta pessoa (os do núcleo e os antigos do Field). */
+  function filaDe(email) {
+    var k = String(email || '').toLowerCase();
+    return (jget('tff_fila') || []).filter(function (x) { return x && x.por && String(x.por).toLowerCase() === k; }).length;
+  }
+  /** Sair deste celular de vez: some do "Quem vai usar?" e o aparelho dela é desconectado.
+   *  Com envio na fila, a sessão fica guardada SÓ para enviar (e é apagada quando a fila dela esvaziar). */
+  function sairDeste(email) {
+    var k = String(email || sessao().email || '').toLowerCase(), m = sessoesEmp(), c = cfgDe(k);
+    var atual = sessao();
+    if (atual.email && String(atual.email).toLowerCase() === k && atual.token) m[k] = Object.assign({}, atual);
+    var revogar = c && c.ap ? rpc('tf_aparelho_revogar', { p_aparelho: c.ap }).catch(function () {}) : Promise.resolve();
+    return revogar.then(function () {
+      if (m[k]) { if (filaDe(k) > 0) m[k]._soEnvio = true; else delete m[k]; }
+      gravarSessoesEmp(m); apagarCfg(k);
+      if (atual.email && String(atual.email).toLowerCase() === k) { limparSessao(); lsDel(K_TRAVADO); }
+    });
+  }
+  /** Desmarca o celular (desativado no banco): volta a ser um aparelho comum. */
+  function desmarcarEmp() {
+    var m = sessoesEmp();
+    Object.keys(m).forEach(function (k) { apagarCfg(k); });
+    lsDel(K_EMP); lsDel(K_SESSOES);
+  }
+  // A9: o celular conta ao banco a fila de envios (no máximo uma vez por minuto, ou quando muda)
+  var ultFila = { t: 0, sig: '' };
+  function contarFila() {
+    var e = empresa(); if (!e || !sessao().token) return;
+    var f = (jget('tff_fila') || []).filter(function (x) { return !!x; });
+    var pend = f.length, par = f.filter(function (x) { return x.parado; }).length;
+    var antiga = f.reduce(function (a, x) { return (x.em && (!a || x.em < a)) ? x.em : a; }, null);
+    var sig = pend + '|' + par + '|' + antiga;
+    if (sig === ultFila.sig && Date.now() - ultFila.t < 60000) return;
+    ultFila = { t: Date.now(), sig: sig };
+    rpc('tf_aparelho_empresa_fila', { p_empresa: e.id, p_pendentes: pend, p_parados: par, p_mais_antiga: antiga }).catch(function () {});
+  }
+  // A2/A4: avisos com o app fechado não chegam ao celular da empresa (seriam do ponto de alguém)
+  var pushLimpo = false;
+  function limparPushEmp() {
+    if (pushLimpo || !empresa()) return; pushLimpo = true;
+    try {
+      if (!('serviceWorker' in navigator)) return;
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (reg) {
+          if (!reg.pushManager) return;
+          reg.pushManager.getSubscription().then(function (sub) {
+            if (!sub) return;
+            var ep = sub.endpoint;
+            sub.unsubscribe().catch(function () {});
+            if (sessao().token) rpc('tf_push_remover', { p_endpoint: ep }).catch(function () {});
+          }).catch(function () {});
+        });
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  var MSG_EMPRESA = 'Este é um celular da empresa: ponto, EPI e assinaturas só no seu celular.';
   function limparSessao() { lsDel(K_SESSAO); lsDel('tapflow_sessao'); lsDel('tff_sessao'); }
   function primeiroNome(s) { return String((s && (s.nome || s.email)) || '').split(' ')[0]; }
   function iniciais(s) {
@@ -352,7 +488,12 @@
         var depois = c && !c.ver && window.crypto && crypto.subtle ? guardarResumo(s.email, c.ap, pin).catch(function () {}) : Promise.resolve();
         return depois.then(function () {
           return rpc('tf_aparelho_ok', { p_aparelho: c && c.ap || null }).then(function (ok) {
-            if (ok === false) { apagarCfg(s.email); return { ok: false, sair: true, recado: 'Este aparelho foi desconectado. Entre com e-mail e senha.' }; }
+            if (ok === false) {
+              apagarCfg(s.email);
+              // N7: no celular da empresa, quem foi tirado da lista (ou o celular desativado) some do "Quem vai usar?"
+              if (empresa()) { var m = sessoesEmp(); delete m[String(s.email || '').toLowerCase()]; gravarSessoesEmp(m); }
+              return { ok: false, sair: true, recado: 'Este aparelho foi desconectado. Entre com e-mail e senha.' };
+            }
             return { ok: true };
           }, function () { return { ok: true }; });   // aparelho_ok sem sinal: o PIN já foi aceito
         });
@@ -600,6 +741,7 @@
       var dig = sup && c && c.dig ? c.dig : null;
       return telaConfirmar({
         titulo: primeiroNome(s) + (dig ? ', confirme que é você' : ', digite seu PIN'),
+        sub: empresa() ? empresa().nome + ' · celular da empresa' : '',
         // iPhone/iPad: o Safari só abre a digital/o rosto com um toque na tela; nos outros, abre sozinho
         dig: dig, autoDigital: !ehIOS(),
         digital: function () { return digitalDestravar(c, s); },
@@ -621,7 +763,11 @@
             return r;
           });
         },
-        links: [
+        links: empresa() ? [
+          // N7 · A6: no celular da empresa, quem pega o aparelho travado troca de pessoa daqui
+          { txt: 'Trocar de pessoa', fn: function () { trocarPessoa(); } },
+          { txt: 'Esqueci o PIN: pedir um novo', fn: function (h) { pedirPinNovo(h); } }
+        ] : [
           { txt: 'Esqueci o PIN: pedir um novo', fn: function (h) { pedirPinNovo(h); } },
           { txt: 'Entrar com e-mail e senha', fn: function () { sairParaLogin('Entre com e-mail e senha.'); } },
           { txt: 'Não é você? Trocar de conta', fn: function () { sairParaLogin(''); } }
@@ -696,6 +842,7 @@
   /** Depois de um PIN certo: "Usar digital neste aparelho?" — uma vez por aparelho. */
   function oferecerDigital(s, c, pin) {
     if (!c || !c.ap || c.dig || c.digNao || lsGet(K_EFEMERO) === '1' || navigator.onLine === false) return Promise.resolve('nao');
+    if (empresa()) return Promise.resolve('nao');   // N7 · A3: celular da empresa não usa digital
     return suporteDigital().then(function (sup) {
       if (!sup) return 'nao';
       return rpc('tf_digital_situacao', { p_aparelho: c.ap }).then(function (sit) {
@@ -869,6 +1016,8 @@
     var modoS = o.modo === 'servidor', s = sessao(), c = cfgDe(s.email);
     var fin = String(o.finalidade || (modoS ? '' : 'local'));
     if (modoS && !/^[a-z_]{2,30}$/.test(fin)) return Promise.reject(new Error('confirmarPessoa: finalidade inválida.'));
+    // N7 · A4: no celular da empresa não se bate ponto nem se assina (o banco também recusa)
+    if (empresa()) { toast(MSG_EMPRESA, 'err'); return Promise.resolve({ ok: false, cancelado: true, empresa: true, msg: MSG_EMPRESA }); }
     if (modoS && navigator.onLine === false) return Promise.resolve({ ok: false, semSinal: true });
     var res = null;
     return suporteDigital().then(function (sup) {
@@ -952,15 +1101,48 @@
       });
     })();
   }
-  function lembrarAparelho(s, pin) {
-    return rpc('tf_aparelho_registrar', { p_nome: nomeDoAparelho() }).then(function (ap) {
+  function lembrarAparelho(s, pin, emp) {
+    // N7: p_empresa só vai quando é celular da empresa (banco sem a 210 não conhece o parâmetro)
+    var corpo = emp ? { p_nome: nomeDoAparelho(), p_empresa: emp.id } : { p_nome: nomeDoAparelho() };
+    return rpc('tf_aparelho_registrar', corpo).then(function (ap) {
       lsDel(K_EFEMERO);
+      if (emp) { lsSet(K_EMP, JSON.stringify({ id: emp.id, nome: emp.nome })); }
       var p = window.crypto && crypto.subtle ? guardarResumo(s.email, ap, pin) : (gravarCfg(s.email, { ap: ap }), Promise.resolve());
       return p.catch(function () { gravarCfg(s.email, { ap: ap }); }).then(function () {
         destravar();
+        if (emp) { lembrarSessaoEmp(Object.assign(sessao(), { _entrou: true })); limparPushEmp(); return 'ok'; }
         // N3: logo depois de lembrar o aparelho com o PIN, a pergunta da digital (uma vez)
         return oferecerDigital(s, cfgDe(s.email), pin).catch(function () {}).then(function () { return 'ok'; });
       });
+    }, function (e) {
+      if (!emp || e.rede) throw e;
+      var msg = limpaMsg(e.message) || 'Não deu para entrar neste celular.';
+      if (/desativado/i.test(msg)) {          // o celular foi desativado: volta a ser um aparelho comum
+        desmarcarEmp();
+        return perguntar('Celular desativado', msg + ' Ele volta a ser um aparelho comum.', ['Entendi']).then(function () { return 'refazer'; });
+      }
+      // A5: fora da lista → pode pedir para entrar
+      return perguntar('Você não está na lista deste celular', msg, ['Pedir para entrar', 'Voltar']).then(function (i) {
+        if (i !== 0) return 'fora';
+        return rpc('tf_aparelho_empresa_pedir', { p_empresa: emp.id }).then(function () {
+          return perguntar('Pedido enviado', 'O Bruno e o Fernando recebem o pedido. Quando incluírem você, entre de novo neste celular.', ['Entendi']);
+        }, function () {}).then(function () { return 'fora'; });
+      });
+    });
+  }
+  /** N7 · "É um celular da empresa": qual? (só os celulares em que a pessoa está na lista) */
+  function escolherEmpresa() {
+    return rpc('tf_aparelho_empresa_opcoes').then(function (L) {
+      L = Array.isArray(L) ? L : [];
+      if (!L.length) {
+        return perguntar('Celular da empresa', 'Você não está na lista de nenhum celular da empresa. Peça ao Bruno ou ao Fernando para incluir você em Pessoas e acessos › Celulares da empresa.', ['Voltar'])
+          .then(function () { return null; });
+      }
+      return perguntar('Qual celular é este?', 'Escolha o nome do celular da empresa que está na sua mão. Nele não há digital, ponto, EPI nem dados pessoais.',
+        L.map(function (x) { return x.nome; }).concat(['Voltar'])).then(function (i) { return L[i] || null; });
+    }, function (e) {
+      return perguntar('Celular da empresa', e.rede ? 'Sem sinal. Tente de novo com internet.' : 'O banco ainda não tem o celular da empresa.', ['Voltar'])
+        .then(function () { return null; });
     });
   }
   function naoLembrar() { lsSet(K_EFEMERO, '1'); destravar(); return 'efemero'; }
@@ -997,7 +1179,7 @@
   /**
    * Depois de entrar com a senha (ou com sessão antiga e sem PIN neste aparelho):
    * cria o PIN se não tem e pergunta se lembra o aparelho.
-   * Devolve 'ok' | 'efemero' | 'offline'.
+   * Devolve 'ok' | 'efemero' | 'offline' | 'fora' (N7: fora da lista do celular da empresa: a sessão foi apagada).
    */
   function fluxoEntrada() {
     var s = sessao(), c = cfgDe(s.email);
@@ -1017,29 +1199,48 @@
           : Promise.resolve(true);
         return pronto.then(function (ok) {
           if (!ok) return 'offline';
-          return perguntar('Lembrar este aparelho?',
-            'Se for o seu celular ou computador, lembre: ele passa a pedir só o PIN. Em computador de uso comum, escolha não lembrar: ao fechar o navegador você sai.',
-            ['Lembrar este aparelho', 'Não lembrar (uso comum)']).then(function (i) {
-            if (i === 1) return naoLembrar();
-            if (pinNovo) return lembrarAparelho(s, pinNovo);
+          // N7: o celular já está marcado como da empresa → não pergunta; senão, 3 escolhas
+          function qual() {
+            var e = empresa();
+            if (e) return Promise.resolve({ emp: e });
+            return perguntar('Lembrar este aparelho?',
+              'Se for o seu celular ou computador, lembre: ele passa a pedir só o PIN. Em computador de uso comum, escolha não lembrar: ao fechar o navegador você sai. Celular da empresa (o da equipe ou da administração): escolha "É um celular da empresa".',
+              // a ordem dos dois primeiros não muda (quem já usa toca no mesmo lugar); o novo vem por último
+              ['Lembrar este aparelho', 'Não lembrar (uso comum)', 'É um celular da empresa']).then(function (i) {
+              if (i === 1) return { nao: true };
+              if (i === 2) return escolherEmpresa().then(function (emp) { return emp ? { emp: emp } : qual(); });
+              return {};
+            });
+          }
+          function lembrar(pin, emp) {
+            return lembrarAparelho(s, pin, emp).then(function (r) {
+              if (r === 'refazer') return qual().then(function (q) { return q.nao ? naoLembrar() : lembrar(pin, q.emp); });
+              if (r === 'fora') { limparSessao(); return 'fora'; }
+              return r;
+            });
+          }
+          return qual().then(function (q) {
+            if (q.nao) return naoLembrar();
+            var emp = q.emp || null;
+            if (pinNovo) return lembrar(pinNovo, emp);
             // já tinha PIN: confirma com ele antes de registrar o aparelho
-            var t = abrirTela({ titulo: 'Digite seu PIN', sub: 'Para lembrar este aparelho.',
-              links: [{ txt: 'Não lembrar neste aparelho', fn: function (h) { h.cancelar(); } },
+            var t = abrirTela({ titulo: 'Digite seu PIN', sub: emp ? 'Para entrar no ' + emp.nome + '.' : 'Para lembrar este aparelho.',
+              links: [{ txt: emp ? 'Cancelar' : 'Não lembrar neste aparelho', fn: function (h) { h.cancelar(); } },
                       { txt: 'Esqueci o PIN: pedir um novo', fn: function (h) { pedirPinNovo(h); } }] });
             return (function laco() {
               return t.pin().then(function (pin) {
-                if (pin === null) { t.fechar(); return naoLembrar(); }
+                if (pin === null) { t.fechar(); if (emp) { limparSessao(); return 'fora'; } return naoLembrar(); }
                 t.ocupado(true);
                 return rpc('tf_meu_pin_conferir', { p_pin: pin, p_aparelho: null }).then(function (j) {
                   t.ocupado(false);
-                  if (j && j.status === 'ok') { t.fechar(); return lembrarAparelho(s, pin); }
+                  if (j && j.status === 'ok') { t.fechar(); return lembrar(pin, emp); }
                   t.limpar();
                   // N4: o provisório chegou depois do login: cria o PIN e lembra o aparelho com ele
                   if (j && j.status === 'trocar_pin') {
                     t.msg('');
                     return criarPin(t, pin).then(function (novo) {
-                      if (!novo) { t.fechar(); return naoLembrar(); }
-                      t.fechar(); return lembrarAparelho(s, novo);
+                      if (!novo) { t.fechar(); if (emp) { limparSessao(); return 'fora'; } return naoLembrar(); }
+                      t.fechar(); return lembrar(novo, emp);
                     });
                   }
                   t.msg(j && j.status === 'pin_errado' ? 'PIN errado. Restam ' + j.restantes + ' tentativas.'
@@ -1062,7 +1263,7 @@
     if (c) {   // aparelho já lembrado: entrou com a senha, não pede o PIN de novo
       return rpc('tf_aparelho_ok', { p_aparelho: c.ap }).then(function (ok) {
         if (ok === false) { apagarCfg(s.email); return seguir(); }
-        destravar(); return 'ok';
+        destravar(); lembrarSessaoEmp(Object.assign(sessao(), { _entrou: true })); return 'ok';
       }, function (e) {
         if (e.rede) { destravar(); return 'ok'; }
         throw e;
@@ -1113,6 +1314,7 @@
         monitorar();
         if (motivoDeTravar()) { pedirDestrave(); }
         else { lsDel(K_OCULTO); }
+        if (empresa()) { limparPushEmp(); setTimeout(contarFila, 3000); }   // N7 · A2/A9
         return 'livre';
       }
       // sem trava neste aparelho
@@ -1141,8 +1343,15 @@
     travarAgora: function () { lsSet(K_TRAVADO, '1'); if (cfgDe(sessao().email)) pedirDestrave(); },
     configurar: function (o) { conf.url = o.url || conf.url; conf.anon = o.anon || conf.anon; if (o.app) conf.app = o.app; },
     rpc: rpc, api: api, sessao: sessao, primeiroNome: primeiroNome,
-    /** Sair de verdade (botão Sair): apaga a sessão, mantém o aparelho lembrado. */
-    sair: function () { limparSessao(); lsDel(K_TRAVADO); }
+    /** Sair de verdade (botão Sair): apaga a sessão, mantém o aparelho lembrado.
+     *  N7: no celular da empresa, a pessoa continua no "Quem vai usar?" (é o mesmo que trocar de pessoa). */
+    sair: function () { var s = sessao(); if (empresa() && s.email && s.token) lembrarSessaoEmp(s); limparSessao(); lsDel(K_TRAVADO); },
+    /** N7 · o celular da empresa (210). atual() = { id, nome } ou null. */
+    empresa: {
+      atual: empresa, pessoas: pessoasEmp, entrarComo: entrarComo, trocarPessoa: trocarPessoa,
+      sairDeste: sairDeste, sessaoDe: sessaoDeEmp, renovarDe: renovarEmp, desmarcar: desmarcarEmp,
+      lembrar: lembrarSessaoEmp, contarFila: contarFila, aviso: MSG_EMPRESA
+    }
   };
 
   /* ══════════════════════════════════════════════════════════════════════════
@@ -1297,13 +1506,18 @@
       location.href = RAIZ + (conf.app ? '?para=' + encodeURIComponent(conf.app) : '');
     }
   }
+  function autorFora(email) {
+    var m = sessoesEmp()[String(email || '').toLowerCase()] || {};
+    return Object.assign(new Error('Feito por ' + (m.nome || email) + ': espera essa pessoa entrar neste celular para enviar.'), { autorFora: true });
+  }
   function req(caminho, opts, tentativas) {
     opts = opts || {}; if (tentativas == null) tentativas = 2;
     var escrita = (opts.method || 'GET').toUpperCase() !== 'GET';
     var jaRenovou = false, ultimo;
     var c = cfgDoBanco();
+    var autor = opts.autor || null;                 // N7 · A7: envio de quem fez, no celular da empresa
     function uma(i) {
-      var s = sessao();
+      var s = autor ? (sessaoDeEmp(autor) || {}) : sessao();
       return fetch(c.url + caminho, Object.assign({}, opts, {
         signal: sinalDe(escrita),
         headers: Object.assign({ apikey: c.anon, 'Content-Type': 'application/json' },
@@ -1316,6 +1530,11 @@
           if (!r.ok) {
             var msg = (corpo && (corpo.message || corpo.error_description || corpo.error || corpo.hint)) || ('HTTP ' + r.status);
             var err = new Error(msg); err.negocio = (r.status >= 400 && r.status < 500); err.status = r.status;
+            if (tokenVencido(err) && autor && autor !== String(sessao().email || '').toLowerCase()) {
+              // a sessão de quem fez venceu: renova a cópia dela; sem jeito, o envio espera a pessoa entrar
+              if (!jaRenovou && s.refresh) { jaRenovou = true; return renovarEmp(autor).then(function (ok) { if (ok) return uma(i); throw autorFora(autor); }); }
+              throw autorFora(autor);
+            }
             if (tokenVencido(err)) {
               if (!jaRenovou && s.refresh) {
                 jaRenovou = true;
@@ -1473,8 +1692,8 @@
   }
 
   /** Envio direto ao Storage. 409 / "already exists" = 'ja_existia' (é o reenvio). */
-  function storageEnviar(bucket, caminho, blob, _jaRenovou) {
-    var c = cfgDoBanco(), s = sessao();
+  function storageEnviar(bucket, caminho, blob, _jaRenovou, autor) {
+    var c = cfgDoBanco(), s = autor ? (sessaoDeEmp(autor) || {}) : sessao();
     var url = c.url + '/storage/v1/object/' + encodeURIComponent(bucket) + '/' + String(caminho).split('/').map(encodeURIComponent).join('/');
     return fetch(url, { method: 'POST', body: blob, signal: sinalDe(true),
       headers: Object.assign({ apikey: c.anon, 'Content-Type': (blob && blob.type) || 'image/jpeg' },
@@ -1484,6 +1703,10 @@
         return r.json().catch(function () { return {}; }).then(function (j) {
           var m = String(j.message || j.error || j.statusCode || '');
           if (r.status === 409 || /exist|duplicate/i.test(m)) return 'ja_existia';
+          if ((r.status === 401 || r.status === 403 || /jwt|token/i.test(m)) && autor) {
+            if (_jaRenovou || !s.refresh) throw autorFora(autor);
+            return renovarEmp(autor).then(function (ok) { if (ok) return storageEnviar(bucket, caminho, blob, true, autor); throw autorFora(autor); });
+          }
           if ((r.status === 401 || r.status === 403 || /jwt|token/i.test(m)) && !_jaRenovou && s.refresh) {
             return renovar().then(function (ok) {
               if (ok) return storageEnviar(bucket, caminho, blob, true);
@@ -1513,7 +1736,8 @@
         return { chave: x.chave, bucket: x.bucket, caminho: x.caminho, tipo: x.tipo || 'image/jpeg', enviada: false };
       }),
       rpc: e.rpc ? { funcao: e.rpc.funcao, payload: e.rpc.payload || {} } : null,
-      tentativas: 0, em: new Date().toISOString(), parado: false
+      tentativas: 0, em: new Date().toISOString(), parado: false,
+      por: String(sessao().email || '').toLowerCase() || null      // N7 · A7: quem fez (o envio sai com a sessão dela)
     };
     var f = filaLer(), achou = false;
     for (var k = 0; k < f.length; k++) {
@@ -1537,7 +1761,8 @@
   function filaEnviar() {
     var trabalho = function () {
       if (enviando) return Promise.resolve();
-      if (conf.demo || !sessao().token) return Promise.resolve();
+      // N7: no celular da empresa a fila também anda na troca de pessoa (cada envio vai com a sessão de quem fez)
+      if (conf.demo || (!sessao().token && !(empresa() && Object.keys(sessoesEmp()).length))) return Promise.resolve();
       if (navigator.onLine === false) return Promise.resolve();   // sem sinal: nem tenta (volta no evento 'online')
       enviando = true;
       var lista = filaLer().filter(function (x) { return x && x.v === 2; }).map(function (x) { return x.assinatura; });
@@ -1557,6 +1782,13 @@
           avisar({ assinatura: assin, tipo: e.tipo, situacao: 'enviado', resposta: resp });
           return proxima();
         }, function (err) {
+          if (err && err.autorFora) {
+            // N7: a sessão de quem fez venceu (ou a pessoa saiu de vez): o envio espera, sem travar os dos outros
+            if (e.grupo) bloqueados[e.grupo] = true;
+            filaTrocar(assin, function (y) { y.motivo = err.message; return y; });
+            avisar({ assinatura: assin, tipo: e.tipo, situacao: 'esperando', erro: err.message });
+            return proxima();
+          }
           if (err && err.sessaoMorta) throw err;
           if (err && err.negocio && !err.rede) {
             // o servidor RECUSOU: reenviar sozinho não resolve. A entrada NÃO é
@@ -1580,7 +1812,8 @@
           throw err;   // sem rede: para aqui, a ordem fica
         });
       }
-      return proxima().catch(function () {}).then(function () { enviando = false; }, function () { enviando = false; });
+      return proxima().catch(function () {}).then(function () { enviando = false; limparSoEnvio(); contarFila(); },
+                                                  function () { enviando = false; });
     };
     try {
       if (navigator.locks && navigator.locks.request) {
@@ -1591,20 +1824,41 @@
     } catch (e) {}
     return trabalho();
   }
+  /** N7 · A7: no celular da empresa, o envio de outra pessoa vai com a sessão guardada DELA. */
+  function autorDoEnvio(e) {
+    if (!empresa() || !e || !e.por) return null;
+    var atual = String(sessao().email || '').toLowerCase();
+    return e.por === atual ? null : e.por;
+  }
+  /** Quem saiu de vez com envio na fila: a sessão guardada só para enviar some quando a fila dela esvazia. */
+  function limparSoEnvio() {
+    if (!empresa()) return;
+    var m = sessoesEmp(), mudou = false;
+    Object.keys(m).forEach(function (k) { if (m[k] && m[k]._soEnvio && filaDe(k) === 0) { delete m[k]; mudou = true; } });
+    if (mudou) gravarSessoesEmp(m);
+  }
   function enviarUma(e) {
+    var autor = autorDoEnvio(e);
+    if (autor && !(sessaoDeEmp(autor) || {}).token) return Promise.reject(autorFora(autor));
     var p = Promise.resolve();
     (e.fotos || []).forEach(function (ft, idx) {
       p = p.then(function () {
         if (ft.enviada) return;
         return IDB.get(ft.chave).then(paraBlob).then(function (blob) {
           if (!blob) throw Object.assign(new Error('A foto não está mais no aparelho. Tire de novo.'), { negocio: true });
-          return storageEnviar(ft.bucket, ft.caminho, blob);
+          return storageEnviar(ft.bucket, ft.caminho, blob, false, autor);
         }).then(function () {
           filaTrocar(e.assinatura, function (y) { if (y.fotos && y.fotos[idx]) y.fotos[idx].enviada = true; return y; });
         });
       });
     });
-    return p.then(function () { return e.rpc ? rpcM(e.rpc.funcao, e.rpc.payload) : null; });
+    return p.then(function () {
+      if (!e.rpc) return null;
+      if (!autor) return rpcM(e.rpc.funcao, e.rpc.payload);
+      var pl = e.rpc.payload || {};
+      return req('/rest/v1/rpc/' + e.rpc.funcao, { method: 'POST', body: JSON.stringify(pl), autor: autor,
+        idempotente: !!(pl.p_client_uid || pl.p_uid || pl.p_id_celular) });
+    });
   }
 
   // outra aba (ou outro módulo aberto) mexeu na fila: a tela daqui fica sabendo

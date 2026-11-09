@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapField · S52</title>
+<title>TapField · S53</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -617,10 +617,10 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 #filaTxt{cursor:pointer}
 </style>
 <!-- S33 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N6">
-<script src="../nucleo/config.js?v=N6"></script>
-<script src="../nucleo/nucleo.js?v=N6"></script>
-<script src="../nucleo/modulos.js?v=M3"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N7">
+<script src="../nucleo/config.js?v=N7"></script>
+<script src="../nucleo/nucleo.js?v=N7"></script>
+<script src="../nucleo/modulos.js?v=M4"></script>
 </head>
 <body>
 
@@ -637,6 +637,7 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
   <div class="cx" role="dialog" aria-label="Sua conta">
     <b id="euNome">—</b><small id="euPerfil"></small>
     <button id="euTrocar" hidden>Trocar de módulo</button>
+    <button id="euPessoa" hidden>Trocar de pessoa</button>
     <button id="euSair" class="perigo">Sair da conta</button>
     <button id="euFecha" class="fraco">Cancelar</button>
   </div>
@@ -680,7 +681,8 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S52';   // S52 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
+const APP_VERSION = 'S53';   // S53 (S136): o celular da empresa (210): sem a parte pessoal do Eu, "Trocar de pessoa", a fila envia com a sessão de quem fez
+// const APP_VERSION = 'S52';   // S52 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const APP_VERSION = 'S51';   // S51 (S134): só o modulos.js M3 (o card Cadastros abre o TapHub Cadastros); nada mudou nas telas do celular
 // const APP_VERSION = 'S50';   // S50 (item #19 da lista): "Meu espelho e banco" diz que o número de cima já é o banco total — "Seu banco hoje", "Horas do mês (só informativo, não somar)" e sem o "Começou o mês com 00:00" no mês do acordo
 // const APP_VERSION = 'S49';   // S49 (615 + 626 + 209): a coluna Banco em "Meu espelho e banco" (item #7); uniforme — "Meus uniformes" com toda peça (#11), pedido com quantidade (#12), "Qual item" sem o limite do fabricante (#13), orientações do próprio uniforme na confirmação (#16); "Relatar problema ou sugerir" no Eu e no menu (#1); o app se chama TapField e o sistema TapHub (#10)
@@ -814,6 +816,11 @@ async function req(caminho, opts={}, tentativas=2){
   const escrita = (opts.method||'GET').toUpperCase() !== 'GET';
   let ultimo;
   let jaRenovou = false;
+  // S53 · A7: `autor` = envio de outra pessoa no celular da empresa (a sessão guardada dela, no núcleo)
+  const autor = opts.autor || null;
+  const tok = () => autor ? ((window.Nucleo && Nucleo.empresa && Nucleo.empresa.sessaoDe(autor)) || {}).token : sessao.token;
+  const foraDe = () => Object.assign(new Error('Feito por outra pessoa: espera ela entrar neste celular para enviar.'), { autorFora:true });
+  if (autor && !tok()) throw foraDe();
   for (let i=0;i<=tentativas;i++){
     try{
       const r = await fetch(SUPABASE_URL + caminho, Object.assign({}, opts, {
@@ -822,7 +829,7 @@ async function req(caminho, opts={}, tentativas=2){
         // existe sessão — as chaves novas (sb_publishable_...) não são JWT.
         headers: Object.assign(
           { apikey: SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
-          sessao.token ? { Authorization: 'Bearer ' + sessao.token } : {},
+          tok() ? { Authorization: 'Bearer ' + tok() } : {},
           opts.headers||{})
       }));
       const txt = await r.text();
@@ -840,6 +847,10 @@ async function req(caminho, opts={}, tentativas=2){
         // renovação automática) — manda para o login com recado claro. Antes,
         // este caso caía direto no `throw` e a pessoa ficava com o quadro vazio
         // e um "JWT expired" vermelho na tela: parece perda de dados, e não é.
+        if (tokenVencido(err) && autor){
+          if (!jaRenovou && await Nucleo.empresa.renovarDe(autor)){ jaRenovou = true; i--; continue; }
+          throw foraDe();
+        }
         if (tokenVencido(err)){
           if (!jaRenovou && sessao.refresh){
             jaRenovou = true;
@@ -856,6 +867,7 @@ async function req(caminho, opts={}, tentativas=2){
       ultimo = ehTO(e)
         ? Object.assign(new Error('O servidor não respondeu' + (escrita ? ' — pode NÃO ter sido enviado.' : '.')), {rede:true})
         : e;
+      if (e && e.autorFora) throw e;
       const transitorio = !e.negocio && (ehTO(e) || /Failed to fetch|NetworkError|Load failed/i.test(e.message)
         || /devolveu HTML/.test(e.message) || /^HTTP 5\d\d$/.test(e.message));
       ultimo.rede = transitorio;
@@ -987,14 +999,14 @@ const driveLigado = () => DEMO || !!(PARAM.drive_url && PARAM.drive_chave);
  * Sem cabeçalho customizado de propósito: assim o navegador não dispara o
  * preflight OPTIONS, que o Apps Script não responde.
  */
-async function subirArquivo(dataUrl, meta){
+async function subirArquivo(dataUrl, meta, autor){
   if (DEMO) return { drive_url:'https://drive.google.com/demo', file_id:'demo' };
   if (!driveLigado()) throw Object.assign(new Error('O Drive ainda não foi configurado.'), {negocio:true});
 
   const r = await fetch(PARAM.drive_url, {
     method:'POST', redirect:'follow', signal: sinal(true),
     body: JSON.stringify({
-      chave: PARAM.drive_chave, token: sessao.token,
+      chave: PARAM.drive_chave, token: autor ? ((Nucleo.empresa.sessaoDe(autor) || {}).token || '') : sessao.token,
       client_uid: meta.client_uid, cliente: meta.cliente, os_numero: meta.os_numero,
       categoria: meta.categoria, nome: meta.nome, mime:'image/jpeg', base64: dataUrl
     })
@@ -1004,13 +1016,13 @@ async function subirArquivo(dataUrl, meta){
   if (j.status !== 'ok') throw Object.assign(new Error(j.mensagem || 'Falha ao gravar no Drive'),
                                              { negocio: j.codigo === 'CHAVE' || j.codigo === 'TOKEN' });
 
-  await rpc('tf_registrar_anexo', {
+  await req('/rest/v1/rpc/tf_registrar_anexo', { method:'POST', autor, body: JSON.stringify({
     p_os_id: meta.os_id, p_categoria: meta.categoria, p_nome: meta.nome,
     p_client_uid: meta.client_uid, p_drive_file_id: j.file_id, p_drive_url: j.url,
     p_os_item_id: meta.os_item_id || null, p_levantamento_id: meta.levantamento_id || null,
     p_tarefa_id: meta.tarefa_id || null, p_slot: meta.slot || null,
     p_mime: 'image/jpeg', p_bytes: j.bytes || null
-  });
+  }) });
   return { drive_url: j.url, file_id: j.file_id };
 }
 
@@ -1029,7 +1041,8 @@ function filaAdd(entrada){
   // Antes ia para o fim da fila, e um item que depende de outro podia passar
   // na frente dele.
   const f = filaLer();
-  const novo = Object.assign({ tentativas:0, em: new Date().toISOString() }, entrada);
+  // S53 · A7: quem fez (no celular da empresa o envio sai com a sessão dessa pessoa)
+  const novo = Object.assign({ tentativas:0, em: new Date().toISOString(), por: String(sessao.email || '').toLowerCase() || null }, entrada);
   const i = f.findIndex(e => e.assinatura === entrada.assinatura);
   if (i >= 0) f[i] = novo; else f.push(novo);
   filaGravar(f); pintarFila();
@@ -1048,16 +1061,19 @@ async function flushFila(){
       // S34 · N2: entrada nova (v2, de qualquer módulo) é enviada pelo NÚCLEO,
       // não por aqui — este laço só conhece os tipos antigos do Field.
       if (e && e.v === 2) continue;
+      // S53 · A7: no celular da empresa, o que outra pessoa fez sobe com a sessão DELA
+      const autor = (EMP_F() && e.por && e.por !== String(sessao.email || '').toLowerCase()) ? e.por : null;
+      const rpcE = (fn, p) => autor ? req('/rest/v1/rpc/' + fn, { method:'POST', body: JSON.stringify(p||{}), autor }) : rpc(fn, p);
       try{
         if (e.tipo === 'anexo'){
           const dataUrl = await IDB.get(e.idbKey);
           if (!dataUrl){ filaRemover(e.assinatura); continue; }   // já subiu ou sumiu
-          await subirArquivo(dataUrl, e.meta);
+          await subirArquivo(dataUrl, e.meta, autor);
           await IDB.del(e.idbKey);
           filaRemover(e.assinatura);
         } else if (e.tipo === 'execucao'){
           // registro da volta ao cliente: não tem rascunho nem foto atrelada
-          await rpc(e.funcao, e.payload);
+          await rpcE(e.funcao, e.payload);
           filaRemover(e.assinatura);
           // se a tela da execução está aberta, o item deixa de ser "no aparelho"
           if (exec && exec.osId === e.osId){
@@ -1066,7 +1082,7 @@ async function flushFila(){
           }
           toast('Registro da ' + e.rotulo + ' enviado.', 'ok');
         } else {
-          const r = await rpc(e.funcao, e.payload);
+          const r = await rpcE(e.funcao, e.payload);
           filaRemover(e.assinatura);
           LS.del(e.draftKey || (K_DRAFT + e.osId));
           await enfileirarFotosDoEnvio(e, r);
@@ -1075,6 +1091,7 @@ async function flushFila(){
             : 'Levantamento da ' + e.rotulo + ' enviado.', 'ok');
         }
       }catch(err){
+        if (err.autorFora) continue;   // S53: a sessão de quem fez venceu: espera a pessoa entrar neste celular
         if (err.negocio){
           // o servidor RECUSOU por regra — reenviar não resolve. Sai da fila e avisa.
           filaRemover(e.assinatura);
@@ -1114,7 +1131,7 @@ async function enfileirarFotosDoEnvio(entrada, resposta){
       meta.os_id = resposta.os_id; meta.os_numero = resposta.numero || meta.os_numero;
     }
     filaAdd({ tipo:'anexo', assinatura:'anx|'+meta.client_uid, osId: entrada.osId,
-              rotulo: entrada.rotulo, idbKey: f.idbKey, meta });
+              rotulo: entrada.rotulo, idbKey: f.idbKey, meta, por: entrada.por || null });
   }
   flushFila().catch(()=>{});
 }
@@ -1199,7 +1216,9 @@ function pintarFilaParada(){
 let listaOS = [];
 let falhaCarga = null;   // motivo do último erro de carga, para a tela vazia não mentir
 let atual   = null;   // { os, tarefas, equipamentos }
-let tela    = location.hash === '#ponto' ? 'eu' : 'lista';   // S45 · 2E: o toque no aviso do ponto abre o Eu
+// S53 · celular da empresa (210): só trabalho — sem ponto, EPI, diárias, férias e documentos (A2)
+const EMP_F = () => { try{ return (window.Nucleo && Nucleo.empresa && Nucleo.empresa.atual()) || null; }catch(e){ return null; } };
+let tela    = location.hash === '#ponto' && !EMP_F() ? 'eu' : 'lista';   // S45 · 2E: o toque no aviso do ponto abre o Eu
 let coleta  = null;   // { client_uid, fase, itens: [] }
 let exec    = null;   // { osId, itens: [] }  — a volta ao cliente
 let execForm = null;  // item aberto no formulario, ou 'fim' na conferencia
@@ -5298,7 +5317,7 @@ function abasTopo(m, qual){
   const abas = [];
   // a mesma regra do pintarLista: só de escritório COM ficha mora no Eu
   if (!(soSeg() && SEG && SEG.tem_ficha)) abas.push(['lista', 'Trabalho', 0]);
-  abas.push(['eu', 'Eu', nAvisosEu()]);
+  abas.push(['eu', EMP_F() ? 'Mais' : 'Eu', nAvisosEu()]);   // S53: no celular da empresa a aba não é pessoal
   if (abas.length < 2 && qual === 'eu') return;
   const doEu = qual !== 'lista';
   const d = document.createElement('div'); d.className = 'abasTopo';
@@ -5313,6 +5332,7 @@ function abasTopo(m, qual){
 /** Quantas coisas do Eu pedem a pessoa: EPI/presença/devolução, documento
  *  para assinar, canhoto parado ou devolvido, o lembrete das diárias. */
 function nAvisosEu(){
+  if (EMP_F()){ try{ return canPendentes(); }catch(e){ return 0; } }   // S53 · celular da empresa: só os canhotos
   let n = 0;
   try{ n += nPendSeg(); }catch(e){}
   try{ n += nPendDocs(); }catch(e){}
@@ -5325,6 +5345,7 @@ function nAvisosEu(){
 function pintarEu(){
   tela = 'eu'; atual = null; coleta = null;
   pintarModulo();
+  if (EMP_F()) return pintarEuEmpresa();   // S53 · A2: no celular da empresa, só o que é trabalho
   document.getElementById('btnBack').hidden = true;
   // H10: para quem é de escritório, o Eu é a "Minha área" (o card do hub)
   document.getElementById('hTit').textContent = soMinhaArea() ? 'Minha área' : 'Eu';
@@ -5358,6 +5379,34 @@ function pintarEu(){
   if (!DEMO && window.Nucleo && Nucleo.relatar) itens.push(['Relatar problema ou sugerir', 'Conte o que deu errado ou o que melhoraria, com o print', 0,
     () => Nucleo.relatar({ modulo: moduloField(), tela: 'Eu' })]);
   const h = document.createElement('div'); h.className = 'sec'; h.textContent = 'Seus registros'; m.appendChild(h);
+  itens.forEach(([tit, sub, n, fn]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'osCard outro euItem';
+    b.innerHTML = '<div class="c" style="margin:0"></div><div class="t"><span>›</span><span class="tn"></span></div>'
+      + (n ? '<div class="chips"><span class="chip atr">' + n + (n === 1 ? ' pede atenção' : ' pedem atenção') + '</span></div>' : '');
+    b.querySelector('.c').textContent = tit; b.querySelector('.tn').textContent = sub;
+    b.addEventListener('click', fn);
+    m.appendChild(b);
+  });
+  abasTopo(m, 'eu');
+}
+
+/** S53 · celular da empresa (210, A2): no lugar do Eu, só o que é trabalho (canhotos e relatar).
+ *  Ponto, EPI, uniforme, documentos, diárias e férias ficam no celular da própria pessoa. */
+function pintarEuEmpresa(){
+  const emp = EMP_F() || {};
+  document.getElementById('btnBack').hidden = true;
+  document.getElementById('hTit').textContent = 'Mais';
+  document.getElementById('hSub').textContent = sessao.nome || '';
+  const m = document.getElementById('main'); m.innerHTML = '';
+  const av = document.createElement('div'); av.className = 'osCard outro';
+  av.innerHTML = '<div class="c" style="margin:0"></div><div class="t"><span class="tn"></span></div>';
+  av.querySelector('.c').textContent = (emp.nome || 'Celular da empresa') + ' · celular da empresa';
+  av.querySelector('.tn').textContent = 'Ponto, EPI, uniforme, documentos, diárias e férias ficam no seu celular. Aqui só o trabalho.';
+  m.appendChild(av);
+  const itens = [['Canhotos', 'Compra no cartão da empresa: tirar a foto e enviar', canPendentes(), () => canNovo()]];
+  if (window.Nucleo && Nucleo.relatar) itens.push(['Relatar problema ou sugerir', 'Conte o que deu errado ou o que melhoraria, com o print', 0,
+    () => Nucleo.relatar({ modulo: moduloField(), tela: 'Mais (celular da empresa)' })]);
+  itens.push(['Trocar de pessoa', 'Outra pessoa da equipe vai usar o celular', 0, () => Nucleo.empresa.trocarPessoa()]);
   itens.forEach(([tit, sub, n, fn]) => {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'osCard outro euItem';
     b.innerHTML = '<div class="c" style="margin:0"></div><div class="t"><span>›</span><span class="tn"></span></div>'
@@ -7774,6 +7823,11 @@ function euAbrir(){
   document.getElementById('euPerfil').textContent = sessao.perfil_nome || sessao.perfil || '';
   const t = document.getElementById('euTrocar');
   t.hidden = !(NO_SERVIDOR && !DEMO && (sessao.admin || sessao.executa_em === 'ambos'));
+  // S53 · celular da empresa: "Trocar de pessoa" e "Sair deste celular"
+  const emp = EMP_F();
+  document.getElementById('euPessoa').hidden = !emp;
+  document.getElementById('euSair').textContent = emp ? 'Sair deste celular' : 'Sair da conta';
+  if (emp) document.getElementById('euPerfil').textContent = emp.nome + ' · celular da empresa';
   document.getElementById('euPan').hidden = false;
 }
 function euFechar(){ document.getElementById('euPan').hidden = true; }
@@ -7786,8 +7840,17 @@ document.getElementById('euTrocar').addEventListener('click', () => {
   if (window.TapModulos) TapModulos.abrir(document.getElementById('btnEu'), moduloField());
   else location.href = '../';
 });
-document.getElementById('euSair').addEventListener('click', () => {
+document.getElementById('euPessoa').addEventListener('click', () => { euFechar(); Nucleo.empresa.trocarPessoa(); });
+document.getElementById('euSair').addEventListener('click', async () => {
   const n = (LS.get(K_FILA, []) || []).length;
+  if (EMP_F()){
+    // S53 · celular da empresa: some do "Quem vai usar?"; o que está na fila ainda sobe com a sessão dela
+    if (!confirm('Sair deste celular? Você some da lista "Quem vai usar?" e, para voltar, entra com e-mail e senha.'
+        + (n ? ' Os ' + n + ' envio(s) da fila continuam e sobem quando tiver sinal.' : ''))) return;
+    try{ await Nucleo.empresa.sairDeste(sessao.email); }catch(e){}
+    LS.del(K_SESSAO); LS.del(K_SESSAO_VELHA);
+    location.href = '../'; return;
+  }
   if (n && !confirm('Você tem ' + n + ' envio(s) na fila. Eles ficam guardados neste aparelho e '
       + 'saem quando você entrar de novo. Sair mesmo assim?')) return;
   LS.del(K_SESSAO); LS.del(K_SESSAO_VELHA);
