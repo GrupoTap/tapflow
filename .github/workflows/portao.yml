@@ -1,0 +1,41 @@
+# Portão do TapHub — o sinal OBRIGATÓRIO "portão" (processos/github-portao-desenho.md, P1–P12).
+# CÓPIA IGUAL da fonte no brunoengetap/tapflow-privado (portao/publico/portao.yml); o portão confere a cópia.
+#  · pull_request_target: roda este arquivo e o .py do MAIN (o Pull request não consegue desligá-lo nem trocar o
+#    código) e NÃO baixa o código do Pull request: só manda o número e o commit para o workflow `portao` do privado,
+#    que confere tudo (código, banco do zero, todas as suítes, as telas isoladas) e devolve verde ou vermelho.
+#  · a chave (PORTAO_TOKEN: chave fina da conta brunoengetap, só o tapflow-privado, permissão Actions) mora no
+#    ambiente "portao", liberado só para o main: workflow de outro ramo não a recebe.
+#  · arquivo próprio, sem outro gatilho: um job PULADO conta como verde para sinal obrigatório.
+# Vermelho = não dar Merge. Aqui aparece só o nome do passo que reprovou; o detalhe fica no privado.
+name: portao
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portao-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  portao:
+    name: portão
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    environment: portao
+    steps:
+      - uses: actions/checkout@v4  # o MAIN deste repositório (pull_request_target): o código do Pull request não é baixado
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/portao
+      - name: Banco, suítes e telas (no privado)
+        env:
+          PORTAO_TOKEN: ${{ secrets.PORTAO_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 .github/portao/portao_publico.py --chamar
