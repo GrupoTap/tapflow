@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapCRM 2 · Comercial</title>
+<title>TapCRM 3 · Comercial</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2306,7 +2306,7 @@ th.num .tfThFixo{text-align:right}
 <script src="../nucleo/config.js?v=N6"></script>
 <script src="../nucleo/nucleo.js?v=N6"></script>
 <!-- S82 · H10: a tabela única dos módulos (cor, miniatura, menu "Trocar de módulo"). Mudou o ?v=? Troque no sw.js da raiz também (é do central). -->
-<script src="../nucleo/modulos.js?v=M2"></script>
+<script src="../nucleo/modulos.js?v=M3"></script>
 <!-- CRM1 · C2: as propostas (comuns com o Manager). Mudou o ?v=? Troque no sw.js da raiz também. -->
 <script src="../nucleo/propostas.js?v=PR1"></script>
 </head>
@@ -2395,7 +2395,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'CRM2';   // TapCRM 2 (S132): o sistema se chama TapHub nas telas (item #10 da lista) e "Relatar problema ou sugerir" no menu (núcleo N6, modulos M2)
+const APP_VERSION = 'CRM3';   // TapCRM 3 (S134): os Cadastros abrem no TapHub (cadastros/) e "Configurações" do comercial (Planos e Serviços do negócio, só admin), vindas do Manager (K3/K6)
+// const APP_VERSION = 'CRM2';   // TapCRM 2 (S132): o sistema se chama TapHub nas telas (item #10 da lista) e "Relatar problema ou sugerir" no menu (núcleo N6, modulos M2)
 // const APP_VERSION = 'CRM1';   // TapCRM 1 (separado do Manager S118) — o S## da publicação é da rodada que publica
 try{ document.getElementById('verBadge').textContent = 'CRM · ' + APP_VERSION; }catch(e){}
 
@@ -5352,12 +5353,13 @@ const NAV = [
     { v:'com',  rot:'Equipe Comercial', ico:'funil', cont:'nCom', mod:'comercial' },
   ]},
   { id:'cadastros', rot:'CADASTROS', itens:[
-    // os cadastros comuns abrem no Manager, na cor do TapCRM (?ir=…&area=tapcrm)
+    // S134 · os cadastros comuns abrem no TapHub (cadastros/), na cor do TapCRM (?ir=…&area=tapcrm)
     { v:'mcad', rot:'Clientes',   ico:'predio', link:'cad' },
     { v:'mcat', rot:'Catálogo',   ico:'tag',    link:'cat' },
     { v:'mdup', rot:'Duplicados', ico:'duplo',  link:'dup' },
   ]},
   { id:'sistema', rot:'SISTEMA', fim:true, itens:[
+    { v:'cfg',  rot:'Configurações',    ico:'engrenagem', admin:true },   // S134 · K3: Planos e Serviços do negócio
     { v:'hub',  rot:'Trocar de módulo', ico:'modulos' },
     { v:'sair', rot:'Sair',             ico:'sair' },
   ]},
@@ -5373,10 +5375,11 @@ function podeVer(mod){
 /** C5 · quem entra é como no Manager: a caixa `comercial` do perfil (admin vê tudo).
  *  O banco tranca de novo em cada função. Os cadastros só aparecem para quem vê a tela. */
 function navVisivel(){
-  const daTela = i => !i.link && i.v !== 'hub' && i.v !== 'sair';
+  const daTela = i => !i.link && !i.admin && i.v !== 'hub' && i.v !== 'sair';
   const pode = i => podeVer(i.mod);
   const algum = NAV.some(g => g.itens.some(i => daTela(i) && pode(i)));
-  return NAV.map(g => Object.assign({}, g, { itens: g.itens.filter(i => daTela(i) ? pode(i) : (i.link ? algum : true)) }))
+  return NAV.map(g => Object.assign({}, g, { itens: g.itens.filter(i => i.admin ? !!sessao.admin
+                                                            : daTela(i) ? pode(i) : (i.link ? algum : true)) }))
             .filter(g => g.itens.length);
 }
 
@@ -5445,7 +5448,7 @@ function montarNav(){
         + (i.cont ? '<span class="nav-n" id="' + i.cont + '"></span>' : '');
       // no servidor, o "Trocar de módulo" do menu abre o menu de módulos do núcleo
       if (i.v === 'hub' && window.TapModulos && NO_SERVIDOR && !DEMO) TapModulos.trocador(b, 'tapcrm');
-      else if (i.link) b.addEventListener('click', () => { location.href = crmLinkManager(i.link); });
+      else if (i.link) b.addEventListener('click', () => { location.href = crmLinkCad(i.link); });
       else b.addEventListener('click', () => irPara(i.v));
       d.appendChild(b);
     });
@@ -5454,20 +5457,21 @@ function montarNav(){
 }
 
 
-const ROTULO = { com:'Equipe Comercial' };
+const ROTULO = { com:'Equipe Comercial', cfg:'Configurações' };
 
 
-/** As telas de Cadastros moram no Manager (na cor do TapCRM). */
-const crmLinkManager = (ir, extra) => '../manager/?ir=' + encodeURIComponent(ir) + '&area=tapcrm' + (extra ? '&' + extra : '');
+/** S134 · as telas de Cadastros moram no TapHub (cadastros/), na cor do TapCRM. */
+const crmLinkCad = (ir, extra) => '../cadastros/?ir=' + encodeURIComponent(ir) + '&area=tapcrm' + (extra ? '&' + extra : '');
 /** O único caminho para trocar de tela. O comercial tem uma tela só; o resto
  *  (cliente, contrato, OS) mora no Manager e o botão leva até lá. */
 function irPara(v){
   if (v === 'sair'){ sairDaConta(); return; }
   const lk = NAV.reduce((a, g) => a.concat(g.itens || []), []).find(i => i.v === v && i.link);
-  if (lk){ location.href = crmLinkManager(lk.link); return; }
+  if (lk){ location.href = crmLinkCad(lk.link); return; }
   if (v === 'hub'){ location.href = NO_SERVIDOR ? '../' : '#'; return; }
-  // "Abrir o cadastro" do negócio: a ficha do cliente no Manager
-  if (v === 'cad'){ location.href = crmLinkManager('cad', cadSel ? 'cli=' + encodeURIComponent(cadSel) : ''); return; }
+  // "Abrir o cadastro" do negócio: a ficha do cliente no TapHub (cadastros/)
+  if (v === 'cad'){ location.href = crmLinkCad('cad', cadSel ? 'cli=' + encodeURIComponent(cadSel) : ''); return; }
+  if (v === 'cfg'){ pintarConfigCRM(); return; }   // S134 · K3
   // "Abrir o contrato" / contrato recém-criado a partir do negócio: a tela Contratos do Manager
   if (v === 'ctr'){
     location.href = '../manager/?ir=ctr' + (CTR && CTR.id ? '&ctr=' + encodeURIComponent(CTR.id)
@@ -5687,19 +5691,194 @@ async function modalContratoDoNegocio(n, apr){
 const rhDT = t => t ? new Date(t).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit',
   month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }).replace(',', '') : '—';
 
+// ════════════════════════════════════════════════════════════════════════════
+// S134 · CONFIGURAÇÕES DO COMERCIAL (K3) — Planos e Serviços do negócio, só o admin.
+// Vieram do Manager S133 (Configurações) sem mudança; as outras abas ficam no TapHub
+// (cadastros/ › Configurações) e no TapFlow (Manager › Configurações).
+// ════════════════════════════════════════════════════════════════════════════
+let abaCfgCRM = 'planos';
+function pintarConfigCRM(){
+  visao = 'cfg';
+  document.querySelectorAll('.nav-item').forEach(b => {
+    const ativo = b.dataset.v === 'cfg';
+    b.classList.toggle('on', ativo);
+    if (ativo) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
+  });
+  document.getElementById('crumbGrupo').textContent = 'Sistema';
+  document.getElementById('crumbAtual').textContent = 'Configurações';
+  document.body.classList.remove('navAberta', 'emQuadro');
+  document.getElementById('board').classList.add('livre');
+  document.querySelector('main').classList.add('rolaY');
+  const bu = document.getElementById('tbBusca'); bu.value = ''; bu.disabled = true; bu.style.visibility = 'hidden';
+  const board = document.getElementById('board');
+  if (!sessao.admin){
+    board.innerHTML = '<div class="painel"><h3>Configurações</h3>'
+      + '<p class="nota">Esta área é do perfil admin. Fale com o Fernando ou o Bruno.</p></div>';
+    return;
+  }
+  if (!['planos','servneg'].includes(abaCfgCRM)) abaCfgCRM = 'planos';
+  board.innerHTML = '<div class="cfgWrap">'
+    + '<div class="chips" id="cfgTabs"></div>'
+    + '<p class="nota cfgAcessos">Usuários, Turno, Feriados, Google Drive e Exclusões ficam no '
+    + '<a href="../cadastros/?ir=cfg&amp;area=tapcrm">TapHub (Cadastros › Configurações)</a>; Tarefas por perfil, '
+    + 'Responsáveis automáticos, Alertas do menu e Documentos, no <a href="../manager/?ir=cfg">TapFlow</a>.</p>'
+    + '<div id="cfgCorpo"></div></div>';
+  const t = document.getElementById('cfgTabs');
+  [['planos','Planos'],['servneg','Serviços do negócio']].forEach(([id, rot]) => {
+    const b = document.createElement('button');
+    b.className = 'fchip' + (abaCfgCRM === id ? ' on' : '');
+    b.textContent = rot;
+    b.addEventListener('click', () => { abaCfgCRM = id; pintarConfigCRM(); });
+    t.appendChild(b);
+  });
+  if (abaCfgCRM === 'servneg') return cfgServicosNegocio();
+  return cfgPlanos();
+}
+
+// ── S41 · item 6: SERVIÇOS DO NEGÓCIO ─────────────────────────────────────────
+// A lista fechada do "O que o cliente quer". Incluir, renomear, mudar a ordem
+// e desativar. Não há "apagar": um serviço desativado some da escolha de
+// negócio NOVO e continua nos negócios que já o usaram (e no relatório).
+async function cfgServicosNegocio(){
+  const c = document.getElementById('cfgCorpo');
+  c.innerHTML = '<p class="nota">Carregando…</p>';
+  await carregarServicosNeg(true);
+  if (!SERV_NEG){
+    c.innerHTML = '<div class="aviso">Não deu para ler a lista (falta rodar o <b>61_ajustes_s41.sql</b>?): '
+      + esc(SERV_NEG_ERRO || '') + '</div>'; return;
+  }
+  c.innerHTML = '<div class="painel"><h3 style="margin-top:0">Serviços do negócio</h3>'
+    + '<p class="nota">É a lista do campo <b>"O que o cliente quer"</b> no Novo negócio — fechada, sem "Outro". '
+    + 'Serviço novo entra aqui e aparece na hora para todo mundo. Desativar tira da escolha de negócio novo; '
+    + 'quem já usou continua com ele.</p>'
+    + '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Serviço</th><th>Ordem</th><th>Ativo</th><th></th></tr></thead>'
+    + '<tbody></tbody></table></div>'
+    + '<div class="secTit">Incluir</div>'
+    + '<div class="dupla"><div class="campo"><label for="snNovo">Nome do serviço</label>'
+    + '<input id="snNovo" type="text" maxlength="80" autocomplete="off" name="snn_nofill" placeholder="ex.: Ensaio por Ultrassom"></div>'
+    + '<div class="campo" style="align-self:end"><button class="btn pri" type="button" id="snAdd">Incluir na lista</button></div></div>'
+    + '</div>';
+  const tb = c.querySelector('tbody');
+  SERV_NEG.forEach(x => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td><input type="text" class="nm" maxlength="80" style="width:100%" aria-label="Nome do serviço"></td>'
+      + '<td><input type="number" class="or" min="0" max="9999" style="width:72px" aria-label="Ordem"></td>'
+      + '<td><input type="checkbox" class="at" aria-label="Ativo"></td>'
+      + '<td><button class="btn mini" type="button">Gravar</button></td>';
+    tr.querySelector('.nm').value = x.nome;
+    tr.querySelector('.or').value = x.ordem;
+    tr.querySelector('.at').checked = !!x.ativo;
+    tr.querySelector('button').addEventListener('click', function(){
+      _semDuploEnvio_(this, async () => {
+        try{
+          await rpc('tf_salvar_servico_negocio', { p_id: x.id, p_nome: tr.querySelector('.nm').value,
+            p_ordem: parseInt(tr.querySelector('.or').value, 10) || 0, p_ativo: tr.querySelector('.at').checked });
+          toast('"' + tr.querySelector('.nm').value.trim() + '" gravado.', 'ok');
+          cfgServicosNegocio();
+        }catch(e){ toast(e.message, 'err'); }
+      });
+    });
+    tb.appendChild(tr);
+  });
+  document.getElementById('snAdd').addEventListener('click', function(){
+    _semDuploEnvio_(this, async () => {
+      const nm = (document.getElementById('snNovo').value || '').trim();
+      if (nm.length < 3){ toast('Escreva o nome do serviço.', 'err'); return; }
+      try{
+        await rpc('tf_salvar_servico_negocio', { p_id: null, p_nome: nm, p_ordem: null, p_ativo: true });
+        toast('"' + nm + '" entrou na lista.', 'ok');
+        cfgServicosNegocio();
+      }catch(e){ toast(e.message, 'err'); }
+    });
+  });
+}
+
+async function cfgPlanos(){
+  const c = document.getElementById('cfgCorpo');
+  c.innerHTML = '<p class="nota">Carregando…</p>';
+  let pl = null, erro = null;
+  try{ pl = DEMO ? Object.assign({}, PLANOS_DEMO) : ((await get('parametros_planos?select=*&id=eq.GLOBAL')) || [])[0]; }
+  catch(e){ erro = e.message; }
+  if (!pl){
+    c.innerHTML = '<div class="painel"><h3>Planos da proposta</h3><div class="aviso"></div></div>';
+    c.querySelector('.aviso').textContent = 'Os parâmetros dos planos não vieram'
+      + (erro ? ': ' + erro : '') + ' — falta rodar o 51_ajustes_s29.sql no Supabase.';
+    return;
+  }
+  const campo = (id, rot, v, dica, extra) => '<div class="campo"><label for="' + id + '">' + rot + '</label>'
+    + '<input id="' + id + '" type="text" autocomplete="off" name="' + id + '_nofill" value="' + esc(v == null ? '' : String(v)) + '"' + (extra || '') + '>'
+    + (dica ? '<small>' + dica + '</small>' : '') + '</div>';
+  const bloco = (pid, rot, cor) => '<div class="planoCfg ' + pid + '"><div class="planoCfgT">' + rot + '</div>'
+    + campo('pl_' + pid + '_texto', 'Texto do plano <span class="nota">(azul, no modelo)</span>', pl[pid + '_texto'])
+    + campo('pl_' + pid + '_faixa', 'Faixa de itens <span class="nota">(vermelho)</span>', pl[pid + '_faixa'], '', ' style="max-width:260px"')
+    + (cor || '') + '</div>';
+  c.innerHTML = '<div class="painel"><h3>Planos da proposta</h3>'
+    + '<p class="nota">O modelo <b>Inspeção NR-13 (Vasos de Pressão)</b> tem três tabelas: Básico, Padrão e Premium. '
+    + 'O que se digita no app é o <b>Padrão</b> — é o valor dele que vale no card, no quadro e no documento. '
+    + 'Na linha do plano, o texto vem daqui, e o preço do Básico e do Premium sai do Padrão por percentual. '
+    + 'As outras linhas (válvula, manômetro, mobilização) saem iguais nas três.</p>'
+    + bloco('basico', 'Básico', '<div class="dupla">'
+        + campo('pl_basico_pct', 'Percentual sobre o Padrão', String(pl.basico_pct).replace('.', ','), 'negativo: é desconto (ex.: −9)', ' inputmode="decimal"') + '<div></div></div>')
+    + bloco('padrao', 'Padrão — o que se vende')
+    + bloco('premium', 'Premium', '<div class="dupla">'
+        + campo('pl_premium_pct', 'Percentual sobre o Padrão', String(pl.premium_pct).replace('.', ','), 'positivo: é acréscimo (ex.: 34)', ' inputmode="decimal"') + '<div></div></div>')
+    + '<div class="dupla">'
+    +   campo('pl_trecho', 'Trecho comum aos três <span class="nota">(preto, linha de baixo)</span>', pl.trecho_comum)
+    +   campo('pl_arred', 'Arredondar para múltiplo de (R$)', String(pl.arredondar).replace('.', ','), '10 = R$ 1.082,90 vira R$ 1.080,00 · 0 = não arredondar', ' inputmode="decimal"')
+    + '</div>'
+    + '<div class="planosGer"><div class="planosGerT">Simulação</div>'
+    + '<div class="campo" style="max-width:240px;margin:0 0 8px"><label for="pl_sim">Unitário do Padrão (R$)</label>'
+    + '<input id="pl_sim" type="text" inputmode="decimal" value="1.190,00"></div>'
+    + '<div id="pl_simR" class="nota"></div></div>'
+    + '<button class="btn pri" id="plSalvar" type="button">Salvar planos</button></div>';
+
+  const val = id => document.getElementById(id).value;
+  const num = id => _numBR(val(id).replace(/[−–]/g, '-'));
+  const sim = () => {
+    const u = num('pl_sim'), b = num('pl_basico_pct'), pr = num('pl_premium_pct'), a = num('pl_arred');
+    const r = document.getElementById('pl_simR');
+    if ([u, b, pr, a].some(x => x == null || isNaN(x))){ r.textContent = 'Preencha os números para simular.'; return; }
+    r.innerHTML = 'Básico <b></b> · Padrão <b></b> · Premium <b></b>';
+    const bs = r.querySelectorAll('b');
+    bs[0].textContent = BRL(precoPlano(u, b, a)); bs[1].textContent = BRL(u); bs[2].textContent = BRL(precoPlano(u, pr, a));
+  };
+  c.querySelectorAll('input').forEach(i => i.addEventListener('input', sim));
+  sim();
+
+  document.getElementById('plSalvar').addEventListener('click', e => _semDuploEnvio_(e.target, async () => {
+    const b = num('pl_basico_pct'), pr = num('pl_premium_pct'), a = num('pl_arred');
+    if (b == null || isNaN(b) || b >= 0) return toast('O percentual do Básico é um desconto: um número negativo, como −9.','err');
+    if (pr == null || isNaN(pr) || pr <= 0) return toast('O percentual do Premium é um acréscimo: um número positivo, como 34.','err');
+    if (a == null || isNaN(a) || a < 0) return toast('O arredondamento é em reais, zero ou mais.','err');
+    const dados = { basico_pct: b, premium_pct: pr, arredondar: a, trecho_comum: val('pl_trecho').trim() };
+    for (const pid of ['basico','padrao','premium']){
+      dados[pid + '_texto'] = val('pl_' + pid + '_texto').trim();
+      dados[pid + '_faixa'] = val('pl_' + pid + '_faixa').trim();
+      if (!dados[pid + '_texto']) return toast('Os três planos precisam de texto.','err');
+    }
+    if (DEMO) return toast('Modo demonstração: os planos não são gravados.','err');
+    try{
+      await rpc('tf_salvar_planos', { p: dados });
+      await carregarPlanos(true);
+      toast('Planos gravados. A próxima proposta gerada já usa estes valores.','ok');
+    }catch(err){ toast(err.message,'err'); }
+  }));
+}
+
 async function iniciar(){
   montarNav();
   pintarCracha();
   await carregarEquipe();   // os nomes da equipe (Agenda do negócio, "Agendar com")
   // links de fora: `?neg=<id>` (abre a ficha do negócio; `&aba=<aba>`, ex.: agenda, proposta)
-  let neg = null, aba = null;
+  let neg = null, aba = null, ir = null;
   try{
     const prm = new URLSearchParams(location.search);
-    neg = prm.get('neg'); aba = prm.get('aba');
+    neg = prm.get('neg'); aba = prm.get('aba'); ir = prm.get('ir');
     if (location.search) history.replaceState(null, '', location.pathname);
   }catch(e){}
   if (!conectado && !DEMO) setConn('ok', 'Conectado');
   if (DEMO) setConn('', 'Demonstração');
+  if (ir === 'cfg' && sessao.admin){ if (aba) abaCfgCRM = aba; return irPara('cfg'); }   // S134
   await irPara('com');
   if (neg && podeVer('comercial')) abrirNegocioPorId(neg, aba || null);
 }

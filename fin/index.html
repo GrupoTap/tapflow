@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 16 · Financeiro</title>
+<title>TapFin 17 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2250,7 +2250,7 @@ th.num .tfThFixo{text-align:right}
 <script src="../nucleo/config.js?v=N6"></script>
 <script src="../nucleo/nucleo.js?v=N6"></script>
 <!-- F4 · H10: a tabela única dos módulos (cor da moldura e o menu "Trocar de módulo"). Sem ele, o TapFin fica azul e o botão leva ao hub, como antes. -->
-<script src="../nucleo/modulos.js?v=M2"></script>
+<script src="../nucleo/modulos.js?v=M3"></script>
 </head>
 <body data-app="tapfin">
 
@@ -2318,7 +2318,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'F16';   // TapFin 16 (S132): o sistema se chama TapHub nas telas (item #10 da lista) e "Relatar problema ou sugerir" no menu (núcleo N6, modulos M2)
+const APP_VERSION = 'F17';   // TapFin 17 (S134): Clientes, Catálogo e Duplicados abrem no TapHub (cadastros/), não mais no Manager (K6)
+// const APP_VERSION = 'F16';   // TapFin 16 (S132): o sistema se chama TapHub nas telas (item #10 da lista) e "Relatar problema ou sugerir" no menu (núcleo N6, modulos M2)
 // const APP_VERSION = 'F15';   // TapFin 15 (o tipo de custo de cada subcategoria, 519, para a margem do TapGestão) · F14: a medição da OS comum: avisos no Painel e no painel da OS · F13: OS de contrato — o S## da publicação é do central
 try{ document.getElementById('verBadge').textContent = 'FINANCEIRO · ' + APP_VERSION; }catch(e){}
 
@@ -3015,7 +3016,7 @@ const NAV = [
     { v:'ccp',   rot:'Conta corrente Proper', ico:'moeda',   cc:true },
   ]},
   { id:'cadastros', rot:'CADASTROS', itens:[
-    // F11 · os cadastros comuns abrem no Manager, na cor do TapFin (Manager S101: ?ir=…&area=tapfin)
+    // F11 · os cadastros comuns abrem fora, na cor do TapFin · F17 (S134): no TapHub (cadastros/), não mais no Manager
     { v:'mcad', rot:'Clientes',     ico:'pessoas', fin:true, link:'cad' },
     { v:'mcat', rot:'Catálogo',     ico:'caixa',   fin:true, link:'cat' },
     { v:'ffor', rot:'Fornecedores', ico:'predio',  fin:true },
@@ -3105,7 +3106,7 @@ function montarNav(){
         + (i.cont ? '<span class="nav-n" id="' + i.cont + '"></span>' : '');
       // F4 · H10: no servidor, o "Trocar de módulo" do menu abre o menu de módulos do núcleo
       if (i.v === 'hub' && window.TapModulos && NO_SERVIDOR && !DEMO) TapModulos.trocador(b, 'tapfin');
-      else if (i.link) b.addEventListener('click', () => { location.href = finLinkManager(i.link); });
+      else if (i.link) b.addEventListener('click', () => { location.href = finLinkCad(i.link); });
       else b.addEventListener('click', () => irPara(i.v));
       d.appendChild(b);
     });
@@ -3123,13 +3124,13 @@ const GRUPO_DE = {};
 NAV.forEach(g => g.itens.forEach(i => { GRUPO_DE[i.v] = g.rot; }));
 
 /** O único caminho para trocar de tela. */
-/** F11 · as telas de Cadastros do Manager, na cor do TapFin. */
-const finLinkManager = ir => '../manager/?ir=' + encodeURIComponent(ir) + '&area=tapfin';
+/** F11 · as telas de Cadastros, na cor do TapFin · F17 (S134): moram no TapHub (cadastros/). */
+const finLinkCad = ir => '../cadastros/?ir=' + encodeURIComponent(ir) + '&area=tapfin';
 
 function irPara(v){
   if (v === 'sair'){ sairDaConta(); return; }
   const lk = NAV.reduce((a, g) => a.concat(g.itens || []), []).find(i => i.v === v && i.link);
-  if (lk){ location.href = finLinkManager(lk.link); return; }
+  if (lk){ location.href = finLinkCad(lk.link); return; }
   if (v === 'hub'){ location.href = NO_SERVIDOR ? '../' : '#'; return; }
   // tela que a pessoa não abre (ou endereço colado): cai na primeira que ela abre
   const visiveis = navVisivel().reduce((a,g) => a.concat(g.itens), []).filter(i => i.v !== 'hub' && i.v !== 'sair');
@@ -6516,7 +6517,7 @@ async function modalEmitirBoleto(t, opcoes){
       boFaixaTeste(prep.ambiente)
     + lista(prep.erros, 'nfErros')
     + ((prep.erros || []).some(x => /Cadastros/.test(x)) && NO_SERVIDOR
-       ? '<p class="nota" style="margin:-4px 0 10px"><a href="../manager/?ir=cad&area=tapfin" target="_blank" rel="noopener">Abrir Cadastros › Clientes</a> (em outra aba).</p>' : '')
+       ? '<p class="nota" style="margin:-4px 0 10px"><a href="../cadastros/?ir=cad&area=tapfin" target="_blank" rel="noopener">Abrir Cadastros › Clientes</a> (em outra aba).</p>' : '')
     + lista(prep.avisos, 'nfAvisos')
     + '<div class="nfBloco"><b>Pagador</b>'
     +   '<div>' + esc(r.cliente || '—') + ' · ' + esc(finDocFmt(r.doc)) + '</div>'
@@ -7044,7 +7045,7 @@ async function modalEmitirNota(t){
     + jfAvisoEmitir(t)
     + lista(prep.erros, 'nfErros')
     + ((prep.erros || []).some(x => /Cadastros/.test(x)) && NO_SERVIDOR
-       ? '<p class="nota" style="margin:-4px 0 10px"><a href="../manager/?ir=cad&area=tapfin" target="_blank" rel="noopener">Abrir Cadastros › Clientes</a> (em outra aba). Corrigido, feche esta janela e clique em "Emitir nota" de novo.</p>' : '')
+       ? '<p class="nota" style="margin:-4px 0 10px"><a href="../cadastros/?ir=cad&area=tapfin" target="_blank" rel="noopener">Abrir Cadastros › Clientes</a> (em outra aba). Corrigido, feche esta janela e clique em "Emitir nota" de novo.</p>' : '')
     + lista(prep.avisos, 'nfAvisos')
     + '<div class="nfBloco"><b>Tomador</b>'
     +   '<div>' + esc(r.cliente || '—') + ' · CNPJ ' + esc(finDocFmt(r.cnpj)) + '</div>'

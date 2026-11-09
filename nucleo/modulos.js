@@ -1,5 +1,5 @@
 /* ============================================================================
- * nucleo/modulos.js · M2 — os módulos do sistema num lugar só
+ * nucleo/modulos.js · M3 — os módulos do sistema num lugar só
  * ----------------------------------------------------------------------------
  * H10 (23/10/2026, chat central). Desenho: processos/hub-h10-layout-desenho.md.
  *
@@ -10,7 +10,7 @@
  * módulo" abre o menu de UMA coluna com os módulos que a pessoa pode abrir.
  *
  * Como usar numa página (depois do nucleo.js):
- *   <script src="../nucleo/modulos.js?v=M2"></script>
+ *   <script src="../nucleo/modulos.js?v=M3"></script>
  *   TapModulos.aplicar('tapfin');               // a moldura (variáveis CSS)
  *   TapModulos.trocador(botao, 'tapfin');       // o botão abre o menu
  *   (no Manager, que tem várias áreas: trocador(botao, () => chaveDaAreaAtual))
@@ -21,13 +21,14 @@
  * Quem pode abrir o quê vem do SERVIDOR (tf_hub_modulos, a mesma regra do
  * hub). A lista fica guardada no aparelho para abrir sem sinal.
  * Arquivo novo: não mexe no nucleo.js (N2) nem obriga trocar o ?v= dele.
- * ⚠ Mudou este arquivo? Troque o ?v=M2 em todas as páginas e nos sw.js.
+ * ⚠ Mudou este arquivo? Troque o ?v=M3 em todas as páginas e nos sw.js.
  *   (Card novo sem mudar o ?v= — como no S116, S118, S119 e no GE1 — vale porque o sw.js da
  *   raiz busca o nucleo/ na rede primeiro; aparelho sem sinal vê o card no próximo acesso.)
  * ========================================================================== */
 (function () {
   'use strict';
-  var VERSAO = 'M2';   // M2 (S132): "Relatar problema ou sugerir" no menu (item #1 da lista)
+  var VERSAO = 'M3';   // M3 (S134): o card Cadastros abre o TapHub Cadastros (cadastros/), não mais o Manager (K1)
+  // M2 (S132): "Relatar problema ou sugerir" no menu (item #1 da lista)
 
   // A raiz do app: este arquivo mora em <raiz>/nucleo/.
   var RAIZ = (function () {
@@ -62,7 +63,7 @@
     { chave: 'taprh',     titulo: 'TapRH',      texto: 'Pessoal, diárias e ponto',      cor: '#6D28D9', href: 'rh/' },   // S118 · TapRH 1 em pasta própria
     { chave: 'tapseg',    titulo: 'TapSeg',     texto: 'EPI, ASO e treinamentos',       cor: '#BE123C', href: 'seg/' },   // S116 · TapSeg 1 em pasta própria
     { chave: 'tapdoc',    titulo: 'TapDoc',     texto: 'Preparar a inspeção NR-13',     cor: '#A16207', href: 'doc/' },
-    { chave: 'cadastros', titulo: 'Cadastros',  texto: 'Clientes e catálogo',           cor: '#334155', href: 'manager/?ir=cad' },
+    { chave: 'cadastros', titulo: 'Cadastros',  texto: 'Clientes e catálogo',           cor: '#334155', href: 'cadastros/' },   // S134 · TapHub Cadastros 1 (K1)
     { chave: 'gestao',    titulo: 'Gestão',     texto: 'Relatórios',                    cor: '#A21CAF', href: 'manager/?ir=rel' },   // S87: os quadros passaram ao TapFlow
     { chave: 'tapgestao', titulo: 'TapGestão',  texto: 'Indicadores, metas e o mês',    cor: '#4338CA', href: 'gestao/' },   // GE1 · TapGestão 1 (03/11/2026)
     { chave: 'campo',     titulo: 'Campo',      texto: 'Levantamento, mesmo sem sinal', cor: '#0E7490', href: 'field/' },
