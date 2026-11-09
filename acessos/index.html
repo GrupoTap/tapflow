@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pessoas e acessos · A6</title>
+<title>Pessoas e acessos · A7</title>
 <meta name="theme-color" content="#0C1420">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22104%22 fill=%22%231B6FA9%22/%3E%3Ctext x=%22256%22 y=%22350%22 font-family=%22Arial,sans-serif%22 font-size=%22300%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EE%3C/text%3E%3C/svg%3E">
 <link rel="manifest" href="../manifest.webmanifest">
@@ -30,11 +30,16 @@
        provisória" / "Gerar PIN provisório" (mostrado UMA vez, vale 24 h),
        "Descartar" e quem ainda não trocou o provisório;
      · "senha/PIN" na linha de cada pessoa: redefinir sem pedido.
+     A7 (S136 · Celular da empresa, processos/aparelho-empresa-desenho.md, banco 210):
+     · seção "Celulares da empresa": o nome, a lista de quem usa, quem está
+       conectado, a fila de envios (alerta de 24 h), "Novo celular", "Editar",
+       "Desativar" (perda, roubo, quebra) e os pedidos para entrar. Mexer, só
+       quem tem "Autoriza acesso"; ver, o admin.
      ════════════════════════════════════════════════════════════════════════ -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N6">
-<script src="../nucleo/config.js?v=N6"></script>
-<script src="../nucleo/nucleo.js?v=N6"></script>
-<script src="../nucleo/modulos.js?v=M3"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N7">
+<script src="../nucleo/config.js?v=N7"></script>
+<script src="../nucleo/nucleo.js?v=N7"></script>
+<script src="../nucleo/modulos.js?v=M4"></script>
 <style>
 :root{
   --accent:#2C86C6; --accent-ink:#A9D2F2; --accent-soft:#1B3550; --sidebar-bg:#102438;
@@ -112,13 +117,17 @@ tr.semmod td{background:#1E2232}
 .relResp{font-size:13px;background:var(--surface-2);border-radius:6px;padding:6px 8px}
 .relAcoes{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px}.relAcoes .relRespTxt{flex:1 1 220px;min-width:0;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--rule);border-radius:6px;background:var(--surface-2);color:var(--ink)}
 .tag.novo{border-color:#F0B357;color:#F0B357}.tag.ok{border-color:#5FCF95;color:#5FCF95}.tag.mute{opacity:.6}
+/* A7 · celulares da empresa */
+.cePes{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 14px;max-height:320px;overflow:auto;margin-top:6px}
+.cePes label{display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:14px;color:var(--ink);margin:0}
+.alerta{color:var(--crit);font-weight:600}
 </style>
 </head>
 <body>
 
 <div class="topo">
   <div class="marca">Tap<span>Hub</span></div>
-  <div class="selo" id="selo">ACESSOS · A6</div>
+  <div class="selo" id="selo">ACESSOS · A7</div>
   <div class="dir"><span id="eu"></span><a href="../" id="btInicio">Início</a></div>
 </div>
 
@@ -152,6 +161,15 @@ tr.semmod td{background:#1E2232}
     <div class="cx"><table id="tPessoas"></table></div>
     <p class="nota">Clique no <b>perfil</b> de uma pessoa para trocar o perfil dela ou editar o perfil (onde trabalha e se é admin). Pessoa nova nasce <b>sem módulos</b>: marque o que ela usa. Quem trabalha só em campo entra no Campo e no TapDoc do celular pela escala da OS, não por este quadro.</p>
 
+    <!-- A7 · celulares da empresa (210) -->
+    <section id="celulares">
+      <h2 style="font-size:16px;margin:26px 0 4px">Celulares da empresa</h2>
+      <p class="nota" style="margin:0 0 10px">O celular que fica com a dupla de inspeção (ou o da administração). Nele só entra quem está na lista; cada pessoa entra uma vez com e-mail e senha e depois escolhe o nome e digita o PIN. <b>Não tem digital, ponto, EPI nem assinaturas</b> (isso fica no celular de cada um). Tirar alguém da lista ou <b>desativar</b> o celular (perda, roubo, quebra) desconecta na hora. A coluna Fila mostra os envios que o celular ainda não conseguiu subir: com mais de 24 h, aparece em vermelho e no início. Mexer, só quem tem <b>Autoriza acesso</b>.</p>
+      <div class="barra" style="margin:0 0 8px"><button class="btn pri" type="button" id="btNovoCel" hidden>Novo celular</button><span class="porp" id="celPode"></span></div>
+      <div class="cx"><table id="tCel"></table></div>
+      <div id="celPedidos"></div>
+    </section>
+
     <section id="secDig">
       <h2 style="font-size:16px;margin:26px 0 4px">Digital (trava do PIN)</h2>
       <p class="nota" style="margin:0 0 10px">A digital (ou o rosto) destrava o TapHub no aparelho da pessoa. O sistema guarda só uma chave do aparelho, nunca a digital. O 1º cadastro é livre; aparelho novo (troca ou perda de celular) só com a liberação de quem tem <b>Autoriza acesso</b>: vale para <b>um</b> cadastro, por <b>24 horas</b>, e fica no histórico. As colunas PIN e Digital contam os destraves dos últimos 30 dias: quem usa muito o PIN aparece marcado.</p>
@@ -168,7 +186,8 @@ tr.semmod td{background:#1E2232}
 
 <script>
 'use strict';
-const APP_VERSION = 'A6';   // A6 (S132): a seção Relatos e a caixa "Recebe relatos" (209; item #1 da lista)
+const APP_VERSION = 'A7';   // A7 (S136): a seção "Celulares da empresa" (210)
+// const APP_VERSION = 'A6';   // A6 (S132): a seção Relatos e a caixa "Recebe relatos" (209; item #1 da lista)
 // const APP_VERSION = 'A5';   // A5 (S124): "Autoriza acesso" e os pedidos de senha e PIN (207) · A4 (S123): a seção Digital (Passkey 1) · A3 (S91): uma tela só
 const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL = _CFG.SUPABASE_URL || '', SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
@@ -201,7 +220,7 @@ async function carregar(){
   }
   carregarRelatos();
   document.getElementById('conteudo').hidden = false;
-  desenharPessoas(); desenharHistorico(); carregarDigital(); carregarPedidos();
+  desenharPessoas(); desenharHistorico(); carregarDigital(); carregarPedidos(); carregarCelulares();
 }
 
 /* ── A6 · Relatos de problemas e sugestões (209, R6–R9) ────────────────── */
@@ -350,7 +369,7 @@ document.getElementById('tPessoas').addEventListener('change', async ev => {
       const pd = c.dataset.poder, rot = pd === 'plh' ? 'PLH' : pd === 'relatos' ? '"Recebe relatos"' : '"Autoriza acesso"';
       p.poderes = tem ? p.poderes.concat(pd) : p.poderes.filter(x => x !== pd);
       toast(rot + (tem ? ' dado a ' : ' tirado de ') + p.nome, 'ok');
-      if (pd === 'digital'){ carregarDigital(); carregarPedidos(); }
+      if (pd === 'digital'){ carregarDigital(); carregarPedidos(); carregarCelulares(); }
       if (pd === 'relatos') carregarRelatos();
     } else {
       const k = c.dataset.mod;
@@ -492,6 +511,102 @@ document.getElementById('tDig').addEventListener('click', ev => {
         try{ await rpc('tf_digital_remover_de', { p_usuario: p.id, p_aparelho: rem.dataset.ap }); toast('Digital removida.', 'ok'); await carregarDigital(); recarregarHistorico(); }
         catch(e){ toast(e.message || 'Não removeu.', 'erro'); }
       });
+  }
+});
+
+/* ── A7 · Celulares da empresa (210) ──────────────────────────────────────── */
+let CE = null;
+async function carregarCelulares(){
+  const t = document.getElementById('tCel');
+  try{ CE = await rpc('tf_aparelhos_empresa_painel', {}); }
+  catch(e){
+    t.innerHTML = '<tbody><tr><td class="vazio">' + (/tf_aparelhos_empresa_painel|function|404/i.test(e.message || '')
+      ? 'O banco ainda não tem os celulares da empresa (rodar a 210).' : 'Não deu para carregar: ' + esc(e.message || '')) + '</td></tr></tbody>';
+    return;
+  }
+  desenharCelulares();
+}
+function filaTxt(c){
+  const f = c.fila || {};
+  if (!f.visto_em) return '<span class="porp">sem notícia ainda</span>';
+  if (!f.pendentes) return '<span class="ganha">vazia</span> <span class="porp">· ' + esc(quando(f.visto_em)) + '</span>';
+  return '<span class="' + (c.alerta ? 'alerta' : '') + '">' + f.pendentes + (f.pendentes === 1 ? ' envio' : ' envios')
+    + (f.parados ? ' (' + f.parados + ' parado' + (f.parados > 1 ? 's' : '') + ')' : '') + ' desde ' + esc(quando(f.mais_antiga)) + '</span>'
+    + ' <span class="porp">· notícia ' + esc(quando(f.visto_em)) + '</span>';
+}
+function desenharCelulares(){
+  const t = document.getElementById('tCel'); if (!CE) return;
+  document.getElementById('btNovoCel').hidden = !CE.pode;
+  document.getElementById('celPode').textContent = CE.pode ? '' : 'Só quem tem "Autoriza acesso" mexe aqui.';
+  let h = '<thead><tr><th>Celular</th><th>Quem usa</th><th>Conectados agora</th><th>Fila</th><th></th></tr></thead><tbody>';
+  if (!CE.celulares.length) h += '<tr><td colspan="5" class="vazio">Nenhum celular da empresa cadastrado.</td></tr>';
+  CE.celulares.forEach(c => {
+    const pes = c.pessoas.length ? c.pessoas.map(p => esc(p.nome)).join(', ') : '<span class="porp">ninguém</span>';
+    const uso = c.em_uso.length ? c.em_uso.map(u => esc(u.nome) + ' <span class="porp">' + esc(quando(u.ultimo_uso)) + '</span>').join('<br>') : '<span class="porp">—</span>';
+    let ac = '';
+    if (CE.pode && c.ativo) ac = '<button class="lnkp" type="button" data-cel-editar="' + esc(c.id) + '">editar</button> · <button class="lnkp" type="button" data-cel-ativo="' + esc(c.id) + '" data-v="0">desativar</button>';
+    else if (CE.pode) ac = '<button class="lnkp" type="button" data-cel-ativo="' + esc(c.id) + '" data-v="1">reativar</button>';
+    h += '<tr' + (c.ativo ? '' : ' class="inativo"') + '><td><div class="nm">' + esc(c.nome) + '</div>'
+       + (c.ativo ? '' : '<span class="tag">desativado ' + esc(quando(c.desativado_em)) + '</span>') + '</td>'
+       + '<td>' + pes + '</td><td>' + uso + '</td><td>' + (c.ativo ? filaTxt(c) : '—') + '</td><td>' + ac + '</td></tr>';
+  });
+  t.innerHTML = h + '</tbody>';
+  const sec = document.getElementById('celulares');
+  if (location.hash === '#celulares' && !sec.dataset.rolou){ sec.dataset.rolou = '1'; setTimeout(() => sec.scrollIntoView({ block:'start' }), 50); }
+  const pd = document.getElementById('celPedidos');
+  if (!CE.pedidos.length){ pd.innerHTML = ''; return; }
+  pd.innerHTML = '<h3 style="font-size:14px;margin:14px 0 6px">Pedidos para entrar</h3><div class="cx"><table><thead><tr><th>Pessoa</th><th>Celular</th><th>Pediu em</th><th></th></tr></thead><tbody>'
+    + CE.pedidos.map(d => '<tr><td>' + esc(d.pessoa) + '</td><td>' + esc(d.celular) + '</td><td>' + esc(quando(d.pedido_em)) + '</td><td>'
+      + (CE.pode ? '<button class="btn" type="button" data-cel-pedido="' + esc(d.id) + '" data-v="1">Incluir</button> <button class="lnkp" type="button" data-cel-pedido="' + esc(d.id) + '" data-v="0">recusar</button>' : '')
+      + '</td></tr>').join('') + '</tbody></table></div>';
+}
+function formCelular(c){
+  const marcados = new Set((c ? c.pessoas : []).map(p => p.id));
+  const lista = CE.pessoas.map(p => '<label><input type="checkbox" value="' + esc(p.id) + '"' + (marcados.has(p.id) ? ' checked' : '') + '> ' + esc(p.nome) + '</label>').join('');
+  Nucleo.janela.abrir(c ? 'Editar ' + c.nome : 'Novo celular da empresa',
+    '<div class="pform"><label for="ceNome">Nome</label><input type="text" id="ceNome" maxlength="60" placeholder="Celular Equipe 1" value="' + esc(c ? c.nome : '') + '">'
+    + '<p class="dica">O nome aparece no celular e na lista de aparelhos de quem entrar nele.</p>'
+    + '<label>Quem usa este celular</label><div class="cePes" id="cePes">' + lista + '</div>'
+    + (c ? '<p class="dica">Quem você desmarcar é desconectado deste celular na hora.</p>' : '') + '</div>',
+    [{ label:'Cancelar', onClick: () => Nucleo.janela.fechar() },
+     { label:'Salvar', pri:true, onClick: async () => {
+        const nome = document.getElementById('ceNome').value.trim();
+        const ids = Array.from(document.querySelectorAll('#cePes input:checked')).map(x => x.value);
+        try{
+          const r = await rpc('tf_aparelho_empresa_salvar', { p_id: c ? c.id : null, p_nome: nome, p_pessoas: ids });
+          Nucleo.janela.fechar();
+          toast(c ? ('Salvo.' + (r && r.sairam ? ' ' + r.sairam + ' pessoa(s) desconectada(s).' : '')) : 'Celular cadastrado. Na 1ª vez, a pessoa entra nele e escolhe "É um celular da empresa".', 'ok');
+          await carregarCelulares(); recarregarHistorico();
+        }catch(e){ toast(String(e.message || 'Não salvou.').replace(/^.*?(Dê um|Já existe|Uma das|Só quem)/, '$1'), 'erro'); }
+     }}]);
+  setTimeout(() => { try{ document.getElementById('ceNome').focus(); }catch(e){} }, 30);
+}
+document.getElementById('btNovoCel').addEventListener('click', () => { if (CE) formCelular(null); });
+document.getElementById('celulares').addEventListener('click', ev => {
+  const ed = ev.target.closest('[data-cel-editar]'), at = ev.target.closest('[data-cel-ativo]'), pd = ev.target.closest('[data-cel-pedido]');
+  if (ed){ const c = CE.celulares.find(x => x.id === ed.dataset.celEditar); if (c) formCelular(c); return; }
+  if (at){
+    const c = CE.celulares.find(x => x.id === at.dataset.celAtivo); if (!c) return;
+    const ativar = at.dataset.v === '1';
+    Nucleo.janela.confirmar(ativar ? 'Reativar o ' + c.nome + '?' : 'Desativar o ' + c.nome + '?',
+      ativar ? '<p>As pessoas da lista voltam a poder entrar nele (com e-mail e senha na 1ª vez).</p>'
+             : '<p>Todo mundo é desconectado deste celular na hora (perda, roubo ou quebra). O que ainda estava na fila do celular e não subiu <b>não</b> chega ao sistema.</p>',
+      ativar ? 'Reativar' : 'Desativar', !ativar).then(async ok => {
+        if (!ok) return;
+        try{ const r = await rpc('tf_aparelho_empresa_ativo', { p_id: c.id, p_ativo: ativar });
+             toast(ativar ? 'Reativado.' : 'Desativado. ' + ((r && r.desconectados) || 0) + ' sessão(ões) desconectada(s).', 'ok');
+             await carregarCelulares(); recarregarHistorico(); }
+        catch(e){ toast(e.message || 'Não deu.', 'erro'); }
+      });
+    return;
+  }
+  if (pd){
+    const incluir = pd.dataset.v === '1';
+    (async () => {
+      try{ await rpc('tf_aparelho_empresa_pedido', { p_pedido: pd.dataset.celPedido, p_incluir: incluir });
+           toast(incluir ? 'Incluído na lista.' : 'Pedido recusado.', 'ok'); await carregarCelulares(); recarregarHistorico(); }
+      catch(e){ toast(e.message || 'Não deu.', 'erro'); }
+    })();
   }
 });
 

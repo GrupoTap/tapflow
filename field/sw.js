@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S52-T21';   // S52: item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
+const VERSAO = 'S53-T22';   // S53: o celular da empresa (210): núcleo N7, modulos M4, sem a parte pessoal do Eu, a fila com a sessão de quem fez
+// const VERSAO = 'S52-T21';   // S52: item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const VERSAO = 'S51-T20';   // S51: só o modulos.js M3 (o card Cadastros abre o cadastros/)
 // const VERSAO = 'S50-T19';   // S50: "Meu espelho e banco" mais claro (item #19 da lista: "Seu banco hoje", "Horas do mês")
 // const VERSAO = 'S49-T18';   // S49: núcleo N6 e modulos M2 (Relatar problema), a coluna Banco, o uniforme (itens 11–13 e 16), TapField
@@ -44,11 +45,11 @@ const ESSENCIAIS = [
   // IDÊNTICO ao do <script> do index.html, com o ?v= (c.match compara a consulta inteira).
   // Sem isto o Field sem sinal abriria sem o núcleo. Trocou o ?v= no index.html? Troque aqui também.
   // S34: N2 (fila de envios e utilitários)
-  '../nucleo/nucleo.js?v=N6',
-  '../nucleo/nucleo.css?v=N6',
-  '../nucleo/config.js?v=N6',
+  '../nucleo/nucleo.js?v=N7',
+  '../nucleo/nucleo.css?v=N7',
+  '../nucleo/config.js?v=N7',
   // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo"
-  '../nucleo/modulos.js?v=M3',
+  '../nucleo/modulos.js?v=M4',
   // S35 · TapDoc 1: a coleta da inspeção (página própria, abre sem sinal)
   './doc/',
   // S80 · TapDoc 4: o motor de cálculo para a prévia sem sinal. Mesmo ?v= do <script> de doc/index.html.
