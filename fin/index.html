@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 18 · Financeiro</title>
+<title>TapFin 19 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2318,7 +2318,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'F18';   // TapFin 18 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
+const APP_VERSION = 'F19';   // TapFin 19 (S138): item 29 da lista: "Dividir em parcelas" a conta a receber que já tem nota (522)
+// const APP_VERSION = 'F18';   // TapFin 18 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const APP_VERSION = 'F17';   // TapFin 17 (S134): Clientes, Catálogo e Duplicados abrem no TapHub (cadastros/), não mais no Manager (K6)
 // const APP_VERSION = 'F16';   // TapFin 16 (S132): o sistema se chama TapHub nas telas (item #10 da lista) e "Relatar problema ou sugerir" no menu (núcleo N6, modulos M2)
 // const APP_VERSION = 'F15';   // TapFin 15 (o tipo de custo de cada subcategoria, 519, para a margem do TapGestão) · F14: a medição da OS comum: avisos no Painel e no painel da OS · F13: OS de contrato — o S## da publicação é do central
@@ -5960,6 +5961,9 @@ function finreMenu(t){
   // F5: a nota emitida se cancela pelo topo do menu, em vermelho, longe do "Anular"
   if (n && n.situacao === 'autorizada') M.push({ acao:'nfcancelar', rot:'Cancelar nota fiscal', perigo:true, cls:'topo' }, { sep:true });
   M.push({ acao:'editar', rot:'Editar' });
+  // F19 · item 29 (522): a conta que já tem nota vira parcelas, cada uma com o seu boleto
+  if (t.etapa === 'faturado' && !t.anulado && !finEhParcela(t) && !finTemBaixa(t))
+    M.push(bv ? { acao:'dividir', rot:'Dividir em parcelas', off:'Cancele o boleto primeiro' } : { acao:'dividir', rot:'Dividir em parcelas' });
   if (p !== 'baixar' && Number(t.saldo) > 0) M.push({ acao:'baixar', rot:'Baixar' });
   if (p !== 'baixas') M.push({ acao:'baixas', rot:'Baixas' });
   if (FINJF.ativo && !t.anulado){   // TapFin 7
@@ -6003,6 +6007,83 @@ function finreAcao(a, t){
   if (a === 'baixas') return modalVerBaixas(t, finreCarregar);
   if (a === 'anular') return modalAnularTitulo(t);
   if (a === 'editar') return modalTituloReceber(t);
+  if (a === 'dividir') return modalDividirTitulo(t);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// F19 · ITEM 29 DA LISTA: DIVIDIR EM PARCELAS A CONTA QUE JÁ TEM NOTA (522)
+// ----------------------------------------------------------------------------
+// O cliente paga em 30/60 dias por boleto, mas a conta nasceu com 1 parcela e a nota
+// saiu do total. A parcela 1 é a própria conta (fica com a nota); as outras nascem com a
+// mesma nota. Cada uma tem o seu "Emitir boleto" (código NF154-01, NF154-02…).
+// O banco confere tudo de novo (tf_fin_titulo_dividir): soma, datas, baixa e boleto.
+// ════════════════════════════════════════════════════════════════════════════
+const finEhParcela = t => /parcela\s+\d{1,2}\s*\/\s*\d{1,2}\s*$/i.test(String((t && t.descricao) || ''));
+
+function modalDividirTitulo(t, rasc){
+  const totalC = Math.round(Number(t.valor) * 100);
+  const sugerir = n => {
+    const base = Math.floor(totalC / n);
+    return Array.from({ length: n }, (_, i) => ({
+      valor: ((base + (i === n - 1 ? totalC - base * n : 0)) / 100).toFixed(2),
+      venc: finSomaDias(t.vencimento, 30 * i) }));
+  };
+  const d = Object.assign({ n: 2, linhas: null,
+    uid: (crypto.randomUUID && crypto.randomUUID()) || ('dv-' + Date.now() + '-' + Math.random().toString(16).slice(2)) }, rasc || {});
+  if (!d.linhas || d.linhas.length !== d.n) d.linhas = sugerir(d.n);
+  const nf = t.nf_numero ? 'NF ' + nfNumero({ numero: t.nf_numero }) : 'a nota';
+  const linhasHtml = L => L.map((l, i) => '<div class="dupla">'
+      + '<div class="campo"><label for="dvV' + i + '">Parcela ' + (i + 1) + ' · valor</label><input id="dvV' + i + '" type="number" step="0.01" min="0.01" value="' + esc(l.valor) + '"></div>'
+      + '<div class="campo"><label for="dvD' + i + '">Vencimento</label><input id="dvD' + i + '" type="date" value="' + esc(l.venc) + '"></div></div>').join('');
+  abrirModal('Dividir em parcelas — ' + finTituloRot(t),
+      '<p class="nota" style="margin:0 0 10px">Valor da conta <b>' + esc(BRL(t.valor)) + '</b> · ' + esc(nf) + '. '
+    + 'A parcela 1 continua sendo esta conta (fica com a nota); as outras nascem com a mesma nota. '
+    + 'Depois, em cada parcela: <b>Emitir boleto</b>.</p>'
+    + '<div class="campo"><label for="dvN">Quantas parcelas</label><select id="dvN">'
+    +   Array.from({ length: 11 }, (_, i) => '<option value="' + (i + 2) + '"' + (i + 2 === d.n ? ' selected' : '') + '>' + (i + 2) + '</option>').join('')
+    + '</select><div class="dica">Sugestão: partes iguais, a cada 30 dias a partir do vencimento de hoje. Pode mudar valor e data.</div></div>'
+    + '<div id="dvLinhas">' + linhasHtml(d.linhas) + '</div>'
+    + '<p class="nota" id="dvSoma" style="margin:4px 0 0"></p>',
+    [{ label: 'Cancelar', onClick: fecharModal },
+     { label: 'Dividir', pri: true, onClick: async () => {
+        // tudo lido aqui, antes de qualquer outra janela
+        const r = ler();
+        const somaC = r.linhas.reduce((a, l) => a + Math.round(Number(l.valor) * 100), 0);
+        if (r.linhas.some(l => !(Number(l.valor) > 0))){ toast('Informe o valor de cada parcela.', 'err'); return; }
+        if (r.linhas.some(l => !l.venc)){ toast('Informe o vencimento de cada parcela.', 'err'); return; }
+        if (somaC !== totalC){ toast('A soma das parcelas (' + BRL(somaC / 100) + ') tem de dar ' + BRL(t.valor) + '.', 'err'); return; }
+        const b = [...document.querySelectorAll('#mFoot .btn')].pop(); if (b) b.disabled = true;
+        try{
+          const res = await rpc('tf_fin_titulo_dividir', { p_titulo_id: t.id, p_client_uid: r.uid,
+            p_parcelas: r.linhas.map(l => ({ valor: Number(l.valor), vencimento: l.venc })) });
+          fecharModal();
+          toast('Conta dividida em ' + ((res && res.titulos && res.titulos.length) || r.n) + ' parcelas. Agora, "Emitir boleto" em cada uma.', 'ok');
+          await finreCarregar();
+        }catch(e){
+          toast(e.message, 'err');
+          modalDividirTitulo(t, r);   // volta com o que foi escrito (a mesma chave: não divide em dobro)
+        }
+     }}]);
+  function ler(){
+    const n = Number((document.getElementById('dvN') || {}).value) || d.n;
+    const linhas = Array.from({ length: n }, (_, i) => ({
+      valor: ((document.getElementById('dvV' + i) || {}).value || '').trim(),
+      venc: ((document.getElementById('dvD' + i) || {}).value || '').trim() }));
+    return { n, linhas, uid: d.uid };
+  }
+  function somar(){
+    const el = document.getElementById('dvSoma'); if (!el) return;
+    const somaC = ler().linhas.reduce((a, l) => a + Math.round((Number(l.valor) || 0) * 100), 0);
+    const dif = totalC - somaC;
+    el.innerHTML = 'Soma das parcelas: <b>' + esc(BRL(somaC / 100)) + '</b>'
+      + (dif === 0 ? ' · confere com a conta' : ' · <span style="color:var(--crit,#b42318)">' + (dif > 0 ? 'faltam ' : 'passou ') + esc(BRL(Math.abs(dif) / 100)) + '</span>');
+  }
+  const corpo = document.getElementById('mBody');
+  document.getElementById('dvN').addEventListener('change', e => {
+    document.getElementById('dvLinhas').innerHTML = linhasHtml(sugerir(Number(e.target.value) || 2)); somar();
+  });
+  if (corpo) corpo.addEventListener('input', e => { if (e.target.id && /^dv[VD]\d/.test(e.target.id)) somar(); });
+  somar();
 }
 
 async function pintarContasReceber(){
