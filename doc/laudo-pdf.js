@@ -35,6 +35,42 @@ function dataBR(x) {
 const dataSP = x => x ? new Date(x).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }) : null;
 function txt(t, v) { return String(t == null ? '' : t).replace(/\{\{(\w+)\}\}/g, (m, k) => v && v[k] != null ? String(v[k]) : ''); }
 const maiusc1 = s => s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : s;
+// S143 · item 68: o texto justificado do pdfmake parte a palavra no hífen e na barra ("Conclui- se", "kgf/ cm²");
+// o hífen que não quebra (U+2011, que a Roboto tem) e a barra presa à letra seguinte (U+FEFF) resolvem
+const presos = s => typeof s !== 'string' ? s : s.replace(/(\p{L})-(?=\p{L})/gu, '$1‑').replace(/(\p{L})\/(?=\p{L})/gu, '$1/﻿');
+// S143 · item 67: só a palavra do resultado se destaca (seminegrito), com o ponto: verde CONFORME, vermelho NÃO CONFORME
+const VERDE = '#1E7B34', VERMELHO = '#B42318';
+const RES = { ok: 'CONFORME', nc: 'NÃO CONFORME' };
+function comResultado(t, v, res) {
+  const s = presos(txt(t, Object.assign({}, v, { resultado: '\u0001' })));
+  const i = s.indexOf('\u0001');
+  if (i < 0 || !RES[res]) return s.replace('\u0001', '');
+  const depois = s.slice(i + 1), ponto = depois.charAt(0) === '.' ? '.' : '';
+  return [s.slice(0, i), { text: RES[res] + ponto, bold: true, color: res === 'ok' ? VERDE : VERMELHO }, depois.slice(ponto.length)].filter(x => x !== '');
+}
+// S143 · item 62: a cidade do cadastro vem de muitos jeitos ("DIVINOPOLIS", "Divinopolis", "Para De Minas"); no laudo
+// sai com a grafia certa: maiúsculas de nome próprio, "de/da/do" minúsculos e o acento das cidades conhecidas
+const CIDADES_ACENTO = ('Araújos|Araxá|Bambuí|Barão de Cocais|Belém|Brasília|Carmópolis de Minas|Cláudio|Conceição do Pará|Cuiabá|Divinópolis|' +
+  'Florianópolis|Goiânia|Indianópolis|Itaúna|Itatiaiuçu|Jaboatão dos Guararapes|Japaraíba|João Monlevade|Maceió|Macapá|Niterói|Perdigão|' +
+  'Petrópolis|Pará de Minas|Pompéu|Poços de Caldas|Ribeirão das Neves|Santa Bárbara|Santo Antônio do Monte|São Gonçalo do Pará|' +
+  'São João de Meriti|São Joaquim de Bicas|São José da Lapa|São José dos Pinhais|São Luís|São Paulo|São Sebastião do Oeste|Teófilo Otoni|' +
+  'Três Corações|Três Marias|Uberlândia|Unaí|Vitória').split('|');
+const semAcento = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+const MAPA_CIDADES = {}; CIDADES_ACENTO.forEach(c => { MAPA_CIDADES[semAcento(c)] = c; });
+function cidadeLaudo(c) {
+  if (!c) return c;
+  const s = String(c).trim().replace(/\s+/g, ' ');
+  if (MAPA_CIDADES[semAcento(s)]) return MAPA_CIDADES[semAcento(s)];
+  if (/[a-zà-ÿ]/.test(s) && !/\b(De|Da|Do|Das|Dos)\b/.test(s)) return s;   // já digitada com cuidado
+  return s.toLowerCase().split(' ').map((p, i) => i > 0 && /^(de|da|do|das|dos|e|del)$/.test(p) ? p : p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+}
+// lista "a, b e c"
+const eLista = xs => xs.length <= 1 ? (xs[0] || '') : xs.slice(0, -1).join(', ') + ' e ' + xs[xs.length - 1];
+// litros (item 64): o volume mostrado é sempre em litros; o m³ fica só na conta da categoria
+const litros = m3 => m3 == null || !isFinite(Number(m3)) ? null : fmt(Number(m3) * 1000, Number(m3) * 1000 < 10 ? 1 : 0) + ' litros';
+// pressão de outra unidade em bar (para comparar a abertura da válvula com a PMTA)
+const EM_BAR = { bar: 1, 'kgf/cm2': 0.980665, 'kgf/cm²': 0.980665, psi: 0.0689476, mpa: 10, kpa: 0.01 };
+const emBar = (v, un) => v == null ? null : Number(v) * (EM_BAR[String(un || 'bar').toLowerCase()] || 1);
 
 const TIPOS_COMP = { costado: 'Costado', eliptico: 'Tampo elíptico 2:1', torisferico: 'Tampo torisférico', hemisferico: 'Tampo hemisférico',
   conico: 'Cone', plano: 'Tampo plano', janela: 'Janela de visita' };
@@ -96,10 +132,56 @@ function lugaresDe(d) {
 }
 // S140 · item 51: a sigla da região do costado (pela posição; sem ela, pelo nome)
 const REG_SIGLA = { frontal: 'CF', traseiro: 'CT', superior: 'CS', inferior: 'CI', direito: 'CLD', esquerdo: 'CLE' };
+// S143: o nome manda (no piloto o CS veio com a posição "inferior"); sem sigla no nome, a posição
 function siglaReg(c) {
-  if (REG_SIGLA[c.posicao]) return REG_SIGLA[c.posicao];
   const m = String(c.nome || '').match(/\b(CF|CT|CS|CI|CLD|CLE)\s*$/i);
-  return m ? m[1].toUpperCase() : null;
+  if (m) return m[1].toUpperCase();
+  return REG_SIGLA[c.posicao] || null;
+}
+// S143 · item 78 (7.3): o nome inteiro com a sigla: "Costado superior (CS)", "Tampo direito (TD)"
+const REG_NOME = { CF: 'Costado frontal', CT: 'Costado traseiro', CS: 'Costado superior', CI: 'Costado inferior', CLD: 'Costado lateral direito', CLE: 'Costado lateral esquerdo' };
+const TAMPO_SIGLA = { direito: 'TD', esquerdo: 'TE', superior: 'TS', inferior: 'TI' };
+function siglaComp(c) {
+  if (!c) return null;
+  if (c.tipo === 'costado') return siglaReg(c);
+  if (c.tipo !== 'conico' && c.tipo !== 'janela' && TAMPO_SIGLA[c.posicao]) return TAMPO_SIGLA[c.posicao];
+  const m = String(c.nome || '').match(/\b(direito|esquerdo|superior|inferior)\b/i);
+  return c.tipo !== 'conico' && c.tipo !== 'janela' && m ? TAMPO_SIGLA[m[1].toLowerCase()] : null;
+}
+function nomeComp(c) {
+  if (!c) return '';
+  const sg = siglaComp(c);
+  if (c.tipo === 'costado' && sg) return REG_NOME[sg] + ' (' + sg + ')';
+  return c.nome + (sg && String(c.nome).indexOf('(' + sg + ')') < 0 ? ' (' + sg + ')' : '');
+}
+
+/** S143 · item 78 (7.3): o mapa dos pontos de medição, desenhado (SVG) com as siglas que têm leitura. */
+function mapaSvg(posicao, siglas) {
+  const tem = s => siglas.indexOf(s) >= 0;
+  const ponto = (x, y, rot, tx, ty, anc) => '<circle cx="' + x + '" cy="' + y + '" r="5" fill="#B42318"/>'
+    + '<text x="' + tx + '" y="' + ty + '" font-size="12" font-weight="bold" fill="#14181B" text-anchor="' + (anc || 'middle') + '">' + rot + '</text>';
+  let s = '';
+  if (posicao === 'vertical') {
+    s += '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">'
+      + '<path d="M95 70 L95 230 A55 28 0 0 0 205 230 L205 70 A55 28 0 0 0 95 70 Z" fill="#E3EEF7" stroke="#1B6FA9" stroke-width="2"/>'
+      + '<ellipse cx="150" cy="70" rx="55" ry="28" fill="#D3E4F2" stroke="#1B6FA9" stroke-width="2"/>';
+    if (tem('TS')) s += ponto(150, 62, 'TS', 150, 30);
+    if (tem('TI')) s += ponto(150, 252, 'TI', 150, 284);
+    if (tem('CF')) s += ponto(150, 150, 'CF', 150, 140);
+    if (tem('CT')) s += ponto(150, 185, 'CT (atrás)', 150, 176);
+    if (tem('CLD')) s += ponto(200, 150, 'CLD', 215, 154, 'start');
+    if (tem('CLE')) s += ponto(100, 150, 'CLE', 85, 154, 'end');
+  } else {
+    s += '<svg xmlns="http://www.w3.org/2000/svg" width="420" height="190" viewBox="0 0 420 190">'
+      + '<path d="M110 45 L310 45 A45 50 0 0 1 310 145 L110 145 A45 50 0 0 1 110 45 Z" fill="#E3EEF7" stroke="#1B6FA9" stroke-width="2"/>';
+    if (tem('CS')) s += ponto(210, 50, 'CS', 210, 32);
+    if (tem('CI')) s += ponto(210, 140, 'CI', 210, 170);
+    if (tem('CF')) s += ponto(170, 95, 'CF', 170, 85);
+    if (tem('CT')) s += ponto(250, 95, 'CT (atrás)', 250, 85);
+    if (tem('TD')) s += ponto(345, 95, 'TD', 372, 99, 'start');
+    if (tem('TE')) s += ponto(75, 95, 'TE', 48, 99, 'end');
+  }
+  return s + '</svg>';
 }
 
 /** As fotos que o laudo usa, na ordem (a página baixa e devolve em `imagens`). */
@@ -134,46 +216,65 @@ function montar(d, opc) {
   const dataTopo = dataBR(fim);
   const cams = (V.camaras || []), rcams = d.resultado_camaras || [], rcomps = d.resultado_componentes || [];
   const pmtaVaso = rcams.length ? Math.min(...rcams.map(k => Number(k.pmta_adotada_mpa))) : (R.pmta_adotada_mpa != null ? Number(R.pmta_adotada_mpa) : null);
+  const numeroTap = V.numero_tap || null;   // S143 · item 63: o campo nasce na D2; sem ele, a linha não sai
   let fig = 0, quadro = 0;
   const C = [];   // o conteúdo
   const sec = (n, t) => C.push({ text: n + '  ' + t, style: 'h1', tocItem: true, tocMargin: [0, 0, 0, 0], headlineLevel: 1 });
   const sub = (n, t) => C.push({ text: n + '  ' + t, style: 'h2', tocItem: true, tocMargin: [14, 0, 0, 0], headlineLevel: 2 });
-  const par = (t, extra) => { if (t) C.push(Object.assign({ text: t, style: 'par' }, extra || {})); };
-  const lista = (itens, ol) => { const xs = (itens || []).filter(Boolean); if (xs.length) C.push(Object.assign({ style: 'lista', margin: [14, 2, 0, 8] }, ol ? { ol: xs } : { ul: xs })); };
+  const par = (t, extra) => { if (t && (typeof t !== 'string' || t.trim())) C.push(Object.assign({ text: Array.isArray(t) ? t : presos(t), style: 'par' }, extra || {})); };
+  const lista = (itens, ol) => { const xs = (itens || []).filter(Boolean).map(presos); if (xs.length) C.push(Object.assign({ style: 'lista', margin: [14, 2, 0, 8] }, ol ? { ol: xs } : { ul: xs })); };
+  const vazio = x => x == null || x === '' || /^\s*(—|-+|n[ãa]o h[áa]|n\/a)\s*$/i.test(String(x));
   const tabela = (cab, linhas, larg, titulo) => {
     // quadro pequeno não se parte entre páginas (título, cabeçalho e linhas juntos); o grande repete o cabeçalho
     const alvo = linhas.length <= 14 ? [] : C;
     if (titulo) alvo.push({ text: 'Quadro ' + (++quadro) + ' – ' + titulo, style: 'legenda', margin: [0, 6, 0, 3] });
     alvo.push({ table: { headerRows: cab ? 1 : 0, dontBreakRows: true, widths: larg || Array((cab || linhas[0]).length).fill('*'),
-      body: (cab ? [cab.map(x => ({ text: x, style: 'th' }))] : []).concat(linhas.map(l => l.map(x => typeof x === 'object' && x !== null ? x : { text: x == null ? '—' : String(x), style: 'td' }))) },
+      body: (cab ? [cab.map(x => ({ text: x, style: 'th' }))] : []).concat(linhas.map(l => l.map(x => typeof x === 'object' && x !== null ? x : { text: x == null ? '—' : presos(String(x)), style: 'td' }))) },
       layout: { hLineColor: '#C9D2D8', vLineColor: '#C9D2D8', fillColor: (i) => cab && i === 0 ? '#E3EEF7' : null, paddingTop: () => 3, paddingBottom: () => 3 }, margin: [0, 0, 0, 10] });
     if (alvo !== C) C.push({ stack: alvo, unbreakable: true });
   };
-  // S140 · item 49: as fotos de lugar, na ordem dos lugares; sem foto, o motivo no lugar dela (2 por linha: 4 detalhes = grade 2×2)
-  const LUG = lugaresDe(d), SEMAC = I.fotos_sem_acesso || {};
-  const deLugar = f => /^lugar:/.test(f.item || '');
-  const fotosLugares = lista => {
-    const cel = [];
-    lista.forEach(l => {
-      const f = (d.fotos || []).find(x => x.item === 'lugar:' + l.lugar && img[x.path]), mot = String(SEMAC[l.lugar] || '').trim();
-      if (f) cel.push({ stack: [{ image: img[f.path], fit: [235, 175], alignment: 'center' }, { text: 'Figura ' + (++fig) + ' – ' + l.rotulo + '.', style: 'legenda' }] });
-      else if (mot) cel.push({ stack: [{ text: l.rotulo + ': sem foto', bold: true, alignment: 'center', margin: [0, 40, 0, 4] }, { text: mot, style: 'legenda', margin: [0, 0, 0, 40] }] });
-    });
+  // linhas "rótulo | valor" que somem quando o valor está vazio (S143 · regra geral do "bem bolado")
+  const tabelaRV = (linhas, larg, titulo) => {
+    const ls = linhas.filter(([, b]) => !vazio(b)).map(([a, b]) => [{ text: a, style: 'thl' }, String(b)]);
+    if (ls.length) tabela(null, ls, larg, titulo);
+  };
+  // S143 · item 65: as figuras numeradas na ordem em que aparecem; uma figura pode ter várias fotos lado a lado
+  const figura = (imgs, legenda, alvo) => {
+    const n = ++fig, fit = imgs.length >= 3 ? [160, 150] : [235, 175];
+    const linhas = [];
+    for (let k = 0; k < imgs.length; k += (imgs.length >= 3 ? 3 : 2)) linhas.push(imgs.slice(k, k + (imgs.length >= 3 ? 3 : 2)));
+    const bloco = { stack: linhas.map(l => ({ columns: l.map(im => ({ image: im, fit, alignment: 'center' })), columnGap: 10, margin: [0, 2, 0, 2] }))
+      .concat([{ text: 'Figura ' + n + ' – ' + presos(legenda) + '.', style: 'legenda' }]), margin: [0, 4, 0, 10], unbreakable: true };
+    (alvo || C).push(bloco);
+    return n;
+  };
+  // duas figuras pequenas por linha (os detalhes do vaso: tampos, conexões, base)
+  const pares = (cel) => {
     for (let k = 0; k < cel.length; k += 2) {
       const par2 = cel.slice(k, k + 2); if (par2.length === 1) par2.push({ text: '' });
       C.push({ columns: par2, columnGap: 12, margin: [0, 4, 0, 10], unbreakable: true });
     }
   };
+  // S140 · item 49: as fotos de lugar, na ordem dos lugares; sem foto, o motivo no lugar dela (2 por linha: 4 detalhes = grade 2×2)
+  const LUG = lugaresDe(d), SEMAC = I.fotos_sem_acesso || {};
+  const deLugar = f => /^lugar:/.test(f.item || '');
+  const fotoDoLugar = l => (d.fotos || []).find(x => x.item === 'lugar:' + l.lugar && img[x.path]);
+  const fotosLugares = lista => {
+    const cel = [];
+    lista.forEach(l => {
+      const f = fotoDoLugar(l), mot = String(SEMAC[l.lugar] || '').trim();
+      if (f) cel.push({ stack: [{ image: img[f.path], fit: [235, 175], alignment: 'center' }, { text: 'Figura ' + (++fig) + ' – ' + presos(l.rotulo) + '.', style: 'legenda' }] });
+      else if (mot) cel.push({ stack: [{ text: presos(l.rotulo) + ': sem foto', bold: true, alignment: 'center', margin: [0, 40, 0, 4] }, { text: presos(mot), style: 'legenda', margin: [0, 0, 0, 40] }] });
+    });
+    pares(cel);
+  };
   const fotos = (secao, legPad, filtro) => {
     const fs = (d.fotos || []).filter(f => f.secao === secao && img[f.path] && (!filtro || filtro(f)));
-    for (let k = 0; k < fs.length; k += 2) {
-      const par2 = fs.slice(k, k + 2).map(f => ({ stack: [{ image: img[f.path], fit: [235, 175], alignment: 'center' },
-        { text: 'Figura ' + (++fig) + ' – ' + (f.legenda || (f.item ? f.item + (f.anomalia ? ': ' + f.anomalia : '') : legPad || LEG_FOTO[secao] || 'Foto')) + '.', style: 'legenda' }] }));
-      if (par2.length === 1) par2.push({ text: '' });
-      C.push({ columns: par2, columnGap: 12, margin: [0, 4, 0, 10], unbreakable: true });
-    }
+    pares(fs.map(f => ({ stack: [{ image: img[f.path], fit: [235, 175], alignment: 'center' },
+      { text: 'Figura ' + (++fig) + ' – ' + presos(f.legenda || (f.item ? f.item + (f.anomalia ? ': ' + f.anomalia : '') : legPad || LEG_FOTO[secao] || 'Foto')) + '.', style: 'legenda' }] })));
     return fs.length;
   };
+  const compDe = id => (V.componentes || []).find(x => x.id === id);
 
   // ── capa ────────────────────────────────────────────────────────────────
   const capaFoto = (d.fotos || []).find(f => f.secao === 'capa' && img[f.path]);
@@ -186,8 +287,9 @@ function montar(d, opc) {
     { text: (M.capa_exames || {})[exames] || '', style: 'capaSub' },
     capaFoto ? { image: img[capaFoto.path], fit: [380, 260], alignment: 'center', margin: [0, 18, 0, 18] } : { text: '', margin: [0, 120, 0, 0] },
     { text: V.tag || '', style: 'capaTag' },
-    { text: 'OS ' + ((d.os || {}).numero || '—') + (opc.numero ? ' · Relatório nº ' + numero : ''), style: 'capaSub' },
-    { text: [emp.cidade, emp.uf].filter(Boolean).join(' – '), style: 'capaRodape', margin: [0, 40, 0, 0] },
+    // S143 · item 63: o Número TAP no lugar da OS (a OS não aparece no laudo)
+    { text: [numeroTap ? 'Número TAP ' + numeroTap : null, opc.numero ? 'Relatório nº ' + numero : null].filter(Boolean).join(' · '), style: 'capaSub' },
+    { text: [cidadeLaudo(emp.cidade), emp.uf].filter(Boolean).join(' – '), style: 'capaRodape', margin: [0, 40, 0, 0] },
     { text: txt(ini === fim ? M.capa_data_um_dia : M.capa_data_periodo, { inicio: dataBR(ini), termino: dataBR(fim) }), style: 'capaRodape', pageBreak: 'after' }
   ];
   C.push(...capa);
@@ -197,17 +299,20 @@ function montar(d, opc) {
   sec('1', T.objetivo || 'OBJETIVO'); par(M.objetivo);
   sec('2', T.referencias || 'REFERÊNCIAS'); lista(M.referencias);
   sec('3', T.abreviacoes || 'LISTA DE ABREVIAÇÕES'); lista(M.abreviacoes);
-  // ── 4 · a empresa ───────────────────────────────────────────────────────
+  // ── 4 · a empresa (S143 · item 78: ramo, CNAE e grau de risco do cadastro; linha vazia não sai) ──
   sec('4', T.empresa || 'IDENTIFICAÇÃO DA EMPRESA');
-  const end = [emp.endereco, emp.numero, emp.complemento, emp.bairro].filter(Boolean).join(', ');
+  const end = [emp.endereco, emp.numero, emp.complemento, emp.bairro].filter(x => !vazio(x)).join(', ');
   const resp = emp.responsavel || null;
-  tabela(null, [
-    [{ text: 'Razão social', style: 'thl' }, emp.razao_social],
-    [{ text: 'CNPJ', style: 'thl' }, emp.cnpj],
-    [{ text: 'Atividade (CNAE)', style: 'thl' }, [emp.cnae, emp.cnae_descricao].filter(Boolean).join(' – ') || null],
-    [{ text: 'Endereço', style: 'thl' }, end || null],
-    [{ text: 'Cidade', style: 'thl' }, [emp.cidade, emp.uf].filter(Boolean).join(' – ') + (emp.cep ? ' · CEP ' + emp.cep : '') || null],
-    [{ text: 'Responsável', style: 'thl' }, resp ? [resp.nome, resp.cargo].filter(Boolean).join(', ') + (resp.telefone ? ' · ' + resp.telefone : '') : null]
+  tabelaRV([
+    ['Razão social', emp.razao_social],
+    ['CNPJ', emp.cnpj],
+    ['Ramo de atividade', emp.ramo_atividade || emp.cnae_descricao],
+    ['CNAE', emp.cnae],
+    ['Grau de risco', emp.grau_risco != null ? String(emp.grau_risco) : null],
+    ['Endereço', end],
+    ['Cidade', [cidadeLaudo(emp.cidade), emp.uf].filter(Boolean).join(' – ') + (emp.cep ? ' · CEP ' + emp.cep : '')],
+    ['Responsável', resp ? [resp.nome, resp.cargo].filter(x => !vazio(x)).join(', ') : null],
+    ['Telefone', resp ? resp.telefone : null]
   ], [120, '*']);
   // ── 5 · localização ─────────────────────────────────────────────────────
   sec('5', T.localizacao || 'LOCALIZAÇÃO DO EQUIPAMENTO');
@@ -219,25 +324,42 @@ function montar(d, opc) {
   // ── 6 · o equipamento ───────────────────────────────────────────────────
   sec('6', T.equipamento || 'IDENTIFICAÇÃO DO EQUIPAMENTO');
   sub('6.1', T.vaso || 'Identificação do vaso de pressão');
-  par(txt(M.vaso_intro, { serie: V.numero_serie || 'não informado', fabricante: V.fabricante || 'fabricante não identificado', funcao: V.funcao ? String(V.funcao).toLowerCase().replace(/^(um|uma) /, '') : 'vaso de pressão' }));
+  const funcao = V.funcao ? String(V.funcao).toLowerCase().replace(/^(um|uma) /, '') : null;
+  const qVaso = quadro + 1;
+  par(txt(V.sem_placa && M.vaso_intro_sem_placa ? M.vaso_intro_sem_placa : M.vaso_intro, { serie: V.numero_serie || 'não informado',
+    fabricante: V.fabricante || 'fabricante não identificado', funcao: funcao ? ' e funciona como ' + funcao : '', quadro: qVaso }));
   const volume = cams.reduce((a, k) => a + (Number(k.volume_m3) || 0), 0) || (R.volume_m3 != null ? Number(R.volume_m3) : null);
-  const compsTxt = (V.componentes || []).filter(c => c.ativo !== false).map(c => c.nome + (c.tipo !== 'costado' && TIPOS_COMP[c.tipo] ? ' (' + TIPOS_COMP[c.tipo].toLowerCase() + ')' : '')).join('; ');
-  const codigo = V.sem_codigo_construcao ? 'Sem código de construção' : V.codigo_construcao ? V.codigo_construcao + (V.codigo_edicao ? '/' + V.codigo_edicao : '') : 'ASME Seção VIII, Divisão 1 (adotado)';
-  const linhas1 = [['Fabricante', V.fabricante], ['TAG', V.tag], ['Nº de série', V.numero_serie], ['Modelo', V.modelo], ['Ano de fabricação', V.ano_fabricacao],
-    ['Código de construção', codigo], ['Posição', POSICAO[V.posicao] || V.posicao], ['Componentes', compsTxt || null],
-    ['Volume', volume ? fmt(volume, 3) + ' m³ (' + fmt(volume * 1000, 0) + ' litros)' : null]];
+  // S143 · item 78: "Tampos: 2, elípticos 2:1" e "Costado: cilíndrico" no lugar das siglas soltas
+  const ativos = (V.componentes || []).filter(c => c.ativo !== false);
+  const TAMPO_PL = { eliptico: ['elíptico 2:1', 'elípticos 2:1'], torisferico: ['torisférico', 'torisféricos'], hemisferico: ['hemisférico', 'hemisféricos'], plano: ['plano', 'planos'] };
+  const tampos = ativos.filter(c => TAMPO_PL[c.tipo]);
+  const porTipo = {}; tampos.forEach(c => { porTipo[c.tipo] = (porTipo[c.tipo] || 0) + 1; });
+  const tamposTxt = tampos.length ? tampos.length + ', ' + Object.keys(porTipo).map(t => (Object.keys(porTipo).length > 1 ? porTipo[t] + ' ' : '') + TAMPO_PL[t][porTipo[t] > 1 ? 1 : 0]).join(' e ') : null;
+  const costadoTxt = [ativos.some(c => c.tipo === 'costado') ? 'cilíndrico' : null, ativos.some(c => c.tipo === 'conico') ? 'cônico' : null].filter(Boolean).join(' e ') || null;
+  const janelas = ativos.filter(c => c.tipo === 'janela').length;
+  const codigo = V.sem_codigo_construcao ? 'Sem código de construção' : V.codigo_construcao ? V.codigo_construcao + (V.codigo_edicao ? ' / ' + V.codigo_edicao : '') : 'ASME VIII Div. 1 – adotado';
+  const linhas1 = [['Fabricante', V.fabricante], ['TAG', V.tag], ['Número TAP', numeroTap], ['Função', V.funcao], ['Nº de série', V.numero_serie], ['Modelo', V.modelo], ['Ano de fabricação', V.ano_fabricacao],
+    ['Código de construção', codigo], ['Posição', POSICAO[V.posicao] || V.posicao], ['Tampos', tamposTxt], ['Costado', costadoTxt], ['Janelas de visita', janelas || null],
+    ['Volume', litros(volume)]];
   if (cams.length <= 1) {
     const k = cams[0] || {};
-    linhas1.push(['Fluido', k.fluido], ['Classe do fluido', k.classe_fluido], ['Pressão máxima de operação', bar(k.p_operacao_max_mpa)],
-      ['PMTA de plaqueta', bar(k.pmta_plaqueta_mpa != null ? k.pmta_plaqueta_mpa : V.pmta_plaqueta_mpa)], ['PTH de plaqueta', bar(k.pth_mpa != null ? k.pth_mpa : V.pth_mpa)]);
+    linhas1.push(['Fluido', k.fluido], ['Classe do fluido', k.classe_fluido], ['Pressão máxima de operação', k.p_operacao_max_mpa != null ? bar(k.p_operacao_max_mpa) : null],
+      ['PMTA de plaqueta', (k.pmta_plaqueta_mpa != null ? k.pmta_plaqueta_mpa : V.pmta_plaqueta_mpa) != null ? bar(k.pmta_plaqueta_mpa != null ? k.pmta_plaqueta_mpa : V.pmta_plaqueta_mpa) : null],
+      ['PTH de plaqueta', (k.pth_mpa != null ? k.pth_mpa : V.pth_mpa) != null ? bar(k.pth_mpa != null ? k.pth_mpa : V.pth_mpa) : null]);
   }
-  linhas1.push(['PMTA adotada nesta inspeção', bar(pmtaVaso)], ['Grupo de potencial de risco', R.grupo != null ? String(R.grupo) : null], ['Categoria (NR-13)', R.categoria]);
-  tabela(null, linhas1.map(([a, b]) => [{ text: a, style: 'thl' }, b == null || b === '' ? '—' : String(b)]), [170, '*'], 'Descrição do equipamento');
+  linhas1.push(['PMTA adotada nesta inspeção', pmtaVaso != null ? bar(pmtaVaso) : null], ['Grupo de potencial de risco', R.grupo != null ? String(R.grupo) : null], ['Categoria (NR-13)', R.categoria]);
+  tabelaRV(linhas1, [170, '*'], 'Descrição do equipamento');
   if (cams.length > 1) tabela(['Câmara', 'Fluido', 'Classe', 'Operação', 'Volume', 'PMTA de plaqueta', 'PTH'],
-    cams.map(k => [k.nome, k.fluido, k.classe_fluido, bar(k.p_operacao_max_mpa), k.volume_m3 != null ? fmt(k.volume_m3, 3) + ' m³' : '—', bar(k.pmta_plaqueta_mpa), bar(k.pth_mpa)]), null, 'Câmaras do vaso');
-  par(M.vaso_fonte);
-  fotosLugares(LUG.filter(l => l.secao === 'plaqueta'));
-  fotos('plaqueta', null, f => !deLugar(f));
+    cams.map(k => [k.nome, k.fluido, k.classe_fluido, bar(k.p_operacao_max_mpa), litros(k.volume_m3) || '—', bar(k.pmta_plaqueta_mpa), bar(k.pth_mpa)]), null, 'Câmaras do vaso');
+  // S143 · item 65: as placas numa figura só ("Detalhamento das plaquetas de identificação"), e o texto cita o número dela
+  const placas = LUG.filter(l => l.secao === 'plaqueta').map(fotoDoLugar).filter(Boolean)
+    .concat((d.fotos || []).filter(f => f.secao === 'plaqueta' && !deLugar(f) && img[f.path])).map(f => img[f.path]);
+  const blocoPlacas = [];
+  const nPlaca = placas.length ? figura(placas, T.fig_placas || 'Detalhamento das plaquetas de identificação', blocoPlacas) : null;
+  par(txt(M.vaso_fonte, { figura: nPlaca ? ' (Figura ' + nPlaca + ')' : '', quadro: qVaso }));
+  C.push(...blocoPlacas);
+  LUG.filter(l => l.secao === 'plaqueta' && !fotoDoLugar(l) && String(SEMAC[l.lugar] || '').trim())
+    .forEach(l => par(presos(l.rotulo) + ': sem foto (' + String(SEMAC[l.lugar]).trim().replace(/[.\s]+$/, '') + ').', { style: 'legenda' }));
   sub('6.2', T.acessorios || 'Identificação dos acessórios do vaso de pressão');
   const acs = d.acessorios || [];
   if (!acs.length) par(M.acessorios_nenhum);
@@ -246,14 +368,22 @@ function montar(d, opc) {
     lista(acs.map(a => {
       const p = [TIPOS_ACESS[a.tipo] || a.tipo, a.tag ? a.tag : null].filter(Boolean).join(' ');
       // S141 · itens 32 e 48: o lacre é o colocado na aferição; "Não há" não é marca nem modelo
-      const nh = x => x == null || /^\s*(n[ãa]o h[áa]|-+|—)\s*$/i.test(String(x)) ? null : x, lacre = (a.afericao && a.afericao.lacre_colocado) || a.lacre_num;
+      const nh = x => vazio(x) ? null : x, lacre = (a.afericao && a.afericao.lacre_colocado) || a.lacre_num;
       const det = [nh(a.marca) ? 'marca ' + a.marca : null, nh(a.modelo) ? 'modelo ' + a.modelo : null, a.escala ? 'escala ' + a.escala : null,
         a.pressao_ajuste_mpa != null ? 'ajuste ' + bar(a.pressao_ajuste_mpa) : null, a.conexao ? 'conexão ' + a.conexao : null, lacre ? 'lacre nº ' + lacre : null].filter(Boolean).join(', ');
       const sit = { ok: '', substituir: ' — a substituir', ausente: ' — ausente', inoperante: ' — inoperante', retirado: ' — retirado nesta inspeção' }[a.situacao] || '';
       return p + (det ? ': ' + det : '') + sit + ';';
     }), true);
   }
-  fotos('acessorios');
+  // S143 · item 78 (6.2): uma figura por acessório, com as fotos dele lado a lado e a legenda do que mostram
+  const fotosAc = (d.fotos || []).filter(f => f.secao === 'acessorios' && img[f.path]);
+  const grupos = [];
+  fotosAc.forEach(f => { const g = grupos.find(x => x.item === (f.item || f.id)); if (g) g.fs.push(f); else grupos.push({ item: f.item || f.id, fs: [f] }); });
+  grupos.forEach(g => {
+    const a = acs.find(x => x.id === g.item);
+    const nome = a ? [TIPOS_ACESS[a.tipo] || a.tipo, a.tag].filter(Boolean).join(' ') : (g.fs[0].legenda || 'Acessório do vaso');
+    figura(g.fs.map(f => img[f.path]), nome);
+  });
 
   // ── 7 · o escopo e os exames ────────────────────────────────────────────
   sec('7', T.escopo || 'ESCOPO DA INSPEÇÃO');
@@ -261,164 +391,251 @@ function montar(d, opc) {
   const B = d.boroscopia || {}, TE = d.teste || {};
   // S141 · item 61 (decisão do Bruno, 10/11): feito, o título é o tipo do teste; não feito, "Teste Hidrostático", como no modelo
   const TIT_TESTE = { hidrostatico: 'Teste Hidrostático', pneumatico: 'Teste Pneumático', hidropneumatico: 'Teste Hidropneumático' };
-  const tituloTeste = TE.realizado && TIT_TESTE[TE.tipo] ? TIT_TESTE[TE.tipo] : (T.teste || 'Teste Hidrostático');
-  lista(['7.1 ' + (T.visual || 'Exame visual externo') + ';', '7.2 ' + (T.boroscopia || 'Inspeção interna por boroscopia') + (B.realizada ? ';' : ' (não realizada);'),
-    '7.3 ' + (T.ultrassom || 'Medição de espessura por ultrassom') + ';', '7.4 ' + tituloTeste + (TE.realizado ? ';' : ' (não realizado);'),
-    '7.5 ' + (T.manometro || 'Aferição do manômetro') + ';', '7.6 ' + (T.valvula || 'Teste da válvula de segurança') + '.']);
-  // 7.1 visual
+  const tituloTeste = TE.realizado && TIT_TESTE[TE.tipo] ? TIT_TESTE[TE.tipo] : 'Teste Hidrostático';
+  const tituloValv = T.valvula || 'Aferição da válvula de segurança';
+  // S143 · item 73: a lista só com o número e o nome (o motivo de não fazer fica na própria seção)
+  lista(['7.1 ' + (T.visual || 'Exame visual externo') + ';', '7.2 ' + (T.boroscopia || 'Inspeção interna por boroscopia') + ';',
+    '7.3 ' + (T.ultrassom || 'Medição de espessura por ultrassom') + ';', '7.4 ' + tituloTeste + ';',
+    '7.5 ' + (T.manometro || 'Aferição do manômetro') + ';', '7.6 ' + tituloValv + '.']);
+  // 7.1 visual · S143 · item 66: o resultado sai só da integridade do vaso (costado, tampos, conexões, base); o aterramento não conta
   sub('7.1', T.visual || 'Exame visual externo');
-  const vis = d.visual || [], nc = vis.filter(x => x.conforme === false);
+  const vis = d.visual || [];
+  const foraIntegridade = x => /aterramento/i.test(x.item || '');
+  const nc = vis.filter(x => x.conforme === false && !foraIntegridade(x)), ncFora = vis.filter(x => x.conforme === false && foraIntegridade(x));
   par(M.visual_intro);
-  lista(vis.map(x => x.conforme === false ? txt(M.visual_nc, { item: x.item, anomalia: x.anomalia || 'anomalia registrada' })
+  lista(vis.map(x => x.conforme === false ? txt(M.visual_nc, { item: x.item, anomalia: String(x.anomalia || 'anomalia registrada').replace(/[;.\s]+$/, '') })
     : x.conforme === true ? ((M.visual_ok || {})[x.item] || txt(M.visual_ok_outro, { item: x.item })) : x.item + ': não avaliado;'));
-  par(txt(M.visual_conclusao, { resultado: nc.length ? 'NÃO CONFORME' : 'CONFORME' }), { bold: true });
+  par(comResultado(M.visual_conclusao, {}, nc.length ? 'nc' : 'ok'));
+  if (ncFora.length && M.visual_fora_integridade) par(txt(M.visual_fora_integridade, { itens: eLista(ncFora.map(x => String(x.item).toLowerCase())) }));
   fotosLugares(LUG.filter(l => l.secao !== 'plaqueta'));   // os detalhes do vaso (tampos, conexões, base), logo depois da lista
   fotos('visual');
   fotos('geral', null, f => !deLugar(f));
   // 7.2 boroscopia
   sub('7.2', T.boroscopia || 'Inspeção interna por boroscopia');
   const boroSubst = m => /fluido|conex|opera|substitu/i.test(m || '');
-  if (B.realizada) par(B.resultado === 'com_anomalia' ? txt(M.boro_anomalia, { anomalia: B.anomalia || 'anomalia registrada' }) : M.boro_ok);
+  if (B.realizada) par(comResultado(B.resultado === 'com_anomalia' ? M.boro_anomalia : M.boro_ok, { anomalia: B.anomalia || 'anomalia registrada' }, B.resultado === 'com_anomalia' ? 'nc' : 'ok'));
   else { par(txt(M.boro_nao, { motivo: B.motivo_nao || 'não informado' })); if (boroSubst(B.motivo_nao)) par(M.boro_substituida); }
   fotos('boroscopia');
   // 7.3 ultrassom
   sub('7.3', T.ultrassom || 'Medição de espessura por ultrassom');
   const med = d.medidor || {};
+  const leit = d.leituras || [], comps = ativos;
+  const comLeitura = comps.filter(c => leit.some(l => l.componente_id === c.id));
+  const siglasMapa = comLeitura.map(siglaComp).filter(Boolean);
+  const qUS = quadro + 1, fMapa = siglasMapa.length ? fig + 1 : null;
   par(txt(M.ultrassom_intro, { medidor: [med.marca, med.modelo].filter(Boolean).join(' ') || med.descricao || '—', serie: med.numero_serie || '—',
-    certificado: med.certificado_num || '—', laboratorio: med.laboratorio ? ', ' + med.laboratorio : '', validade: dataBR(med.validade) }));
-  const leit = d.leituras || [], comps = (V.componentes || []).filter(c => c.ativo !== false);
+    certificado: med.certificado_num || '—', laboratorio: med.laboratorio ? ', ' + med.laboratorio : '', validade: dataBR(med.validade), quadro: qUS }));
+  if (fMapa && M.ultrassom_mapa) par(txt(M.ultrassom_mapa, { figura: fMapa }));
   const linhasUS = [];
-  comps.forEach(c => {
+  comLeitura.forEach(c => {
     const ls = leit.filter(l => l.componente_id === c.id);
     const pontos = [...new Set(ls.map(l => l.ponto))].sort((a, b) => a - b);
     pontos.forEach((p, k) => {
       const vs = ls.filter(l => l.ponto === p).sort((a, b) => a.leitura - b.leitura).map(l => Number(l.valor_mm));
-      linhasUS.push([k === 0 ? { text: c.nome, style: 'td', rowSpan: pontos.length } : {}, String(p)].concat([0, 1, 2, 3].map(i => vs[i] != null ? fmt(vs[i], 2) : ''))
+      linhasUS.push([k === 0 ? { text: presos(nomeComp(c)), style: 'td', rowSpan: pontos.length } : {}, String(p)].concat([0, 1, 2, 3].map(i => vs[i] != null ? fmt(vs[i], 2) : ''))
         .concat([{ text: fmt(Math.min(...vs), 2), style: 'td', bold: true }]));
     });
   });
-  if (linhasUS.length) tabela(['Componente', 'Ponto', 'Leitura 1', 'Leitura 2', 'Leitura 3', 'Leitura 4', 'Mínima'], linhasUS, ['*', 34, 48, 48, 48, 48, 48], 'Medição de espessura (mm)');
+  if (linhasUS.length) tabela(['Componente', 'Ponto', 'Leitura 1', 'Leitura 2', 'Leitura 3', 'Leitura 4', 'Mínima'], linhasUS, ['*', 34, 46, 46, 46, 46, 46], 'Medição de espessura (mm)');
+  if (fMapa) { fig++; C.push({ stack: [{ svg: mapaSvg(V.posicao, siglasMapa), alignment: 'center', width: V.posicao === 'vertical' ? 190 : 300 },
+    { text: 'Figura ' + fMapa + ' – ' + presos(T.fig_mapa || 'Representação dos pontos no mapa de medição') + '.', style: 'legenda' }], margin: [0, 4, 0, 10], unbreakable: true }); }
   const semL = I.ultrassom_sem_leitura || {};
-  comps.filter(c => (semL[c.id] || '').trim()).forEach(c => par(txt(M.ultrassom_nao_medido, { componente: c.nome, motivo: semL[c.id] })));
+  comps.filter(c => (semL[c.id] || '').trim()).forEach(c => par(txt(M.ultrassom_nao_medido, { componente: nomeComp(c), motivo: semL[c.id] })));
   const ES = espessuras(d);
+  ES.forEach(x => { x.nome = nomeComp(compDe(x.id)) || x.nome; });
   if (ES.length) {
     tabela(['Componente', 'Mínima medida', 'Mínima requerida', 'Anterior', 'Taxa de perda'],
       ES.map(x => [x.nome, fmt(x.atual, 2) + ' mm', fmt(x.req, 2) + ' mm', x.ant != null ? fmt(x.ant, 2) + ' mm (' + dataBR(x.dataAnt) + ')' : '—',
         x.taxa != null ? fmt(x.taxa, 3) + ' mm/ano' : x.semPerda ? 'sem perda mensurável' : '—']), ['*', 70, 75, 105, 85], 'Espessuras: medida, requerida e anterior');
+    // S143 · item 78 (7.3): a frase final sai da perda (nunca fixa): perda que esgota a espessura antes do prazo do exame interno é "perda significativa"
     const comAnt = ES.filter(x => x.ant != null), fonte = comAnt.length ? comAnt[0].fonte + (comAnt[0].dataAnt ? ' de ' + dataBR(comAnt[0].dataAnt) : '') : null;
+    const prazoRef = Number(R.prazo_interno_anos || R.prazo_externo_anos) || null;
+    const signif = comAnt.filter(x => x.taxa != null && x.atual != null && x.req != null && (x.taxa > 0) && ((x.atual - x.req) / x.taxa < (prazoRef || 0)))
+      .sort((a, b) => b.taxa - a.taxa);
     if (!comAnt.length) par(M.ultrassom_sem_anterior);
-    else {
-      const maior = comAnt.filter(x => x.taxa != null).sort((a, b) => b.taxa - a.taxa)[0];
-      par(maior ? txt(M.ultrassom_perda, { fonte: 'a ' + fonte, taxa: fmt(maior.taxa, 3), componente: maior.nome }) : txt(M.ultrassom_sem_perda, { fonte: 'a ' + fonte }));
-    }
+    else if (signif.length) par(txt(M.ultrassom_perda, { fonte, taxa: fmt(signif[0].taxa, 3), componente: signif[0].nome }));
+    else par(txt(M.ultrassom_sem_perda, { fonte }));
     const abaixo = ES.filter(x => x.abaixo).map(x => x.nome);
-    if (abaixo.length) par(txt(M.ultrassom_abaixo, { componentes: abaixo.join(', ') }), { bold: true });
+    if (abaixo.length) par(txt(M.ultrassom_abaixo, { componentes: eLista(abaixo) }), { bold: true });
   }
-  fotos('componentes');
+  fotos('componentes', T.fig_medicao || 'Medição de espessura');
   // 7.4 teste
   sub('7.4', tituloTeste);
-  if (TE.realizado) par(txt(TE.resultado === 'reprovado' ? M.teste_reprovado : M.teste_ok, { tipo: TIPOS_TESTE[TE.tipo] || TE.tipo || 'de pressão', pressao: bar(TE.pressao_mpa),
-    duracao: TE.duracao_min ? ', durante ' + fmt(TE.duracao_min, 0) + ' minutos' : '', anomalia: TE.anomalia || 'anomalia registrada' }));
-  else par(txt(M.teste_nao, { motivo: TE.motivo_nao || 'não informado' }));
-  if (TE.th_fabricacao_comprovado) par(txt(M.th_comprovado, { comprovacao: TE.th_comprovacao || 'documento do fabricante' }));
-  else if (!(TE.realizado && TE.tipo === 'hidrostatico' && TE.resultado !== 'reprovado')) {
+  const visOk = !nc.length && vis.some(x => x.conforme === true);
+  const abaixoAlgum = ES.some(x => x.abaixo);
+  if (TE.realizado) par(comResultado(TE.resultado === 'reprovado' ? M.teste_reprovado : M.teste_ok, { tipo: TIPOS_TESTE[TE.tipo] || TE.tipo || 'de pressão', pressao: bar(TE.pressao_mpa),
+    duracao: TE.duracao_min ? ', durante ' + fmt(TE.duracao_min, 0) + ' minutos' : '', anomalia: TE.anomalia || 'anomalia registrada' }, TE.resultado === 'reprovado' ? 'nc' : 'ok'));
+  else if (M.teste_nao_cond && visOk && !abaixoAlgum) {
+    // S143 · item 78 (7.4): a justificativa no jeito do modelo, só com o que é verdade para este vaso
+    const K4 = M.teste_cond || {};
+    const temAnt = ES.some(x => x.ant != null);
+    const conds = [K4.visual, temAnt ? K4.espessura_sem_perda : K4.espessura_acima, I.ambiente === 'fechado' ? K4.coberto : null,
+      TE.th_fabricacao_comprovado ? txt(K4.th, { comprovacao: String(TE.th_comprovacao || 'documento do fabricante').toLowerCase() }) : null].filter(Boolean);
+    par(txt(M.teste_nao_cond, { condicoes: eLista(conds) }));
+  } else par(txt(M.teste_nao, { motivo: TE.motivo_nao || 'não informado' }));
+  if (!TE.realizado && TE.th_fabricacao_comprovado && !(M.teste_nao_cond && visOk && !abaixoAlgum)) par(txt(M.th_comprovado, { comprovacao: TE.th_comprovacao || 'documento do fabricante' }));
+  else if (TE.realizado && TE.th_fabricacao_comprovado) par(txt(M.th_comprovado, { comprovacao: TE.th_comprovacao || 'documento do fabricante' }));
+  else if (!TE.th_fabricacao_comprovado && !(TE.realizado && TE.tipo === 'hidrostatico' && TE.resultado !== 'reprovado')) {
     const ano = Number(V.ano_fabricacao) || null;
     par(!ano ? M.th_ano_desconhecido : ano < 2014 ? M.th_antes_2014 : M.th_depois_2014);
   }
   fotos('teste');
-  // 7.5 e 7.6 aferições
+  // 7.5 e 7.6 aferições (S143 · itens 69, 74 e 75: "aferição", nunca "calibração", para o que a Engetap faz)
   const presentes = a => ['ausente', 'retirado'].indexOf(a.situacao) < 0;
   const unidadeTxt = (v, un) => v == null ? '—' : fmt(v, 2) + ' ' + String(un || 'bar').replace('kgf/cm2', 'kgf/cm²');
-  const conc = { man: [], valv: [] };
+  const numsTxt = (xs, un) => eLista(xs.map(x => fmt(x, 2))) + ' ' + String(un || 'bar').replace('kgf/cm2', 'kgf/cm²');
+  // o padrão: marca (sem repetir a descrição), laboratório e certificado
+  const padraoVars = pz => ({ padrao_marca: !vazio(pz.marca) ? ' da marca ' + pz.marca : '',
+    laboratorio: pz.laboratorio ? (/^laborat/i.test(pz.laboratorio) ? ' pelo ' + pz.laboratorio.replace(/^Laborat/, 'laborat') : ' pelo laboratório ' + pz.laboratorio) + ',' : '',
+    certificado: pz.certificado_num || '—' });
+  const bancadaTxt = bz => { const m = [bz.marca, bz.modelo].filter(x => !vazio(x)).join(' '); return m ? ' (modelo ' + m + ')' : ''; };
+  const conc = { man: [], valv: [] }, K = M.conc || {};
   sub('7.5', T.manometro || 'Aferição do manômetro');
   const mans = acs.filter(a => (a.tipo === 'manometro' || a.tipo === 'manovacuometro') && presentes(a));
-  if (!mans.length) { par(M.manometro_nenhum); conc.man.push(M.conc && M.conc.man_nenhum); }
+  if (!mans.length) { par(M.manometro_nenhum); conc.man.push(K.man_nenhum); }
   mans.forEach(a => {
-    const f = a.afericao, nome = (TIPOS_ACESS[a.tipo] === 'Manovacuômetro' ? 'manovacuômetro ' : '') + (a.tag || a.marca || '');
+    const f = a.afericao, tipoNome = a.tipo === 'manovacuometro' ? 'manovacuômetro' : 'manômetro';
     if (f && (f.resultado === 'aprovado' || f.resultado === 'reprovado')) {
-      const pz = f.padrao || {}, bz = f.bancada || {};
-      par(txt(M.manometro_feito, { acessorio: nome || '', bancada: bz.descricao ? ' (' + [bz.descricao, bz.marca, bz.modelo].filter(Boolean).join(', ') + ')' : '',
-        padrao: [pz.descricao, pz.marca, pz.modelo].filter(Boolean).join(', ') || '—', certificado: pz.certificado_num || '—', laboratorio: pz.laboratorio ? ', ' + pz.laboratorio : '',
-        resultado: f.resultado === 'aprovado' ? 'APROVADO' : 'REPROVADO', codigo: f.codigo || 'a numerar' }));
-      conc.man.push(M.conc && (f.resultado === 'aprovado' ? M.conc.man_ok : M.conc.man_nc));
-    } else { par(txt(M.manometro_nao, { acessorio: nome, motivo: a.afericao_motivo || 'não informado' })); conc.man.push(txt(M.conc && M.conc.man_nao, { motivo: a.afericao_motivo || 'motivo não informado' })); }
+      const pz = f.padrao || {}, bz = f.bancada || {}, esc = (f.leituras || {}).escala || {};
+      const escala = f.faixa_fim != null ? ', com escala de ' + fmt(f.faixa_ini || 0, 0) + ' a ' + fmt(f.faixa_fim, 0) + ' ' + String(f.unidade || 'bar').replace('kgf/cm2', 'kgf/cm²') : (a.escala ? ', com escala ' + a.escala : '');
+      const pontos = Array.isArray((f.leituras || {}).pontos) ? f.leituras.pontos.length : (esc.graduacoes || null);
+      const ident = [!vazio(a.marca) ? 'da marca ' + a.marca : null, escala ? escala.replace(/^, /, '') : null].filter(Boolean);
+      par(comResultado(f.resultado === 'aprovado' ? M.manometro_feito : M.manometro_reprovado, Object.assign({ tipo: tipoNome, ident: ident.length ? ', ' + ident.join(', ') + ',' : '',
+        bancada: bancadaTxt(bz), pontos: pontos ? ' em ' + pontos + ' pontos da escala,' : '', lacre: f.lacre_colocado ? txt(M.manometro_lacre, { lacre: f.lacre_colocado }) : '',
+        codigo: f.codigo || 'a numerar' }, padraoVars(pz)), f.resultado === 'aprovado' ? 'ok' : 'nc'));
+      conc.man.push(f.resultado === 'aprovado' ? K.man_ok : K.man_nc);
+    } else { par(txt(M.manometro_nao, { acessorio: !vazio(a.marca) ? a.marca : '', motivo: a.afericao_motivo || 'não informado' })); conc.man.push(txt(K.man_nao, { motivo: a.afericao_motivo || 'motivo não informado' })); }
   });
-  sub('7.6', T.valvula || 'Teste da válvula de segurança');
+  sub('7.6', tituloValv);
   const valvs = acs.filter(a => ['valvula_seguranca', 'valvula_alivio', 'quebra_vacuo'].indexOf(a.tipo) >= 0 && presentes(a));
-  if (!valvs.length) { par(M.valvula_nenhuma); conc.valv.push(M.conc && M.conc.valv_nenhuma); }
+  if (!valvs.length) { par(M.valvula_nenhuma); conc.valv.push(K.valv_nenhuma); }
   valvs.forEach(a => {
-    const f = a.afericao, nome = (a.tipo !== 'valvula_seguranca' ? (TIPOS_ACESS[a.tipo] || '').toLowerCase() + ' ' : '') + (a.tag || a.marca || '');
+    const f = a.afericao, tipoNome = (TIPOS_ACESS[a.tipo] || 'Válvula de segurança').toLowerCase();
     const kc = rcams.find(k => k.camara_id === a.camara_id) || rcams[0] || {};
     if (f && (f.resultado === 'aprovado' || f.resultado === 'reprovado')) {
       const pz = f.padrao || {}, bz = f.bancada || {}, ab = ((f.leituras || {}).aberturas || []).map(Number).filter(x => isFinite(x)),
         asv = ((f.leituras || {}).assentamentos || []).map(Number).filter(x => isFinite(x));
-      par(txt(M.valvula_feita, { acessorio: nome, bancada: bz.descricao ? ' (' + [bz.descricao, bz.marca, bz.modelo].filter(Boolean).join(', ') + ')' : '',
-        padrao: [pz.descricao, pz.marca, pz.modelo].filter(Boolean).join(', ') || '—', certificado: pz.certificado_num || '—',
-        ajuste: unidadeTxt(f.ajuste, f.unidade), abertura: ab.length ? unidadeTxt(ab.reduce((x, y) => x + y, 0) / ab.length, f.unidade) : '—',
-        aberturas: ab.length ? ab.map(x => unidadeTxt(x, f.unidade)).join('; ') : '—',
-        assentamentos: asv.length ? asv.map(x => unidadeTxt(x, f.unidade)).join('; ') : '—',
-        assentamento: unidadeTxt(asv.length ? asv.reduce((x, y) => x + y, 0) / asv.length : (f.leituras || {}).assentamento, f.unidade), pmta: bar(kc.pmta_adotada_mpa),
-        resultado: f.resultado === 'aprovado' ? 'APROVADA' : 'REPROVADA', lacre: f.lacre_colocado || a.lacre_num || '—', codigo: f.codigo || 'a numerar' }));
-      conc.valv.push(M.conc && (f.resultado === 'aprovado' ? M.conc.valv_ok : M.conc.valv_nc));
-    } else { par(txt(M.valvula_nao, { acessorio: nome, motivo: a.afericao_motivo || 'não informado' })); conc.valv.push(txt(M.conc && M.conc.valv_nao, { motivo: a.afericao_motivo || 'motivo não informado' })); }
+      const pmtaBar = kc.pmta_adotada_mpa != null ? Number(kc.pmta_adotada_mpa) * 10 : null, maior = ab.length ? Math.max(...ab) : null;
+      const acima = maior != null && pmtaBar != null && emBar(maior, f.unidade) > pmtaBar + 1e-6;
+      const lacre = f.lacre_colocado || a.lacre_num;
+      const ident = [!vazio(a.marca) ? 'da marca ' + a.marca : null, a.conexao ? 'com conexão ' + a.conexao : null].filter(Boolean);
+      const vars = Object.assign({ tipo: tipoNome, ident: ident.length ? ', ' + ident.join(', ') + ',' : '',
+        bancada: bancadaTxt(bz), ajuste: unidadeTxt(f.ajuste, f.unidade), aberturas: ab.length ? numsTxt(ab, f.unidade) : '—', assentamentos: asv.length ? numsTxt(asv, f.unidade) : '—',
+        ciclos: ab.length || 3, maior: maior != null ? unidadeTxt(maior, f.unidade) : '—', pmta: pmtaBar != null ? bar(kc.pmta_adotada_mpa) : '—',
+        lacre: lacre ? txt(M.valvula_lacre, { lacre }) : '', codigo: f.codigo || 'a numerar' }, padraoVars(pz));
+      if (f.resultado === 'aprovado') par(comResultado(M.valvula_feita, vars, 'ok'));
+      else par(comResultado(M.valvula_reprovada, Object.assign(vars, { motivo: acima ? txt(M.valvula_motivo_pmta, vars) : M.valvula_motivo_tolerancia }), 'nc'));
+      conc.valv.push(f.resultado === 'aprovado' ? K.valv_ok : K.valv_nc);
+    } else { par(txt(M.valvula_nao, { acessorio: !vazio(a.marca) ? a.marca : '', motivo: a.afericao_motivo || 'não informado' })); conc.valv.push(txt(K.valv_nao, { motivo: a.afericao_motivo || 'motivo não informado' })); }
   });
 
   // ── 8 · espessura mínima requerida ──────────────────────────────────────
   sec('8', T.calculo || 'ESPESSURA MÍNIMA REQUERIDA');
-  par(V.sem_codigo_construcao ? M.codigo_sem : V.codigo_construcao ? txt(M.codigo_conhecido, { codigo: codigo }) : M.codigo_estimado);
   const mat = V.material || {}, S = R.s_mpa != null ? Number(R.s_mpa) : Number(mat.s_mpa), cor = Number(R.corrosao_mm) || 0;
-  par(txt(M.material, { material: [mat.especificacao, mat.forma].filter(Boolean).join(', ') || '—', s: fmt(S, 1), fonte: mat.fonte || 'ASME Seção II, Parte D' }));
   par(M.calculo_intro);
   lista(M.calculo_legenda);
   par(txt(M.calculo_minimo, { corrosao: fmt(cor, 2) }));
-  // S140 · item 51: um costado só por câmara nos itens de cálculo (a região da menor leitura, que é a governante do costado)
-  const rcCalc = [], vistos = {};
-  rcomps.forEach(rc => {
-    const mesmos = rc.tipo === 'costado' ? rcomps.filter(x => x.tipo === 'costado' && x.camara_id === rc.camara_id) : [];
-    if (mesmos.length < 2) { rcCalc.push(rc); return; }
-    if (vistos[rc.camara_id]) return; vistos[rc.camara_id] = true;
-    const comT = mesmos.filter(x => x.t_min_mm != null).sort((a, b) => Number(a.t_min_mm) - Number(b.t_min_mm));
-    const rep = mesmos.find(x => rcams.some(k => k.governante_id === x.componente_id)) || comT[0] || mesmos[0];
-    const sg = siglaReg((V.componentes || []).find(x => x.id === rep.componente_id) || { nome: rep.nome });
-    rcCalc.push(Object.assign({}, rep, { nome: 'Costado' + (sg ? ' (menor leitura no ' + sg + ')' : '') }));
-  });
+  // a conta de cada componente (o motor R00): geometria, P e t útil
   const MEM = {};
-  rcCalc.forEach(rc => {
-    const c = (V.componentes || []).find(x => x.id === rc.componente_id) || { tipo: rc.tipo, nome: rc.nome };
+  rcomps.forEach(rc => {
+    const c = compDe(rc.componente_id) || { tipo: rc.tipo, nome: rc.nome };
     const k = rcams.find(x => x.camara_id === rc.camara_id) || rcams[0] || {};
     const P = Math.abs(Number(k.p_operacao_mpa != null ? k.p_operacao_mpa : R.p_operacao_mpa));
     const g = geoDe(V, c), tU = rc.t_min_mm != null ? Number(rc.t_min_mm) - cor : null;
     try { MEM[rc.componente_id] = Object.assign(memoria(g, P, S, tU), { g, P, tU }); } catch (e) { MEM[rc.componente_id] = null; }
   });
-  rcCalc.forEach((rc, k) => {
+  // S143 · item 78 (8): uma conta só para o costado (CF, CT, CS e CI: mesmo R, E e P) e para tampos iguais
+  const multiCam = rcams.length > 1;
+  const camNome = id => multiCam ? ((rcams.find(k => k.camara_id === id) || {}).nome || '') + ' · ' : '';
+  const chaveGeo = m => m ? [m.g.tipo, m.g.R, m.g.L, m.g.d, m.g.C, m.g.alfaGraus, m.g.E, m.P].map(x => x == null ? '' : Number(x).toFixed(4)).join('|') : '';
+  const gruposCalc = [];
+  rcomps.forEach(rc => {
     const m = MEM[rc.componente_id]; if (!m) return;
-    sub('8.' + (k + 1), rc.nome + ' (' + (TIPOS_COMP[rc.tipo] || rc.tipo).toLowerCase() + ', ' + m.ref + ')');
-    C.push({ stack: [{ text: m.fe, style: 'formula' }, { text: m.se + ' = ' + fmt(m.e, 3) + ' mm', style: 'formula' },
-      { text: 'Espessura mínima requerida: ' + fmt(Number(rc.e_min_mm), 3) + ' mm' + (m.e < 1.5 ? ' (mínimo de 1,5 mm)' : '') + (cor ? ', com ' + fmt(cor, 2) + ' mm de corrosão' : '') + '.', style: 'par' },
-      m.g.padrao.length ? { text: 'Geometria padrão (pendência 2): ' + m.g.padrao.join(', ') + '.', style: 'nota' } : { text: '' }], unbreakable: true });
+    const fam = rc.tipo === 'costado' ? 'costado' : rc.tipo === 'conico' ? 'cone' : rc.tipo === 'janela' ? 'janela' : 'tampos';
+    let g = gruposCalc.find(x => x.fam === fam && x.cam === rc.camara_id);
+    if (!g) { g = { fam, cam: rc.camara_id, contas: [] }; gruposCalc.push(g); }
+    let ct = g.contas.find(x => x.chave === chaveGeo(m));
+    if (!ct) { ct = { chave: chaveGeo(m), m, rcs: [] }; g.contas.push(ct); }
+    ct.rcs.push(rc);
+  });
+  const ORD_FAM = { costado: 0, cone: 1, tampos: 2, janela: 3 };
+  gruposCalc.sort((a, b) => ORD_FAM[a.fam] - ORD_FAM[b.fam]);
+  const TIT_FAM = { costado: 'Costado', tampos: 'Tampos', cone: 'Cone', janela: 'Janelas de visita' };
+  const siglasDe = rcs => eLista(rcs.map(rc => siglaComp(compDe(rc.componente_id)) || rc.nome));
+  gruposCalc.forEach((g, k) => {
+    const unica = g.contas.length === 1;
+    sub('8.' + (k + 1), camNome(g.cam) + TIT_FAM[g.fam] + (unica ? ' (' + siglasDe(g.contas[0].rcs) + ') – ' + g.contas[0].m.ref : ''));
+    g.contas.forEach(ct => {
+      const m = ct.m, emin = Math.max(...ct.rcs.map(rc => Number(rc.e_min_mm)));
+      const st = [];
+      if (!unica) st.push({ text: presos(ct.rcs.map(rc => nomeComp(compDe(rc.componente_id)) || rc.nome).join(' e ') + ' – ' + m.ref), style: 'h3' });
+      st.push({ text: m.fe, style: 'formula' }, { text: m.se + ' = ' + fmt(m.e, 3) + ' mm', style: 'formula' },
+        { text: 'Espessura mínima requerida: ' + fmt(emin, 3) + ' mm' + (m.e < 1.5 ? ' (mínimo de 1,5 mm)' : '') + (cor ? ', com ' + fmt(cor, 2) + ' mm de corrosão' : '') + '.', style: 'par' });
+      C.push({ stack: st, unbreakable: true });
+    });
   });
 
   // ── 9 · PMTA ────────────────────────────────────────────────────────────
   sec('9', T.pmta || 'PRESSÃO MÁXIMA DE TRABALHO ADMISSÍVEL (PMTA)');
-  rcCalc.forEach((rc, k) => {
+  // 9.1 · o código de construção (S143 · item 78: sai do 8 e vem para cá, como no modelo)
+  sub('9.1', T.pmta_codigo || 'Código de construção');
+  par(V.sem_codigo_construcao ? M.codigo_sem : V.codigo_construcao ? txt(M.codigo_conhecido, { codigo }) : M.codigo_estimado);
+  // 9.2 · os parâmetros
+  sub('9.2', T.pmta_parametros || 'Parâmetros do cálculo');
+  const fonteS = String(mat.fonte || 'ASME Seção II, Parte D').replace(/\s*\(imagens da pasta[^)]*\)\)?/i, '').replace(/ASME\s+II-D/i, 'ASME Seção II, Parte D').replace(/\s+$/, '');
+  const Es = fam => { const xs = [...new Set(rcomps.filter(rc => (fam === 'costado' ? rc.tipo === 'costado' || rc.tipo === 'conico' : rc.tipo !== 'costado' && rc.tipo !== 'conico') && MEM[rc.componente_id])
+    .map(rc => fmt(MEM[rc.componente_id].g.E, 2)))]; return xs.length ? xs.join(' / ') : null; };
+  const Rs = [...new Set(rcomps.filter(rc => MEM[rc.componente_id] && MEM[rc.componente_id].g.R != null).map(rc => fmt(MEM[rc.componente_id].g.R, 2) + ' mm'))];
+  const Ps = [...new Set(rcams.map(k => k.p_operacao_mpa).concat(rcams.length ? [] : [R.p_operacao_mpa]).filter(x => x != null).map(x => fmt(Math.abs(x), 3) + ' MPa (' + bar(Math.abs(x)) + ')'))];
+  tabelaRV([['Material', [mat.especificacao, mat.forma].filter(Boolean).join(', ')], ['Tensão admissível (S)', isFinite(S) ? fmt(S, 1) + ' MPa' : null], ['Fonte da tensão', fonteS],
+    ['Eficiência de junta (E) – costado', Es('costado')], ['Eficiência de junta (E) – tampos', Es('tampos')], ['Raio interno (R)', Rs.join(' / ') || null],
+    ['Pressão máxima de operação (P)', Ps.join(' / ') || null], ['Sobre-espessura de corrosão', fmt(cor, 2) + ' mm']], [190, '*'], 'Parâmetros do cálculo');
+  // 9.3 · a conta por componente (o costado pela região da menor leitura, S140 · item 51) e o quadro com o governante
+  sub('9.3', T.pmta_calculo || 'Cálculo da PMTA');
+  const rcCalc = [], vistos = {};
+  rcomps.forEach(rc => {
+    const mesmos = rc.tipo === 'costado' ? rcomps.filter(x => x.tipo === 'costado' && x.camara_id === rc.camara_id) : [];
+    if (mesmos.length < 2) { rcCalc.push(Object.assign({}, rc, { nome: nomeComp(compDe(rc.componente_id)) || rc.nome })); return; }
+    if (vistos[rc.camara_id]) return; vistos[rc.camara_id] = true;
+    const comT = mesmos.filter(x => x.t_min_mm != null).sort((a, b) => Number(a.t_min_mm) - Number(b.t_min_mm));
+    const rep = mesmos.find(x => rcams.some(k => k.governante_id === x.componente_id)) || comT[0] || mesmos[0];
+    const sg = siglaComp(compDe(rep.componente_id) || { nome: rep.nome, tipo: 'costado' });
+    rcCalc.push(Object.assign({}, rep, { nome: 'Costado' + (sg ? ' (menor leitura no ' + sg + ')' : '') }));
+  });
+  rcCalc.forEach(rc => {
     const m = MEM[rc.componente_id]; if (!m || !m.sp) return;
     const gov = rcams.some(x => x.governante_id === rc.componente_id);
-    sub('9.' + (k + 1), rc.nome + (gov ? ' — governante' : ''));
-    C.push({ stack: [{ text: m.fp, style: 'formula' }, { text: m.sp + ' = ' + fmt(m.p, 3) + ' MPa (' + bar(m.p) + ')', style: 'formula' }], unbreakable: true, margin: [0, 0, 0, 6] });
+    C.push({ stack: [{ text: presos(camNome(rc.camara_id) + rc.nome + (gov ? ' — governante' : '')), style: 'h3' }, { text: m.fp, style: 'formula' },
+      { text: m.sp + ' = ' + fmt(m.p, 3) + ' MPa (' + bar(m.p) + ')', style: 'formula' }], unbreakable: true, margin: [0, 0, 0, 6] });
   });
   tabela(['Componente', 't medida', 't útil', 'E', 'PMTA'], rcCalc.map(rc => {
     const m = MEM[rc.componente_id] || {}, gov = rcams.some(x => x.governante_id === rc.componente_id);
-    return [{ text: rc.nome + (gov ? ' (governante)' : ''), style: 'td', bold: gov }, fmt(rc.t_min_mm, 2) + ' mm', m.tU != null ? fmt(m.tU, 2) + ' mm' : '—',
-      m.g ? fmt(m.g.E, 2) : '—', rc.pmta_mpa != null ? fmt(rc.pmta_mpa, 3) + ' MPa' : '—'];
-  }), ['*', 65, 65, 40, 75], 'PMTA por componente');
+    return [{ text: presos(camNome(rc.camara_id) + rc.nome + (gov ? ' (governante)' : '')), style: 'td', bold: gov }, fmt(rc.t_min_mm, 2) + ' mm', m.tU != null ? fmt(m.tU, 2) + ' mm' : '—',
+      m.g ? fmt(m.g.E, 2) : '—', rc.pmta_mpa != null ? fmt(rc.pmta_mpa, 3) + ' MPa (' + bar(rc.pmta_mpa) + ')' : '—'];
+  }), ['*', 55, 55, 35, 110], 'PMTA por componente');
+  // 9.4 · a PMTA adotada, com o texto montado pela regra (S143 · item 78: some o "Justificativa: …" cru)
+  sub('9.4', T.pmta_adotada || 'PMTA adotada');
+  const ant = d.laudo_anterior || null;
   rcams.forEach(k => {
-    const nm = rcams.length > 1 ? k.nome + ': ' : '';
-    if (k.regra_pmta === 'calculada') par(nm + txt(M.pmta_calculada, { governante: (rcCalc.find(c => c.componente_id === k.governante_id) || rcomps.find(c => c.componente_id === k.governante_id) || {}).nome || '—', pmta: bar(k.pmta_adotada_mpa) }));
-    else if (k.regra_pmta === 'mantida_anterior') par(nm + txt(M.pmta_mantida, { calculada: bar(k.pmta_calculada_mpa), pmta: bar(k.pmta_adotada_mpa) }));
-    else par(nm + txt(M.pmta_plh, { pmta: bar(k.pmta_adotada_mpa), justificativa: k.justificativa_pmta || '' }));
+    const nm = multiCam ? k.nome + ': ' : '';
+    const cGov = compDe(k.governante_id), sgGov = siglaComp(cGov);
+    const gov = cGov ? (cGov.tipo === 'costado' ? 'costado' + (sgGov ? ', na região ' + sgGov : '') : nomeComp(cGov).replace(/^./, x => x.toLowerCase())) : 'componente governante';
+    const camV = cams.find(x => x.id === k.camara_id) || {};
+    const placa = camV.pmta_plaqueta_mpa != null ? Number(camV.pmta_plaqueta_mpa) : (V.pmta_plaqueta_mpa != null ? Number(V.pmta_plaqueta_mpa) : null);
+    const anterior = camV.pmta_vigente_mpa != null ? Number(camV.pmta_vigente_mpa) : (ant && ant.pmta_mpa != null ? Number(ant.pmta_mpa) : placa);
+    const calc = k.pmta_calculada_mpa != null ? Number(k.pmta_calculada_mpa) : null, adot = Number(k.pmta_adotada_mpa);
+    const igual = (a, b) => a != null && b != null && Math.abs(a - b) < 0.0005;
+    const vars = { governante: gov, calculada: bar(calc), placa: bar(placa), anterior: bar(anterior), pmta: bar(adot), justificativa: String(k.justificativa_pmta || '').replace(/[.\s]+$/, '') };
+    let t;
+    if (calc != null && placa != null && igual(adot, placa) && calc >= placa - 0.0005) t = M.pmta_placa_mantida;
+    else if (calc != null && anterior != null && igual(adot, anterior) && calc >= anterior - 0.0005) t = M.pmta_anterior_mantida;
+    else if (calc != null && igual(adot, calc) && anterior != null && calc < anterior - 0.0005) t = M.pmta_reduzida;
+    else if (calc != null && igual(adot, calc)) t = M.pmta_calculada;
+    else t = M.pmta_plh;
+    par(nm + txt(t, vars));
     if (k.pmta_externa_mpa != null) par(nm + txt(M.pmta_externa, { pmta: bar(k.pmta_externa_mpa), justificativa: k.justificativa_externa || '' }));
   });
-  C.push({ text: txt(M.pmta_final, { pmta: bar(pmtaVaso) }), style: 'destaque' });
+  C.push({ text: presos(txt(M.pmta_final, { pmta: bar(pmtaVaso) })), style: 'destaque' });
 
   // ── 10 · categoria ──────────────────────────────────────────────────────
   sec('10', T.categoria || 'CATEGORIA DO VASO');
@@ -437,18 +654,19 @@ function montar(d, opc) {
   sub('11.2', T.rec_conservacao || 'Recomendações de conservação');
   lista([].concat(recs.filter(r => r.tipo === 'conservacao').map(comPrazo), M.rec_conservacao_gerais || []), true);
 
-  // ── 12 · conclusão e parecer ────────────────────────────────────────────
-  sec('12', T.conclusao || 'CONCLUSÃO E PARECER');
+  // ── 12 · conclusão (S143 · item 76: "Conforme a seção 7.x, …", montado pelos resultados) ──
+  sec('12', T.conclusao || 'CONCLUSÃO');
   par(M.conclusao_intro);
-  const K = M.conc || {};
-  const abaixoAlgum = ES.some(x => x.abaixo);
+  const motivoCurto = m => String(m || 'motivo não informado').replace(/[.\s]+$/, '').replace(/^./, x => x.toLowerCase());
+  const tituloTesteMin = tituloTeste.replace(/^Teste /, 'teste ').replace(/Hidrostático|Pneumático|Hidropneumático/, x => x.toLowerCase());
   lista([nc.length ? K.visual_nc : K.visual_ok,
-    B.realizada ? (B.resultado === 'com_anomalia' ? K.boro_anomalia : K.boro_ok) : txt(K.boro_nao, { motivo: String(B.motivo_nao || 'motivo não informado').replace(/[.\s]+$/, '').toLowerCase() }),
+    B.realizada ? (B.resultado === 'com_anomalia' ? K.boro_anomalia : K.boro_ok) : txt(K.boro_nao, { motivo: motivoCurto(B.motivo_nao) }),
     abaixoAlgum ? K.us_abaixo : K.us_ok,
-    TE.realizado ? (TE.resultado === 'reprovado' ? K.teste_reprovado : K.teste_ok) : txt(K.teste_nao, { motivo: String(TE.motivo_nao || 'motivo não informado').replace(/[.\s]+$/, '').toLowerCase() })]
-    .concat(conc.man).concat(conc.valv));
+    TE.realizado ? txt(TE.resultado === 'reprovado' ? K.teste_reprovado : K.teste_ok, { tipo: tituloTesteMin, pressao: bar(TE.pressao_mpa) })
+      : (M.teste_nao_cond && visOk && !abaixoAlgum ? txt(K.teste_desaconselhado, { tipo: tituloTesteMin }) : txt(K.teste_nao, { tipo: tituloTesteMin, motivo: motivoCurto(TE.motivo_nao) }))]
+    .concat(conc.man).concat(conc.valv).map((x, i, a) => x ? String(x).replace(/[;.]\s*$/, i === a.length - 1 ? '.' : ';') : x));
   const inapto = TE.realizado && TE.resultado === 'reprovado';
-  C.push({ text: txt(inapto ? M.parecer_inapto : M.parecer_apto, { pmta: bar(pmtaVaso) }), style: 'destaque' });
+  par(txt(inapto ? M.parecer_inapto : M.parecer_apto, { pmta: bar(pmtaVaso) }), M.parecer_destaque ? { style: 'destaque' } : null);
 
   // ── 13 · próximas inspeções ─────────────────────────────────────────────
   sec('13', T.proximas || 'PRÓXIMAS INSPEÇÕES');
@@ -477,6 +695,9 @@ function montar(d, opc) {
   // ── a página ────────────────────────────────────────────────────────────
   const logoCli = emp.logo && /^data:image\/(png|jpe?g);base64,/i.test(emp.logo) ? emp.logo : null;
   const empresaM = M.empresa_emissora || {};
+  // S143 · item 63: o cabeçalho do modelo: logomarca (ou o nome) · Relatório nº e ART · Número TAP, TAG, data e página
+  const cabDir = [numeroTap ? [{ text: 'Número TAP', style: 'cabMin' }, { text: numeroTap, style: 'cabMin' }] : null,
+    [{ text: 'TAG', style: 'cabMin' }, { text: V.tag || '—', style: 'cabMin' }]].filter(Boolean);
   return {
     pageSize: 'A4', pageMargins: [50, 92, 45, 62],
     info: { title: 'Relatório de inspeção ' + numero + ' · ' + (V.tag || ''), author: empresaM.nome || 'Engetap', creator: 'TapFlow · TapDoc', producer: 'TapFlow · TapDoc (pdfmake)',
@@ -487,9 +708,8 @@ function montar(d, opc) {
       table: { widths: [95, '*', 150], body: [[
         logoCli ? { image: logoCli, fit: [85, 36], alignment: 'center', margin: [0, 3, 0, 0] } : { text: emp.nome_fantasia || emp.razao_social || '', style: 'cabTxt', margin: [0, 10, 0, 0] },
         { stack: [{ text: 'Relatório nº ' + numero, style: 'cabNum' }, { text: 'ART: ' + ((d.art || {}).numero || '—'), style: 'cabTxt' }], alignment: 'center', margin: [0, 6, 0, 0] },
-        { table: { widths: [52, '*'], body: [[{ text: 'OS', style: 'cabMin' }, { text: (d.os || {}).numero || '—', style: 'cabMin' }],
-          [{ text: 'TAG', style: 'cabMin' }, { text: V.tag || '—', style: 'cabMin' }],
-          [{ text: dataTopo, style: 'cabMin' }, { text: 'Página ' + pag + ' de ' + total, style: 'cabMin' }]] }, layout: { hLineColor: '#C9D2D8', vLineColor: '#C9D2D8' } }]] },
+        { table: { widths: [52, '*'], body: cabDir.concat([[{ text: dataTopo, style: 'cabMin' }, { text: 'Página ' + pag + ' de ' + total, style: 'cabMin' }]]) },
+          layout: { hLineColor: '#C9D2D8', vLineColor: '#C9D2D8' } }]] },
       layout: { hLineColor: '#C9D2D8', vLineColor: '#C9D2D8' }
     },
     footer: () => ({ margin: [50, 14, 45, 0], columns: [
@@ -502,6 +722,7 @@ function montar(d, opc) {
     styles: {
       h1: { fontSize: 11.5, bold: true, color: COR, margin: [0, 14, 0, 6] },
       h2: { fontSize: 10.5, bold: true, color: CINZA, margin: [0, 10, 0, 4] },
+      h3: { fontSize: 10, bold: true, color: CINZA, margin: [0, 6, 0, 2] },
       par: { fontSize: 10, lineHeight: 1.25, alignment: 'justify', margin: [0, 0, 0, 6] },
       lista: { fontSize: 10, lineHeight: 1.2 },
       th: { fontSize: 8.5, bold: true, color: '#164C77', alignment: 'center' },
@@ -522,6 +743,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-S141-2026-11-10' };
+const LaudoPDF = { montar, fotosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-S143-2026-11-10' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
