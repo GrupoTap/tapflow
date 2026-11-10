@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pessoas e acessos · A8</title>
+<title>Pessoas e acessos · A9</title>
 <meta name="theme-color" content="#0C1420">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22104%22 fill=%22%231B6FA9%22/%3E%3Ctext x=%22256%22 y=%22350%22 font-family=%22Arial,sans-serif%22 font-size=%22300%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EE%3C/text%3E%3C/svg%3E">
 <link rel="manifest" href="../manifest.webmanifest">
@@ -130,7 +130,7 @@ tr.semmod td{background:#1E2232}
 
 <div class="topo">
   <div class="marca">Tap<span>Hub</span></div>
-  <div class="selo" id="selo">ACESSOS · A8</div>
+  <div class="selo" id="selo">ACESSOS · A9</div>
   <div class="dir"><span id="eu"></span><a href="../" id="btInicio">Início</a></div>
 </div>
 
@@ -189,7 +189,8 @@ tr.semmod td{background:#1E2232}
 
 <script>
 'use strict';
-const APP_VERSION = 'A8';   // A8 (S142): nos Relatos, "Copiar print" na janela da lista e as 3 respostas prontas (itens 36 e 39 da lista)
+const APP_VERSION = 'A9';   // A9 (S144): a "Função no laudo" e o registro (CREA) de cada pessoa, que saem na seção 14 do laudo do TapDoc (item 71 da lista; 211)
+// const APP_VERSION = 'A8';   // A8 (S142): nos Relatos, "Copiar print" na janela da lista e as 3 respostas prontas (itens 36 e 39 da lista)
 // const APP_VERSION = 'A7';   // A7 (S136): a seção "Celulares da empresa" (210)
 // const APP_VERSION = 'A6';   // A6 (S132): a seção Relatos e a caixa "Recebe relatos" (209; item #1 da lista)
 // const APP_VERSION = 'A5';   // A5 (S124): "Autoriza acesso" e os pedidos de senha e PIN (207) · A4 (S123): a seção Digital (Passkey 1) · A3 (S91): uma tela só
@@ -206,6 +207,8 @@ const mod = k => (window.TapModulos && TapModulos.porChave(k)) || { chave:k, tit
 const nomeMod = k => mod(k).titulo;
 
 let D = null;            // o que tf_acessos_ver devolveu
+const LAUDO_P = {};      // A9 · item 71: a função no laudo e o registro de cada pessoa (tf_acessos_laudo_lista)
+const FUNCOES_LAUDO = ['Inspetor', 'Profissional Legalmente Habilitado', 'Engenheiro Industrial Mecânico', 'Auxiliar de Inspeção'];
 let ocupado = false;
 
 function erroGeral(html){
@@ -223,6 +226,7 @@ async function carregar(){
     return;
   }
   carregarRelatos();
+  try{ (await rpc('tf_acessos_laudo_lista', {})).forEach(x => { LAUDO_P[x.id] = x; }); }catch(e){}   // A9 · item 71
   document.getElementById('conteudo').hidden = false;
   desenharPessoas(); desenharHistorico(); carregarDigital(); carregarPedidos(); carregarCelulares();
 }
@@ -383,6 +387,8 @@ function desenharPessoas(){
     h += '<tr data-id="' + esc(p.id) + '"' + (semMod(p) ? ' class="semmod"' : '') + '><td><div class="nm">' + esc(p.nome)
        + (semMod(p) ? ' <span class="tag sem">sem módulos: marque o que ela usa</span>' : '') + '</div><div class="em">' + esc(p.email || '')
        + (PD && PD.pode_atender && p.id !== PD.eu ? ' <button class="lnkp rd" type="button" data-redefinir="' + esc(p.id) + '" title="Gerar senha ou PIN provisório">senha/PIN</button>' : '')
+       + ' <button class="lnkp rd" type="button" data-laudo="' + esc(p.id) + '" title="Como a pessoa sai no laudo de inspeção (seção 14)">'
+       + esc(LAUDO_P[p.id] && LAUDO_P[p.id].funcao_laudo ? 'laudo: ' + LAUDO_P[p.id].funcao_laudo : 'função no laudo') + '</button>'
        + '</div></td>'
        + '<td class="pf"><button class="lnkp" type="button" data-perfilde="' + esc(p.id) + '" title="Trocar o perfil ou editar">' + esc(p.perfil_nome || p.perfil) + '</button></td>';
     if (!p.escritorio){
@@ -474,6 +480,27 @@ async function excluirPerfil(p){
   catch(e){ toast(e.message || 'Não excluiu.', 'erro'); }
 }
 document.getElementById('btNovoPerfil').addEventListener('click', () => formPerfil(null));
+
+/* A9 · item 71: a função no laudo e o registro no conselho (o laudo escreve "Nome completo — Função" e o registro de quem tem) */
+document.getElementById('tPessoas').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-laudo]'); if (!b) return;
+  const pes = D.pessoas.find(x => x.id === b.dataset.laudo); if (!pes) return;
+  const L = LAUDO_P[pes.id] || {};
+  const corpo = '<div class="pform"><p class="dica" style="margin-top:0">No laudo sai o nome como está no cadastro: <b>' + esc(pes.nome) + '</b>. Se não for o nome completo, corrija em Configurações › Usuários.</p>'
+    + '<label for="plFunc">Função no laudo</label><input type="text" id="plFunc" list="plFuncs" value="' + esc(L.funcao_laudo || '') + '" placeholder="escolha ou escreva">'
+    + '<datalist id="plFuncs">' + FUNCOES_LAUDO.map(f => '<option value="' + esc(f) + '">').join('') + '</datalist>'
+    + '<label for="plReg">Registro no conselho (CREA)</label><input type="text" id="plReg" value="' + esc(L.registro || '') + '" placeholder="só para quem tem; ex.: CREA-MG 000000/D">'
+    + '<p class="dica">Sem função, o laudo usa o papel na inspeção (Inspetor, Auxiliar de Inspeção). Sem registro, a coluna fica em branco.</p></div>';
+  Nucleo.janela.abrir('No laudo: ' + pes.nome, corpo, [
+    { label:'Cancelar', onClick: () => Nucleo.janela.fechar() },
+    { label:'Gravar', pri:true, onClick: async () => {
+      try{
+        const r = await rpc('tf_acessos_laudo_gravar', { p_usuario: pes.id, p_funcao: document.getElementById('plFunc').value, p_registro: document.getElementById('plReg').value });
+        LAUDO_P[pes.id] = { id: pes.id, funcao_laudo: r.funcao_laudo, registro: r.registro };
+        Nucleo.janela.fechar(); toast('Gravado: ' + pes.nome + (r.funcao_laudo ? ' — ' + r.funcao_laudo : '') + '.', 'ok'); desenharPessoas();
+      }catch(e){ toast(e.message || 'Não gravou.', 'erro'); }
+    }}]);
+});
 
 /* A3: a coluna Perfil — trocar o perfil desta pessoa ou editar o perfil */
 document.getElementById('tPessoas').addEventListener('click', ev => {

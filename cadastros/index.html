@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapHub Cadastros 3 · Cadastros e Configurações</title>
+<title>TapHub Cadastros 4 · Cadastros e Configurações</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2371,7 +2371,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'CAD3';   // TapHub Cadastros 3 (S139): item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
+const APP_VERSION = 'CAD4';   // TapHub Cadastros 4 (S144): ramo de atividade e grau de risco do cliente (NR-04), que saem na seção 4 do laudo do TapDoc (item 78 da lista; 211)
+// const APP_VERSION = 'CAD3';   // TapHub Cadastros 3 (S139): item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
 // const APP_VERSION = 'CAD2';   // TapHub Cadastros 2 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const APP_VERSION = 'CAD1';   // TapHub Cadastros 1 (separado do Manager S133) — o S## da publicação é da rodada que publica
 try{ document.getElementById('verBadge').textContent = 'CAD · ' + APP_VERSION; }catch(e){}
@@ -4782,6 +4783,11 @@ async function detalheCliente(c){
     +   cp('clAber','Data de abertura', cli.data_abertura, null, 'date') + '</div>'
     + '<div class="dupla">' + cp('clCnae','CNAE', cli.cnae)
     +   cp('clCnaeD','Atividade principal', cli.cnae_descricao) + '</div>'
+    // S144 · item 78: o que sai na seção 4 do laudo de inspeção (sem ramo, sai a atividade principal do CNAE)
+    + '<div class="dupla">' + cp('clRamo','Ramo de atividade (laudo)', cli.ramo_atividade, 'Ex.: Metalurgia')
+    +   '<div class="campo"><label for="clGrau">Grau de risco (NR-04)</label><select id="clGrau"><option value="">—</option>'
+    +   [1,2,3,4].map(n => '<option value="' + n + '"' + (Number(cli.grau_risco) === n ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></div></div>'
+    + '<p class="nota">O grau de risco sai do CNAE pelo Quadro I da NR-04 (1 a 4). Confira o CNAE acima e o quadro antes de escolher.</p>'
     + (cli.dados_cnpj_em
         ? '<p class="nota">Consultado pelo CNPJ em '
           + esc(new Date(cli.dados_cnpj_em).toLocaleDateString('pt-BR'))
@@ -4850,6 +4856,9 @@ async function detalheCliente(c){
           // só carimba quando a consulta aconteceu nesta sessão de edição:
           // salvar à mão não pode fazer dado velho parecer recém-conferido
           p_dados_cnpj_em: _cnpjConsultado || null });
+        // S144 · item 78: ramo de atividade e grau de risco (laudo do TapDoc)
+        if (!DEMO && (v('clRamo').trim() !== (cli.ramo_atividade || '') || String(v('clGrau')) !== String(cli.grau_risco || '')))
+          await rpc('tf_cliente_laudo_gravar', { p_id: cli.id, p_ramo: v('clRamo').trim() || null, p_grau: v('clGrau') ? Number(v('clGrau')) : null });
         toast('Cliente salvo.','ok');
         pintarCadastros();
       }catch(e){ toast(e.message,'err'); }

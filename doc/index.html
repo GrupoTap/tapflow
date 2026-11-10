@@ -154,7 +154,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E16';   // E16 (S143 · 419): rodada D1 — texto e cara do laudo (itens 62 a 69, 73 a 76 e 78 da lista; só o laudo-pdf.js S143)
+const VERSAO = 'TapDoc E17';   // E17 (S144 · 420 e 211): rodada D2 — itens 63, 69, 70, 71, 72, 75, 77 e 78 da lista (Número TAP, função e "sem placa" na revisão; prazo menor que o da norma; anexos com miniaturas; tampos com E diferente; sugestões de recomendação; cadastro do padrão; laudo-pdf.js S144)
+// const VERSAO = 'TapDoc E16';   // E16 (S143 · 419): rodada D1 — texto e cara do laudo (itens 62 a 69, 73 a 76 e 78 da lista; só o laudo-pdf.js S143)
 // const VERSAO = 'TapDoc E15';   // E15 (S141 · 417): rodada B da lista — itens 31, 32, 34, 35, 41, 42, 43, 45, 46, 47, 48, 58 e 61 (Em campo, retomar a coleta, PMTA escolhida na revisão, câmaras corrigidas na revisão, imagens da boroscopia, lacre da aferição, nomes por extenso, laudo com o tipo do teste)
 // const VERSAO = 'TapDoc E14';   // E14 (S140 · 416): itens 44, 49, 50, 51, 53 e 56 da lista — volume em m³ e litros com aviso, as fotos com lugar (mudar de lugar, "sem foto"), a foto da galeria marcada, aviso acima de 200 °C, o costado com regiões e o lembrete interno da aferição
 // const VERSAO = 'TapDoc E13';   // E13 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
@@ -348,7 +349,11 @@ async function telaInstrumentos(){
     + '<p class="muted">O celular só oferece medidor, padrão e bancada com o certificado válido. Vencido não aparece para escolha. O padrão precisa da U do certificado.</p>'
     + (L.length ? '<table><tr><th>Tipo</th><th>Descrição</th><th>Nº de série</th><th>Certificado</th><th>Validade</th><th></th></tr>'
       + L.map(x => '<tr><td>' + esc(TIPOS_INST[x.tipo] || x.tipo) + '</td><td><b>' + esc(x.descricao || '') + '</b><div class="muted">' + esc([x.marca, x.modelo].filter(Boolean).join(' · ')) + '</div></td><td>'
-        + esc(x.numero_serie || '—') + '</td><td>' + esc(x.certificado_num || '—') + (x.laboratorio ? '<div class="muted">' + esc(x.laboratorio) + '</div>' : '')
+        + esc(x.numero_serie || '—') + '</td><td>' + esc(x.certificado_num || '—')
+        + (x.certificado_num && (x.certificado_num.toUpperCase() === ((x.descricao || '').match(/^[A-Z]{2,5}-?\d{1,5}/i) || [''])[0].toUpperCase() || x.certificado_num === x.numero_serie)
+           ? '<div><span class="chip s-grave">confira: igual ao código</span></div>' : '')
+        + (!x.laboratorio && x.tipo === 'manometro_padrao' ? '<div><span class="chip s-grave">sem o laboratório</span></div>' : '')
+        + (x.laboratorio ? '<div class="muted">' + esc(x.laboratorio) + '</div>' : '')
         + (x.certificado_path ? '<div><a href="#" data-cert="' + esc(x.certificado_path) + '">PDF do certificado</a></div>'
            : (x.tipo === 'medidor_espessura' || x.tipo === 'manometro_padrao' ? '<div><span class="chip s-grave">sem o PDF</span></div>' : ''))
         + (x.tipo === 'manometro_padrao' ? '<div class="muted">' + (x.u_expandida != null ? 'U ' + fmt(x.u_expandida, 4) + ' ' + esc(x.unidade || '') + ' (k = ' + fmt(x.k || 2, 2) + ')' : '<span class="chip s-grave">sem a U</span>') + '</div>' : '') + '</td><td>'
@@ -370,8 +375,10 @@ function editarInstrumento(x){
   const c = (k, rot, tipo) => '<label class="f">' + rot + '<input class="t" id="in_' + k + '" type="' + (tipo || 'text') + '" value="' + esc(x[k] || '') + '"></label>';
   janela(x.id ? 'Editar instrumento' : 'Novo instrumento',
     (x.id ? '' : '<label class="f">Tipo<select class="t" id="in_tipo">' + Object.keys(TIPOS_INST).map(t => '<option value="' + t + '"' + (t === x.tipo ? ' selected' : '') + '>' + TIPOS_INST[t] + '</option>').join('') + '</select></label>')
-    + c('descricao', 'Descrição') + c('marca', 'Marca') + c('modelo', 'Modelo') + c('numero_serie', 'Nº de série') + c('certificado_num', 'Nº do certificado')
-    + c('laboratorio', 'Laboratório') + c('calibrado_em', 'Calibrado em', 'date') + c('validade', 'Validade', 'date')
+    // S144 · item 69: cada campo no seu lugar (o laudo escreve "manômetro padrão da marca …, calibrado pelo laboratório …, certificado nº …")
+    + c('descricao', 'Descrição <small>(o código interno e o que é, ex.: MAN-001 · manômetro digital)</small>') + c('marca', 'Marca <small>(só a marca, sem o modelo)</small>') + c('modelo', 'Modelo')
+    + c('numero_serie', 'Nº de série') + c('certificado_num', 'Nº do certificado de calibração <small>(o que o laboratório escreveu no certificado; não é o código interno)</small>')
+    + c('laboratorio', 'Laboratório que calibrou') + c('calibrado_em', 'Calibrado em', 'date') + c('validade', 'Validade', 'date')
     // S86 · R04a: o manômetro padrão leva a U do certificado (a aferição calcula a incerteza com ela)
     + '<fieldset id="in_pad" style="border:1px solid #DBE0E3;border-radius:6px;padding:8px 10px;margin-top:8px"><legend class="muted">Só para manômetro padrão (do certificado)</legend>'
     + '<div class="g3"><label class="f">U (incerteza expandida)<input class="t" id="in_u" inputmode="decimal" value="' + esc(fmt(x.u_expandida, 5)) + '"></label>'
@@ -386,6 +393,11 @@ function editarInstrumento(x){
     .concat([{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
       const d = {}; ['descricao','marca','modelo','numero_serie','certificado_num','laboratorio','calibrado_em','validade'].forEach(k => { d[k] = ($('in_' + k).value || '').trim() || null; });
       if (!d.descricao){ U.toast('Escreva a descrição.', 'err'); return false; }
+      // S144 · item 69: o nº do certificado não é o código interno nem o nº de série
+      const cod = (d.descricao.match(/^[A-Z]{2,5}-?\d{1,5}/i) || [''])[0].toUpperCase();
+      if (d.certificado_num && ((cod && d.certificado_num.toUpperCase() === cod) || (d.numero_serie && d.certificado_num === d.numero_serie))){
+        U.toast('O nº do certificado está igual ao ' + (cod && d.certificado_num.toUpperCase() === cod ? 'código interno' : 'nº de série') + '. Use o número que o laboratório escreveu no certificado.', 'err'); return false; }
+      if (d.marca && d.modelo && d.marca.toUpperCase() === d.modelo.toUpperCase()) d.modelo = null;
       if (x.id) d.id = x.id; else d.tipo = $('in_tipo').value;
       if ((x.id ? x.tipo : d.tipo) === 'manometro_padrao'){
         const nn = id => { const v = num($(id).value); return v == null || Number.isNaN(v) ? null : v; };
@@ -921,11 +933,13 @@ async function previa(){
 // componente do tipo costado da câmara). A conta é por região e a governante diz a região da menor leitura.
 const REG_SIGLA = { frontal:'CF', traseiro:'CT', superior:'CS', inferior:'CI', direito:'CLD', esquerdo:'CLE' };
 const REG_NOME = { CF:'Frontal', CT:'Traseiro', CS:'Superior', CI:'Inferior', CLD:'Lateral direita', CLE:'Lateral esquerda' };
+// S144 · item 78: o nome manda (no piloto, a região "CS" veio com a posição "inferior", de antes do TapDoc 14); sem sigla no nome, a posição
 function siglaReg(c){
-  if (REG_SIGLA[c.posicao]) return REG_SIGLA[c.posicao];
   const m = String(c.nome || '').match(/\b(CF|CT|CS|CI|CLD|CLE)\s*$/i);
-  return m ? m[1].toUpperCase() : null;
+  if (m) return m[1].toUpperCase();
+  return REG_SIGLA[c.posicao] || null;
 }
+const siglaDaPosicao = c => REG_SIGLA[c.posicao] || null;
 const nomeReg = c => { const sg = siglaReg(c); return sg ? REG_NOME[sg] + ' (' + sg + ')' : (String(c.nome || '').replace(/^costado\s*/i, '').trim() || 'Costado inteiro'); };
 function nomeGov(ck){
   const g = ck.governante; if (!g) return '';
@@ -1081,21 +1095,25 @@ function previa(v){
   }catch(e){ r.vaso = { erro:e.message }; }
   return r;
 }
-  return { usar:p => { E = p || { materiais:[] }; }, previa, minimaDe, eMinDe, compsMedir, ativas, materialDe, unidadeDe, deMPa, UNID_ROT };
+  return { usar:p => { E = p || { materiais:[] }; }, previa, minimaDe, eMinDe, compsMedir, ativas, materialDe, unidadeDe, deMPa, UNID_ROT, geoDe };
 })();
 
 const REV_ITENS = [['dados','Dados contra as fotos'], ['recomendacoes','Anomalias e recomendações'], ['pmta','PMTA'], ['espessuras','Espessuras contra o laudo anterior']];
 const REV_ETAPA = { 1:'Revisão 1 · equipe', 2:'Revisão 2 · outra equipe', 3:'Aprovação do PLH' };
-const REV_CAMPOS_VASO = [['numero_serie','Nº de série'], ['modelo','Modelo'], ['ano_fabricacao','Ano de fabricação'], ['codigo_construcao','Código de construção'],
-                         ['codigo_edicao','Edição do código']];   // S141 · item 31: a PMTA e a PTH de plaqueta são da câmara (quadro abaixo)
-const REV_CAMPOS_AC = [['tag','TAG'], ['marca','Marca'], ['modelo','Modelo'], ['escala','Escala'], ['lacre_num','Lacre'], ['pressao_ajuste_mpa','Ajuste (MPa)']];
+const REV_CAMPOS_VASO = [['numero_tap','Número TAP'], ['funcao','Função do vaso'], ['sem_placa','Vaso sem placa'], ['numero_serie','Nº de série'], ['modelo','Modelo'], ['ano_fabricacao','Ano de fabricação'], ['codigo_construcao','Código de construção'],
+                         ['codigo_edicao','Edição do código']];   // S144 · itens 63 e 78: Número TAP (nº do cliente + TAG sem prefixo), função e "sem placa"   // S141 · item 31: a PMTA e a PTH de plaqueta são da câmara (quadro abaixo)
+const REV_CAMPOS_AC = [['tag','TAG'], ['marca','Marca'], ['conexao','Conexão'], ['escala','Escala'], ['lacre_num','Lacre'], ['pressao_ajuste_mpa','Ajuste (MPa)']];   // S144 · itens 72 e 75: sem "modelo"; a conexão
+// S144 · item 78: o que a revisão sugere (o revisor escolhe; nada é marcado sozinho)
+const FUNCOES_VASO = ['Reservatório de ar comprimido', 'Pulmão de ar comprimido', 'Secador de ar comprimido', 'Filtro', 'Separador de condensado', 'Acumulador hidráulico',
+  'Autoclave', 'Trocador de calor', 'Reservatório de gás', 'Tanque de pressão'];
+const PRAZO_MOTIVOS = ['Atmosfera agressiva (corrosão acelerada)', 'Perda de espessura acima do esperado', 'Vida remanescente menor que o prazo da norma', 'Histórico de anomalias no vaso', 'Condições de operação severas'];
 const TIPO_REC = { seguranca:'Segurança', conservacao:'Conservação', geral:'Geral' };
 // sugestões fixas até a biblioteca (R05b)
 function sugestaoRec(item, anomalia){
   const a = (anomalia || '').toLowerCase();
   if (/corros/.test(a)) return 'Tratar a corrosão (' + (anomalia || '') + ') e refazer a pintura de proteção do item "' + item + '".';
   if (/vazament/.test(a)) return 'Eliminar o vazamento no item "' + item + '" antes da próxima operação.';
-  if (/aterr/.test(item.toLowerCase())) return 'Refazer o aterramento do vaso e medir a continuidade.';
+  if (/aterr/.test(item.toLowerCase())) return 'Instalar ou reparar o aterramento do vaso e medir a continuidade.';   // S144 · item 66
   return 'Corrigir no item "' + item + '": ' + (anomalia || 'anomalia registrada em campo') + '.';
 }
 const quandoBR = t => t ? new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
@@ -1173,6 +1191,21 @@ function pintarRevisao(){
     if (Number(k.t_operacao_c) > 200) conf.push({ chave:'temperatura', nivel:'amarelo', texto:'Opera a ' + fmt(k.t_operacao_c, 0) + ' °C' + nm + ': o engenheiro confere o cálculo',
       detalhe:'Acima de 200 °C a resistência do aço cai e a PMTA calculada muda (o S do material vale até a temperatura da tabela).' });
   });
+  // S144 · item 78: tampos iguais (mesmo tipo, mesma câmara) com eficiência de solda (E) diferente; região do costado com o nome e a posição em desacordo
+  CALC.ativas(v).forEach(k => {
+    const tps = (v.componentes || []).filter(c => c.ativo !== false && ['eliptico','torisferico','hemisferico','conico','plano'].indexOf(c.tipo) >= 0 && (!c.camara_id || c.camara_id === k.id));
+    const porTipo = {}; tps.forEach(c => { (porTipo[c.tipo] = porTipo[c.tipo] || []).push(c); });
+    Object.values(porTipo).filter(g => g.length > 1).forEach(g => {
+      const es = g.map(c => ({ c, E: CALC.geoDe(v, c).E }));
+      if (es.some(x => Math.abs(x.E - es[0].E) > 1e-6)) conf.push({ chave:'tampos_e', nivel:'amarelo', texto:'Tampos iguais com eficiência de solda (E) diferente: ' + es.map(x => x.c.nome + ' E = ' + fmt(x.E, 2)).join(' e '),
+        detalhe:'Confira se é o mesmo tampo (mesma fabricação). Se for, corrija o E no componente: o laudo mostra uma conta para cada E.' });
+    });
+  });
+  (v.componentes || []).filter(c => c.ativo !== false && c.tipo === 'costado').forEach(c => {
+    const pn = String(c.nome || '').match(/\b(CF|CT|CS|CI|CLD|CLE)\s*$/i), pp = siglaDaPosicao(c);
+    if (pn && pp && pn[1].toUpperCase() !== pp) conf.push({ chave:'regiao', nivel:'amarelo', texto:'Região do costado "' + c.nome + '" gravada com a posição de ' + pp,
+      detalhe:'Vale o nome (' + pn[1].toUpperCase() + '): é o que sai no laudo e no mapa dos pontos. Confira as leituras desta região.' });
+  });
   if (prev.vaso && prev.vaso.erro) conf.push({ chave:'vaso', nivel:/[Vv]olume/.test(prev.vaso.erro) ? 'amarelo' : 'vermelho', texto:'Categoria e prazos', detalhe:prev.vaso.erro });
   (REV.vidas || []).filter(x => x.cor && !x.resumo).forEach(x => conf.push({ chave:'vida', nivel:'amarelo', texto:x.nome + ': vida remanescente ' + (x.cor === 'vermelho' ? 'menor que o prazo até a próxima inspeção' : 'menor que 2× o prazo'), detalhe:'O PLH decide (reduzir o prazo ou a PMTA, ou recomendar reparo).' }));
   const ico = n => n === 'ok' ? '<span class="cf ok">✓</span>' : n === 'amarelo' ? '<span class="cf am">!</span>' : '<span class="cf vm">✗</span>';
@@ -1192,7 +1225,7 @@ function pintarRevisao(){
       + (f.origem === 'galeria' ? ' · galeria' + (f.tirada_em ? ', tirada em ' + dataBR(dataSP(f.tirada_em)).slice(0, 5) : '') : ''); };
   h += '<div class="card">' + cab('dados', '1 · Dados contra as fotos')
     + '<div class="g2rev"><div><table><tr><th>Plaqueta</th><th></th><th></th></tr>'
-    + [['fabricante','Fabricante']].concat(REV_CAMPOS_VASO).map(([k, r]) => '<tr><td class="muted">' + r + '</td><td><b>' + esc(R.vaso[k] == null ? '—' : String(R.vaso[k])) + '</b></td><td>'
+    + [['fabricante','Fabricante']].concat(REV_CAMPOS_VASO).map(([k, r]) => '<tr><td class="muted">' + r + '</td><td><b>' + esc(k === 'sem_placa' ? (R.vaso[k] ? 'sim' : 'não') : R.vaso[k] == null ? '—' : String(R.vaso[k])) + '</b></td><td>'
         + (eu.pode && k !== 'fabricante' ? '<button class="btn mini" data-corv="' + k + '">Corrigir</button>' : '') + '</td></tr>').join('') + '</table>'
     // S141 · itens 31, 45 e 47: a PMTA e a PTH de plaqueta, a pressão de operação e o volume são da câmara (como vieram do campo)
     + CALC.ativas(v).map(k => '<table style="margin-top:8px"><tr><th>' + (CALC.ativas(v).length > 1 ? esc(k.nome) : 'Câmara') + '</th><th></th><th></th></tr>'
@@ -1205,9 +1238,9 @@ function pintarRevisao(){
     + (LUG.some(l => !semAc[l.lugar] && !fotos.some(f => f.item === 'lugar:' + l.lugar) && !(l.lugar === 'placa_fabricacao' && fotos.some(f => f.secao === 'plaqueta' && !f.item)))
         ? '<p class="alerta" style="margin:6px 0 0">Sem foto e sem motivo: ' + LUG.filter(l => !semAc[l.lugar] && !fotos.some(f => f.item === 'lugar:' + l.lugar) && !(l.lugar === 'placa_fabricacao' && fotos.some(f => f.secao === 'plaqueta' && !f.item))).map(l => esc(l.rotulo)).join(', ') + '. Ponha uma foto no lugar (clique na foto › Lugar no laudo).</p>' : '')
     + '<div id="revVisor" class="visorrev"><p class="muted">Clique numa foto para ver.</p></div></div></div>'
-    + '<h3 style="margin-top:14px">Acessórios</h3>' + ((R.acessorios || []).length ? '<table><tr><th>Acessório</th><th>Marca / modelo</th><th>Lacre</th><th>Ajuste</th><th>Aferição</th><th></th></tr>'
+    + '<h3 style="margin-top:14px">Acessórios</h3>' + ((R.acessorios || []).length ? '<table><tr><th>Acessório</th><th>Marca · conexão</th><th>Lacre</th><th>Ajuste</th><th>Aferição</th><th></th></tr>'
       + R.acessorios.map(a => '<tr><td><b>' + esc(a.tag || ROT_ACESS[a.tipo] || a.tipo) + '</b><div class="muted">' + esc(a.tag ? (ROT_ACESS[a.tipo] || a.tipo) : '') + (a.situacao ? (a.tag ? ' · ' : '') + esc(ROT_SIT_AC[a.situacao] || a.situacao) : '') + '</div></td><td>'
-        + esc([semNaoHa(a.marca), semNaoHa(a.modelo)].filter(Boolean).join(' · ') || '—')
+        + esc([semNaoHa(a.marca), a.conexao].filter(Boolean).join(' · ') || '—')
         + '</td><td>' + esc((a.afericao && a.afericao.lacre) || a.lacre_num || '—') + (a.afericao && a.afericao.lacre ? '<div class="muted">na aferição</div>' : '') + '</td><td>' + (a.pressao_ajuste_mpa != null ? pr(a.pressao_ajuste_mpa) : '—') + '</td><td>'
         + (a.afericao ? esc(a.afericao.codigo || 'sem número') + ' · ' + (a.afericao.resultado === 'aprovado' ? 'aprovado' : '<b style="color:var(--crit)">' + esc(a.afericao.resultado || '') + '</b>') + (a.afericao.grave ? ' <span class="chip s-grave">grave</span>' : '') : '<span class="muted">—</span>')
         + '</td><td>' + (eu.pode ? '<button class="btn mini" data-cora="' + esc(a.id) + '">Corrigir</button>' : '') + '</td></tr>').join('') + '</table>' : '<p class="vazio">Nenhum acessório.</p>')
@@ -1226,7 +1259,12 @@ function pintarRevisao(){
       }).join('') + '</table>' : '<p class="muted">Nenhuma anomalia no visual e nenhum acessório reprovado.</p>')
     + '<h3 style="margin-top:14px">Todas as recomendações (' + recs.length + ')</h3>' + (recs.length ? '<table>' + recs.map(r => '<tr><td>' + esc(r.texto) + '</td><td class="muted">' + TIPO_REC[r.tipo]
         + (r.prazo ? ' · até ' + dataBR(r.prazo) : '') + (r.ref ? '' : ' · livre') + '</td><td>' + (eu.pode ? '<button class="btn mini" data-edrec="' + esc(r.id) + '">Editar</button> <button class="btn mini perigo" data-rmrec="' + esc(r.id) + '">Tirar</button>' : '') + '</td></tr>').join('') + '</table>' : '<p class="muted">Nenhuma.</p>')
-    + (eu.pode ? '<button class="btn mini" data-novarec="" data-sug="" style="margin-top:8px">+ recomendação livre</button>' : '') + '</div>';
+    + (eu.pode ? '<button class="btn mini" data-novarec="" data-sug="" style="margin-top:8px">+ recomendação livre</button>' : '')
+    + revSugestoesHtml(recs, eu.pode) + '</div>';
+  // S144 · item 70: prazo menor que o da norma (campo ou revisão)
+  h += revPrazoHtml(prev, eu.pode && e && e <= 3);
+  // S144 · item 77: o que vai anexado ao laudo, página por página
+  h += revAnexosHtml();
   // 3 · PMTA
   const plhAprova = e === 3 && eu.pode;
   h += '<div class="card">' + cab('pmta', '3 · PMTA') + '<table><tr><th>Câmara</th><th>Operação</th><th>Calculada</th><th>Anterior</th><th>Plaqueta</th><th>Adotada</th></tr>'
@@ -1298,7 +1336,10 @@ function pintarRevisao(){
 function revDatasHtml(prz){
   const base = dataSP(REV.R.inspecao.termino || REV.R.inspecao.inicio); if (!base) return '';
   const nExt = somaAnos(base, prz.externo), nInt = prz.interno == null ? null : somaAnos(base, prz.interno), obrig = prz.interno == null;
-  const D = REV.datas = REV.datas || { ativo: obrig, ext: nExt, int: nInt, just: '' };
+  const PR = REV.R.inspecao.prazo_red;   // S144 · item 70: o prazo reduzido vira as datas (o PLH vê e pode mudar)
+  const D = REV.datas = REV.datas || (PR ? { ativo:true, ext:PR.externo != null && PR.externo < prz.externo ? somaAnos(base, PR.externo) : nExt,
+      int:PR.interno != null && (prz.interno == null || PR.interno < prz.interno) ? somaAnos(base, PR.interno) : nInt, just:PR.just || '', red:true }
+    : { ativo: obrig, ext: nExt, int: nInt, just: '' });
   if (obrig) D.ativo = true;
   return '<div style="margin-top:10px;border-top:1px solid var(--rule-2);padding-top:8px"><b>Próximas inspeções</b>'
     + '<div class="muted">Pela NR-13: externa até <b>' + dataBR(nExt) + '</b>, interna ' + (nInt ? 'até <b>' + dataBR(nInt) + '</b>' : '<b>a critério do PLH</b> (abaixo de 0 °C)') + '.</div>'
@@ -1306,6 +1347,72 @@ function revDatasHtml(prz){
     + '<div id="revDatasCx"' + (D.ativo ? '' : ' hidden') + '><div class="g3"><label class="f">Próxima externa<input class="t" type="date" id="revExt" value="' + esc(D.ext || '') + '" max="' + nExt + '"></label>'
     + '<label class="f">Próxima interna<input class="t" type="date" id="revInt" value="' + esc(D.int || '') + '"' + (nInt ? ' max="' + nInt + '"' : '') + '></label>'
     + '<label class="f">Motivo<input class="t" id="revJust" value="' + esc(D.just || '') + '" placeholder="ex.: vaso horizontal em atmosfera agressiva"></label></div></div></div>';
+}
+// ── S144 · item 78: recomendações sugeridas pelas condições do vaso (o revisor escolhe; nada é marcado sozinho) ──
+function revSugestoes(){
+  const { R, v } = REV, out = [];
+  const fluidos = CALC.ativas(v).map(k => String(k.fluido || '').toLowerCase()).join(' ');
+  const amb = R.inspecao.ambiente || (v.inspecao && v.inspecao.ambiente) || v.ambiente;
+  const vis = R.visual || [];
+  out.push({ tipo:'conservacao', texto:'Que se faça a limpeza periódica do vaso e dos acessórios.' });
+  if (/ar comprimido/.test(fluidos)) out.push({ tipo:'conservacao', texto:'Que se faça a drenagem (purga) periódica do condensado ou se instale purga automática, para evitar acúmulo de umidade no interior do vaso.' });
+  if (amb === 'aberto') out.push({ tipo:'conservacao', texto:'Que seja providenciada uma cobertura, para evitar que o vaso fique exposto às intempéries.' });
+  if (vis.some(x => x.conforme === false && /corros|pintur|ferrugem|oxida/i.test((x.anomalia || '') + ' ' + x.item))) out.push({ tipo:'conservacao', texto:'Que se providencie a pintura do vaso, para desacelerar a corrosão.' });
+  if (vis.some(x => /aterr/i.test(x.item) && x.conforme === false)) out.push({ tipo:'seguranca', texto:'Instalar ou reparar o aterramento do vaso e medir a continuidade.' });
+  if ((R.vaso || {}).sem_placa) out.push({ tipo:'seguranca', texto:'Que seja instalada a placa de identificação do vaso, conforme o item 13.5.1.3 da NR-13.' });
+  return out;
+}
+function revSugestoesHtml(recs, pode){
+  const norm = x => String(x || '').toLowerCase().replace(/[^a-zà-ú]/g, '').slice(0, 40);
+  const L = revSugestoes().filter(x => !recs.some(r => norm(r.texto) === norm(x.texto)));
+  if (!L.length) return '';
+  return '<h3 style="margin-top:14px">Sugestões pelas condições do vaso</h3><p class="muted" style="margin:0 0 4px">O sistema não marca nenhuma: escolha as que valem para este vaso.</p><table>'
+    + L.map(x => '<tr><td>' + esc(x.texto) + '</td><td class="muted">' + TIPO_REC[x.tipo] + '</td><td>' + (pode ? '<button class="btn mini" data-sugrec="' + esc(x.tipo) + '" data-sug="' + esc(x.texto) + '">Recomendar</button>' : '') + '</td></tr>').join('') + '</table>';
+}
+// ── S144 · item 70: prazo menor que o da norma (externo e interno separados, com a justificativa) ──
+function revPrazoHtml(prev, pode){
+  const PR = REV.R.inspecao.prazo_red, prz = prev.vaso && !prev.vaso.erro ? prev.vaso.prazos : null;
+  // sugestão (nunca automática): a menor vida remanescente abaixo do prazo do interno
+  const vidas = (REV.vidas || revVidas()).filter(x => x.vida != null && x.vida > 0 && !x.semPerda);
+  const menor = vidas.length ? vidas.reduce((a, b) => b.vida < a.vida ? b : a) : null;
+  const refPrz = prz ? (prz.interno != null ? prz.interno : prz.externo) : null;
+  const sug = menor && refPrz != null && menor.vida < refPrz ? Math.max(1, Math.floor(menor.vida)) : null;
+  let h = '<div class="card"><h3 style="margin:0">Prazo das próximas inspeções</h3>'
+    + '<p class="muted" style="margin:4px 0 8px">' + (prz ? 'Pela NR-13 (Tabela 2, categoria ' + esc(prev.vaso.categoria) + '): externo ' + prz.externo + ' ano(s), interno ' + (prz.interno == null ? 'a critério do PLH' : prz.interno + ' anos') + '. ' : '')
+    + 'Pode ser menor, nunca maior. Quem reduziu fica só no controle interno; o laudo diz os prazos e o motivo.</p>';
+  if (PR) h += '<p class="alerta" style="margin:0 0 8px"><b>Reduzido ' + (PR.origem === 'campo' ? 'em campo' : 'na revisão') + (PR.por ? ' por ' + esc(PR.por) : '') + (PR.em ? ' (' + quandoBR(PR.em) + ')' : '') + ':</b> '
+    + [PR.externo != null ? 'externo ' + PR.externo + ' ano(s)' : null, PR.interno != null ? 'interno ' + PR.interno + ' ano(s)' : null].filter(Boolean).join(', ') + '. Motivo: ' + esc(PR.just || '') + '</p>';
+  if (sug != null) h += '<p class="alerta falta" style="margin:0 0 8px">Sugestão: a vida remanescente do ' + esc(menor.nome) + ' (' + esc(menor.vidaTxt) + ') é menor que o prazo da norma. Avalie reduzir o prazo do exame interno para ' + sug + ' ano(s).</p>';
+  if (pode) h += '<div class="g3"><label class="f">Externo (anos)<input class="t" id="przExt" inputmode="numeric" value="' + esc(PR && PR.externo != null ? PR.externo : '') + '" placeholder="' + (prz ? 'norma: ' + prz.externo : '') + '"></label>'
+    + '<label class="f">Interno (anos)<input class="t" id="przInt" inputmode="numeric" value="' + esc(PR && PR.interno != null ? PR.interno : (sug != null && !PR ? sug : '')) + '" placeholder="' + (prz && prz.interno != null ? 'norma: ' + prz.interno : '') + '"></label>'
+    + '<label class="f">Justificativa<input class="t" id="przJust" list="przMotivos" value="' + esc(PR ? PR.just || '' : '') + '" placeholder="escolha ou escreva"><datalist id="przMotivos">' + PRAZO_MOTIVOS.map(m => '<option value="' + esc(m) + '">').join('') + '</datalist></label></div>'
+    + '<div class="linha"><button class="btn mini" id="przGravar">Gravar o prazo reduzido</button>' + (PR ? '<button class="btn mini" id="przTirar">Voltar ao prazo da norma</button>' : '') + '</div>';
+  return h + '</div>';
+}
+// ── S144 · item 77: os anexos do laudo, com a miniatura de cada página ──
+function revAnexosHtml(){
+  const A = REV.R.anexos || {}, L = [];
+  L.push({ k:'medidor', rot:'Anexo 1 · Certificado de calibração do medidor de espessura' + (A.medidor && A.medidor.descricao ? ' (' + A.medidor.descricao + ')' : ''), path:A.medidor && A.medidor.path });
+  L.push({ k:'art', rot:'Anexo 2 · ART' + (A.art && A.art.numero ? ' nº ' + A.art.numero : ''), path:A.art && A.art.path });
+  return '<div class="card"><h3 style="margin:0">Anexos do laudo</h3><p class="muted" style="margin:4px 0 8px">Confira cada página antes de aprovar: o laudo vai para o cliente e anexa exatamente estes arquivos.</p>'
+    + L.map(x => '<div style="margin-bottom:10px"><b>' + esc(x.rot) + '</b>' + (x.path ? ' <button class="btn mini" data-anexo="' + esc(x.path) + '">Ver as páginas</button><div class="paginas" data-pags="' + esc(x.path) + '"></div>'
+        : ' <span class="chip s-grave">sem o arquivo</span>') + '</div>').join('') + '</div>';
+}
+async function revMostrarPaginas(path, cx){
+  cx.innerHTML = '<p class="muted">Abrindo…</p>';
+  try{
+    const b = await baixar(path);
+    if (!ehPdf(b)){ cx.innerHTML = '<div class="pag"><img alt="" style="max-width:220px;max-height:300px;border:1px solid var(--rule-2)"></div>'; cx.querySelector('img').src = dataURLDe(b); return; }
+    if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
+    const doc = await PDFLib.PDFDocument.load(b, { ignoreEncryption:true }), n = doc.getPageCount();
+    const url = URL.createObjectURL(new Blob([b], { type:'application/pdf' }));
+    cx.innerHTML = '<p class="muted" style="margin:4px 0">' + n + ' página(s). Clique numa página para ampliar.</p><div style="display:flex;flex-wrap:wrap;gap:8px">'
+      + Array.from({ length:n }, (_, k) => '<div style="text-align:center"><iframe title="Página ' + (k + 1) + '" src="' + url + '#page=' + (k + 1) + '&toolbar=0&navpanes=0&view=Fit" style="width:180px;height:250px;border:1px solid var(--rule-2);pointer-events:none"></iframe>'
+        + '<div><button class="btn mini" data-pagina="' + (k + 1) + '">Página ' + (k + 1) + '</button></div></div>').join('') + '</div>';
+    cx.querySelectorAll('[data-pagina]').forEach(bt => bt.addEventListener('click', () => {
+      janela('Página ' + bt.dataset.pagina, '<iframe title="Página" src="' + url + '#page=' + bt.dataset.pagina + '&view=Fit" style="width:100%;height:70vh;border:0"></iframe>', [{ rotulo:'Fechar' }]);
+    }));
+  }catch(e){ cx.innerHTML = '<p class="alerta crit"></p>'; cx.firstChild.textContent = e.message; }
 }
 // a regra sugerida: mantém a anterior quando ela cabe na calculada; senão, a calculada
 // S141 · item 43 (decisão do Bruno, 10/11: A): a sugestão é a menor entre a calculada, a de plaqueta e a anterior (nenhuma acima da calculada)
@@ -1464,12 +1571,21 @@ function ligarRevisao(){
   }));
   const corrigir = (alvo, ref, campos, atual) => {
     janela('Corrigir', '<label class="f">Dado<select class="t" id="rcCampo">' + campos.map(([k, r]) => '<option value="' + k + '">' + r + '</option>').join('') + '</select></label>'
-      + '<label class="f">Valor certo<input class="t" id="rcValor"></label><label class="f">Motivo<input class="t" id="rcMotivo" placeholder="ex.: conforme a foto da plaqueta"></label>'
+      + '<label class="f">Valor certo<input class="t" id="rcValor" list="rcLista"><datalist id="rcLista"></datalist></label><p class="muted" id="rcDica" style="margin:2px 0 0"></p>'
+      + '<label class="f">Motivo<input class="t" id="rcMotivo" placeholder="ex.: conforme a foto da plaqueta"></label>'
       + '<p class="muted">Fica registrado o antes, o depois e o seu nome.</p>', [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
         rpc('tf_insp_revisao_corrigir', { p_id:id, p_alvo:alvo, p_ref:ref, p_campo:$('rcCampo').value, p_valor:$('rcValor').value, p_motivo:$('rcMotivo').value })
           .then(r => { U.toast(r && r.mudou ? 'Corrigido.' : 'Era o mesmo valor.', 'ok'); N.janela.fechar(); recarregar(); }, erro);
         return false; } }]);
-    const sel = $('rcCampo'), pinta = () => { $('rcValor').value = atual(sel.value) == null ? '' : String(atual(sel.value)); };
+    // S144 · itens 63 e 78: a lista das funções do vaso; "sem placa" é sim ou não; o Número TAP é o nº do cliente + a TAG sem o prefixo
+    const DICA = { numero_tap:'Nº do cliente + "-" + a TAG sem o prefixo (ex.: VP-23 do cliente 33 → 33-23). Depois de gravado na placa, não muda mais.',
+      sem_placa:'Escreva "sim" (o vaso não tem placa) ou "não".', conexao:'Ex.: 1/2" (a bitola da rosca).' };
+    const sel = $('rcCampo'), pinta = () => {
+      const k = sel.value, a = atual(k);
+      $('rcValor').value = k === 'sem_placa' ? (a ? 'sim' : 'não') : a == null ? '' : String(a);
+      $('rcLista').innerHTML = (k === 'funcao' ? FUNCOES_VASO : k === 'sem_placa' ? ['sim', 'não'] : []).map(x => '<option value="' + esc(x) + '">').join('');
+      $('rcDica').textContent = DICA[k] || '';
+    };
     sel.addEventListener('change', pinta); pinta();
   };
   T.querySelectorAll('[data-corv]').forEach(b => b.addEventListener('click', () => { corrigir('vaso', null, REV_CAMPOS_VASO, k => R.vaso[k]); $('rcCampo').value = b.dataset.corv; $('rcCampo').dispatchEvent(new Event('change')); }));
@@ -1523,6 +1639,23 @@ function ligarRevisao(){
         return false; } }]);
   };
   T.querySelectorAll('[data-novarec]').forEach(b => b.addEventListener('click', () => formRec(null, b.dataset.novarec || null, b.dataset.sug)));
+  // S144 · item 78: a sugestão abre o formulário já preenchido (o revisor confere e grava)
+  T.querySelectorAll('[data-sugrec]').forEach(b => b.addEventListener('click', () => formRec({ tipo:b.dataset.sugrec, texto:b.dataset.sug, prazo:null, ref:null })));
+  // S144 · item 77: as páginas de cada anexo
+  T.querySelectorAll('[data-anexo]').forEach(b => b.addEventListener('click', () => revMostrarPaginas(b.dataset.anexo, T.querySelector('[data-pags="' + b.dataset.anexo + '"]'))));
+  // S144 · item 70: gravar ou tirar o prazo reduzido
+  const prz = (ext, int, just) => rpc('tf_insp_prazo_reduzir', { p_id:id, p_dados:{ externo:ext, interno:int, justificativa:just } })
+    .then(r => { U.toast(r && r.mudou ? 'Prazo gravado.' : 'Nada mudou.', 'ok'); REV.datas = null; recarregar(); }, erro);
+  const bpg = $('przGravar'); if (bpg) bpg.addEventListener('click', () => U.semDuploEnvio(bpg, async () => {
+    const n = id => { const x = ($(id).value || '').trim(); if (!x) return null; const y = Number(x); if (!Number.isInteger(y) || y < 1) throw new Error('Prazo em anos inteiros (1 ou mais).'); return y; };
+    let ext, int; try{ ext = n('przExt'); int = n('przInt'); }catch(e){ erro(e); return; }
+    const pz = REV.prev.vaso && !REV.prev.vaso.erro ? REV.prev.vaso.prazos : null;
+    if (pz && ext != null && ext > pz.externo){ U.toast('O externo não pode passar de ' + pz.externo + ' ano(s) (NR-13).', 'err'); return; }
+    if (pz && int != null && pz.interno != null && int > pz.interno){ U.toast('O interno não pode passar de ' + pz.interno + ' anos (NR-13).', 'err'); return; }
+    if (ext == null && int == null){ U.toast('Informe o prazo reduzido (externo, interno ou os dois).', 'err'); return; }
+    await prz(ext, int, ($('przJust').value || '').trim());
+  }));
+  const bpt = $('przTirar'); if (bpt) bpt.addEventListener('click', () => prz(null, null, null));
   T.querySelectorAll('[data-edrec]').forEach(b => b.addEventListener('click', () => formRec(R.recomendacoes.find(x => x.id === b.dataset.edrec))));
   T.querySelectorAll('[data-rmrec]').forEach(b => b.addEventListener('click', async () => {
     if (!await N.janela.confirmar('Tirar a recomendação?', '<p>' + esc((R.recomendacoes.find(x => x.id === b.dataset.rmrec) || {}).texto || '') + '</p>', 'Tirar', true)) return;
@@ -1733,7 +1866,7 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S143');
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S144');
     return true;
   })().catch(e => { LIBS = null; throw e; });
   return LIBS;

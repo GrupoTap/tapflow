@@ -369,14 +369,18 @@ function montar(d, opc) {
       const p = [TIPOS_ACESS[a.tipo] || a.tipo, a.tag ? a.tag : null].filter(Boolean).join(' ');
       // S141 · itens 32 e 48: o lacre é o colocado na aferição; "Não há" não é marca nem modelo
       const nh = x => vazio(x) ? null : x, lacre = (a.afericao && a.afericao.lacre_colocado) || a.lacre_num;
-      const det = [nh(a.marca) ? 'marca ' + a.marca : null, nh(a.modelo) ? 'modelo ' + a.modelo : null, a.escala ? 'escala ' + a.escala : null,
+      // S144 · item 72: o acessório não tem "modelo"; o manômetro sai com a escala (a da aferição; sem ela, a anotada em campo)
+      const f = a.afericao || {}, ehMed = a.tipo === 'manometro' || a.tipo === 'manovacuometro';
+      const escala = ehMed ? (f.faixa_fim != null ? 'escala de ' + fmt(f.faixa_ini || 0, 0) + ' a ' + fmt(f.faixa_fim, 0) + ' ' + String(f.unidade || 'bar').replace('kgf/cm2', 'kgf/cm²')
+        : (nh(a.escala) ? 'escala ' + String(a.escala).replace(/^escala\s*/i, '') : null)) : null;
+      const det = [nh(a.marca) ? 'marca ' + a.marca : null, escala,
         a.pressao_ajuste_mpa != null ? 'ajuste ' + bar(a.pressao_ajuste_mpa) : null, a.conexao ? 'conexão ' + a.conexao : null, lacre ? 'lacre nº ' + lacre : null].filter(Boolean).join(', ');
       const sit = { ok: '', substituir: ' — a substituir', ausente: ' — ausente', inoperante: ' — inoperante', retirado: ' — retirado nesta inspeção' }[a.situacao] || '';
       return p + (det ? ': ' + det : '') + sit + ';';
     }), true);
   }
   // S143 · item 78 (6.2): uma figura por acessório, com as fotos dele lado a lado e a legenda do que mostram
-  const fotosAc = (d.fotos || []).filter(f => f.secao === 'acessorios' && img[f.path]);
+  const fotosAc = (d.fotos || []).filter(f => f.secao === 'acessorios' && img[f.path] && !/^afer:/.test(f.item || ''));   // S144 · item 69: a foto da aferição vai no 7.5/7.6
   const grupos = [];
   fotosAc.forEach(f => { const g = grupos.find(x => x.item === (f.item || f.id)); if (g) g.fs.push(f); else grupos.push({ item: f.item || f.id, fs: [f] }); });
   grupos.forEach(g => {
@@ -490,6 +494,9 @@ function montar(d, opc) {
     certificado: pz.certificado_num || '—' });
   const bancadaTxt = bz => { const m = [bz.marca, bz.modelo].filter(x => !vazio(x)).join(' '); return m ? ' (modelo ' + m + ')' : ''; };
   const conc = { man: [], valv: [] }, K = M.conc || {};
+  // S144 · item 69: a foto da aferição (tirada no celular, no lugar próprio do acessório) entra como figura
+  const fotoAfer = (a, legenda) => { const fs = (d.fotos || []).filter(f => f.secao === 'acessorios' && f.item === 'afer:' + a.id && img[f.path]);
+    if (fs.length) figura(fs.map(f => img[f.path]), legenda); };
   sub('7.5', T.manometro || 'Aferição do manômetro');
   const mans = acs.filter(a => (a.tipo === 'manometro' || a.tipo === 'manovacuometro') && presentes(a));
   if (!mans.length) { par(M.manometro_nenhum); conc.man.push(K.man_nenhum); }
@@ -503,6 +510,7 @@ function montar(d, opc) {
       par(comResultado(f.resultado === 'aprovado' ? M.manometro_feito : M.manometro_reprovado, Object.assign({ tipo: tipoNome, ident: ident.length ? ', ' + ident.join(', ') + ',' : '',
         bancada: bancadaTxt(bz), pontos: pontos ? ' em ' + pontos + ' pontos da escala,' : '', lacre: f.lacre_colocado ? txt(M.manometro_lacre, { lacre: f.lacre_colocado }) : '',
         codigo: f.codigo || 'a numerar' }, padraoVars(pz)), f.resultado === 'aprovado' ? 'ok' : 'nc'));
+      fotoAfer(a, 'Aferição do ' + tipoNome);
       conc.man.push(f.resultado === 'aprovado' ? K.man_ok : K.man_nc);
     } else { par(txt(M.manometro_nao, { acessorio: !vazio(a.marca) ? a.marca : '', motivo: a.afericao_motivo || 'não informado' })); conc.man.push(txt(K.man_nao, { motivo: a.afericao_motivo || 'motivo não informado' })); }
   });
@@ -525,6 +533,7 @@ function montar(d, opc) {
         lacre: lacre ? txt(M.valvula_lacre, { lacre }) : '', codigo: f.codigo || 'a numerar' }, padraoVars(pz));
       if (f.resultado === 'aprovado') par(comResultado(M.valvula_feita, vars, 'ok'));
       else par(comResultado(M.valvula_reprovada, Object.assign(vars, { motivo: acima ? txt(M.valvula_motivo_pmta, vars) : M.valvula_motivo_tolerancia }), 'nc'));
+      fotoAfer(a, 'Aferição da ' + tipoNome);
       conc.valv.push(f.resultado === 'aprovado' ? K.valv_ok : K.valv_nc);
     } else { par(txt(M.valvula_nao, { acessorio: !vazio(a.marca) ? a.marca : '', motivo: a.afericao_motivo || 'não informado' })); conc.valv.push(txt(K.valv_nao, { motivo: a.afericao_motivo || 'motivo não informado' })); }
   });
@@ -670,21 +679,33 @@ function montar(d, opc) {
 
   // ── 13 · próximas inspeções ─────────────────────────────────────────────
   sec('13', T.proximas || 'PRÓXIMAS INSPEÇÕES');
-  if (R.datas_pelo_plh && R.justificativa_datas) par(txt(M.proximas_plh, { justificativa: R.justificativa_datas }));
+  // S144 · item 70: o prazo reduzido em campo ou na revisão (o PLH aprovou com as datas desse prazo)
+  const RED = I.prazo_red && R.datas_pelo_plh && R.justificativa_datas === I.prazo_red.just ? I.prazo_red : null;
+  const anosTxt = n => n + (Number(n) === 1 ? ' ano' : ' anos');
+  if (RED) par(txt(M.proximas_reduzido || 'Os prazos foram reduzidos para {{prazos}}, a critério do PLH, em razão de: {{justificativa}}.',
+    { prazos: [RED.externo != null ? anosTxt(RED.externo) + ' (exame externo)' : null, RED.interno != null ? anosTxt(RED.interno) + ' (exame interno)' : null].filter(Boolean).join(' e '),
+      justificativa: String(RED.just || '').replace(/[.\s]+$/, '').replace(/^./, x => x.toLowerCase()) }));
+  else if (R.datas_pelo_plh && R.justificativa_datas) par(txt(M.proximas_plh, { justificativa: R.justificativa_datas }));
   else if (V.sem_codigo_construcao) par(M.proximas_sem_codigo);
   else if (V.abaixo_zero_sem_deterioracao) par(M.proximas_abaixo_zero);
   else par(txt(M.proximas_tabela, { categoria: R.categoria || '—' }));
-  const prazoTxt = (n, plh) => plh ? 'definido pelo PLH' : n == null ? 'a critério do PLH' : n + (n === 1 ? ' ano' : ' anos');
+  const prazoTxt = (n, plh, red) => red != null ? anosTxt(red) + ' (reduzido)' : plh ? 'definido pelo PLH' : n == null ? 'a critério do PLH' : anosTxt(n);
   tabela(['Exame', 'Prazo', 'Data limite'], [
-    ['Externo', prazoTxt(R.prazo_externo_anos, R.datas_pelo_plh), { text: dataBR(R.proxima_externa), style: 'td', bold: true }],
-    ['Interno', prazoTxt(R.prazo_interno_anos, R.datas_pelo_plh), { text: R.proxima_interna ? dataBR(R.proxima_interna) : '—', style: 'td', bold: true }]], [120, '*', 120]);
+    ['Externo', prazoTxt(R.prazo_externo_anos, R.datas_pelo_plh, RED && RED.externo != null && RED.externo < R.prazo_externo_anos ? RED.externo : null), { text: dataBR(R.proxima_externa), style: 'td', bold: true }],
+    ['Interno', prazoTxt(R.prazo_interno_anos, R.datas_pelo_plh, RED && RED.interno != null && (R.prazo_interno_anos == null || RED.interno < R.prazo_interno_anos) ? RED.interno : null),
+      { text: R.proxima_interna ? dataBR(R.proxima_interna) : '—', style: 'td', bold: true }]], [120, '*', 120]);
 
   // ── 14 · responsáveis ───────────────────────────────────────────────────
   sec('14', T.responsaveis || 'RESPONSÁVEIS PELA INSPEÇÃO');
   par(M.responsaveis_intro);
-  const plh = opc.plh || d.plh || null;
-  tabela(['Função', 'Nome', 'Registro'], [[{ text: 'PLH (responsável técnico)', style: 'thl' }, plh ? plh.nome + (plh.titulo ? ' — ' + plh.titulo : '') : 'assina quem emitir', plh ? plh.registro : '—']]
-    .concat((d.equipe || []).map(q => [{ text: maiusc1(q.papel || 'equipe'), style: 'thl' }, q.nome + (q.perfil ? ' — ' + q.perfil : ''), '—'])), [130, '*', 110]);
+  // S144 · item 71: "Nome completo — Função" (a função do cadastro da pessoa) e o registro de quem tem; sem o setor do sistema
+  const FUNC_PAPEL = { inspetor: 'Inspetor', auxiliar: 'Auxiliar de Inspeção', plh: 'Profissional Legalmente Habilitado' };
+  const eqPlh = (d.equipe || []).find(q => q.papel === 'plh') || null;
+  const plh = opc.plh || d.plh || (eqPlh ? { nome: eqPlh.nome, registro: eqPlh.registro } : null);
+  const mesmo = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+  const reg = x => vazio(x) ? '' : String(x);
+  tabela(['Nome', 'Função', 'Registro'], [[{ text: plh ? plh.nome : 'O PLH que emitir o laudo', style: 'thl' }, 'Profissional Legalmente Habilitado (responsável técnico)', reg(plh && plh.registro)]]
+    .concat((d.equipe || []).filter(q => !(plh && mesmo(q.nome, plh.nome))).map(q => [{ text: q.nome, style: 'thl' }, q.funcao || FUNC_PAPEL[q.papel] || 'Equipe de inspeção', reg(q.registro)])), ['*', 190, 110]);
   par(M.responsaveis_assinatura, { italics: true, color: CLARO });
   if (opc.numero) par('Relatório nº ' + numero + ', emitido em ' + dataBR(opc.emitidoEm) + (opc.revisao ? '. Revisão ' + opc.revisao + (opc.motivoRev ? ': ' + opc.motivoRev : '') : '') + '.', { color: CLARO });
 
@@ -743,6 +764,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-S143-2026-11-10' };
+const LaudoPDF = { montar, fotosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-S144-2026-11-10' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);

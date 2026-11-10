@@ -181,7 +181,8 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 16';   // S142 · item 40 (418): quem não está na T06 vê um aviso com quem está
+const VERSAO = 'TapDoc 17';   // S144 · rodada D2 (420): função do vaso e "sem placa" na plaqueta; prazo menor que o da norma no fechamento (item 70); sem o "modelo" do acessório (item 72); "aferição" também na válvula (item 74); aviso de válvula sem conexão (item 75); foto da aferição (item 69); a sigla da região pelo nome (item 78)
+// const VERSAO = 'TapDoc 16';   // S142 · item 40 (418): quem não está na T06 vê um aviso com quem está
 // const VERSAO = 'TapDoc 15';   // S141 · item 58 (motor R00.5): a tolerância do manômetro pela NBR 14105-1, classe B, com a regra na tela · item 42: o aviso da coleta anterior
 // const VERSAO = 'TapDoc 14';   // S140 · lista de melhorias, itens 33, 44, 49 a 56, 59 e 60 (416): lugares das fotos, galeria, costado com regiões, cartões dos componentes, volume em litros, temperatura só acima de 200 °C, aferição sem pulos, o que se digita não se perde
 // const VERSAO = 'TapDoc 13';   // S132: o sistema se chama TapHub nas telas (item #10 da lista) e "Relatar problema ou sugerir" no menu (núcleo N6, modulos M2)
@@ -715,11 +716,11 @@ const REGIOES = { frontal:['CF','Frontal'], traseiro:['CT','Traseiro'], superior
 const REG_ORDEM = ['frontal','traseiro','superior','inferior','direito','esquerdo'];
 const REG_PADRAO = { horizontal:['frontal','traseiro','superior','inferior'], vertical:['frontal','traseiro','direito','esquerdo'] };
 const TIPO_CURTO = { eliptico:'elíptico', torisferico:'torisférico', hemisferico:'hemisférico', conico:'cônico', plano:'plano', janela:'janela de visita', costado:'cilíndrico' };
-/** A sigla da região: pela posição; sem posição, pelo nome (inspeções antigas: "CF", "Costado CS"…). */
+// S144 · item 78: o nome manda (no piloto, "CS" veio com a posição "inferior", gravada antes do TapDoc 14); sem sigla no nome, a posição
 function siglaReg(c){
-  if (REGIOES[c.posicao]) return REGIOES[c.posicao][0];
   const m = String(c.nome || '').match(/\b(CF|CT|CS|CI|CLD|CLE)\s*$/i);
-  return m ? m[1].toUpperCase() : null;
+  if (m) return m[1].toUpperCase();
+  return REGIOES[c.posicao] ? REGIOES[c.posicao][0] : null;
 }
 function nomeReg(c){
   const sg = siglaReg(c), k = Object.keys(REGIOES).find(x => REGIOES[x][0] === sg);
@@ -1044,6 +1045,10 @@ function telaPlaqueta(v){
     fabs.map(f => '<option value="' + esc(f.id) + '"' + (f.id === v.fabricante_id ? ' selected' : '') + '>' + esc(f.nome) + '</option>').join('') +
     (v.fabricante && !fabs.some(f => f.id === v.fabricante_id) ? '<option value="__" selected>' + esc(v.fabricante) + '</option>' : '') +
     '<option value="+">Outro (escrever)…</option></select></label>';
+  // S144 · item 78: o que o vaso é (sai no laudo: "funciona como …") e o vaso sem placa (sai no laudo e vira recomendação)
+  h += '<label class="f">Função do vaso<select class="t" id="pFunc"><option value="">—</option>' + FUNCOES_VASO.map(f => '<option' + (f === v.funcao ? ' selected' : '') + '>' + esc(f) + '</option>').join('') +
+    (v.funcao && FUNCOES_VASO.indexOf(v.funcao) < 0 ? '<option selected>' + esc(v.funcao) + '</option>' : '') + '<option value="+">Outra (escrever)…</option></select></label>';
+  h += '<div class="chk"><input type="checkbox" id="pSemPlaca"' + (v.sem_placa ? ' checked' : '') + '><label for="pSemPlaca">O vaso não tem placa de identificação</label></div>';
   h += campoTexto('Nº de série', 'pSerie', v.numero_serie);
   h += '<div class="lin">' + campoTexto('Modelo', 'pModelo', v.modelo) + campoNum('Ano de fabricação', 'pAno', v.ano_fabricacao, null, 'inputmode="numeric"') + '</div>';
   h += '<div class="chk"><input type="checkbox" id="pSemCod"' + (v.sem_codigo_construcao ? ' checked' : '') + '><label for="pSemCod">Sem código de construção (não consta)</label></div>';
@@ -1084,6 +1089,16 @@ function telaPlaqueta(v){
     mudouVaso(v, 'fabricante_id', el.value || null);
   });
   ligar('pSerie', el => mudouVaso(v, 'numero_serie', el.value.trim() || null));
+  ligar('pFunc', el => {
+    if (el.value === '+'){
+      janela('Função do vaso', '<label class="f">O que o vaso é<input class="t" id="pfNome" placeholder="Ex.: reservatório de nitrogênio"></label>', [{ rotulo:'Cancelar', acao:() => pintar() }, { rotulo:'Usar', classe:'pri', acao:() => {
+        const nm = ($('pfNome').value || '').trim(); if (!nm){ U.toast('Escreva a função.', 'err'); return false; }
+        mudouVaso(v, 'funcao', nm); N.janela.fechar(); pintar(); } }]);
+      return;
+    }
+    mudouVaso(v, 'funcao', el.value || null);
+  });
+  ligar('pSemPlaca', el => mudouVaso(v, 'sem_placa', el.checked));
   ligar('pModelo', el => mudouVaso(v, 'modelo', el.value.trim() || null));
   ligar('pAno', el => { const a = numOuAviso(el, 1900, new Date().getFullYear() + 1, 'Ano'); if (a !== undefined) mudouVaso(v, 'ano_fabricacao', a == null ? null : Math.round(a)); });
   ligar('pSemCod', el => { mudouVaso(v, 'sem_codigo_construcao', el.checked); if (el.checked){ mudouVaso(v, 'codigo_construcao', null); } pintar(); });
@@ -1553,6 +1568,8 @@ const TIPOS_ACESS = { valvula_seguranca:'Válvula de segurança', valvula_alivio
 const VALVULAS = ['valvula_seguranca', 'valvula_alivio', 'quebra_vacuo'];
 const MEDIDORES = ['manometro', 'manovacuometro'];
 const SIT_ACESS = { ok:'ok', substituir:'substituir', ausente:'ausente', inoperante:'inoperante', retirado:'retirado' };
+const FUNCOES_VASO = ['Reservatório de ar comprimido', 'Pulmão de ar comprimido', 'Secador de ar comprimido', 'Filtro', 'Separador de condensado', 'Acumulador hidráulico',
+  'Autoclave', 'Trocador de calor', 'Reservatório de gás', 'Tanque de pressão'];   // S144 · item 78 (a mesma lista do escritório)
 const BITOLAS = ['1/8"', '1/4"', '3/8"', '1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"'];
 const MOTIVOS_BORO = ['O fluido do vaso inviabiliza a boroscopia.', 'O vaso não tem conexão para a boroscopia.',
   'A inspeção interna está dentro do prazo de validade.', 'O vaso está em operação: não foi possível parar e abrir.',
@@ -1731,6 +1748,8 @@ function avisosAcess(v){
     if (p && x.pressao_ajuste_mpa > p + 1e-9) a.push((TIPOS_ACESS[x.tipo]) + (x.lacre_num ? ' lacre ' + x.lacre_num : '') + ': ajuste ' + fmt(x.pressao_ajuste_mpa, 3) +
       ' MPa acima da PMTA vigente (' + fmt(p, 3) + ' MPa). NR-13 13.5.1.2 "a".');
   });
+  // S144 · item 75: a conexão da válvula sai no 7.6 do laudo ("com conexão …")
+  l.filter(x => VALVULAS.includes(x.tipo) && x.situacao !== 'ausente' && !(x.conexao || '').trim()).forEach(x => a.push(TIPOS_ACESS[x.tipo] + ': informe a conexão (bitola).'));
   const cs = ativas(v);
   cs.forEach(c => {
     const tem = l.some(x => x.tipo === 'valvula_seguranca' && (cs.length === 1 || x.camara_id === c.id));
@@ -1792,17 +1811,19 @@ function blocoAfericao(v, a, pode){
   let h = '<div class="afBloco" style="margin-top:10px;padding:8px 10px;border:1px solid var(--rule-2);border-radius:6px">';
   if (af){
     const r = resultadoAf(v, a, af);
-    h += '<div style="display:flex;gap:8px;align-items:center"><b style="flex:1">' + (vv ? 'Teste' : 'Aferição') + '</b>' + chipAf(r.resultado) + '</div>'
+    h += '<div style="display:flex;gap:8px;align-items:center"><b style="flex:1">Aferição</b>' + chipAf(r.resultado) + '</div>'
       + '<p class="muted" style="margin:4px 0 0">' + (af.codigo ? esc(af.codigo) : 'Número ao enviar (o servidor numera).') + '</p>'
       + (r.grave ? '<p class="alerta" style="margin:6px 0 0">Abertura acima da PMTA vigente: grave.</p>' : '')
-      + '<button class="btn sec" data-afabre="' + esc(a.id) + '" style="margin-top:6px">' + (pode ? 'Abrir ' + (vv ? 'o teste' : 'a aferição') : 'Ver') + '</button>';
+      + '<button class="btn sec" data-afabre="' + esc(a.id) + '" style="margin-top:6px">' + (pode ? 'Abrir a aferição' : 'Ver') + '</button>'
+      // S144 · item 69: a foto da aferição na bancada (sai como figura no 7.5/7.6 do laudo)
+      + '<p style="margin:10px 0 0;font-size:13px;font-weight:600;color:var(--ink-2)">Foto da aferição <small class="muted" style="font-weight:400">(na bancada; vai no laudo)</small></p>' + gradeFotos(v, 'acessorios', 2, null, 'afer:' + a.id);
   } else if ((a.afericao_motivo || '').trim()){
-    h += '<b>Não ' + (vv ? 'testada' : 'aferido') + '</b><p class="muted" style="margin:4px 0 0">' + esc(a.afericao_motivo) + '</p>'
-      + (pode ? '<button class="btn sec" data-afdesf="' + esc(a.id) + '" style="margin-top:6px">' + (vv ? 'Testar' : 'Aferir') + ' mesmo assim</button>' : '');
+    h += '<b>Não ' + (vv ? 'aferida' : 'aferido') + '</b><p class="muted" style="margin:4px 0 0">' + esc(a.afericao_motivo) + '</p>'
+      + (pode ? '<button class="btn sec" data-afdesf="' + esc(a.id) + '" style="margin-top:6px">' + 'Aferir mesmo assim</button>' : '');
   } else {
-    h += '<b>' + (vv ? 'Teste da válvula' : 'Aferição do manômetro') + '</b><p class="muted" style="margin:4px 0 0">O envio pede ' + (vv ? 'o teste' : 'a aferição') + ' ou o motivo.</p>'
-      + (pode ? '<div style="display:flex;gap:8px;margin-top:6px"><button class="btn pri" data-afnovo="' + esc(a.id) + '">' + (vv ? 'Testar' : 'Aferir') + '</button>'
-        + '<button class="btn sec" data-afnao="' + esc(a.id) + '">Não ' + (vv ? 'testar' : 'aferir') + '…</button></div>' : '');
+    h += '<b>' + (vv ? 'Aferição da válvula' : 'Aferição do manômetro') + '</b><p class="muted" style="margin:4px 0 0">O envio pede a aferição ou o motivo.</p>'
+      + (pode ? '<div style="display:flex;gap:8px;margin-top:6px"><button class="btn pri" data-afnovo="' + esc(a.id) + '">Aferir</button>'
+        + '<button class="btn sec" data-afnao="' + esc(a.id) + '">Não aferir…</button></div>' : '');
   }
   return h + '</div>';
 }
@@ -1816,7 +1837,7 @@ function ligarBlocoAfericao(v, l, mudou){
   }));
   $('tela').querySelectorAll('[data-afnao]').forEach(b => b.addEventListener('click', () => {
     const a = l.find(x => x.id === b.dataset.afnao);
-    janela('Por que não ' + (tipoAf(a) === 'valvula' ? 'testar' : 'aferir') + '?',
+    janela('Por que não aferir?',
       '<label class="f">Motivo<textarea class="t" id="afMot" placeholder="Ex.: o cliente não liberou a retirada"></textarea></label>',
       [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
         const m = ($('afMot').value || '').trim(); if (m.length < 5){ U.toast('Escreva o motivo.', 'err'); return false; }
@@ -1872,10 +1893,10 @@ function telaAfericao(v){
   const a = acessDe(v).find(x => x.id === telaAtual.ac);
   if (!a){ ir({ nome:'acessorios', vaso:v.id }, true); return; }
   const af = afDe(v, a) || novaAfericao(v, a), vv = af.tipo === 'valvula', pode = ed(v), un = af.unidade || 'bar';
-  titulo(vv ? 'Teste da válvula' : 'Aferição do manômetro', v.tag + ' · ' + nomeAc(a));
+  titulo(vv ? 'Aferição da válvula' : 'Aferição do manômetro', v.tag + ' · ' + nomeAc(a));
   const r = resultadoAf(v, a, af);
   let h = '<div class="card"><div style="display:flex;gap:8px;align-items:center"><b style="flex:1">' + (af.codigo ? esc(af.codigo) : 'Número ao enviar') + '</b><span id="afChip">' + chipAf(r.resultado) + '</span></div>'
-    + '<p class="muted" style="margin:4px 0 0">PR-ENG-001 · ' + (vv ? 'desmontada até onde a construção permite, inspecionada, limpa e testada' : '3 cargas e 3 descargas por ponto') + '</p></div>';
+    + '<p class="muted" style="margin:4px 0 0">PR-ENG-001 · ' + (vv ? 'desmontada até onde a construção permite, inspecionada, limpa e aferida' : '3 cargas e 3 descargas por ponto') + '</p></div>';
   h += '<div class="card"><label class="f">Manômetro padrão<select class="t" id="afPad"><option value="">—</option>' + (E.padroes || []).map(p => '<option value="' + esc(p.id) + '"' + (p.id === af.padrao_id ? ' selected' : '') + '>'
       + esc((p.descricao || 'Padrão') + (p.numero_serie ? ' · ' + p.numero_serie : '') + (p.validade ? ' · até ' + String(p.validade).slice(5, 7) + '/' + String(p.validade).slice(0, 4) : '')) + '</option>').join('') + '</select></label>'
     + ((E.padroes || []).length ? '' : '<p class="alerta">Nenhum padrão com certificado válido no pacote. O escritório cadastra em TapDoc › Instrumentos.</p>')
@@ -1889,13 +1910,13 @@ function telaAfericao(v){
           campoNum('Abertura (' + UN_AF_ROT[un] + ')', 'afAb' + k, L.aberturas[k]) + campoNum('Assentamento (' + UN_AF_ROT[un] + ')', 'afAs' + k, L.assentamentos[k]) + '</div></div>').join('');
   } else {
     const L = af.leituras || (af.leituras = { pontos:[] }), es = L.escala || (L.escala = {});
-    // S112 · C4: como no TapDoc do Paulo — escala de indicação, graduações, escala de utilização e resolução; "Gerar calibração" monta os pontos
+    // S112 · C4: como no TapDoc do Paulo — escala de indicação, graduações, escala de utilização e resolução; "Gerar os pontos da aferição" monta os pontos
     h += '<div class="card"><b>Escala do manômetro</b>'
       + '<div class="lin">' + campoNum('Escala de indicação: início', 'afIni', af.faixa_ini) + campoNum('Escala de indicação: fim', 'afFim', af.faixa_fim) + '</div>'
       + campoNum('Quantidade de graduações', 'afGr', es.graduacoes, 'Divide a escala de utilização em partes iguais (ex.: 0 a 20 com 4 graduações: 5, 10, 15, 20)')
       + '<div class="lin">' + campoNum('Escala de utilização: início', 'afUi', es.uti_ini == null ? af.faixa_ini : es.uti_ini) + campoNum('Escala de utilização: fim', 'afUf', es.uti_fim == null ? af.faixa_fim : es.uti_fim) + '</div>'
       + campoNum('Resolução (' + UN_AF_ROT[un] + ')', 'afRes', af.resolucao, 'O que dá para ler; por exemplo, meia divisão')
-      + '<button class="btn pri" id="afGerar" style="margin-top:10px">Gerar calibração</button>'
+      + '<button class="btn pri" id="afGerar" style="margin-top:10px">Gerar os pontos da aferição</button>'
       + (L.pontos.length ? '<p class="muted" style="margin:8px 0 0">Pontos: ' + L.pontos.map(p => esc(fmt(p.nominal))).join(' · ') + ' ' + UN_AF_ROT[un] + '</p>' : '') + '</div>';
     // S112 · C3: as leituras na ordem em que se mexe no manômetro — cada ciclo sobe (carga) e desce (descarga) a escala inteira
     const pts = L.pontos, linha = (k, n) => {
@@ -1950,7 +1971,7 @@ function telaAfericao(v){
       af.leituras.pontos = lista.map(x => velhos.find(p => Number(p.nominal) === x) || { nominal:x, leituras:[] });
       mudou(true);
     };
-    // C4: "Gerar calibração" — a quantidade de graduações divide a escala de utilização (início + k × passo, k = 1..graduações)
+    // C4: "Gerar os pontos da aferição" — a quantidade de graduações divide a escala de utilização (início + k × passo, k = 1..graduações)
     ligar('afGerar', () => {
       const ui = es.uti_ini == null ? af.faixa_ini : es.uti_ini, uf = es.uti_fim == null ? af.faixa_fim : es.uti_fim, g = es.graduacoes;
       if (ui == null || uf == null || !(uf > ui)){ U.toast('Informe a escala de utilização (início e fim).', 'err'); return; }
@@ -1998,7 +2019,7 @@ function telaAcessorios(v){
     if (a.situacao !== 'retirado' && a.situacao !== 'ausente'){
       // S112 · C12: manômetro e válvula não têm TAG · C11: o lacre (o novo) é informado na tela de teste/aferição
       if (!AFERIVEIS.includes(a.tipo)) h += campoTexto('TAG', 'ac_tag_' + a.id, a.tag, 'data-k="tag"');
-      h += '<div class="lin">' + campoTexto('Marca', 'ac_mar_' + a.id, a.marca, 'data-k="marca"') + campoTexto('Modelo', 'ac_mod_' + a.id, a.modelo, 'data-k="modelo"') + '</div>';
+      h += campoTexto('Marca', 'ac_mar_' + a.id, a.marca, 'data-k="marca"');   // S144 · item 72: acessório não tem "modelo"
       h += '<label class="f">Conexão<select class="t" data-k="conexao"><option value="">—</option>' + BITOLAS.map(b => '<option' + (b === a.conexao ? ' selected' : '') + '>' + esc(b) + '</option>').join('') +
         (a.conexao && BITOLAS.indexOf(a.conexao) < 0 ? '<option selected>' + esc(a.conexao) + '</option>' : '') + '<option value="+">Outra…</option></select></label>';
       if (VALVULAS.includes(a.tipo)) h += campoPressao('Pressão de abertura (plaqueta/certificado)', 'ac_p_' + a.id, a.pressao_ajuste_mpa, u, 'Como está na válvula ou no certificado');
@@ -2015,6 +2036,7 @@ function telaAcessorios(v){
     '><label for="acConf">Conferi: a lista está completa' + (l.length ? '' : ' (o vaso não tem acessório)') + '</label></div></div>';
   $('tela').innerHTML = h;
   l.forEach(a => ligarFotos(v, 'acessorios', () => TIPOS_ACESS[a.tipo] + (a.lacre_num ? ' · lacre ' + a.lacre_num : ''), a.id));
+  l.forEach(a => ligarFotos(v, 'acessorios', () => 'Aferição · ' + TIPOS_ACESS[a.tipo], 'afer:' + a.id));   // S144 · item 69
   if (!pode){ $('tela').querySelectorAll('input,select,button').forEach(el => { el.disabled = true; }); somenteLeitura(); return; }
   const mudou = (a, k, val) => { a[k] = val; salvar(); adiar2('acess:' + a.id, 'acess', v, a); };
   $('tela').querySelectorAll('[data-ac]').forEach(card => {
@@ -2162,6 +2184,44 @@ function ligarReabrir(v){
 }
 
 // ── fechamento e envio ─────────────────────────────────────────────────────
+// ── S144 · item 70: prazo menor que o da norma (externo e interno separados), com a justificativa ──
+const PRAZO_MOTIVOS = ['Atmosfera agressiva (corrosão acelerada)', 'Perda de espessura acima do esperado', 'Histórico de anomalias no vaso', 'Condições de operação severas'];
+function cartaoPrazo(v){
+  const i = v.inspecao, PR = i.prazo_red || null;
+  let pz = null; try{ const r = previa(v); pz = r.vaso && !r.vaso.erro ? r.vaso.prazos : null; }catch(e){}
+  const opc = (max, val) => '<option value="">da norma</option>' + Array.from({ length:Math.max(0, (max || 10) - 1) }, (_, k) => k + 1)
+    .map(n => '<option value="' + n + '"' + (Number(val) === n ? ' selected' : '') + '>' + n + (n === 1 ? ' ano' : ' anos') + '</option>').join('');
+  return '<div class="card"><div class="chk" style="margin-top:0"><input type="checkbox" id="przOn"' + (PR ? ' checked' : '') + '><label for="przOn">Prazo das próximas inspeções menor que o da norma</label></div>'
+    + '<div id="przCx"' + (PR ? '' : ' hidden') + '><p class="muted" style="margin:4px 0 0">' + (pz ? 'Pela NR-13: externo ' + pz.externo + ' ano(s), interno ' + (pz.interno == null ? 'a critério do PLH' : pz.interno + ' anos') + '. ' : '')
+    + 'Só menor, nunca maior. O escritório e o PLH veem antes de aprovar.</p>'
+    + '<div class="lin"><label class="f">Exame externo<select class="t" id="przExt">' + opc(pz && pz.externo, PR && PR.externo) + '</select></label>'
+    + '<label class="f">Exame interno<select class="t" id="przInt">' + opc(pz && pz.interno != null ? pz.interno : 10, PR && PR.interno) + '</select></label></div>'
+    + '<label class="f">Por quê<select class="t" id="przMot"><option value="">—</option>' + PRAZO_MOTIVOS.map(m => '<option' + (PR && PR.just === m ? ' selected' : '') + '>' + esc(m) + '</option>').join('')
+    + '<option value="+"' + (PR && PR.just && PRAZO_MOTIVOS.indexOf(PR.just) < 0 ? ' selected' : '') + '>Outro (escrever)</option></select></label>'
+    + '<label class="f" id="przOutroL"' + (PR && PR.just && PRAZO_MOTIVOS.indexOf(PR.just) < 0 ? '' : ' hidden') + '>Motivo<textarea class="t" id="przOutro">' + esc(PR && PRAZO_MOTIVOS.indexOf(PR.just) < 0 ? PR.just || '' : '') + '</textarea></label></div></div>';
+}
+function ligarPrazo(v){
+  const i = v.inspecao;
+  const gravar = () => {
+    const on = $('przOn').checked, ext = on ? Number($('przExt').value) || null : null, int = on ? Number($('przInt').value) || null : null;
+    const just = $('przMot').value === '+' ? ($('przOutro').value || '').trim() : $('przMot').value;
+    if (on && (ext || int) && just.length < 5) return;   // grava quando o motivo estiver dito
+    i.prazo_red = on && (ext || int) ? { externo:ext, interno:int, just, origem:'campo' } : null; salvar();
+    enfileirar(v, 'prazo', 'prazo das próximas inspeções', { funcao:'tf_insp_prazo_reduzir', payload:{ p_id:i.id, p_dados:{ externo:ext, interno:int, justificativa:on ? just : null } } });
+  };
+  ligar('przOn', el => { $('przCx').hidden = !el.checked; if (!el.checked && i.prazo_red) gravar(); });
+  ligar('przExt', gravar); ligar('przInt', gravar);
+  ligar('przMot', el => { $('przOutroL').hidden = el.value !== '+'; if (el.value !== '+') gravar(); });
+  ligar('przOutro', gravar);
+}
+function avisoPrazo(v){
+  const i = v.inspecao, on = $('przOn') && $('przOn').checked;
+  if (!on) return null;
+  const ext = Number($('przExt').value) || null, int = Number($('przInt').value) || null, just = $('przMot').value === '+' ? ($('przOutro').value || '').trim() : $('przMot').value;
+  if (!ext && !int) return 'Prazo menor: escolha o prazo do exame externo, do interno ou dos dois (ou desmarque).';
+  if (just.length < 5) return 'Prazo menor: diga por quê.';
+  return null;
+}
 function telaFechamento(v){
   titulo('Fechamento e envio', v.tag);
   const i = v.inspecao, pode = ed(v);
@@ -2180,16 +2240,19 @@ function telaFechamento(v){
   if (a.length) h += '<div class="alerta"><b>Avisos</b><ul>' + a.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
   h += '<div class="card"><label class="f">Observações do vaso<small>O que o escritório precisa saber e não coube nas seções.</small><textarea class="t" id="fObs">' + esc(i.observacao || '') + '</textarea></label></div>';
   h += '<div class="card"><b>Foto de capa</b><p class="muted" style="margin:2px 0 0">O vaso inteiro, de frente: vai na capa do laudo.</p>' + gradeFotos(v, 'capa', 1) + '</div>';
+  h += cartaoPrazo(v);   // S144 · item 70
   h += '<button class="btn pri" id="fEnviar"' + (f.length ? ' disabled' : '') + '>Enviar a inspeção deste vaso</button>';
   h += '<p class="muted" style="text-align:center;margin-top:6px">Depois de enviar, você ainda pode reabrir para corrigir, até o escritório começar a revisão. Sem sinal, vai quando o sinal voltar.</p>';
   h += '<button class="btn perigo" id="fNao">Não foi possível inspecionar este vaso</button>';
   $('tela').innerHTML = h;
   ligarFotos(v, 'capa', () => 'Capa');
   ligar('fObs', el => { i.observacao = el.value.trim() || null; salvar(); adiar2('fech:' + v.id, 'fech', v); }, 'input');
+  ligarPrazo(v);
   const fechar = (situ, motivo) => {
     i.situacao = 'enviada'; i.pode_editar = false; if (motivo) i.nao_inspecionado_motivo = motivo; salvar();
   };
   ligar('fEnviar', () => {
+    const ap = avisoPrazo(v); if (ap){ U.toast(ap, 'err'); return; }
     N.janela.confirmar('Enviar a inspeção do ' + v.tag + '?', '<p>Depois de enviar, você ainda pode reabrir para corrigir, até o escritório começar a revisão.</p>', 'Enviar').then(s => {
       if (!s) return;
       if (i.observacao !== undefined) enfileirar(v, 'fech', 'observações', { funcao:'tf_insp_fechamento_gravar', payload:{ p_id:i.id, p_dados:{ observacao:i.observacao || null } } });
