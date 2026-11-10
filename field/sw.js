@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S54-T25';   // S141: TapDoc 15 e o motor R00.5 (item 58 da lista: tolerância NBR 14105-1, classe B)
+const VERSAO = 'S55-T26';   // S142: Field S55 e TapDoc 16 (itens 38 e 40 da lista; 418), núcleo N8 (item 37)
+// const VERSAO = 'S54-T25';   // S141: TapDoc 15 e o motor R00.5 (item 58 da lista: tolerância NBR 14105-1, classe B)
 // const VERSAO = 'S54-T24';   // S140: TapDoc 14 (field/doc/: itens 33, 44, 49 a 56, 59 e 60 da lista; 416)
 // const VERSAO = 'S54-T23';   // S54: item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
 // const VERSAO = 'S53-T22';   // S53: o celular da empresa (210): núcleo N7, modulos M4, sem a parte pessoal do Eu, a fila com a sessão de quem fez
@@ -48,9 +49,9 @@ const ESSENCIAIS = [
   // IDÊNTICO ao do <script> do index.html, com o ?v= (c.match compara a consulta inteira).
   // Sem isto o Field sem sinal abriria sem o núcleo. Trocou o ?v= no index.html? Troque aqui também.
   // S34: N2 (fila de envios e utilitários)
-  '../nucleo/nucleo.js?v=N7',
-  '../nucleo/nucleo.css?v=N7',
-  '../nucleo/config.js?v=N7',
+  '../nucleo/nucleo.js?v=N8',
+  '../nucleo/nucleo.css?v=N8',
+  '../nucleo/config.js?v=N8',
   // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo"
   '../nucleo/modulos.js?v=M4',
   // S35 · TapDoc 1: a coleta da inspeção (página própria, abre sem sinal)

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapField · S54</title>
+<title>TapField · S55</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -617,9 +617,9 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 #filaTxt{cursor:pointer}
 </style>
 <!-- S33 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N7">
-<script src="../nucleo/config.js?v=N7"></script>
-<script src="../nucleo/nucleo.js?v=N7"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N8">
+<script src="../nucleo/config.js?v=N8"></script>
+<script src="../nucleo/nucleo.js?v=N8"></script>
 <script src="../nucleo/modulos.js?v=M4"></script>
 </head>
 <body>
@@ -681,7 +681,8 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S54';   // S54 (S139): item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
+const APP_VERSION = 'S55';   // S55 (S142): item 40: a inspeção só abre para quem está na T06 (aviso com quem está para os outros) · item 38: o aviso do atestado (5 anos, junto da ausência) · núcleo N8
+// const APP_VERSION = 'S54';   // S54 (S139): item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
 // const APP_VERSION = 'S53';   // S53 (S136): o celular da empresa (210): sem a parte pessoal do Eu, "Trocar de pessoa", a fila envia com a sessão de quem fez
 // const APP_VERSION = 'S52';   // S52 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const APP_VERSION = 'S51';   // S51 (S134): só o modulos.js M3 (o card Cadastros abre o TapHub Cadastros); nada mudou nas telas do celular
@@ -2421,9 +2422,12 @@ function pintarOSBase(){
   // S37 (R03a, D2 do Bruno: "a equipe pode ver, iremos testar juntos"): o botão
   // aparece para quem administra E para quem está na T06 (designado ou apoio)
   // ou é de campo. Quando a T06 virar auto:inspecao, o botão de cima assume.
+  // S142 · item 40 (decisão B do Bruno): o botão segue a regra do servidor (tf__insp_pode_os): quem administra
+  // ou quem está na T06 (designado, apoio ou quem tocou em "Assumir", que vira o designado). O resto da equipe
+  // de campo vê o aviso com quem está, em vez de abrir uma tela vazia.
   const naT06 = t.usuario_designado && String(t.usuario_designado) === String(meuId())
              || (t.apoios || []).some(a => String(a) === String(meuId()));
-  if (t.tarefa_id === 'T06' && ehInspecao(os) && (sessao.admin || naT06 || sessao.executa_em === 'campo' || ['inspetor','auxiliar'].includes(sessao.perfil))){
+  if (t.tarefa_id === 'T06' && ehInspecao(os) && (sessao.admin || naT06)){
     const b = document.createElement('button');
     b.className = 'btn';
     b.textContent = 'Abrir a inspeção (TapDoc · piloto)';
@@ -2431,6 +2435,13 @@ function pintarOSBase(){
       location.href = 'doc/#os=' + encodeURIComponent(os.os_id) + '&t=' + encodeURIComponent(t.id || t.tarefa_id);
     });
     p.appendChild(b);
+  } else if (t.tarefa_id === 'T06' && ehInspecao(os) && (sessao.executa_em === 'campo' || ['inspetor','auxiliar'].includes(sessao.perfil))){
+    const quem = [t.usuario_designado ? nomeDe(t.usuario_designado) : ''].concat((t.apoios || []).map(nomeDe)).filter(Boolean);
+    const av = document.createElement('p');
+    av.className = 'semAbrir'; av.id = 'semT06';
+    av.textContent = 'Você não está na T06 desta OS. Peça ao escritório para te pôr como apoio'
+      + (quem.length ? ' (na T06: ' + quem.join(', ') + ').' : ' (ainda não há ninguém na T06).');
+    p.appendChild(av);
   }
 
   // ── tarefa de coleta ──
@@ -6580,7 +6591,7 @@ async function pintarPontoPedidos(pre){
       + '<button type="button" class="lnk" id="ppSug" hidden></button></div>'
       + '<div class="ptFotosP" id="ppFotos"></div>'
       + '<div class="ptDuas"><button type="button" class="btn" id="ppCam">📷 Câmera</button><button type="button" class="btn" id="ppGal">🖼 Galeria</button></div>'
-      + '<p class="ptDica" style="text-align:left">Até 3 fotos. O atestado pode trazer o CID: só você e quem aprova o ponto veem (LGPD art. 11).</p></div>'
+      + '<p class="ptDica" style="text-align:left">Até 3 fotos. O atestado pode trazer o CID: só você, quem aprova o ponto e quem cuida das ausências veem (LGPD art. 11). Aprovado, ele fica junto da ausência por 5 anos e depois é apagado.</p></div>'
     + '<div class="campo"><label for="ppMot">Motivo</label><select id="ppMot"></select></div>'
     + '<div class="campo"><label for="ppTxt">Texto (pode mudar antes de enviar)</label><textarea id="ppTxt" rows="3" maxlength="600"></textarea></div>'
     + '<button type="button" class="btn pri" id="ppEnviar">Enviar pedido</button>'
