@@ -86,6 +86,22 @@ function memoria(g, P, S, t) {
   }
 }
 
+// S140 · item 49 (416): os lugares das fotos (a lista vem dos dados do laudo; sem ela, a mesma regra do banco)
+function lugaresDe(d) {
+  if (((d.inspecao || {}).lugares || []).length) return d.inspecao.lugares;
+  const vt = (d.vaso || {}).posicao === 'vertical';
+  return [['placa_fabricacao', 'plaqueta', 'Placa de fabricação'], ['placa_tag', 'plaqueta', 'Placa de TAG e categoria'],
+    [vt ? 'tampo_superior' : 'tampo_direito', 'geral', vt ? 'Tampo superior' : 'Tampo direito'], [vt ? 'tampo_inferior' : 'tampo_esquerdo', 'geral', vt ? 'Tampo inferior' : 'Tampo esquerdo'],
+    ['conexoes', 'geral', 'Conexões'], ['base', 'geral', 'Base de sustentação / aterramento']].map(([lugar, secao, rotulo]) => ({ lugar, secao, rotulo }));
+}
+// S140 · item 51: a sigla da região do costado (pela posição; sem ela, pelo nome)
+const REG_SIGLA = { frontal: 'CF', traseiro: 'CT', superior: 'CS', inferior: 'CI', direito: 'CLD', esquerdo: 'CLE' };
+function siglaReg(c) {
+  if (REG_SIGLA[c.posicao]) return REG_SIGLA[c.posicao];
+  const m = String(c.nome || '').match(/\b(CF|CT|CS|CI|CLD|CLE)\s*$/i);
+  return m ? m[1].toUpperCase() : null;
+}
+
 /** As fotos que o laudo usa, na ordem (a página baixa e devolve em `imagens`). */
 function fotosDoLaudo(d) {
   const ordem = ['capa', 'localizacao', 'plaqueta', 'acessorios', 'visual', 'boroscopia', 'componentes', 'teste', 'geral'];
@@ -132,6 +148,21 @@ function montar(d, opc) {
       body: (cab ? [cab.map(x => ({ text: x, style: 'th' }))] : []).concat(linhas.map(l => l.map(x => typeof x === 'object' && x !== null ? x : { text: x == null ? '—' : String(x), style: 'td' }))) },
       layout: { hLineColor: '#C9D2D8', vLineColor: '#C9D2D8', fillColor: (i) => cab && i === 0 ? '#E3EEF7' : null, paddingTop: () => 3, paddingBottom: () => 3 }, margin: [0, 0, 0, 10] });
     if (alvo !== C) C.push({ stack: alvo, unbreakable: true });
+  };
+  // S140 · item 49: as fotos de lugar, na ordem dos lugares; sem foto, o motivo no lugar dela (2 por linha: 4 detalhes = grade 2×2)
+  const LUG = lugaresDe(d), SEMAC = I.fotos_sem_acesso || {};
+  const deLugar = f => /^lugar:/.test(f.item || '');
+  const fotosLugares = lista => {
+    const cel = [];
+    lista.forEach(l => {
+      const f = (d.fotos || []).find(x => x.item === 'lugar:' + l.lugar && img[x.path]), mot = String(SEMAC[l.lugar] || '').trim();
+      if (f) cel.push({ stack: [{ image: img[f.path], fit: [235, 175], alignment: 'center' }, { text: 'Figura ' + (++fig) + ' – ' + l.rotulo + '.', style: 'legenda' }] });
+      else if (mot) cel.push({ stack: [{ text: l.rotulo + ': sem foto', bold: true, alignment: 'center', margin: [0, 40, 0, 4] }, { text: mot, style: 'legenda', margin: [0, 0, 0, 40] }] });
+    });
+    for (let k = 0; k < cel.length; k += 2) {
+      const par2 = cel.slice(k, k + 2); if (par2.length === 1) par2.push({ text: '' });
+      C.push({ columns: par2, columnGap: 12, margin: [0, 4, 0, 10], unbreakable: true });
+    }
   };
   const fotos = (secao, legPad, filtro) => {
     const fs = (d.fotos || []).filter(f => f.secao === secao && img[f.path] && (!filtro || filtro(f)));
@@ -205,7 +236,8 @@ function montar(d, opc) {
   if (cams.length > 1) tabela(['Câmara', 'Fluido', 'Classe', 'Operação', 'Volume', 'PMTA de plaqueta', 'PTH'],
     cams.map(k => [k.nome, k.fluido, k.classe_fluido, bar(k.p_operacao_max_mpa), k.volume_m3 != null ? fmt(k.volume_m3, 3) + ' m³' : '—', bar(k.pmta_plaqueta_mpa), bar(k.pth_mpa)]), null, 'Câmaras do vaso');
   par(M.vaso_fonte);
-  fotos('plaqueta');
+  fotosLugares(LUG.filter(l => l.secao === 'plaqueta'));
+  fotos('plaqueta', null, f => !deLugar(f));
   sub('6.2', T.acessorios || 'Identificação dos acessórios do vaso de pressão');
   const acs = d.acessorios || [];
   if (!acs.length) par(M.acessorios_nenhum);
@@ -235,8 +267,9 @@ function montar(d, opc) {
   lista(vis.map(x => x.conforme === false ? txt(M.visual_nc, { item: x.item, anomalia: x.anomalia || 'anomalia registrada' })
     : x.conforme === true ? ((M.visual_ok || {})[x.item] || txt(M.visual_ok_outro, { item: x.item })) : x.item + ': não avaliado;'));
   par(txt(M.visual_conclusao, { resultado: nc.length ? 'NÃO CONFORME' : 'CONFORME' }), { bold: true });
+  fotosLugares(LUG.filter(l => l.secao !== 'plaqueta'));   // os detalhes do vaso (tampos, conexões, base), logo depois da lista
   fotos('visual');
-  fotos('geral');
+  fotos('geral', null, f => !deLugar(f));
   // 7.2 boroscopia
   sub('7.2', T.boroscopia || 'Inspeção interna por boroscopia');
   const boroSubst = m => /fluido|conex|opera|substitu/i.test(m || '');
@@ -333,15 +366,26 @@ function montar(d, opc) {
   par(M.calculo_intro);
   lista(M.calculo_legenda);
   par(txt(M.calculo_minimo, { corrosao: fmt(cor, 2) }));
-  const MEM = {};
+  // S140 · item 51: um costado só por câmara nos itens de cálculo (a região da menor leitura, que é a governante do costado)
+  const rcCalc = [], vistos = {};
   rcomps.forEach(rc => {
+    const mesmos = rc.tipo === 'costado' ? rcomps.filter(x => x.tipo === 'costado' && x.camara_id === rc.camara_id) : [];
+    if (mesmos.length < 2) { rcCalc.push(rc); return; }
+    if (vistos[rc.camara_id]) return; vistos[rc.camara_id] = true;
+    const comT = mesmos.filter(x => x.t_min_mm != null).sort((a, b) => Number(a.t_min_mm) - Number(b.t_min_mm));
+    const rep = mesmos.find(x => rcams.some(k => k.governante_id === x.componente_id)) || comT[0] || mesmos[0];
+    const sg = siglaReg((V.componentes || []).find(x => x.id === rep.componente_id) || { nome: rep.nome });
+    rcCalc.push(Object.assign({}, rep, { nome: 'Costado' + (sg ? ' (menor leitura no ' + sg + ')' : '') }));
+  });
+  const MEM = {};
+  rcCalc.forEach(rc => {
     const c = (V.componentes || []).find(x => x.id === rc.componente_id) || { tipo: rc.tipo, nome: rc.nome };
     const k = rcams.find(x => x.camara_id === rc.camara_id) || rcams[0] || {};
     const P = Math.abs(Number(k.p_operacao_mpa != null ? k.p_operacao_mpa : R.p_operacao_mpa));
     const g = geoDe(V, c), tU = rc.t_min_mm != null ? Number(rc.t_min_mm) - cor : null;
     try { MEM[rc.componente_id] = Object.assign(memoria(g, P, S, tU), { g, P, tU }); } catch (e) { MEM[rc.componente_id] = null; }
   });
-  rcomps.forEach((rc, k) => {
+  rcCalc.forEach((rc, k) => {
     const m = MEM[rc.componente_id]; if (!m) return;
     sub('8.' + (k + 1), rc.nome + ' (' + (TIPOS_COMP[rc.tipo] || rc.tipo).toLowerCase() + ', ' + m.ref + ')');
     C.push({ stack: [{ text: m.fe, style: 'formula' }, { text: m.se + ' = ' + fmt(m.e, 3) + ' mm', style: 'formula' },
@@ -351,20 +395,20 @@ function montar(d, opc) {
 
   // ── 9 · PMTA ────────────────────────────────────────────────────────────
   sec('9', T.pmta || 'PRESSÃO MÁXIMA DE TRABALHO ADMISSÍVEL (PMTA)');
-  rcomps.forEach((rc, k) => {
+  rcCalc.forEach((rc, k) => {
     const m = MEM[rc.componente_id]; if (!m || !m.sp) return;
     const gov = rcams.some(x => x.governante_id === rc.componente_id);
     sub('9.' + (k + 1), rc.nome + (gov ? ' — governante' : ''));
     C.push({ stack: [{ text: m.fp, style: 'formula' }, { text: m.sp + ' = ' + fmt(m.p, 3) + ' MPa (' + bar(m.p) + ')', style: 'formula' }], unbreakable: true, margin: [0, 0, 0, 6] });
   });
-  tabela(['Componente', 't medida', 't útil', 'E', 'PMTA'], rcomps.map(rc => {
+  tabela(['Componente', 't medida', 't útil', 'E', 'PMTA'], rcCalc.map(rc => {
     const m = MEM[rc.componente_id] || {}, gov = rcams.some(x => x.governante_id === rc.componente_id);
     return [{ text: rc.nome + (gov ? ' (governante)' : ''), style: 'td', bold: gov }, fmt(rc.t_min_mm, 2) + ' mm', m.tU != null ? fmt(m.tU, 2) + ' mm' : '—',
       m.g ? fmt(m.g.E, 2) : '—', rc.pmta_mpa != null ? fmt(rc.pmta_mpa, 3) + ' MPa' : '—'];
   }), ['*', 65, 65, 40, 75], 'PMTA por componente');
   rcams.forEach(k => {
     const nm = rcams.length > 1 ? k.nome + ': ' : '';
-    if (k.regra_pmta === 'calculada') par(nm + txt(M.pmta_calculada, { governante: (rcomps.find(c => c.componente_id === k.governante_id) || {}).nome || '—', pmta: bar(k.pmta_adotada_mpa) }));
+    if (k.regra_pmta === 'calculada') par(nm + txt(M.pmta_calculada, { governante: (rcCalc.find(c => c.componente_id === k.governante_id) || rcomps.find(c => c.componente_id === k.governante_id) || {}).nome || '—', pmta: bar(k.pmta_adotada_mpa) }));
     else if (k.regra_pmta === 'mantida_anterior') par(nm + txt(M.pmta_mantida, { calculada: bar(k.pmta_calculada_mpa), pmta: bar(k.pmta_adotada_mpa) }));
     else par(nm + txt(M.pmta_plh, { pmta: bar(k.pmta_adotada_mpa), justificativa: k.justificativa_pmta || '' }));
     if (k.pmta_externa_mpa != null) par(nm + txt(M.pmta_externa, { pmta: bar(k.pmta_externa_mpa), justificativa: k.justificativa_externa || '' }));
@@ -473,6 +517,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-2026-10-25' };
+const LaudoPDF = { montar, fotosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-S140-2026-11-10' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);

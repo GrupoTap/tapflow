@@ -154,7 +154,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E13';   // E13 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
+const VERSAO = 'TapDoc E14';   // E14 (S140 · 416): itens 44, 49, 50, 51, 53 e 56 da lista — volume em m³ e litros com aviso, as fotos com lugar (mudar de lugar, "sem foto"), a foto da galeria marcada, aviso acima de 200 °C, o costado com regiões e o lembrete interno da aferição
+// const VERSAO = 'TapDoc E13';   // E13 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const VERSAO = 'TapDoc E12';   // E12 (S132): o sistema se chama TapHub nas telas (item #10 da lista) e "Relatar problema ou sugerir" no menu (núcleo N6, modulos M2)
 // const VERSAO = 'TapDoc E11';   // E11 (S113 · 414): tirar o vaso da OS (mesmo em campo, com motivo) · reabrir para o campo na revisão · a boroscopia lançada no escritório ·   // E10 (S107 · 412): o CSV do medidor anexado na revisão (Espessuras do medidor); a revisão exige as espessuras ·   // E9 (S94 · 410, R06a): o laudo em PDF (aba Laudos), a ART na preparação, o ambiente, o PDF do certificado dos instrumentos e as datas do PLH na aprovação ·   // E8 (S93 · 409, R05a): a revisão (A revisar: Revisão 1, Revisão 2 e a aprovação do PLH) ·   // E7 (S92 · 408, Acessos P3): entra quem tem o TapDoc; conferir e decidir é do PLH ·   // E = escritório · E6 (S86 · 407, R04a): padrão com U/k, numeração M/V e as aferições da inspeção (E5: material de campo; E4: faixa)
 // 405: a faixa de resistência (norma do material) e o S esperado pelo ASME (fator 3,5; 2/3 do escoamento; costura × 0,85)
@@ -421,20 +422,20 @@ async function cartaoAfericoes(ins){
   if (!L.length){ cx.innerHTML = '<h3 style="margin-top:0">Aferições</h3><p class="muted">Nenhuma aferição de manômetro ou teste de válvula nesta inspeção.</p>'; return; }
   const res = x => x.cancelada_em ? '<span class="chip">cancelada</span>' : x.resultado === 'aprovado' ? '<span class="chip s-pronto">aprovado</span>'
     : x.resultado === 'reprovado' ? '<span class="chip s-grave">reprovado</span>' : '<span class="chip s-em_conferencia">incompleta</span>';
-  cx.innerHTML = '<h3 style="margin-top:0">Aferições</h3><table><tr><th>Número</th><th>Instrumento</th><th>Resultado</th><th>Padrão</th><th>Validade</th></tr>'
+  cx.innerHTML = '<h3 style="margin-top:0">Aferições</h3><table><tr><th>Número</th><th>Instrumento</th><th>Resultado</th><th>Padrão</th><th>Lembrete interno</th></tr>'
     + L.map(x => '<tr' + (x.grave ? ' style="background:#FDECEA"' : '') + '><td><b>' + esc(x.codigo || 'sem número') + '</b>' + (x.codigo ? '' : '<div class="muted">aguardando a sequência</div>') + '</td><td>'
       + (x.tipo === 'valvula' ? 'Válvula' : 'Manômetro') + ' · ' + esc(x.acessorio || '') + '<div class="muted">' + esc(x.por || '') + '</div></td><td>' + res(x)
       + (x.grave ? ' <span class="chip s-grave">grave</span>' : '') + ((x.avisos || []).length ? '<div class="muted" style="color:#B42318">' + x.avisos.map(esc).join('<br>') + '</div>' : '')
       + (x.cancelada_motivo ? '<div class="muted">' + esc(x.cancelada_motivo) + '</div>' : '') + '</td><td>' + esc(x.padrao || '—') + '</td><td>'
-      + (x.tipo === 'manometro' ? (x.validade_meses || 24) + ' meses' + (x.validade_anterior ? '<div class="muted">antes: ' + x.validade_anterior + '</div>' : '')
+      + (x.tipo === 'manometro' ? (x.validade_meses || 24) + ' meses<div class="muted">não sai no relatório</div>' + (x.validade_anterior ? '<div class="muted">antes: ' + x.validade_anterior + '</div>' : '')
         + (x.cancelada_em || !PLH ? '' : ' <button class="btn mini" data-afval="' + esc(x.id) + '">Mudar</button>') : '—') + '</td></tr>').join('') + '</table>';
   cx.querySelectorAll('[data-afval]').forEach(b => b.addEventListener('click', () => {
     const x = L.find(y => y.id === b.dataset.afval);
-    janela('Validade do relatório ' + (x.codigo || ''), '<label class="f">Meses<input class="t" id="avM" inputmode="numeric" value="' + (x.validade_meses || 24) + '"></label>'
+    janela('Lembrete da próxima aferição ' + (x.codigo || ''), '<p class="muted">Só para a Engetap oferecer a próxima aferição ao cliente: não sai no relatório (ABNT NBR ISO/IEC 17025, 7.8.4.3).</p><label class="f">Meses<input class="t" id="avM" inputmode="numeric" value="' + (x.validade_meses || 24) + '"></label>'
       + '<label class="f">Motivo<input class="t" id="avMot" placeholder="Ex.: o cliente pediu 1 ano"></label>',
       [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
         const m = parseInt($('avM').value, 10); if (!(m >= 1 && m <= 120)){ U.toast('De 1 a 120 meses.', 'err'); return false; }
-        try{ await rpc('tf_insp_afericao_validade', { p_id:x.id, p_meses:m, p_motivo:$('avMot').value || null }); U.toast('Validade gravada.', 'ok'); cartaoAfericoes(ins); }
+        try{ await rpc('tf_insp_afericao_validade', { p_id:x.id, p_meses:m, p_motivo:$('avMot').value || null }); U.toast('Lembrete gravado.', 'ok'); cartaoAfericoes(ins); }
         catch(e){ erro(e); return false; } } }]);
   }));
 }
@@ -882,6 +883,30 @@ async function previa(){
 // pessoa com o TapDoc) e a aprovação do PLH, que grava o cálculo oficial.
 // Desenho: inspecao-nr13/rodadas/R05-revisao-desenho.md.
 // ════════════════════════════════════════════════════════════════════════════
+// S140 · item 51: o costado é UM componente, dividido em regiões de medição (cada região é uma linha de
+// componente do tipo costado da câmara). A conta é por região e a governante diz a região da menor leitura.
+const REG_SIGLA = { frontal:'CF', traseiro:'CT', superior:'CS', inferior:'CI', direito:'CLD', esquerdo:'CLE' };
+const REG_NOME = { CF:'Frontal', CT:'Traseiro', CS:'Superior', CI:'Inferior', CLD:'Lateral direita', CLE:'Lateral esquerda' };
+function siglaReg(c){
+  if (REG_SIGLA[c.posicao]) return REG_SIGLA[c.posicao];
+  const m = String(c.nome || '').match(/\b(CF|CT|CS|CI|CLD|CLE)\s*$/i);
+  return m ? m[1].toUpperCase() : null;
+}
+const nomeReg = c => { const sg = siglaReg(c); return sg ? REG_NOME[sg] + ' (' + sg + ')' : (String(c.nome || '').replace(/^costado\s*/i, '').trim() || 'Costado inteiro'); };
+function nomeGov(ck){
+  const g = ck.governante; if (!g) return '';
+  if (g.c.tipo === 'costado' && ck.comps.filter(x => x.c.tipo === 'costado').length > 1) return 'Costado (menor leitura no ' + (siglaReg(g.c) || nomeReg(g.c)) + ')';
+  return g.c.nome;
+}
+// S140 · item 49 (416): os lugares das fotos (a lista vem da revisão; sem ela, a mesma regra do banco)
+function lugaresRev(R){
+  if ((R.inspecao.lugares || []).length) return R.inspecao.lugares;
+  const vt = R.inspecao.posicao === 'vertical';
+  return [['placa_fabricacao','plaqueta','Placa de fabricação'], ['placa_tag','plaqueta','Placa de TAG e categoria'],
+    [vt ? 'tampo_superior' : 'tampo_direito', 'geral', vt ? 'Tampo superior' : 'Tampo direito'], [vt ? 'tampo_inferior' : 'tampo_esquerdo', 'geral', vt ? 'Tampo inferior' : 'Tampo esquerdo'],
+    ['conexoes','geral','Conexões'], ['base','geral','Base de sustentação / aterramento']].map(([lugar, secao, rotulo]) => ({ lugar, secao, rotulo }));
+}
+const ROT_SECAO = { plaqueta:'plaqueta', operacao:'operação', componentes:'componente', localizacao:'local', laudo_anterior:'laudo anterior', geral:'geral', visual:'visual', acessorios:'acessório', boroscopia:'boroscopia', teste:'teste', capa:'capa' };
 // O cálculo é o MESMO da prévia do celular (field/doc, TapDoc 8), copiado
 // para cá dentro de uma função, para os nomes não colidirem com os da página.
 const CALC = (() => {
@@ -995,7 +1020,7 @@ function previa(v){
     const ok = ck.comps.filter(x => x.pmta != null);
     if (ok.length) ck.governante = ok.reduce((a, b) => b.pmta < a.pmta ? b : a);
     const nm = cs.length > 1 ? ' (' + k.nome + ')' : '';
-    if (ck.governante && ck.governante.pmta < P) r.avisos.push('PMTA calculada' + nm + ' de ' + fmt(deMPa(ck.governante.pmta, u), 2) + ' ' + UNID_ROT[u] + ', abaixo da pressão de operação (' + ck.governante.c.nome + ').');
+    if (ck.governante && ck.governante.pmta < P) r.avisos.push('PMTA calculada' + nm + ' de ' + fmt(deMPa(ck.governante.pmta, u), 2) + ' ' + UNID_ROT[u] + ', abaixo da pressão de operação (' + nomeGov(ck) + ').');
     ck.comps.filter(x => x.abaixo).forEach(x => r.avisos.push(x.c.nome + ': espessura medida abaixo da mínima requerida.'));
     ck.comps.filter(x => x.erro).forEach(x => r.detalhes.push(x.c.nome + ': ' + x.erro));
     r.camaras.push(ck);
@@ -1096,8 +1121,17 @@ function pintarRevisao(){
     ck.comps.filter(x => x.abaixo).forEach(x => conf.push({ chave:'abaixo', nivel:'vermelho', texto:x.c.nome + ': espessura abaixo da mínima requerida', detalhe:'O PLH decide a PMTA da câmara com justificativa, e entra uma recomendação de segurança.' }));
     ck.comps.filter(x => x.erro).forEach(x => conf.push({ chave:'calc', nivel:'vermelho', texto:x.c.nome + ': sem cálculo', detalhe:x.erro }));
   });
+  // S140 · item 44: até o TapDoc 13 o volume era em m³ no celular e a equipe digitava litros; acima de 50 m³ o revisor confere
+  // S140 · item 50: acima de 200 °C a resistência do aço cai: o engenheiro confere o cálculo
+  CALC.ativas(v).forEach(k => {
+    const nm = CALC.ativas(v).length > 1 ? ' (' + k.nome + ')' : '';
+    if (Number(k.volume_m3) > 50) conf.push({ chave:'volume', nivel:'amarelo', texto:'Volume de ' + fmt(k.volume_m3, 3) + ' m³ (' + Math.round(Number(k.volume_m3) * 1000).toLocaleString('pt-BR') + ' litros)' + nm + ': confira',
+      detalhe:'Fora do comum. Se o campo lançou litros como m³, corrija o volume antes de aprovar: a categoria e os prazos dependem dele.' });
+    if (Number(k.t_operacao_c) > 200) conf.push({ chave:'temperatura', nivel:'amarelo', texto:'Opera a ' + fmt(k.t_operacao_c, 0) + ' °C' + nm + ': o engenheiro confere o cálculo',
+      detalhe:'Acima de 200 °C a resistência do aço cai e a PMTA calculada muda (o S do material vale até a temperatura da tabela).' });
+  });
   if (prev.vaso && prev.vaso.erro) conf.push({ chave:'vaso', nivel:/[Vv]olume/.test(prev.vaso.erro) ? 'amarelo' : 'vermelho', texto:'Categoria e prazos', detalhe:prev.vaso.erro });
-  (REV.vidas || []).filter(x => x.cor).forEach(x => conf.push({ chave:'vida', nivel:'amarelo', texto:x.nome + ': vida remanescente ' + (x.cor === 'vermelho' ? 'menor que o prazo até a próxima inspeção' : 'menor que 2× o prazo'), detalhe:'O PLH decide (reduzir o prazo ou a PMTA, ou recomendar reparo).' }));
+  (REV.vidas || []).filter(x => x.cor && !x.resumo).forEach(x => conf.push({ chave:'vida', nivel:'amarelo', texto:x.nome + ': vida remanescente ' + (x.cor === 'vermelho' ? 'menor que o prazo até a próxima inspeção' : 'menor que 2× o prazo'), detalhe:'O PLH decide (reduzir o prazo ou a PMTA, ou recomendar reparo).' }));
   const ico = n => n === 'ok' ? '<span class="cf ok">✓</span>' : n === 'amarelo' ? '<span class="cf am">!</span>' : '<span class="cf vm">✗</span>';
   const nV = conf.filter(x => x.nivel === 'vermelho').length;
   h += '<h2>1 · O que o sistema confere</h2><div class="card"><table class="conf">' + conf.sort((a, b) => ({ vermelho:0, amarelo:1, ok:2 }[a.nivel] - { vermelho:0, amarelo:1, ok:2 }[b.nivel]))
@@ -1109,13 +1143,20 @@ function pintarRevisao(){
   const cab = (k, t) => '<div class="linha" style="justify-content:space-between"><h3 style="margin:0">' + t + '</h3>'
     + (e && e < 3 ? '<label class="okrev"><input type="checkbox" data-ok="' + k + '"' + (revOk(k) ? ' checked' : '') + (podeMarcar ? '' : ' disabled') + '> conferido</label>' : '') + '</div>';
   // 1 · dados × fotos
-  const fotos = (R.fotos || []);
+  const fotos = (R.fotos || []), LUG = lugaresRev(R), semAc = R.inspecao.fotos_sem_acesso || {};
+  const rotFoto = f => { const l = /^lugar:/.test(f.item || '') ? LUG.find(x => 'lugar:' + x.lugar === f.item) : null;
+    return (l ? l.rotulo : (ROT_SECAO[f.secao] || f.secao || 'foto') + (f.item && !/^lugar:/.test(f.item) && f.secao === 'visual' ? ' · ' + f.item : ''))
+      + (f.origem === 'galeria' ? ' · galeria' + (f.tirada_em ? ', tirada em ' + dataBR(dataSP(f.tirada_em)).slice(0, 5) : '') : ''); };
   h += '<div class="card">' + cab('dados', '1 · Dados contra as fotos')
     + '<div class="g2rev"><div><table><tr><th>Plaqueta</th><th></th><th></th></tr>'
     + [['fabricante','Fabricante']].concat(REV_CAMPOS_VASO).map(([k, r]) => '<tr><td class="muted">' + r + '</td><td><b>' + esc(R.vaso[k] == null ? '—' : String(R.vaso[k])) + '</b></td><td>'
         + (eu.pode && k !== 'fabricante' ? '<button class="btn mini" data-corv="' + k + '">Corrigir</button>' : '') + '</td></tr>').join('') + '</table></div>'
-    + '<div><div class="muted" style="margin-bottom:4px">Fotos (' + fotos.length + ')</div><div class="fotosrev">' + fotos.map(f => '<button class="fotorev" data-foto="' + esc(f.path) + '" title="' + esc((f.secao || '') + (f.legenda ? ' · ' + f.legenda : '')) + '">' + esc(f.secao || 'foto') + '</button>').join('')
-    + '</div><div id="revVisor" class="visorrev"><p class="muted">Clique numa foto para ver.</p></div></div></div>'
+    + '<div><div class="muted" style="margin-bottom:4px">Fotos (' + fotos.length + ')</div><div class="fotosrev">' + fotos.map(f => '<button class="fotorev" data-foto="' + esc(f.path) + '" data-fid="' + esc(f.id) + '" title="' + esc((f.secao || '') + (f.legenda ? ' · ' + f.legenda : '')) + '"'
+      + (f.origem === 'galeria' ? ' style="border-style:dashed"' : '') + '>' + esc(rotFoto(f)) + '</button>').join('')
+    + '</div>' + (LUG.some(l => semAc[l.lugar]) ? '<p class="muted" style="margin:6px 0 0">Sem foto (o motivo sai no laudo): ' + LUG.filter(l => semAc[l.lugar]).map(l => '<b>' + esc(l.rotulo) + '</b>: ' + esc(semAc[l.lugar])).join(' · ') + '</p>' : '')
+    + (LUG.some(l => !semAc[l.lugar] && !fotos.some(f => f.item === 'lugar:' + l.lugar) && !(l.lugar === 'placa_fabricacao' && fotos.some(f => f.secao === 'plaqueta' && !f.item)))
+        ? '<p class="alerta" style="margin:6px 0 0">Sem foto e sem motivo: ' + LUG.filter(l => !semAc[l.lugar] && !fotos.some(f => f.item === 'lugar:' + l.lugar) && !(l.lugar === 'placa_fabricacao' && fotos.some(f => f.secao === 'plaqueta' && !f.item))).map(l => esc(l.rotulo)).join(', ') + '. Ponha uma foto no lugar (clique na foto › Lugar no laudo).</p>' : '')
+    + '<div id="revVisor" class="visorrev"><p class="muted">Clique numa foto para ver.</p></div></div></div>'
     + '<h3 style="margin-top:14px">Acessórios</h3>' + ((R.acessorios || []).length ? '<table><tr><th>Acessório</th><th>Marca / modelo</th><th>Lacre</th><th>Ajuste</th><th>Aferição</th><th></th></tr>'
       + R.acessorios.map(a => '<tr><td><b>' + esc(a.tag || a.tipo) + '</b><div class="muted">' + esc(a.tipo) + (a.situacao ? ' · ' + esc(a.situacao) : '') + '</div></td><td>' + esc([a.marca, a.modelo].filter(Boolean).join(' · ') || '—')
         + '</td><td>' + esc(a.lacre_num || '—') + '</td><td>' + (a.pressao_ajuste_mpa != null ? pr(a.pressao_ajuste_mpa) : '—') + '</td><td>'
@@ -1144,7 +1185,7 @@ function pintarRevisao(){
         const k = ck.cam, calc = ck.governante ? ck.governante.pmta : null, ant = k.pmta_vigente_mpa, sug = revRegra(ck);
         const esc0 = REV.pmta[k.id] || { regra:sug.regra, valor:sug.valor, just:'' };
         REV.pmta[k.id] = esc0;
-        return '<tr><td><b>' + esc(k.nome) + '</b>' + (ck.governante ? '<div class="muted">governante: ' + esc(ck.governante.c.nome) + '</div>' : '') + '</td><td>' + pr(k.p_operacao_max_mpa) + '</td><td>'
+        return '<tr><td><b>' + esc(k.nome) + '</b>' + (ck.governante ? '<div class="muted">governante: ' + esc(nomeGov(ck)) + '</div>' : '') + '</td><td>' + pr(k.p_operacao_max_mpa) + '</td><td>'
           + (calc == null ? '<span style="color:var(--crit)">' + esc(ck.erro || 'sem cálculo') + '</span>' : '<b>' + pr(calc) + '</b>') + '</td><td>' + pr(ant) + '</td><td>' + pr(k.pmta_plaqueta_mpa) + '</td><td>'
           + (plhAprova ? '<select class="t" data-regra="' + esc(k.id) + '"><option value="calculada"' + (esc0.regra === 'calculada' ? ' selected' : '') + '>a calculada</option>'
               + (ant != null && calc != null && ant <= calc + 1e-4 ? '<option value="mantida_anterior"' + (esc0.regra === 'mantida_anterior' ? ' selected' : '') + '>manter a anterior</option>' : '')
@@ -1155,7 +1196,7 @@ function pintarRevisao(){
             : '<span class="muted">' + (sug.regra === 'mantida_anterior' ? 'sugerida: manter a anterior (' + pr(sug.valor) + ')' : sug.regra === 'calculada' ? 'sugerida: a calculada' : 'o PLH decide') + '</span>')
           + '</td></tr>';
       }).join('') + '</table>'
-    + (prev.vaso && !prev.vaso.erro ? '<p class="muted" style="margin:8px 0 0">P·V = ' + fmt(prev.vaso.pv, 3) + ' · grupo ' + prev.vaso.grupo + ' · <b>categoria ' + prev.vaso.categoria + '</b> · próximas: externa em ' + prev.vaso.prazos.externo
+    + (prev.vaso && !prev.vaso.erro ? '<p class="muted" style="margin:8px 0 0">V = ' + fmt(prev.vaso.V, 3) + ' m³ (' + Math.round(prev.vaso.V * 1000).toLocaleString('pt-BR') + ' litros) · P·V = ' + fmt(prev.vaso.pv, 3) + ' · grupo ' + prev.vaso.grupo + ' · <b>categoria ' + prev.vaso.categoria + '</b> · próximas: externa em ' + prev.vaso.prazos.externo
         + ' ano(s), interna ' + (prev.vaso.prazos.interno == null ? 'a critério do PLH' : 'em ' + prev.vaso.prazos.interno + ' anos') + '</p>' : '')
     + (plhAprova && prev.vaso && !prev.vaso.erro ? revDatasHtml(prev.vaso.prazos) : '')   // E9 (410): as datas do PLH
     + (prev.vaso && prev.vaso.erro && /[Vv]olume/.test(prev.vaso.erro) && plhAprova ? '<label class="f" style="max-width:260px">Volume total do vaso (m³)<input class="t" id="revVol" inputmode="decimal" value="' + (REV.volume != null ? fmt(REV.volume, 3) : '') + '"></label>' : '')
@@ -1164,7 +1205,8 @@ function pintarRevisao(){
   REV.vidas = revVidas();
   h += '<div class="card">' + cab('espessuras', '4 · Espessuras contra o laudo anterior')
     + (REV.vidas.length ? '<table><tr><th>Componente</th><th>Anterior</th><th>Atual</th><th>Requerida</th><th>Perda</th><th>Taxa</th><th>Vida remanescente</th></tr>'
-      + REV.vidas.map(x => '<tr' + (x.cor === 'vermelho' ? ' style="background:var(--crit-soft)"' : x.cor === 'amarelo' ? ' style="background:var(--warn-soft)"' : '') + '><td><b>' + esc(x.nome) + '</b></td><td>'
+      + REV.vidas.map(x => '<tr' + (x.cor === 'vermelho' ? ' style="background:var(--crit-soft)"' : x.cor === 'amarelo' ? ' style="background:var(--warn-soft)"' : '') + '><td>'
+        + (x.sub ? '<span class="muted" style="padding-left:14px">↳ ' + esc(x.nome) + '</span>' : '<b>' + esc(x.nome) + '</b>') + '</td><td>'
         + (x.ant == null ? '<span class="muted">—</span>' : fmt(x.ant, 2) + ' mm<div class="muted">' + dataBR(x.dataAnt) + '</div>') + '</td><td>' + (x.atual == null ? '—' : fmt(x.atual, 2) + ' mm') + '</td><td>' + (x.req == null ? '—' : fmt(x.req, 2) + ' mm')
         + '</td><td>' + (x.perda == null ? '—' : fmt(x.perda, 2) + ' mm') + '</td><td>' + (x.taxa == null ? '—' : x.semPerda ? '<span class="muted">sem perda mensurável</span>' : fmt(x.taxa, 3) + ' mm/ano')
         + '</td><td>' + esc(x.vidaTxt) + '</td></tr>').join('') + '</table>'
@@ -1220,9 +1262,11 @@ function revVidas(){
   const prazo = prev.vaso && prev.vaso.prazos ? (prev.vaso.prazos.interno != null ? prev.vaso.prazos.interno : prev.vaso.prazos.externo) : null;
   const resol = 0.01;   // resolução do medidor de espessura (mm) para "sem perda mensurável"
   const out = [];
-  prev.camaras.forEach(ck => ck.comps.forEach(x => {
+  prev.camaras.forEach(ck => { const nReg = ck.comps.filter(y => y.c.tipo === 'costado').length; let resumo = null; ck.comps.forEach(x => {
     const a = ants.find(y => y.componente_id === x.c.id);
-    const o = { nome:x.c.nome, atual:x.tMin, req:x.eMin, ant:a ? Number(a.t_ant) : null, dataAnt:a ? a.data_ant : null, perda:null, taxa:null, vida:null, vidaTxt:'—', cor:null, semPerda:false };
+    // S140 · item 51: no costado com regiões, uma linha de resumo do costado e as regiões embaixo
+    if (x.c.tipo === 'costado' && nReg > 1 && !resumo){ resumo = { nome:'Costado', resumo:true, atual:null, req:x.eMin, ant:null, dataAnt:null, perda:null, taxa:null, vida:null, vidaTxt:'—', cor:null, semPerda:false, regs:[] }; out.push(resumo); }
+    const o = { nome:x.c.tipo === 'costado' && nReg > 1 ? nomeReg(x.c) : x.c.nome, sub:x.c.tipo === 'costado' && nReg > 1, atual:x.tMin, req:x.eMin, ant:a ? Number(a.t_ant) : null, dataAnt:a ? a.data_ant : null, perda:null, taxa:null, vida:null, vidaTxt:'—', cor:null, semPerda:false };
     if (o.ant != null && o.atual != null && o.dataAnt && dataAtual){
       const anos = (new Date(dataAtual) - new Date(o.dataAnt)) / (365.25 * 864e5);
       o.perda = o.ant - o.atual;
@@ -1236,7 +1280,14 @@ function revVidas(){
       }
     }
     out.push(o);
-  }));
+    if (o.sub && resumo){
+      resumo.regs.push(o);
+      if (o.atual != null && (resumo.atual == null || o.atual < resumo.atual)){ resumo.atual = o.atual; resumo.nome = 'Costado (menor leitura no ' + (siglaReg(x.c) || nomeReg(x.c)) + ')'; }
+      const ordem = { vermelho:2, amarelo:1 };
+      if ((ordem[o.cor] || 0) > (ordem[resumo.cor] || 0)) resumo.cor = o.cor;
+      if (o.vida != null && (resumo.vida == null || o.vida < resumo.vida)){ resumo.vida = o.vida; resumo.vidaTxt = o.vidaTxt; }
+    }
+  }); });
   return out;
 }
 function revMontarResultado(){
@@ -1322,7 +1373,20 @@ function ligarRevisao(){
     try{ await rpc('tf_insp_revisao_ok', { p_id:id, p_item:c.dataset.ok, p_ok:c.checked }); const e = R.inspecao.etapa; R.oks = R.oks || {}; R.oks[e] = (R.oks[e] || []).filter(x => x !== c.dataset.ok).concat(c.checked ? [c.dataset.ok] : []); }
     catch(e){ c.checked = !c.checked; erro(e); }
   }));
-  T.querySelectorAll('[data-foto]').forEach(b => b.addEventListener('click', () => mostrarArquivoEm($('revVisor'), { storage_path:b.dataset.foto })));
+  // S140 · item 49 (416): o escritório põe a foto noutro lugar do laudo (ou tira do lugar), enquanto a inspeção está em revisão
+  T.querySelectorAll('[data-foto]').forEach(b => b.addEventListener('click', async () => {
+    await mostrarArquivoEm($('revVisor'), { storage_path:b.dataset.foto });
+    const f = (R.fotos || []).find(x => x.id === b.dataset.fid);
+    if (!f || ['enviada','em_revisao'].indexOf(R.inspecao.situacao) < 0 || /\.pdf$/i.test(f.path || '')) return;   // quem tem o TapDoc (o banco confere)
+    const LUG = lugaresRev(R), vis = $('revVisor');
+    vis.insertAdjacentHTML('beforeend', '<label class="f" style="max-width:340px">Lugar no laudo<select class="t" id="revLugar"><option value="">sem lugar (' + esc(ROT_SECAO[f.secao] || f.secao) + ')</option>'
+      + LUG.map(l => '<option value="' + l.lugar + '"' + (f.item === 'lugar:' + l.lugar ? ' selected' : '') + '>' + esc(l.rotulo) + '</option>').join('') + '</select></label>'
+      + (f.origem === 'galeria' ? '<p class="muted">Da galeria do celular' + (f.tirada_em ? ', tirada em ' + quandoBR(f.tirada_em) : '') + '.</p>' : ''));
+    $('revLugar').addEventListener('change', async ev => {
+      try{ await rpc('tf_insp_foto_lugar', { p_foto:f.id, p_lugar:ev.target.value || null }); U.toast('Foto no lugar novo.', 'ok'); await recarregar(); }
+      catch(e){ erro(e); }
+    });
+  }));
   const corrigir = (alvo, ref, campos, atual) => {
     janela('Corrigir', '<label class="f">Dado<select class="t" id="rcCampo">' + campos.map(([k, r]) => '<option value="' + k + '">' + r + '</option>').join('') + '</select></label>'
       + '<label class="f">Valor certo<input class="t" id="rcValor"></label><label class="f">Motivo<input class="t" id="rcMotivo" placeholder="ex.: conforme a foto da plaqueta"></label>'
@@ -1548,7 +1612,7 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=R06a');
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S140');
     return true;
   })().catch(e => { LIBS = null; throw e; });
   return LIBS;
