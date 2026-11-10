@@ -126,18 +126,21 @@ async function conferir(bytes, esperado) {
     const sigs = assinaturas(b); r.assinaturas = sigs.length;
     if (!sigs.length) throw new Error('Este PDF não tem assinatura digital. Assine com o token no Assinador SERPRO e devolva o arquivo assinado.');
     if (!achou) throw new Error('Este PDF não é o laudo aprovado (o conteúdo mudou). Assine o PDF do pacote, sem abrir e salvar em outro programa.');
-    // a assinatura que cobre o aprovado: a primeira depois dele
-    const s = sigs.find(x => x.br[0] === 0 && x.br[1] >= achou.fim) || null;
-    if (!s) throw new Error('A assinatura não cobre o laudo aprovado.');
+    // a assinatura conferida é a que vai até o fim do arquivo (a última): ela cobre o aprovado e tudo o que
+    // veio depois, menos o próprio <conteúdo>. Um /ByteRange falso escrito depois não passa: o resumo e a
+    // assinatura RSA são conferidos sobre os bytes que ESTE intervalo diz cobrir.
+    const s = sigs.filter(x => x.br[0] === 0 && x.br[2] >= x.br[1] && x.br[2] + x.br[3] <= b.length)
+                  .sort((x, y) => (y.br[2] + y.br[3]) - (x.br[2] + x.br[3]))[0] || null;
+    if (!s) throw new Error('A assinatura está com o intervalo (/ByteRange) errado.');
     const [a, l1, c, l2] = s.br;
-    if (c < a + l1 || c + l2 > b.length) throw new Error('A assinatura está com o intervalo (/ByteRange) errado.');
-    // o fim do arquivo: nada depois da assinatura (só espaço)
-    const ult = sigs.reduce((m, x) => Math.max(m, x.br[2] + x.br[3]), 0);
-    r.cobre_tudo = ult >= b.length - 2 && ![...b.subarray(ult)].some(x => x > 0x20);
+    r.cobre_tudo = c + l2 >= b.length - 2 && ![...b.subarray(c + l2)].some(x => x > 0x20);
     if (!r.cobre_tudo) throw new Error('O PDF foi mudado depois da assinatura.');
-    // o conteúdo da assinatura (<hex>)
-    const h = new TextDecoder('latin1').decode(b.subarray(a + l1, c)).replace(/[<>\s]/g, '');
-    if (!/^[0-9a-fA-F]+$/.test(h)) throw new Error('A assinatura está ilegível.');
+    if (l1 < achou.fim) throw new Error('A assinatura não cobre o laudo aprovado.');
+    // o conteúdo da assinatura: exatamente <hex> no buraco do intervalo
+    const buraco = new TextDecoder('latin1').decode(b.subarray(a + l1, c));
+    if (!/^<[0-9a-fA-F\s]+>$/.test(buraco)) throw new Error('A assinatura está ilegível.');
+    const h = buraco.replace(/[<>\s]/g, '');
+    if (h.length % 2) throw new Error('A assinatura está ilegível.');
     const cms = new Uint8Array(h.length / 2); for (let k = 0; k < cms.length; k++) cms[k] = parseInt(h.substr(2 * k, 2), 16);
     const C = lerCms(cms);
     r.certificado = C.cn || null; r.serie = C.serie || null; r.emissor = C.emissor || null; r.validade = C.validade || null;
