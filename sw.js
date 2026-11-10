@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S136';   // S136: o celular da empresa (210): hub H16, núcleo N7, modulos M4, Pessoas e acessos A7, Field S53
+const VERSAO = 'H16-S139';   // S139: Manager S139 (item 28 da lista: nomes de empresas fictícios no modo demonstração)
+// const VERSAO = 'H16-S136';   // S136: o celular da empresa (210): hub H16, núcleo N7, modulos M4, Pessoas e acessos A7, Field S53
 // const VERSAO = 'H15-S135';   // S135: item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const VERSAO = 'H14-S134';   // S134 · TapHub Cadastros 1 (cadastros/: Clientes, Catálogo, Duplicados e as Configurações do TapHub), Manager S134 (sem CADASTROS, Configurações só do TapFlow, sem o comercial parado), TapCRM 3 (Configurações do comercial), TapFin 17, TapRH 10, TapSeg 5 e o card Cadastros (modulos M3)
 // const VERSAO = 'H13-S132';   // S132 · lista de melhorias: TapHub nas telas (#10), Relatar problema ou sugerir (#1: hub H13, núcleo N6, modulos M2, acessos A6, 209), TapRH 9 (615: banco dia a dia, EzPoint até a data-base, ASO, documentos por vínculo), TapSeg 4 (626: uniforme), TapFin 16, TapCRM 2, TapGestão 3, TapDoc E12/13 (só o nome)

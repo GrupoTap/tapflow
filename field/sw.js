@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S53-T22';   // S53: o celular da empresa (210): núcleo N7, modulos M4, sem a parte pessoal do Eu, a fila com a sessão de quem fez
+const VERSAO = 'S54-T23';   // S54: item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
+// const VERSAO = 'S53-T22';   // S53: o celular da empresa (210): núcleo N7, modulos M4, sem a parte pessoal do Eu, a fila com a sessão de quem fez
 // const VERSAO = 'S52-T21';   // S52: item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const VERSAO = 'S51-T20';   // S51: só o modulos.js M3 (o card Cadastros abre o cadastros/)
 // const VERSAO = 'S50-T19';   // S50: "Meu espelho e banco" mais claro (item #19 da lista: "Seu banco hoje", "Horas do mês")

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 19 · Financeiro</title>
+<title>TapFin 20 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2318,7 +2318,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'F19';   // TapFin 19 (S138): item 29 da lista: "Dividir em parcelas" a conta a receber que já tem nota (522)
+const APP_VERSION = 'F20';   // TapFin 20 (S139): item 30 da lista: condição de pagamento (523): uma nota do total, a conta se divide quando a nota sai; Prazos de Recebimento com a condição; "Parcelas da nota" com ajustar e "Emitir todos os boletos"
+// const APP_VERSION = 'F19';   // TapFin 19 (S138): item 29 da lista: "Dividir em parcelas" a conta a receber que já tem nota (522)
 // const APP_VERSION = 'F18';   // TapFin 18 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const APP_VERSION = 'F17';   // TapFin 17 (S134): Clientes, Catálogo e Duplicados abrem no TapHub (cadastros/), não mais no Manager (K6)
 // const APP_VERSION = 'F16';   // TapFin 16 (S132): o sistema se chama TapHub nas telas (item #10 da lista) e "Relatar problema ou sugerir" no menu (núcleo N6, modulos M2)
@@ -5934,7 +5935,7 @@ function finreLinha(t, hoje, par){
       + ' ' + finChipPrazo(t, hoje)
       + (t.nf_pdf_url ? ' <a href="' + esc(t.nf_pdf_url) + '" target="_blank" rel="noopener" style="font-size:11px">PDF</a>' : '')
       + (t.nf_xml_url ? ' <a href="' + esc(t.nf_xml_url) + '" target="_blank" rel="noopener" style="font-size:11px">XML</a>' : '')
-      + nfChip(t) + boChip(t) + medChip(t)
+      + nfChip(t) + boChip(t) + medChip(t) + condChip(t)
       + '</span>'
     + (t.anulado ? '<span class="a"></span>' : finAcoesHtml(t, p, t.cliente_nome || t.descricao))
     + '</div>';
@@ -5962,8 +5963,10 @@ function finreMenu(t){
   if (n && n.situacao === 'autorizada') M.push({ acao:'nfcancelar', rot:'Cancelar nota fiscal', perigo:true, cls:'topo' }, { sep:true });
   M.push({ acao:'editar', rot:'Editar' });
   // F19 · item 29 (522): a conta que já tem nota vira parcelas, cada uma com o seu boleto
-  if (t.etapa === 'faturado' && !t.anulado && !finEhParcela(t) && !finTemBaixa(t))
+  if (t.etapa === 'faturado' && !t.anulado && !finEhParcela(t) && !finTemBaixa(t) && !t.tem_parcelas)
     M.push(bv ? { acao:'dividir', rot:'Dividir em parcelas', off:'Cancele o boleto primeiro' } : { acao:'dividir', rot:'Dividir em parcelas' });
+  // F20 · item 30 (523): as parcelas da mesma nota (ajustar e "Emitir todos os boletos")
+  if (t.etapa === 'faturado' && !t.anulado && (t.tem_parcelas || t.dividido_de)) M.push({ acao:'parcelas', rot:'Parcelas da nota' });
   if (p !== 'baixar' && Number(t.saldo) > 0) M.push({ acao:'baixar', rot:'Baixar' });
   if (p !== 'baixas') M.push({ acao:'baixas', rot:'Baixas' });
   if (FINJF.ativo && !t.anulado){   // TapFin 7
@@ -6008,7 +6011,143 @@ function finreAcao(a, t){
   if (a === 'anular') return modalAnularTitulo(t);
   if (a === 'editar') return modalTituloReceber(t);
   if (a === 'dividir') return modalDividirTitulo(t);
+  if (a === 'parcelas') return modalParcelasNota(t);
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// F20 · ITEM 30 DA LISTA: CONDIÇÃO DE PAGAMENTO (523)
+// ----------------------------------------------------------------------------
+// Regra do Bruno (10/11): sempre UMA nota do total e um boleto por parcela. A conta da OS
+// nasce com a condição (30/60, 0/30/60; 0 = no ato), sugerida pelo cliente (Prazos de
+// Recebimento). Quando a nota sai (Emitir nota, Já tem nota), o banco divide sozinho
+// (gatilho fin_titulos_zz_condicao): partes iguais, a última leva o centavo, vencimento =
+// data da nota + os dias. "Parcelas da nota" ajusta valor e data (sem boleto nem baixa, B5)
+// e "Emitir todos os boletos" emite um por vez, sempre com clique (B7).
+// ════════════════════════════════════════════════════════════════════════════
+const CONDICOES_SUG = ['30', '45', '60', '30/60', '0/30', '0/30/60', '28/56/84'];
+/** Os dias da condição ([] = vazia; null = escrita errada). A mesma regra do banco (tf__fin_condicao_dias). */
+function condDias(c){
+  const s = String(c == null ? '' : c).trim().replace(/\s*(dias|dia|d)\s*$/i, '');
+  if (!s) return [];
+  const a = s.split(/\s*[\/,;]\s*|\s+/).filter(Boolean);
+  if (!a.length || a.some(x => !/^\d{1,3}$/.test(x))) return null;
+  const d = a.map(Number);
+  if (d.length > 12 || d.some(x => x > 365) || d.some((x, i) => i && x <= d[i - 1])) return null;
+  return d;
+}
+const condTexto = d => d.map(x => x === 0 ? 'no ato' : x + ' dias').join(', ');
+function condChip(t){
+  if (!t || !t.condicao || t.anulado || t.etapa !== 'a_faturar') return '';
+  const d = condDias(t.condicao) || [];
+  return ' <span class="chip" title="Condição de pagamento: ' + esc(condTexto(d)) + ' depois da nota. Quando a nota sair, '
+    + (d.length > 1 ? 'a conta se divide em ' + d.length + ' parcelas' : 'o vencimento sai pela condição') + '.">Cond. ' + esc(t.condicao) + '</span>';
+}
+function condAvisoNota(t){
+  const d = t && t.condicao ? (condDias(t.condicao) || []) : [];
+  if (!d.length) return '';
+  return '<div class="nfAvisos" style="padding:8px 10px;margin-bottom:10px">Condição de pagamento <b>' + esc(t.condicao) + '</b>: '
+    + (d.length > 1
+        ? 'a nota sai do total (' + esc(BRL(t.valor)) + ') e, quando ela sair, esta conta se divide sozinha em <b>' + d.length + ' parcelas</b> ('
+          + esc(condTexto(d)) + ' depois da data da nota). Depois, no ⋯: <b>Parcelas da nota</b> › <b>Emitir todos os boletos</b>.'
+        : 'o vencimento passa a ser a data da nota ' + (d[0] ? '+ ' + d[0] + ' dias' : '(no ato)') + '.') + '</div>';
+}
+function condPrevia(c, valor){
+  const d = condDias(c);
+  if (d === null) return '<small class="finTrava">Escreva os dias separados por barra, crescendo: 30/60, 0/30/60 (0 = no ato).</small>';
+  if (!d.length) return '';
+  const tot = Math.round((Number(valor) || 0) * 100), n = d.length, base = Math.floor(tot / n), resto = tot - base * n;
+  if (n === 1) return 'Uma parcela: vence ' + (d[0] ? d[0] + ' dias depois da nota' : 'no dia da nota') + '.';
+  return esc(n + ' parcelas' + (tot ? ' de ' + BRL(base / 100) + (resto ? ' (a última ' + BRL((base + resto) / 100) + ')' : '') : '')
+    + ': ' + condTexto(d) + ' depois da nota.') + ' <b>Uma nota só, do total; um boleto por parcela.</b>';
+}
+/** Botões de condição (os mais usados) que preenchem um campo. */
+const condBotoes = alvo => '<div class="przDias" style="margin-top:6px">' + CONDICOES_SUG.map(c =>
+  '<button class="btn" type="button" data-cond="' + esc(c) + '" data-alvo="' + esc(alvo) + '">' + esc(c) + (c === '30' ? ' (padrão)' : '') + '</button>').join('') + '</div>';
+
+/** As parcelas da mesma nota: ajustar valor e data (B5) e emitir todos os boletos (B7). */
+async function modalParcelasNota(t){
+  let P;
+  try{ P = await rpc('tf_fin_parcelas_ver', { p_titulo_id: t.id }); }catch(e){ toast(e.message, 'err'); return; }
+  const L = P.parcelas || [];
+  const travada = L.some(x => x.tem_baixa || x.boleto_vivo);
+  const semBoleto = L.filter(x => !x.boleto_vivo && !x.tem_baixa && Number(x.saldo) >= 2.5);
+  const totalC = L.reduce((a, x) => a + Math.round(Number(x.valor) * 100), 0);
+  const nf = P.nf_numero ? 'NF ' + nfNumero({ numero: P.nf_numero }) : 'a nota';
+  const btns = [{ label: 'Fechar', onClick: fecharModal }];
+  if (!travada) btns.push({ label: 'Gravar ajustes', onClick: async () => {
+    const itens = L.map((x, i) => ({ id: x.id, valor: Number((document.getElementById('pnV' + i) || {}).value),
+                                    vencimento: ((document.getElementById('pnD' + i) || {}).value || '').trim() }));
+    if (itens.some(x => !(x.valor > 0))){ toast('Informe o valor de cada parcela.', 'err'); return; }
+    if (itens.some(x => !x.vencimento)){ toast('Informe o vencimento de cada parcela.', 'err'); return; }
+    const somaC = itens.reduce((a, x) => a + Math.round(x.valor * 100), 0);
+    if (somaC !== totalC){ toast('A soma das parcelas (' + BRL(somaC / 100) + ') tem de continuar ' + BRL(totalC / 100) + '.', 'err'); return; }
+    try{
+      const res = await rpc('tf_fin_parcelas_ajustar', { p_titulo_id: t.id, p_parcelas: itens });
+      fecharModal(); toast(Number(res && res.alteradas) ? 'Parcelas ajustadas.' : 'Nada mudou.', 'ok'); await finreCarregar();
+    }catch(e){ toast(e.message, 'err'); }
+  }});
+  if (FINBO.ativo && semBoleto.length) btns.push({ label: 'Emitir todos os boletos (' + semBoleto.length + ')', pri: true, onClick: () => { fecharModal(); boEmitirTodos(P); } });
+  abrirModal('Parcelas da nota — ' + finTituloRot(t),
+      '<p class="nota" style="margin:0 0 10px">' + esc(nf) + (P.nf_data ? ' de ' + esc(dataBR(P.nf_data)) : '') + ' · total ' + esc(BRL(totalC / 100))
+    + (P.condicao ? ' · condição ' + esc(P.condicao) : '') + '. Uma nota só; um boleto por parcela.</p>'
+    + L.map((x, i) => '<div class="dupla">'
+        + '<div class="campo"><label for="pnV' + i + '">Parcela ' + (i + 1) + ' · valor' + (x.boleto_vivo ? ' (com boleto)' : x.tem_baixa ? ' (com baixa)' : '') + '</label>'
+        +   '<input id="pnV' + i + '" type="number" step="0.01" min="0.01" value="' + esc(Number(x.valor).toFixed(2)) + '"' + (travada ? ' disabled' : '') + '></div>'
+        + '<div class="campo"><label for="pnD' + i + '">Vencimento</label>'
+        +   '<input id="pnD' + i + '" type="date" value="' + esc(String(x.vencimento || '').slice(0, 10)) + '"' + (travada ? ' disabled' : '') + '></div></div>').join('')
+    + '<p class="nota" id="pnSoma" style="margin:4px 0 0"></p>'
+    + (travada ? '<small class="finTrava">Valor e data não se ajustam mais: há parcela com boleto valendo ou com baixa.</small>'
+               : '<p class="nota" style="margin:4px 0 0">Mudou valor ou data? “Gravar ajustes” antes de emitir os boletos.</p>'),
+    btns);
+  const somar = () => {
+    const el = document.getElementById('pnSoma'); if (!el) return;
+    const c = L.reduce((a, x, i) => a + Math.round(Number((document.getElementById('pnV' + i) || {}).value || 0) * 100), 0);
+    el.innerHTML = 'Soma ' + esc(BRL(c / 100)) + (c === totalC ? ' ✓' : ' · <b>tem de dar ' + esc(BRL(totalC / 100)) + '</b>');
+  };
+  L.forEach((x, i) => { const el = document.getElementById('pnV' + i); if (el) el.addEventListener('input', somar); });
+  somar();
+}
+
+/** B7: um boleto por parcela, um por vez (o Inter limita as chamadas), sempre depois do clique. */
+async function boEmitirTodos(P){
+  const L = (P.parcelas || []).filter(x => !x.boleto_vivo && !x.tem_baixa && Number(x.saldo) >= 2.5);
+  if (!L.length){ toast('Todas as parcelas já têm boleto.', 'ok'); return; }
+  const ok = await confirmar('Emitir ' + L.length + ' boleto' + (L.length > 1 ? 's' : '') + '?',
+      '<p style="margin-top:0">Um boleto por parcela, com o valor e o vencimento de cada uma (mensagem padrão de “Boleto ⚙”):</p>'
+    + '<ul class="nfAvisos">' + L.map(x => '<li>' + esc(BRL(x.saldo)) + ' · vence ' + esc(dataBR(x.vencimento)) + '</li>').join('') + '</ul>'
+    + '<p class="nota">Saem um por vez, no Inter. Depois de emitido, cada boleto só se desfaz por cancelamento (no ⋯ da parcela).</p>', 'Emitir');
+  if (!ok) return;
+  const res = [];
+  abrirModal('Emitindo os boletos…', '<p id="boTodosMsg" style="margin:6px 0">Começando… não feche a página.</p>', []);
+  for (let i = 0; i < L.length; i++){
+    const x = L[i], el = document.getElementById('boTodosMsg');
+    if (el) el.textContent = 'Boleto ' + (i + 1) + ' de ' + L.length + ' (' + BRL(x.saldo) + ', vence ' + dataBR(x.vencimento) + ')… não feche a página.';
+    try{
+      const prep = await rpc('tf_fin_boleto_preparar', { p_titulo_id: x.id, p_opcoes: {} });
+      if (!prep.pode_emitir){ res.push({ x, ok: false, msg: (prep.erros || []).join(' ') || 'não pode ser emitido' }); continue; }
+      const j = await boFuncao({ acao: 'emitir', titulo_id: x.id, opcoes: {} });
+      const emitido = j.situacao === 'a_receber' || j.situacao === 'atrasado';
+      res.push({ x, ok: emitido, msg: j.situacao === 'falha' ? 'o Inter recusou: ' + (j.motivo || 'sem detalhe') : (j.aviso || BO_SIT[j.situacao] || j.situacao) });
+    }catch(e){
+      res.push({ x, ok: false, msg: e.message });
+      if (/esperar/i.test(e.message)) break;   // o Inter pediu para esperar (429): para aqui
+    }
+  }
+  fecharModal(); await finreCarregar();
+  const feitos = res.filter(r => r.ok).length, faltam = L.length - res.length;
+  abrirModal('Boletos: ' + feitos + ' de ' + L.length + ' emitido' + (feitos === 1 ? '' : 's'),
+      '<ul class="' + (feitos === L.length ? 'nfAvisos' : 'nfErros') + '">' + res.map(r => '<li>' + esc(BRL(r.x.saldo)) + ' · vence '
+        + esc(dataBR(r.x.vencimento)) + ': ' + (r.ok ? 'emitido' : esc(r.msg)) + '</li>').join('') + '</ul>'
+    + (faltam ? '<p class="nota">' + faltam + ' ficaram para depois (o Inter pediu para esperar). Em 1 minuto, abra “Parcelas da nota” de novo e emita os que faltam.</p>' : '')
+    + '<p class="nota">Linha digitável, Pix e PDF de cada boleto: na linha de cada parcela.</p>',
+    [{ label: 'Fechar', pri: true, onClick: fecharModal }]);
+}
+// um clique num botão de condição preenche o campo dele
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-cond]'); if (!b) return;
+  const el = document.getElementById(b.dataset.alvo); if (!el) return;
+  el.value = b.dataset.cond; el.dispatchEvent(new Event('input', { bubbles: true }));
+});
 
 // ════════════════════════════════════════════════════════════════════════════
 // F19 · ITEM 29 DA LISTA: DIVIDIR EM PARCELAS A CONTA QUE JÁ TEM NOTA (522)
@@ -6412,18 +6551,24 @@ function osDesenhar(){
   }));
 }
 
-function modalCriarContaOs(rasc){
+async function modalCriarContaOs(rasc){
   if (rasc instanceof Event) rasc = null;
   const v = FINOS.ver; if (!v) return;
+  // F20 · item 30: a condição sugerida vem do cliente (Prazos de Recebimento)
+  let condCli = null;
+  if (!(rasc && rasc.cond != null) && v.cliente && v.cliente.id){
+    try{ const pz = await rpc('tf_fin_prazo_ver', { p_cliente_id: v.cliente.id }); condCli = pz && pz.condicao; }catch(e){ condCli = null; }
+  }
   const aprov = Number(v.aprovado) || 0, falta = Number(v.falta) || 0;
   const c = v.cliente || {}, o = v.os || {};
   const props = (v.propostas || []).map(p => p.rotulo).join(', ');
   const d = Object.assign({
     desc: o.numero + (props ? ((v.propostas || []).length > 1 ? ' · Propostas ' : ' · Proposta ') + props : ''),
     valor: aprov > 0 ? falta.toFixed(2) : '',
-    parc: '1', comp: isoHoje().slice(0, 7), venc: finSomaDias(isoHoje(), Number(c.prazo_dias) || 30), forma: '', conf: false,
+    cond: condCli || String(Number(c.prazo_dias) || 30), comp: isoHoje().slice(0, 7), forma: '', conf: false, vencMao: false,
     uid: (crypto.randomUUID && crypto.randomUUID()) || ('os-' + Date.now() + '-' + Math.random().toString(16).slice(2))
   }, rasc || {});
+  if (!d.venc) d.venc = finSomaDias(isoHoje(), ((condDias(d.cond) || [])[0] ?? (Number(c.prazo_dias) || 30)));
   abrirModal('Criar conta a receber — ' + (o.numero || 'OS'),
       '<div class="campo"><label>Cliente (da OS)</label><input type="text" value="' + esc(c.razao_social || c.nome || '—') + '" disabled></div>'
     + (aprov > 0
@@ -6433,42 +6578,55 @@ function modalCriarContaOs(rasc){
     + '<div class="campo"><label for="osDesc">Descrição</label><input id="osDesc" type="text" maxlength="300" value="' + esc(d.desc) + '" autocomplete="off"></div>'
     + '<div class="dupla">'
     +  '<div class="campo"><label for="osValor">Valor</label><input id="osValor" type="number" step="0.01" min="0.01" value="' + esc(d.valor) + '"></div>'
-    +  '<div class="campo"><label for="osParc">Parcelas</label><select id="osParc">'
-    +    Array.from({ length: 12 }, (_, i) => '<option value="' + (i + 1) + '"' + (String(i + 1) === String(d.parc) ? ' selected' : '') + '>' + (i + 1) + (i ? ' (uma por mês)' : '') + '</option>').join('')
-    +  '</select></div></div>'
+    +  '<div class="campo"><label for="osCond">Condição de pagamento (dias depois da nota)</label>'
+    +    '<input id="osCond" type="text" inputmode="numeric" autocomplete="off" placeholder="30/60" value="' + esc(d.cond) + '"></div></div>'
+    + condBotoes('osCond')
+    + '<p class="nota" id="osCondPrev" style="margin:6px 0 10px"></p>'
     + '<div class="dupla">'
     +  '<div class="campo"><label for="osComp">Competência (mês do serviço)</label><input id="osComp" type="month" value="' + esc(d.comp) + '"></div>'
-    +  '<div class="campo"><label for="osVenc">Vencimento (estimativa, 1ª parcela)</label><input id="osVenc" type="date" value="' + esc(d.venc) + '"></div></div>'
+    +  '<div class="campo"><label for="osVenc">Vencimento (estimativa até sair a nota)</label><input id="osVenc" type="date" value="' + esc(d.venc) + '"></div></div>'
     + '<div class="campo"><label for="osForma">Forma prevista (opcional)</label><select id="osForma"><option value="">—</option>'
     +   FORMA_PREVISTA_FIN.map(f => '<option value="' + esc(f) + '"' + (d.forma === f ? ' selected' : '') + '>' + esc(f) + '</option>').join('') + '</select></div>'
-    + '<p class="nota">A conta nasce “A faturar”, ligada à ' + esc(o.numero || 'OS') + '. Depois, na linha dela: “Emitir nota” e “Emitir boleto”.</p>',
+    + '<p class="nota">Nasce <b>uma conta</b> “A faturar”, ligada à ' + esc(o.numero || 'OS') + '. A nota sai do total; quando ela sair, a conta se divide pela condição (0 = no ato). Depois, no ⋯: “Parcelas da nota” › “Emitir todos os boletos”.</p>',
     [{ label: 'Cancelar', onClick: fecharModal },
      { label: 'Criar', pri: true, onClick: async () => {
         // tudo lido aqui, antes de qualquer outra janela
         const val = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
-        const r = { desc: val('osDesc'), valor: val('osValor'), parc: val('osParc') || '1', comp: val('osComp'), venc: val('osVenc'),
-                    forma: val('osForma'), conf: !!(document.getElementById('osConf') || {}).checked, uid: d.uid };
+        const r = { desc: val('osDesc'), valor: val('osValor'), cond: val('osCond'), comp: val('osComp'), venc: val('osVenc'),
+                    forma: val('osForma'), conf: !!(document.getElementById('osConf') || {}).checked, uid: d.uid, vencMao: vencMao };
+        const dias = condDias(r.cond);
         const valor = Number(r.valor);
         if (!r.desc){ toast('A descrição é obrigatória.', 'err'); return; }
         if (!(valor > 0)){ toast('Informe um valor maior que zero.', 'err'); return; }
         if (aprov > 0 && valor > falta + 0.009){ toast('Passa do que falta da OS (' + BRL(falta) + ').', 'err'); return; }
         if (aprov <= 0 && !r.conf){ toast('Marque a confirmação: a OS não tem proposta aprovada.', 'err'); return; }
+        if (!dias || !dias.length){ toast('Escreva a condição de pagamento: os dias separados por barra, crescendo (30/60, 0/30/60; 0 = no ato).', 'err'); return; }
         if (!r.comp || !r.venc){ toast('Informe a competência e o vencimento.', 'err'); return; }
         const b = [...document.querySelectorAll('#mFoot .btn')].pop(); if (b) b.disabled = true;
         try{
-          const res = await rpc('tf_fin_os_criar_conta', {
-            p_os_id: FINOS.id, p_valor: valor, p_parcelas: Number(r.parc), p_descricao: r.desc,
+          const res = await rpc('tf_fin_os_criar_conta_condicao', {
+            p_os_id: FINOS.id, p_valor: valor, p_condicao: r.cond, p_descricao: r.desc,
             p_competencia: r.comp + '-01', p_vencimento: r.venc, p_forma_prevista: r.forma || null,
             p_subcategoria_id: null, p_confirmar_sem_aprovado: aprov <= 0 && r.conf, p_client_uid: r.uid });
           fecharModal();
-          const n = (res && res.titulos ? res.titulos.length : 1);
-          toast(n > 1 ? n + ' parcelas criadas para a ' + osRot() + '.' : 'Conta a receber criada para a ' + osRot() + '.', 'ok');
+          toast('Conta a receber criada para a ' + osRot() + ' (condição ' + ((res && res.condicao) || r.cond) + ')'
+            + (dias.length > 1 ? ': quando a nota sair, ela se divide em ' + dias.length + ' parcelas.' : '.'), 'ok');
           await finreCarregar();
         }catch(e){
           toast(e.message, 'err');
           modalCriarContaOs(r);   // volta com o que foi escrito (a mesma chave: não cria em dobro)
         }
      }}]);
+  let vencMao = !!d.vencMao;
+  const ec = document.getElementById('osCond'), ev = document.getElementById('osVenc'), eva = document.getElementById('osValor');
+  const prev = () => {
+    const el = document.getElementById('osCondPrev'); if (el) el.innerHTML = condPrevia(ec.value, eva.value);
+    const dd = condDias(ec.value);
+    if (!vencMao && dd && dd.length) ev.value = finSomaDias(isoHoje(), dd[0]);
+  };
+  ev.addEventListener('input', () => { vencMao = true; });
+  ec.addEventListener('input', prev); eva.addEventListener('input', prev);
+  prev();
 }
 
 
@@ -6915,7 +7073,8 @@ async function modalJaFaturada(t){
   abrirModal('Já tem nota — ' + finTituloRot(t),
       (i.aviso ? '<div class="nfAvisos" style="padding:8px 10px">' + esc(i.aviso) + '</div>' : '')
     + '<p class="nota" style="margin-top:0">A nota desta conta já foi emitida (no portal, fora do TapFin). '
-    + 'Grave o número e a data: a conta passa a “faturada” <b>e o vencimento continua ' + esc(dataBR(t.vencimento)) + '</b>.</p>'
+    + (t.condicao ? 'Grave o número e a data: a conta passa a “faturada”.</p>' + condAvisoNota(t)
+       : 'Grave o número e a data: a conta passa a “faturada” <b>e o vencimento continua ' + esc(dataBR(t.vencimento)) + '</b>.</p>')
     + (i.nota ? '<div class="nfBloco"><b>Nota lida da contabilidade</b><div>NF' + esc(String(i.nota.numero)) + ' · ' + esc(BRL(i.nota.valor)) + ' · emitida em ' + esc(dataBR(i.nota.emitida_em)) + '</div>'
          + (i.parcelas > 1 ? '<div class="nota" style="margin:2px 0 0">' + esc(String(i.parcelas)) + ' contas com esse número (parcelas) somam ' + esc(BRL(i.soma_parcelas)) + '.</div>' : '') + '</div>' : '')
     + '<div class="dupla">'
@@ -6930,7 +7089,7 @@ async function modalJaFaturada(t){
         if (!dia){ toast('Digite a data da nota.', 'err'); return; }
         try{
           await rpc('tf_fin_marcar_faturado', { p_titulo_id: t.id, p_numero: Number(num), p_data: dia, p_valor: val ? Number(val) : null });
-          fecharModal(); toast('Conta marcada como faturada (NF' + num + '). O vencimento não mudou.', 'ok'); finreCarregar();
+          fecharModal(); toast('Conta marcada como faturada (NF' + num + ').' + (condDias(t.condicao).length > 1 ? ' Dividida em ' + condDias(t.condicao).length + ' parcelas pela condição ' + t.condicao + '.' : t.condicao ? ' Vencimento pela condição (' + t.condicao + ' dias).' : ' O vencimento não mudou.'), 'ok'); finreCarregar();
         }catch(e){ toast(e.message, 'err'); }
      }}]);
 }
@@ -7124,7 +7283,7 @@ async function modalEmitirNota(t){
   const lista = (L, cls) => (L && L.length) ? '<ul class="' + cls + '">' + L.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '';
   abrirModal('Emitir nota — ' + finTituloRot(t),
       nfFaixaTeste(prep.ambiente)
-    + jfAvisoEmitir(t)
+    + jfAvisoEmitir(t) + condAvisoNota(t)
     + lista(prep.erros, 'nfErros')
     + ((prep.erros || []).some(x => /Cadastros/.test(x)) && NO_SERVIDOR
        ? '<p class="nota" style="margin:-4px 0 10px"><a href="../cadastros/?ir=cad&area=tapfin" target="_blank" rel="noopener">Abrir Cadastros › Clientes</a> (em outra aba). Corrigido, feche esta janela e clique em "Emitir nota" de novo.</p>' : '')
@@ -7534,9 +7693,9 @@ async function pintarPrazosFin(){
   visao = 'finprz';
   const board = document.getElementById('board');
   board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Prazos de Recebimento</h2>'
-    + '<p>O padrão é receber 30 dias depois da nota. Aqui ficam só os clientes com prazo diferente — '
-    + 'é deste prazo que sai o vencimento quando a nota é faturada.</p></div>'
-    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="finprzNovo">+ Definir prazo de um cliente</button></div>'
+    + '<p>O padrão é receber 30 dias depois da nota. Aqui ficam só os clientes com outra condição (ex.: 30/60; 0 = no ato) — '
+    + 'é ela que vem sugerida ao criar a conta da OS; quando a nota sai, a conta se divide por ela (uma nota, um boleto por parcela).</p></div>'
+    + '<div style="margin-bottom:10px"><button class="btn pri" type="button" id="finprzNovo">+ Definir a condição de um cliente</button></div>'
     + '<div class="lista" id="finprzLista"><p class="nota" style="padding:12px">Carregando…</p></div></div>';
   document.getElementById('finprzNovo').addEventListener('click', () => modalPrazoCliente(null));
   await finprzCarregar();
@@ -7561,13 +7720,13 @@ function finprzDesenhar(){
   const L = (FINPRZ.lista || []).filter(c => casa([c.razao_social, c.nome_fantasia, c.cnpj, c.cidade, c.uf].join(' '), q));
   if (!L.length){
     el.innerHTML = '<p class="nota" style="padding:12px">' + (q ? 'Nenhum cliente com essa busca.'
-      : 'Todos os clientes estão no padrão de 30 dias. Use “Definir prazo” para quem recebe em outro prazo.') + '</p>';
+      : 'Todos os clientes estão no padrão de 30 dias. Use “Definir a condição” para quem recebe em outro prazo ou em parcelas.') + '</p>';
     return;
   }
-  el.innerHTML = '<div class="ccLin prz cab"><span>Cliente</span><span class="n">Prazo</span><span>Alterado</span><span></span></div>'
+  el.innerHTML = '<div class="ccLin prz cab"><span>Cliente</span><span class="n">Condição</span><span>Alterado</span><span></span></div>'
     + L.map(c => '<div class="ccLin prz"><span class="t"><b>' + esc(nomeCliente(c)) + '</b>'
       + '<small>' + esc(c.cnpj || 'sem CNPJ') + (c.cidade ? ' · ' + esc(c.cidade) + (c.uf ? '/' + esc(c.uf) : '') : '') + '</small></span>'
-      + '<span class="n">' + esc(c.prazo) + ' dias</span>'
+      + '<span class="n">' + esc(c.condicao || c.prazo) + ' dias</span>'
       + '<span class="quem">' + (c.alterado_por ? esc(c.alterado_por) + ' · ' + esc(dataBR(_diaDe(c.alterado_em))) : '<span style="color:var(--ink-3)">antes do histórico</span>') + '</span>'
       + '<span class="a"><button class="btn" type="button" style="padding:3px 8px;font-size:12px" data-prz="' + esc(c.id) + '">Alterar</button></span></div>').join('');
   el.querySelectorAll('[data-prz]').forEach(b => b.addEventListener('click', () => modalPrazoCliente(b.dataset.prz)));
@@ -7577,21 +7736,22 @@ REPINTA.finprz = finprzDesenhar;
 
 function modalPrazoCliente(clienteId){
   let C = null;            // o que tf_fin_prazo_ver devolveu
-  abrirModal('Prazo de recebimento',
+  abrirModal('Condição de pagamento do cliente',
       '<div class="campo" id="przBuscaCx"' + (clienteId ? ' hidden' : '') + '><label for="przBusca">Cliente</label>'
     + '<input id="przBusca" type="text" placeholder="Buscar por nome ou CNPJ…" autocomplete="off"><div id="przLista"></div></div>'
     + '<div id="przCorpo">' + (clienteId ? '<p class="nota">Carregando…</p>' : '') + '</div>',
     [{ label:'Cancelar', onClick: fecharModal },
      { label:'Gravar', pri:true, onClick: async () => {
         if (!C){ toast('Busque e selecione o cliente.', 'err'); return; }
-        const dias = Number((document.getElementById('przDias') || {}).value);
-        if (!Number.isInteger(dias) || dias < 1 || dias > 180){ toast('O prazo tem de ser de 1 a 180 dias.', 'err'); return; }
+        const cond = ((document.getElementById('przCond') || {}).value || '').trim();
+        const dd = condDias(cond);
+        if (!dd || !dd.length){ toast('Escreva a condição: os dias separados por barra, crescendo (30, 30/60, 0/30/60; 0 = no ato).', 'err'); return; }
         const fil = !!(document.getElementById('przFil') || {}).checked;
         try{
-          const r = await rpc('tf_fin_prazo_gravar', { p_cliente_id: C.id, p_dias: dias, p_filiais: fil });
+          const r = await rpc('tf_fin_prazo_condicao_gravar', { p_cliente_id: C.id, p_condicao: cond, p_filiais: fil });
           fecharModal();
-          const n = Number(r && r.alterados) || 0;
-          toast(n ? 'Prazo de ' + dias + ' dias gravado' + (n > 1 ? ' em ' + n + ' cadastros.' : '.') : 'Nada mudou — já estava em ' + dias + ' dias.', 'ok');
+          const n = Number(r && r.alterados) || 0, txt = (r && r.condicao) || cond;
+          toast(n ? 'Condição ' + txt + ' gravada' + (n > 1 ? ' em ' + n + ' cadastros.' : '.') : 'Nada mudou — já estava em ' + txt + '.', 'ok');
           await finprzCarregar();
         }catch(e){ toast(e.message, 'err'); }
      }}]);
@@ -7608,18 +7768,20 @@ function modalPrazoCliente(clienteId){
         ? '<div class="campo"><label>Cliente</label><div><b>' + esc(nomeCliente(C)) + '</b>'
           + '<small style="display:block;color:var(--ink-3)">' + ident + '</small></div></div>'
         : '<p class="nota" style="margin:-8px 0 12px">' + ident + '</p>')
-      + '<div class="campo"><label for="przDias">Prazo (dias depois da nota)</label><div class="przDias">'
-      +   '<input id="przDias" type="number" min="1" max="180" step="1" value="' + esc(C.prazo) + '">'
-      +   [30, 45, 60, 90].map(d => '<button class="btn" type="button" data-d="' + d + '">' + d + (d === 30 ? ' (padrão)' : '') + '</button>').join('')
-      + '</div><small class="nota" style="display:block;margin-top:4px">Hoje: ' + esc(C.prazo) + ' dias' + (Number(C.prazo) === 30 ? ' (o padrão)' : '') + '.</small></div>'
+      + '<div class="campo"><label for="przCond">Condição de pagamento (dias depois da nota)</label>'
+      +   '<input id="przCond" type="text" inputmode="numeric" autocomplete="off" placeholder="30/60" value="' + esc(C.condicao || C.prazo) + '">'
+      +   condBotoes('przCond')
+      +   '<small class="nota" id="przPrev" style="display:block;margin-top:4px"></small>'
+      +   '<small class="nota" style="display:block;margin-top:2px">Hoje: ' + esc(C.condicao || C.prazo) + ' dias' + (String(C.condicao || C.prazo) === '30' ? ' (o padrão)' : '') + '. 0 = no ato (vence no dia da nota).</small></div>'
       + (F.length
           ? '<label class="finAnul" style="margin:0"><input type="checkbox" id="przFil" checked> Aplicar também aos outros '
             + F.length + ' cadastro' + (F.length > 1 ? 's' : '') + ' do mesmo CNPJ</label>'
             + '<div class="przFil">' + F.map(f => '<div><span>' + esc(f.razao_social) + ' <small>· ' + esc(f.cnpj || '')
-            + (f.cidade ? ' · ' + esc(f.cidade) : '') + '</small></span><span>' + esc(f.prazo) + ' dias</span></div>').join('') + '</div>'
+            + (f.cidade ? ' · ' + esc(f.cidade) : '') + '</small></span><span>' + esc(f.condicao || f.prazo) + ' dias</span></div>').join('') + '</div>'
           : '<p class="nota" style="margin:0">Não há outro cadastro com o mesmo CNPJ.</p>');
-    corpo.querySelectorAll('[data-d]').forEach(b => b.addEventListener('click', () => { document.getElementById('przDias').value = b.dataset.d; }));
-    const d = document.getElementById('przDias'); d.focus(); d.select();
+    const d = document.getElementById('przCond'), pv = document.getElementById('przPrev');
+    const prev = () => { pv.innerHTML = condPrevia(d.value, 0); };
+    d.addEventListener('input', prev); prev(); d.focus(); d.select();
   }
   if (clienteId){ abrir(clienteId); return; }
 

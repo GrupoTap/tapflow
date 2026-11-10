@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapRH 11 · Recursos Humanos</title>
+<title>TapRH 12 · Recursos Humanos</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2432,7 +2432,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'RH11';   // TapRH 11 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
+const APP_VERSION = 'RH12';   // TapRH 12 (S139): item 26 da lista: a caixa do espelho esconde também as batidas repetidas
+// const APP_VERSION = 'RH11';   // TapRH 11 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const APP_VERSION = 'RH10';   // TapRH 10 (S134): Clientes, Catálogo e Duplicados abrem no TapHub (cadastros/), não mais no Manager (K6)
 // const APP_VERSION = 'RH9';   // TapRH 9 (615, S132): a coluna Banco no espelho e no PDF (item #7), os cartões do EzPoint só até a data-base (#6), o ASO recalculado quando a periodicidade muda (#8), Documentos do Funcionário por vínculo (#9); TapHub nas telas (#10)
 // const APP_VERSION = 'RH8';   // TapRH 8 (613, S131): batidas repetidas, Hoje com o EzPoint, atestado de vários dias e declaração, lotes antigos, teto na rescisão · TapRH 7 (612): os documentos do gov.br em Escalas e regras (conferir, aceitar, recusar, versão da Engetap) · TapRH 6 (611): o termo de ciência e a advertência em texto formal (T2/A2) na aba Saúde e no PDF · TapRH 5 (Ponto Etapa 2A a 2D, 606 a 609): comparar com o EzPoint (Importar EzPoint), rescisão (Escalas e regras), prazo de guarda das fotos (Parâmetros) · aba Saúde (semáforo por pessoa, avisos, termo de ciência, advertência preparada para o Bruno decidir, PDF do termo), orientação do almoço em Escalas e regras · aba Fechamento (intenção, horas pagas, liberar, assinatura da empresa, Discordo, cobrar pelo WhatsApp, PDF assinado, resumo para o contador, folgas compensatórias) · aba Parâmetros, data do acordo de banco por pessoa, espelho com a tolerância, 100%, noturno, almoço a pagar e o banco por lote · TapRH 4 (S126): o espelho em PDF com a logo, quadros, uma coluna por batida, ajustes e assinaturas; o nome do arquivo no padrão do escritório; folga e atestado de parte do dia (605) · TapRH 3 (Ponto 1A): aba Ponto (Espelhos, Escalas e regras, Importar EzPoint), só para quem aprova o ponto · TapRH 2 (S124): o RH deixa de liberar PIN (decisão 11 do recuperar-acesso: quem libera é "Autoriza acesso") · TapRH 1 (separado do Manager S117) — o S## da publicação é da rodada que publica
@@ -5587,7 +5588,7 @@ async function ptEspelhos(corpo){
         + esc(p.nome) + (p.funcao ? ' · ' + esc(p.funcao) : '') + (p.situacao !== 'ativo' ? ' (desligado)' : '') + '</option>').join('')
     + '</select></label><label class="ptCampo">Mês <select id="ptMes">'
     + meses.map(m => '<option value="' + m + '"' + (m === PT.mes ? ' selected' : '') + '>' + esc(ptMesRot(m)) + '</option>').join('')
-    + '</select></label><label class="chk ptChk"><input type="checkbox" id="ptDesc"' + (PT.desc ? ' checked' : '') + '> Mostrar desconsideradas</label>';
+    + '</select></label><label class="chk ptChk"><input type="checkbox" id="ptDesc"' + (PT.desc ? ' checked' : '') + '> Mostrar desconsideradas e repetidas</label>';
   corpo.appendChild(barra);
   barra.querySelector('#ptSel').addEventListener('change', e => { PT.sel = e.target.value; PT.mes = ''; ptEspelhos(corpo); });
   barra.querySelector('#ptMes').addEventListener('change', e => { PT.mes = e.target.value; ptEspelhoCarregar(); });
@@ -5649,14 +5650,14 @@ function ptEspelhoDesenhar(){
     + cartao('Pedidos aguardando', String(pend.length), pend.length ? 'aviso' : '')
     + '</div>' + ptBancoResumo(E)
     + '<div class="ptLegenda"><span>Legenda:</span>'
-    + Object.keys(PT_ORIGEM).filter(k => (!/^tf_/.test(k) || k === 'tf_repetida') && k !== 'ez_repetida' && (k !== 'ez_desconsiderada' || PT.desc)).map(k =>
+    + Object.keys(PT_ORIGEM).filter(k => (!/^tf_/.test(k) || k === 'tf_repetida') && k !== 'ez_repetida' && ((k !== 'ez_desconsiderada' && k !== 'tf_repetida') || PT.desc)).map(k =>
         '<span><i class="ptB ' + PT_ORIGEM[k].cls + '">08:00</i>' + PT_ORIGEM[k].rot + '</span>').join('')
     + '<span><i class="ptB ptO">08:00 OFF</i>batida sem internet, subiu depois</span>'
     + '<span><i class="ptB ptI">08:00</i>incluída por ajuste</span><span><i class="ptB ptP">08:00</i>pedido aguardando</span></div>'
     + '<div class="rhfdWrap"><table class="tbl ptTab"><thead><tr><th></th><th>Dia</th><th>Batidas</th>'
     + '<th class="num">Feitas</th><th class="num">Saldo</th><th class="num" title="Banco de horas acumulado até o fim do dia (como o BH² do EzPoint)">Banco</th><th>Observação</th><th>Pedido ou justificativa</th></tr></thead><tbody>';
   (E.dias || []).forEach(d => {
-    const bats = (d.batidas || []).filter(b => PT.desc || !/desconsiderada$/.test(b.origem));   // RH8: a repetida aparece sempre, riscada (613)
+    const bats = (d.batidas || []).filter(b => PT.desc || !/(desconsiderada|repetida)$/.test(b.origem));   // RH12 · item 26 da lista: a caixa esconde também as repetidas (613); marcada, mostra as duas, riscadas, com o motivo no title
     const temTf = (d.batidas || []).some(b => /^tf_/.test(b.origem));
     const obs = [];
     if (d.feriado && d.tipo_dia === 'util') obs.push(d.feriado);   // RH8 · dispensa de parte do dia (613)
