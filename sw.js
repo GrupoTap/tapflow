@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S142';   // S142: núcleo N8 (item 37), Pessoas e acessos A8 (itens 36 e 39), TapRH RH13 (item 38; 616)
+const VERSAO = 'H16-S143';   // S143: TapDoc E16 (rodada D1: texto e cara do laudo, itens 62 a 69, 73 a 76 e 78; laudo-pdf.js S143; 419)
+// const VERSAO = 'H16-S142';   // S142: núcleo N8 (item 37), Pessoas e acessos A8 (itens 36 e 39), TapRH RH13 (item 38; 616)
 // const VERSAO = 'H16-S141';   // S141: TapDoc E15 (rodada B da lista; 417) e o motor R00.5
 // const VERSAO = 'H16-S140';   // S140: TapDoc E14 (doc/: itens 44, 49, 50, 51, 53 e 56 da lista; laudo-pdf.js S140; 416)
 // const VERSAO = 'H16-S139';   // S139: Manager S139 (item 28 da lista: nomes de empresas fictícios no modo demonstração)
