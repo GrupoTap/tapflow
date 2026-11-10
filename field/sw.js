@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S54-T23';   // S54: item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
+const VERSAO = 'S54-T24';   // S140: TapDoc 14 (field/doc/: itens 33, 44, 49 a 56, 59 e 60 da lista; 416)
+// const VERSAO = 'S54-T23';   // S54: item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
 // const VERSAO = 'S53-T22';   // S53: o celular da empresa (210): núcleo N7, modulos M4, sem a parte pessoal do Eu, a fila com a sessão de quem fez
 // const VERSAO = 'S52-T21';   // S52: item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const VERSAO = 'S51-T20';   // S51: só o modulos.js M3 (o card Cadastros abre o cadastros/)

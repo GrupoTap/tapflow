@@ -145,6 +145,23 @@ textarea.t{min-height:72px;resize:vertical}
 @media (min-width:900px){ main{padding:20px} .fotos{grid-template-columns:repeat(4,1fr)} }
 .faixa{background:#FBF3DB;border:1px solid #EAD9A6;border-radius:8px;padding:6px 10px;font-size:12.5px;margin-top:6px;color:#3D3416}
 .faixa[hidden]{display:none}
+/* S140 · itens 49, 51, 52, 53, 60 */
+.foto .galb{position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.6);color:#fff;font-size:9.5px;font-weight:700;padding:1px 4px;border-radius:3px;z-index:2}
+.foto.add.gal{background:var(--surface-2);border-color:var(--ink-3);color:var(--ink-2)}
+.lugar{border-top:1px solid var(--rule-2);padding:10px 0 4px;margin-top:8px}
+.lugar .lt{display:flex;gap:8px;align-items:center}.lugar .lt b{flex:1;font-size:14.5px}
+.cardc{background:var(--surface);border:1px solid var(--rule);border-left:6px solid var(--cor,var(--accent));border-radius:6px;box-shadow:var(--sh);margin-bottom:10px}
+.cardc-cab{width:100%;display:flex;gap:10px;align-items:center;background:none;border:0;padding:11px 12px;text-align:left}
+.cardc-cab .cn{flex:1;min-width:0}.cardc-cab .cn b{display:block;font-size:15.5px;line-height:1.25}.cardc-cab .cn small{display:block;font-size:12.5px;color:var(--ink-3)}
+.cardc-cab .seta{font-size:18px;color:var(--ink-3);flex:0 0 auto}
+.cardc-corpo{padding:0 12px 12px;border-top:1px solid var(--rule-2)}
+.reg{display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--rule-2)}.reg b{flex:1;font-size:14px}
+.usTit{position:sticky;top:-12px;z-index:3;background:var(--surface);padding:8px 0 6px;margin:0 0 4px;font-weight:700;font-size:14.5px;border-bottom:2px solid var(--cor,var(--accent))}
+.usTit small{font-weight:400;color:var(--ink-3);font-size:12px;margin-left:6px}
+#salvo{position:fixed;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));background:var(--ok);color:#fff;font-size:12px;font-weight:700;padding:4px 10px;border-radius:12px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:60}
+#salvo.on{opacity:.92}
+#desfazer{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));max-width:560px;margin:0 auto;background:var(--ink);color:#fff;border-radius:6px;padding:10px 12px;display:flex;gap:10px;align-items:center;z-index:70;font-size:14px}
+#desfazer span{flex:1}#desfazer button{background:none;border:0;color:#9FD3FF;font-weight:700;font-size:14px}
 </style>
 </head>
 <body>
@@ -157,11 +174,15 @@ textarea.t{min-height:72px;resize:vertical}
 <div class="aviso fila" id="barFila" hidden><span id="filaTx"></span><span class="esp"></span><button id="filaVer">Ver</button><button id="filaJa">Tentar agora</button></div>
 <main><div class="wrap" id="tela"></div></main>
 <input type="file" id="arqFoto" accept="image/*" capture="environment" hidden>
+<input type="file" id="arqGal" accept="image/*" multiple hidden>
+<div id="salvo" aria-hidden="true">salvo ✓</div>
+<div id="desfazer" hidden role="status"><span id="desfTx"></span><button id="desfBt">Desfazer</button></div>
 <input type="file" id="arqPdf" accept="application/pdf" hidden>
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 13';   // S132: o sistema se chama TapHub nas telas (item #10 da lista) e "Relatar problema ou sugerir" no menu (núcleo N6, modulos M2)
+const VERSAO = 'TapDoc 14';   // S140 · lista de melhorias, itens 33, 44, 49 a 56, 59 e 60 (416): lugares das fotos, galeria, costado com regiões, cartões dos componentes, volume em litros, temperatura só acima de 200 °C, aferição sem pulos, o que se digita não se perde
+// const VERSAO = 'TapDoc 13';   // S132: o sistema se chama TapHub nas telas (item #10 da lista) e "Relatar problema ou sugerir" no menu (núcleo N6, modulos M2)
 // const VERSAO = 'TapDoc 12';   // S113 · 414: reabrir o que enviou (a equipe, até a revisão começar) · válvula com 3 ciclos (abertura + assentamento) ·   // S112 · 413: correções do teste de 29/10 (posição primeiro; aferição por ciclo e por escala; sem bancada, boroscopia, E e R em campo) · S107 · 412: as leituras não travam o envio (o CSV do medidor entra no escritório) ·   // S94 · 410 (R06a): o ambiente do vaso (local fechado ou céu aberto) na Localização, obrigatório no envio ·   // S86 · 407 (R04a): aferição de manômetro e teste de válvula em campo (TapDoc 7: material do escritório; 6: faixa)
 // 405: uma linha curta com a faixa do material, para conferir com a plaqueta ou o certificado da chapa
 function linhaFaixa(m){
@@ -213,7 +234,63 @@ function janela(tit, html, bts){
   N.janela.abrir(tit, html, (bts || []).map(b => ({ label:b.rotulo, pri:b.classe === 'pri',
     onClick:() => { const r = b.acao ? b.acao() : undefined; if (r !== false) N.janela.fechar(); } })));
 }
-function debounce(fn, ms){ const t = {}; return (k, ...a) => { clearTimeout(t[k]); t[k] = setTimeout(() => fn(...a), ms); }; }
+// S140 · item 60: o que está adiado (debounce) é gravado na hora quando a pessoa sai da tela, troca de app
+// ou fecha; e o campo com o foco grava antes de a tela ser trocada (o voltar do Android não dá "blur").
+const ADIADOS = [];
+function debounce(fn, ms){
+  const t = {}, args = {};
+  const d = (k, ...a) => { clearTimeout(t[k]); args[k] = a; t[k] = setTimeout(() => { delete t[k]; const x = args[k]; delete args[k]; fn(...x); }, ms); };
+  d.agora = () => Object.keys(t).forEach(k => { clearTimeout(t[k]); delete t[k]; const x = args[k]; delete args[k]; if (x) fn(...x); });
+  ADIADOS.push(d); return d;
+}
+function guardarFocado(){
+  const el = document.activeElement, t = $('tela');
+  if (!el || !t || !t.contains(el) || !/^(INPUT|TEXTAREA)$/.test(el.tagName) || el.type === 'file' || el.type === 'checkbox') return;
+  if (el._v0 !== undefined && el._v0 !== el.value){ el._v0 = el.value; el.dispatchEvent(new Event('change', { bubbles:true })); }
+}
+function despejar(){
+  try{ guardarFocado(); }catch(e){}
+  ADIADOS.forEach(d => { try{ d.agora(); }catch(e){} });
+  if (desfazer.pendente){ try{ desfazer.pendente(); }catch(e){} }
+}
+document.addEventListener('focusin', ev => {
+  const el = ev.target; if (!el || !/^(INPUT|TEXTAREA)$/.test(el.tagName)) return;
+  el._v0 = el.value;
+  // item 55: com o teclado aberto, rola uma vez só, deixando o campo à vista
+  setTimeout(() => {
+    if (document.activeElement !== el || !window.visualViewport) return;
+    const r = el.getBoundingClientRect(), vh = window.visualViewport.height;
+    if (r.bottom > vh - 8 || r.top < 56) el.scrollIntoView({ block:'center' });
+  }, 350);
+});
+document.addEventListener('change', ev => { const el = ev.target; if (el && el._v0 !== undefined) el._v0 = el.value; }, true);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') despejar(); });
+window.addEventListener('pagehide', despejar);
+function mostrarSalvo(){ const s = $('salvo'); if (!s) return; s.classList.add('on'); clearTimeout(mostrarSalvo.t); mostrarSalvo.t = setTimeout(() => s.classList.remove('on'), 1200); }
+/** item 52: "Tirado. Desfazer" por alguns segundos; sem desfazer, a ação vale (também ao sair). */
+function desfazer(texto, voltar, valer){
+  if (desfazer.pendente) desfazer.pendente();
+  const b = $('desfazer'); $('desfTx').textContent = texto; b.hidden = false;
+  const fim = () => { clearTimeout(desfazer.t); desfazer.pendente = null; b.hidden = true; };
+  desfazer.pendente = () => { fim(); valer(); };
+  $('desfBt').onclick = () => { fim(); voltar(); };
+  desfazer.t = setTimeout(() => { if (desfazer.pendente) desfazer.pendente(); }, 6000);
+}
+// item 55: os gerenciadores de senha não tentam preencher os campos da inspeção
+const SEM_AUTO = ' autocomplete="off" autocorrect="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-form-type="other"';
+/** item 54: o "Próximo" do teclado passa para o campo seguinte da lista; no último, "Concluir" fecha o teclado. */
+function encadear(lista){
+  const els = Array.from(lista).filter(el => !el.disabled);
+  els.forEach((el, k) => {
+    el.setAttribute('enterkeyhint', k === els.length - 1 ? 'done' : 'next');
+    el.addEventListener('keydown', ev => {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      const prox = els[k + 1];
+      if (prox && document.body.contains(prox)) prox.focus(); else el.blur();
+    });
+  });
+}
 
 // unidades da plaqueta → MPa (manométrica)
 const UNID = { 'bar':0.1, 'kgf/cm2':0.0980665, 'MPa':1, 'psi':0.00689476 };
@@ -272,6 +349,7 @@ function normVaso(sv){
     // S80 · R03b: o ultrassom
     leituras:(sv.inspecao.leituras || []).map(x => Object.assign({}, x)),
     ultrassom_sem_leitura:Object.assign({}, sv.inspecao.ultrassom_sem_leitura || {}),
+    fotos_sem_acesso:Object.assign({}, sv.inspecao.fotos_sem_acesso || {}),   // S140 · item 49 (416)
     // S86 · R04a: as aferições
     afericoes:(sv.inspecao.afericoes || []).map(x => Object.assign({}, x, { leituras:JSON.parse(JSON.stringify(x.leituras || {})) })) }) : null;
   v.acessorios_anteriores = sv.acessorios_anteriores || [];
@@ -283,12 +361,14 @@ function normVaso(sv){
   return v;
 }
 /** Pacote novo do servidor: vaso com envio pendente fica com a versão do aparelho. */
-function mesclar(p){
+function mesclar(p, t0){
   const pend = new Set(N.fila.listar({ tipo:'insp' }).map(e => e.grupo));
   const velhos = {}; ((E && E.vasos) || []).forEach(v => { velhos[v.id] = v; });
-  const vasos = (p.vasos || []).map(sv => (velhos[sv.id] && pend.has('insp|' + sv.id)) ? velhos[sv.id] : normVaso(sv));
+  // S140 · item 60: o pacote pedido ANTES da última gravação (que já saiu da fila) chega velho: o vaso fica com a versão do aparelho
+  const manter = v => !!v && (pend.has('insp|' + v.id) || (!!t0 && !!v._gravadoEm && v._gravadoEm >= t0 - 3000));
+  const vasos = (p.vasos || []).map(sv => manter(velhos[sv.id]) ? velhos[sv.id] : normVaso(sv));
   Object.values(velhos).forEach(v => {
-    if (!vasos.some(x => x.id === v.id) && pend.has('insp|' + v.id)) vasos.push(v);
+    if (!vasos.some(x => x.id === v.id) && manter(v)) vasos.push(v);
   });
   E = { os:p.os, vasos, fabricantes:p.fabricantes || [], materiais:p.materiais || [], medidores:p.medidores || [], padroes:p.padroes || [], bancadas:p.bancadas || [], baixado_em:p.gerado_em || new Date().toISOString() };
   salvar();
@@ -307,6 +387,7 @@ function enfileirar(v, chave, rotulo, rpc, fotos, fixo){
   }
   if (!id) id = chave + '~' + uid();
   N.fila.adicionar({ tipo:'insp', id, grupo, rotulo: v.tag + ' · ' + rotulo, rpc, fotos });
+  v._gravadoEm = Date.now(); salvar(); mostrarSalvo();   // S140 · item 60
   pintarFila();
   return id;
 }
@@ -376,8 +457,9 @@ async function baixar(silencioso){
   if (DEMO || baixando || navigator.onLine === false || !OS) return;
   baixando = true;
   try{
+    const t0 = Date.now();
     const p = await N.api.rpc('tf_insp_pacote_os', { p_os_id: OS });
-    mesclar(p);
+    mesclar(p, t0);
     if (!silencioso) U.toast('Pacote da OS atualizado.');
     pintar();
   }catch(e){
@@ -400,6 +482,7 @@ $('voltar').addEventListener('click', () => {
 
 function titulo(t, s){ $('tTit').textContent = t; $('tSub').textContent = s || ''; }
 function pintar(){
+  guardarFocado();   // S140 · item 60
   pintarSinal(); pintarFila();
   if (!E){
     titulo('Inspeção', VERSAO);
@@ -420,11 +503,59 @@ function pintar(){
 }
 
 // ── estado das seções ──────────────────────────────────────────────────────
-function fotosDe(v, secao, item){ return ((v.inspecao && v.inspecao.fotos) || []).filter(f => f.secao === secao && (item === undefined || f.item_ref === item)); }
+function fotosDe(v, secao, item){ return ((v.inspecao && v.inspecao.fotos) || []).filter(f => f.secao === secao && (item === undefined || (item === '__solta' ? !f.item_ref : f.item_ref === item))); }
+// S140 · item 49 (416): os lugares de foto do vaso — a mesma lista do servidor (tf__insp_lugares), mesma ordem e texto.
+// Os tampos seguem a posição do vaso; sem posição vale horizontal (como no servidor).
+function lugaresDe(v){
+  const vt = v.posicao === 'vertical';
+  return [{ lugar:'placa_fabricacao', secao:'plaqueta', rotulo:'Placa de fabricação' },
+    { lugar:'placa_tag', secao:'plaqueta', rotulo:'Placa de TAG e categoria' },
+    { lugar:vt ? 'tampo_superior' : 'tampo_direito', secao:'geral', rotulo:vt ? 'Tampo superior' : 'Tampo direito' },
+    { lugar:vt ? 'tampo_inferior' : 'tampo_esquerdo', secao:'geral', rotulo:vt ? 'Tampo inferior' : 'Tampo esquerdo' },
+    { lugar:'conexoes', secao:'geral', rotulo:'Conexões' },
+    { lugar:'base', secao:'geral', rotulo:'Base de sustentação / aterramento' }];
+}
+const semAcessoDe = v => (v.inspecao && v.inspecao.fotos_sem_acesso) || {};
+/** O lugar está resolvido: tem a foto ou o motivo de não ter. A foto da plaqueta sem lugar (antes do TapDoc 14) vale como a placa de fabricação. */
+function lugarOk(v, l){
+  const fs = (v.inspecao && v.inspecao.fotos) || [];
+  return fs.some(f => f.item_ref === 'lugar:' + l.lugar) || (l.lugar === 'placa_fabricacao' && fs.some(f => f.secao === 'plaqueta' && !f.item_ref))
+    || !!String(semAcessoDe(v)[l.lugar] || '').trim();
+}
+const MOTIVOS_LUGAR = ['Sem acesso a esta parte do vaso.', 'O vaso não tem esta placa.', 'Isolamento ou proteção cobre esta parte.'];
+function blocoLugar(v, l){
+  const mot = String(semAcessoDe(v)[l.lugar] || '').trim(), item = 'lugar:' + l.lugar, tem = fotosDe(v, l.secao, item).length;
+  let h = '<div class="lugar"><div class="lt"><b>' + esc(l.rotulo) + '</b>' + (lugarOk(v, l) ? '<span class="chip ok">ok</span>' : '<span class="chip inc">falta</span>') + '</div>';
+  if (mot) h += '<p class="muted" style="margin:4px 0 0">Sem foto: ' + esc(mot) + '</p><button class="btn peq" data-lsdesf="' + l.lugar + '">Tirar a foto em vez disso</button>';
+  else h += gradeFotos(v, l.secao, 1, null, item) + (tem ? '' : '<button class="btn peq" data-lsem="' + l.lugar + '">Sem acesso / não há</button>');
+  return h + '</div>';
+}
+function gravarSemAcesso(v, lugar, motivo){
+  const s = Object.assign({}, semAcessoDe(v)); if (motivo) s[lugar] = motivo; else delete s[lugar];
+  v.inspecao.fotos_sem_acesso = s; salvar();
+  enfileirar(v, 'semac-' + lugar, 'foto sem acesso', { funcao:'tf_insp_foto_sem_acesso', payload:{ p_id:v.inspecao.id, p_lugar:lugar, p_motivo:motivo || null } });
+  pintar();
+}
+function ligarLugares(v, lista){
+  lista.forEach(l => ligarFotos(v, l.secao, () => l.rotulo, 'lugar:' + l.lugar));
+  $('tela').querySelectorAll('[data-lsem]').forEach(b => b.addEventListener('click', () => {
+    const l = lista.find(x => x.lugar === b.dataset.lsem); if (!l) return;
+    janela('Sem foto · ' + l.rotulo, '<label class="f">Por que não dá para fotografar<select class="t" id="lsSel"><option value="">—</option>' +
+      MOTIVOS_LUGAR.map(m => '<option>' + esc(m) + '</option>').join('') + '<option value="+">Outro…</option></select></label>' +
+      '<label class="f">Detalhe<small>Obrigatório em "Outro". Sai no laudo no lugar da foto.</small><textarea class="t" id="lsTx"></textarea></label>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
+        const sel = $('lsSel').value, tx = ($('lsTx').value || '').trim();
+        const m = sel && sel !== '+' ? (tx ? sel + ' ' + tx : sel) : tx;
+        if (m.length < 5){ U.toast('Escreva o motivo.', 'err'); return false; }
+        N.janela.fechar(); gravarSemAcesso(v, l.lugar, m);
+      } }]);
+  }));
+  $('tela').querySelectorAll('[data-lsdesf]').forEach(b => b.addEventListener('click', () => gravarSemAcesso(v, b.dataset.lsdesf, null)));
+}
 const ativas = v => v.camaras.filter(c => c.ativo !== false);
 const compsAtivos = v => v.componentes.filter(c => c.ativo !== false);
 function estPlaqueta(v){
-  const itens = [fotosDe(v, 'plaqueta').length > 0, !!(v.fabricante_id || v.fabricante), !!v.numero_serie, !!v.ano_fabricacao,
+  const itens = [lugaresDe(v).filter(l => l.secao === 'plaqueta').every(l => lugarOk(v, l)), !!(v.fabricante_id || v.fabricante), !!v.numero_serie, !!v.ano_fabricacao,
     !!(v.codigo_construcao || v.sem_codigo_construcao), ativas(v).length > 0 && ativas(v).every(c => c.pmta_plaqueta_mpa)];
   return est(itens);
 }
@@ -448,11 +579,15 @@ const N_SECOES = 11;
 function secoesOk(v){ return estados(v).filter(x => x === 'ok').length; }
 function alertas(v){
   const a = [];
-  if (!fotosDe(v, 'plaqueta').length) a.push('Falta a foto da plaqueta.');
+  if (!lugarOk(v, lugaresDe(v)[0])) a.push('Falta a foto da placa de fabricação.');
+  const laSit = v.laudo_anterior && v.laudo_anterior.situacao;
   ativas(v).forEach(c => {
     const nm = ativas(v).length > 1 ? ' (' + c.nome + ')' : '';
     if (!c.pmta_plaqueta_mpa) a.push('PMTA de plaqueta não informada' + nm + '.');
-    if (!c.pmta_vigente_mpa && !(v.laudo_anterior && v.laudo_anterior.situacao === 'conferido')) a.push('PMTA vigente desconhecida' + nm + ': o laudo anterior ainda não foi conferido.');
+    // S140 · item 33: vaso sem laudo anterior não tem "laudo a conferir" (decisão do Bruno, 10/11: trocar o texto)
+    if (!c.pmta_vigente_mpa && laSit !== 'conferido') a.push(laSit === 'sem_laudo' ? 'Vaso sem laudo anterior' + nm + ': a PMTA sai da plaqueta e do cálculo.'
+      : laSit === 'cliente_nao_tem' ? 'Sem o laudo anterior (o cliente não tem)' + nm + ': a PMTA sai da plaqueta e do cálculo.'
+      : 'PMTA vigente desconhecida' + nm + ': o laudo anterior ainda não foi conferido.');
     if (c.pressao_externa && !c.pmta_externa_plaqueta_mpa) a.push('Opera com vácuo, sem PMTA externa de plaqueta' + nm + '.');
   });
   if (v.latitude == null) a.push('Sem GPS do vaso.');
@@ -553,13 +688,63 @@ function telaCartao(v){
 
 /** C10: muda a posição do vaso e renomeia os tampos que ainda têm o nome padrão (superior/inferior ↔ esquerdo/direito). */
 const NOME_TAMPO = { superior:'Tampo superior', inferior:'Tampo inferior', esquerdo:'Tampo esquerdo', direito:'Tampo direito' };
+// S140 · itens 51 e 52 (decisões do Bruno, 10/11): o costado é UM componente, dividido em regiões de medição.
+// Cada região é uma linha de vaso_componentes (tipo costado) da mesma câmara: as leituras ficam por região e a
+// conta usa a menor leitura de todas (o resultado é o mesmo da conta por região: mesma geometria e material).
+// Horizontal: Frontal (CF), Traseiro (CT), Superior (CS), Inferior (CI). Vertical: CF, CT, Lateral direita (CLD), Lateral esquerda (CLE).
+const REGIOES = { frontal:['CF','Frontal'], traseiro:['CT','Traseiro'], superior:['CS','Superior'], inferior:['CI','Inferior'], direito:['CLD','Lateral direita'], esquerdo:['CLE','Lateral esquerda'] };
+const REG_ORDEM = ['frontal','traseiro','superior','inferior','direito','esquerdo'];
+const REG_PADRAO = { horizontal:['frontal','traseiro','superior','inferior'], vertical:['frontal','traseiro','direito','esquerdo'] };
+const TIPO_CURTO = { eliptico:'elíptico', torisferico:'torisférico', hemisferico:'hemisférico', conico:'cônico', plano:'plano', janela:'janela de visita', costado:'cilíndrico' };
+/** A sigla da região: pela posição; sem posição, pelo nome (inspeções antigas: "CF", "Costado CS"…). */
+function siglaReg(c){
+  if (REGIOES[c.posicao]) return REGIOES[c.posicao][0];
+  const m = String(c.nome || '').match(/\b(CF|CT|CS|CI|CLD|CLE)\s*$/i);
+  return m ? m[1].toUpperCase() : null;
+}
+function nomeReg(c){
+  const sg = siglaReg(c), k = Object.keys(REGIOES).find(x => REGIOES[x][0] === sg);
+  return k ? REGIOES[k][1] + ' (' + sg + ')' : (String(c.nome || '').replace(/^costado\s*/i, '').trim() || 'Costado inteiro');
+}
+const camIdDe = (v, c) => (camaraDe(v, c) || {}).id || null;
+const ordReg = c => { const k = REG_ORDEM.indexOf(c.posicao); return k < 0 ? 50 + (c.ordem || 0) : k; };
+const regioesDe = (v, camId) => compsAtivos(v).filter(c => c.tipo === 'costado' && camIdDe(v, c) === camId).sort((a, b) => ordReg(a) - ordReg(b));
+const tampo = t => ['eliptico','torisferico','hemisferico','conico','plano'].indexOf(t) >= 0;
+/** O nome sai sozinho do tipo e da posição (item 52: ninguém digita o nome). */
+function nomeAuto(v, c){
+  let n = c.tipo === 'costado' ? (siglaReg(c) ? 'Costado ' + siglaReg(c) : 'Costado')
+    : c.tipo === 'janela' ? 'Janela de visita' + (c.posicao ? ' ' + c.posicao : '')
+    : NOME_TAMPO[c.posicao] || ('Tampo' + (c.posicao ? ' ' + c.posicao : ''));
+  const outros = compsAtivos(v).filter(x => x.id !== c.id).map(x => x.nome);
+  if (outros.indexOf(n) >= 0){ let k = 2; while (outros.indexOf(n + ' (' + k + ')') >= 0) k++; n += ' (' + k + ')'; }
+  return n;
+}
+/** O costado da câmara ganha as regiões padrão (vaso novo ou o costado único da preparação, ainda sem leitura). */
+function garantirRegioes(v){
+  const pos = v.posicao === 'vertical' ? 'vertical' : 'horizontal';
+  ativas(v).forEach(k => {
+    const rs = regioesDe(v, k.id);
+    if (rs.length !== 1 || rs[0].posicao || siglaReg(rs[0]) || leiturasDe(v, rs[0].id).length) return;
+    const base = rs[0], geo = pegar(base, ['r_mm','eficiencia_junta','material_id','camara_id']);
+    REG_PADRAO[pos].forEach((p, n) => {
+      const c = n === 0 ? base : Object.assign({ id:uid(), tipo:'costado', nao_medir:false, ativo:true, ordem:(base.ordem || 1) }, geo);
+      c.posicao = p; c.nome = 'Costado ' + REGIOES[p][0];
+      if (n > 0) v.componentes.push(c);
+      gravarComp(v, c);
+    });
+  });
+}
 function aplicarPosicao(v, p){
   mudouVaso(v, 'posicao', p);
   const mapa = p === 'horizontal' ? { superior:'esquerdo', inferior:'direito' } : { esquerdo:'superior', direito:'inferior' };
+  // a região do costado acompanha: horizontal CS/CI ↔ vertical CLD/CLE
+  const mapaReg = p === 'horizontal' ? { direito:'superior', esquerdo:'inferior' } : { superior:'direito', inferior:'esquerdo' };
   compsAtivos(v).forEach(c => {
-    const alvo = mapa[c.posicao];
-    if (alvo && c.tipo === 'eliptico' && c.nome === NOME_TAMPO[c.posicao]){
-      mudouComp(v, c, 'posicao', alvo); mudouComp(v, c, 'nome', NOME_TAMPO[alvo]);
+    const alvo = c.tipo === 'costado' ? mapaReg[c.posicao] : mapa[c.posicao];
+    if (!alvo) return;
+    if (tampo(c.tipo) && c.nome === NOME_TAMPO[c.posicao]){ mudouComp(v, c, 'posicao', alvo); mudouComp(v, c, 'nome', NOME_TAMPO[alvo]); }
+    else if (c.tipo === 'costado' && c.nome === 'Costado ' + REGIOES[c.posicao][0] && !regioesDe(v, camIdDe(v, c)).some(x => x.posicao === alvo)){
+      mudouComp(v, c, 'posicao', alvo); mudouComp(v, c, 'nome', 'Costado ' + REGIOES[alvo][0]);
     }
   });
 }
@@ -584,9 +769,11 @@ function comecar(v){
     [['costado','Costado',null], ['eliptico', hz ? 'Tampo esquerdo' : 'Tampo superior', hz ? 'esquerdo' : 'superior'],
      ['eliptico', hz ? 'Tampo direito' : 'Tampo inferior', hz ? 'direito' : 'inferior']].forEach((x, i) => {
       const c = { id:uid(), tipo:x[0], nome:x[1], posicao:x[2], camara_id:cam, nao_medir:false, ordem:i + 1, ativo:true };
-      v.componentes.push(c); gravarComp(v, c);
+      v.componentes.push(c);
+      if (x[0] !== 'costado') gravarComp(v, c);
     });
   }
+  garantirRegioes(v);   // S140 · item 51: o costado com as 4 regiões de medição
   salvar();
 }
 
@@ -613,7 +800,7 @@ function telaPainel(v){
     la === 'sem_laudo' ? 'O vaso nunca teve laudo' : la === 'em_conferencia' ? 'Coletado, aguardando a conferência' : 'Fotos do laudo impresso, PDF ou "o cliente não tem"', estLaudo(v));
   // S79 · R03a
   const vis = v.inspecao.visual || [], nc = vis.filter(x => x.conforme === false).length;
-  h += sec('visual', 'Exame visual', nc ? nc + ' não conforme' + (nc > 1 ? 's' : '') : 'Costado, tampos, conexões, base e aterramento', estVisual(v));
+  h += sec('visual', 'Exame visual', nc ? nc + ' não conforme' + (nc > 1 ? 's' : '') : 'Fotos dos tampos, conexões e base; costado, tampos, conexões, base e aterramento', estVisual(v));
   const acs = acessDe(v);
   h += sec('acessorios', 'Acessórios', acs.length ? acs.length + ' na lista' : 'Válvulas e manômetros, com lacre e foto', estAcess(v));
   const nMed = compsAtivos(v).filter(c => !c.nao_medir).length, nLid = compsAtivos(v).filter(c => !c.nao_medir && leiturasDe(v, c.id).length).length;
@@ -628,11 +815,11 @@ function telaPainel(v){
 
 // ── campos ─────────────────────────────────────────────────────────────────
 function campoTexto(rot, id, valor, extra){
-  return '<label class="f">' + rot + '<input class="t" id="' + id + '" value="' + esc(valor == null ? '' : valor) + '" ' + (extra || '') + '></label>';
+  return '<label class="f">' + rot + '<input class="t" id="' + id + '" value="' + esc(valor == null ? '' : valor) + '"' + SEM_AUTO + ' ' + (extra || '') + '></label>';
 }
 function campoNum(rot, id, valor, ajuda, extra){
   return '<label class="f">' + rot + (ajuda ? '<small>' + ajuda + '</small>' : '') +
-    '<input class="t" id="' + id + '" inputmode="decimal" value="' + esc(valor == null ? '' : fmt(valor)) + '" ' + (extra || '') + '></label>';
+    '<input class="t" id="' + id + '" inputmode="decimal" value="' + esc(valor == null ? '' : fmt(valor)) + '"' + SEM_AUTO + ' ' + (extra || '') + '></label>';
 }
 function ligar(id, fn, ev){ const el = $(id); if (el) el.addEventListener(ev || 'change', () => fn(el)); return el; }
 function numOuAviso(el, min, max, rot){
@@ -645,7 +832,7 @@ function unidadeDe(v){ const c = ativas(v)[0]; return (c && c.unidade_campo) || 
 function campoPressao(rot, id, mpa, u, ajuda){
   const val = mpa == null ? '' : fmt(deMPa(mpa, u), 4);
   return '<label class="f">' + rot + ' (' + UNID_ROT[u] + ')' + (ajuda ? '<small>' + ajuda + '</small>' : '') +
-    '<input class="t" id="' + id + '" inputmode="decimal" value="' + esc(val) + '"></label><div class="conv" id="' + id + '_c">' +
+    '<input class="t" id="' + id + '" inputmode="decimal" value="' + esc(val) + '"' + SEM_AUTO + '></label><div class="conv" id="' + id + '_c">' +
     (mpa != null && u !== 'MPa' ? '= ' + fmt(mpa, 4) + ' MPa' : '') + '</div>';
 }
 function ligarPressao(id, u, fn, max){
@@ -671,15 +858,18 @@ function gradeFotos(v, secao, max, rotulos, item){
     const src = MINI[f.id];
     h += '<div class="foto" data-f="' + esc(f.id) + '">' + (src ? '<img alt="" src="' + src + '">' : (/\.pdf$/i.test(f.storage_path || '') ? 'PDF' : 'foto enviada')) +
       (f.legenda ? '<span class="leg">' + esc(f.legenda) + '</span>' : '') +
-      (pend.has(f.id) ? '<span class="pend">a enviar</span>' : '') +
+      (pend.has(f.id) ? '<span class="pend">a enviar</span>' : f.origem === 'galeria' ? '<span class="galb">galeria</span>' : '') +
       '<button class="x" data-rm="' + esc(f.id) + '" aria-label="Tirar a foto">×</button></div>';
   });
-  if (!max || fs.length < max) h += '<div class="foto add" data-add="' + esc(chaveAdd(secao, item)) + '">+ foto' + (rotulos ? '' : '') + '</div>';
+  // S140 · item 53: tirar na hora ou escolher da galeria
+  if (item !== '__solta' && (!max || fs.length < max)) h += '<div class="foto add" data-add="' + esc(chaveAdd(secao, item)) + '">+ câmera</div>' +
+    '<div class="foto add gal" data-gal="' + esc(chaveAdd(secao, item)) + '" data-resta="' + (max ? max - fs.length : 20) + '">+ galeria</div>';
   return h + '</div>';
 }
 function ligarFotos(v, secao, legendaFn, item){
   const k = chaveAdd(secao, item);
   $('tela').querySelectorAll('[data-add]').forEach(b => { if (b.dataset.add === k) b.addEventListener('click', () => tirarFoto(v, secao, legendaFn ? legendaFn() : null, item)); });
+  $('tela').querySelectorAll('[data-gal]').forEach(b => { if (b.dataset.gal === k) b.addEventListener('click', () => escolherGaleria(v, secao, legendaFn ? legendaFn() : null, item, Number(b.dataset.resta) || 20)); });
   $('tela').querySelectorAll('[data-rm]').forEach(b => { if (b.dataset.lig) return; b.dataset.lig = '1'; b.addEventListener('click', ev => { ev.stopPropagation(); tirarFotoDaLista(v, b.dataset.rm); }); });
   carregarMinis(v);
 }
@@ -707,6 +897,60 @@ $('arqPdf').addEventListener('change', async () => {
   laudoColetado(v, 'pdf');
   alvoFoto = null; pintar();
 });
+let alvoGal = null;
+function escolherGaleria(v, secao, legenda, item, resta){
+  alvoGal = { v:v.id, secao, legenda, item:item == null ? null : item, resta };
+  const a = $('arqGal'); a.value = ''; a.multiple = resta > 1; a.click();
+}
+/** A data em que a foto foi tirada: o EXIF da câmera (DateTimeOriginal); sem ele, a data do arquivo. */
+async function dataDaFoto(arq){
+  try{
+    const buf = await arq.slice(0, 131072).arrayBuffer(), d = new DataView(buf);
+    if (d.byteLength > 4 && d.getUint16(0) === 0xFFD8){
+      let o = 2;
+      while (o + 10 < d.byteLength){
+        const m = d.getUint16(o), len = d.getUint16(o + 2);
+        if (m === 0xFFE1 && d.getUint32(o + 4) === 0x45786966){
+          const t = o + 10, le = d.getUint16(t) === 0x4949, u16 = p => d.getUint16(p, le), u32 = p => d.getUint32(p, le);
+          const ifd = (pos, tags) => { const n = u16(t + pos), r = {}; for (let k = 0; k < n; k++){ const e = t + pos + 2 + k * 12, g = u16(e); if (tags.indexOf(g) >= 0) r[g] = { cont:u32(e + 4), val:u32(e + 8), pos:e + 8 }; } return r; };
+          const ascii = x => { let z = ''; const p = x.cont > 4 ? t + x.val : x.pos; for (let k = 0; k < x.cont - 1; k++) z += String.fromCharCode(d.getUint8(p + k)); return z; };
+          const i0 = ifd(u32(t + 4), [0x8769, 0x0132]);
+          let tx = null;
+          if (i0[0x8769]){ const ex = ifd(i0[0x8769].val, [0x9003, 0x9004]); tx = ex[0x9003] ? ascii(ex[0x9003]) : ex[0x9004] ? ascii(ex[0x9004]) : null; }
+          if (!tx && i0[0x0132]) tx = ascii(i0[0x0132]);
+          const mm = tx && tx.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+          if (mm) return new Date(+mm[1], +mm[2] - 1, +mm[3], +mm[4], +mm[5], +mm[6]);
+          break;
+        }
+        if ((m & 0xFF00) !== 0xFF00) break;
+        o += 2 + len;
+      }
+    }
+  }catch(e){}
+  return arq.lastModified ? new Date(arq.lastModified) : null;
+}
+$('arqGal').addEventListener('change', async () => {
+  const arqs = Array.from($('arqGal').files || []), g = alvoGal; alvoGal = null;
+  if (!arqs.length || !g) return;
+  const v = vaso(g.v); if (!v || !v.inspecao) return;
+  const usar = arqs.slice(0, g.resta);
+  if (arqs.length > usar.length) U.toast('Este lugar aceita ' + g.resta + ' foto' + (g.resta > 1 ? 's' : '') + ': entraram as primeiras.');
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  for (const arq of usar){
+    try{
+      const quando = await dataDaFoto(arq);
+      // cuidado contra foto errada: de outro dia, o inspetor confirma
+      if (quando && quando.toLocaleDateString('pt-BR') !== hoje){
+        const sim = await N.janela.confirmar('Foto de outro dia?', '<p>Esta foto foi tirada em <b>' + esc(quando.toLocaleDateString('pt-BR')) + '</b>, não hoje. É mesmo deste vaso?</p>' +
+          '<p class="muted">Na revisão ela aparece marcada "da galeria, tirada em ' + esc(quando.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' })) + '".</p>', 'Usar a foto', false);
+        if (!sim) continue;
+      }
+      const blob = await N.foto.reduzir(arq, { lado:1600, qualidade:0.85 });   // a mesma redução das outras (decisão 12)
+      const mini = await miniatura(blob);
+      await registrarArquivo(v, g.secao, g.legenda, blob, 'jpg', 'image/jpeg', mini, g.item, { origem:'galeria', tirada_em:quando ? quando.toISOString() : null });
+    }catch(e){ U.toast(e.message || 'Não consegui usar a foto.', 'err'); }
+  }
+});
 function miniatura(blob){
   return new Promise(ok => {
     const img = new Image(), u = URL.createObjectURL(blob);
@@ -720,17 +964,19 @@ function miniatura(blob){
     img.src = u;
   });
 }
-async function registrarArquivo(v, secao, legenda, blob, ext, tipo, mini, item){
+async function registrarArquivo(v, secao, legenda, blob, ext, tipo, mini, item, extra){
   const fid = uid(), caminho = v.inspecao.id + '/' + fid + '.' + ext;
   const chave = await N.fila.guardarFoto(blob);
   const ordem = fotosDe(v, secao).length + 1;
   item = item == null ? null : String(item);
-  v.inspecao.fotos.push({ id:fid, secao, legenda, ordem, storage_path:caminho, item_ref:item });
+  const gal = extra && extra.origem === 'galeria';   // S140 · item 53 (416)
+  v.inspecao.fotos.push({ id:fid, secao, legenda, ordem, storage_path:caminho, item_ref:item, origem:gal ? 'galeria' : 'camera', tirada_em:gal ? extra.tirada_em : null });
   if (mini){ MINI[fid] = mini; salvarMini(); }
   salvar();
   enfileirar(v, 'foto~' + fid, (secao === 'laudo_anterior' ? 'laudo anterior' : 'foto de ' + secao), {
     funcao:'tf_insp_foto_registrar',
-    payload:{ p_id:fid, p_dados:{ inspecao_id:v.inspecao.id, storage_path:caminho, secao, legenda:legenda || null, ordem, bytes:blob.size, item_ref:item } }
+    payload:{ p_id:fid, p_dados:Object.assign({ inspecao_id:v.inspecao.id, storage_path:caminho, secao, legenda:legenda || null, ordem, bytes:blob.size, item_ref:item },
+      gal ? { origem:'galeria', tirada_em:extra.tirada_em || null } : {}) }
   }, [{ chave, bucket:'inspecoes', caminho, tipo }], true);
   pintar();
 }
@@ -767,7 +1013,11 @@ function telaPlaqueta(v){
   const u = unidadeDe(v), cs = ativas(v);
   const fabs = E.fabricantes || [];
   const codOutro = v.codigo_construcao && CODIGOS.indexOf(v.codigo_construcao) < 0;
-  let h = '<div class="card"><b>Foto da plaqueta</b><p class="muted" style="margin:2px 0 0">Primeiro a foto: o escritório confere por ela.</p>' + gradeFotos(v, 'plaqueta', 4) + '</div>';
+  // S140 · item 49: uma foto por lugar, com o nome que vai no laudo
+  const lugP = lugaresDe(v).filter(l => l.secao === 'plaqueta'), soltas = fotosDe(v, 'plaqueta', '__solta');
+  let h = '<div class="card"><b>Fotos da plaqueta</b><p class="muted" style="margin:2px 0 0">Primeiro as fotos: o escritório confere por elas. Cada uma vai no laudo com este nome.</p>' +
+    lugP.map(l => blocoLugar(v, l)).join('') +
+    (soltas.length ? '<div class="lugar"><div class="lt"><b>Outras fotos da plaqueta</b></div>' + gradeFotos(v, 'plaqueta', soltas.length, null, '__solta') + '</div>' : '') + '</div>';
   h += '<div class="card">';
   h += '<label class="f">Fabricante<select class="t" id="pFab"><option value="">—</option>' +
     fabs.map(f => '<option value="' + esc(f.id) + '"' + (f.id === v.fabricante_id ? ' selected' : '') + '>' + esc(f.nome) + '</option>').join('') +
@@ -793,7 +1043,7 @@ function telaPlaqueta(v){
   });
   h += '<p class="muted" style="margin-top:8px">Vaso com casco e tubos? Crie as câmaras em "Operação e câmaras": aqui aparece um par por câmara.</p></div>';
   $('tela').innerHTML = h;
-  ligarFotos(v, 'plaqueta', () => 'Plaqueta');
+  ligarLugares(v, lugP);
   ligar('pFab', el => {
     if (el.value === '+'){
       janela('Fabricante', '<label class="f">Nome como está na plaqueta<input class="t" id="nfNome"></label>', [{ rotulo:'Cancelar', acao:() => pintar() }, { rotulo:'Usar', classe:'pri', acao:() => {
@@ -857,9 +1107,14 @@ function telaOperacao(v){
     if (c.fluido && !conhecido || c._outro) h += campoTexto('Qual fluido', 'fl_' + c.id, c.fluido && !conhecido ? c.fluido : '');
     h += '<label class="f">Classe do fluido<div class="seg" data-cls="' + esc(c.id) + '">' + ['A','B','C','D'].map(k => '<button data-c="' + k + '" class="' + (c.classe_fluido === k ? 'on' : '') + '">' + k + '</button>').join('') + '</div></label>';
     h += '<div class="classe">' + (c.classe_fluido ? esc(CLASSES[c.classe_fluido]) : 'Escolha o fluido: a classe é sugerida, você confirma.') + '</div>';
-    h += '<div class="lin"><div>' + campoPressao('Pressão máx. de operação', 'oP_' + c.id, c.p_operacao_max_mpa, u, 'Manométrica') + '</div><div>' +
-         campoNum('Temperatura (°C)', 'oT_' + c.id, c.t_operacao_c) + '</div></div>';
-    if (!c.volume_desconhecido) h += campoNum('Volume (m³)', 'oV_' + c.id, c.volume_m3, 'Da plaqueta ou do laudo. Litros ÷ 1000.');
+    h += campoPressao('Pressão máx. de operação', 'oP_' + c.id, c.p_operacao_max_mpa, u, 'Manométrica');
+    // S140 · item 50 (decisão do Bruno, 10/11): a temperatura só aparece para o vaso que opera acima de 200 °C
+    const quente = !!c._quente || Number(c.t_operacao_c) > 200;
+    h += '<div class="chk"><input type="checkbox" id="oQ_' + esc(c.id) + '"' + (quente ? ' checked' : '') + '><label for="oQ_' + esc(c.id) + '">Opera acima de 200 °C</label></div>';
+    if (quente) h += campoNum('Temperatura de operação (°C)', 'oT_' + c.id, Number(c.t_operacao_c) > 200 ? c.t_operacao_c : null, 'Acima de 200 °C a resistência do aço cai: o engenheiro confere o cálculo no escritório.');
+    // S140 · item 44 (decisão do Bruno, 10/11): o volume é sempre em litros no campo; o banco guarda em m³
+    if (!c.volume_desconhecido) h += campoNum('Volume (litros)', 'oV_' + c.id, c.volume_m3 != null ? Number(c.volume_m3) * 1000 : null, 'Da plaqueta ou do laudo, em litros. Ex.: 500 litros.') +
+      '<div class="conv" id="oV_' + esc(c.id) + '_c">' + (c.volume_m3 != null ? '= ' + fmt(c.volume_m3, 4) + ' m³' : '') + '</div>';
     h += '<div class="chk"><input type="checkbox" id="oVd_' + esc(c.id) + '"' + (c.volume_desconhecido ? ' checked' : '') + '><label for="oVd_' + esc(c.id) + '">Volume desconhecido</label></div>';
     h += '<div class="chk"><input type="checkbox" id="oEx_' + esc(c.id) + '"' + (c.pressao_externa ? ' checked' : '') + '><label for="oEx_' + esc(c.id) + '">Opera com vácuo / pressão externa</label></div>';
     if (c.pressao_externa) h += campoPressao('PMTA externa de plaqueta', 'oPe_' + c.id, c.pmta_externa_plaqueta_mpa, u, 'Se a plaqueta trouxer');
@@ -901,8 +1156,15 @@ function telaOperacao(v){
     const seg = document.querySelector('[data-cls="' + c.id + '"]');
     if (seg) seg.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => { mudouCam(v, c, 'classe_fluido', b.dataset.c); pintar(); }));
     ligarPressao('oP_' + c.id, u, m => mudouCam(v, c, 'p_operacao_max_mpa', m));
-    ligar('oT_' + c.id, el => { const x = numOuAviso(el, -272, 1499, 'Temperatura'); if (x !== undefined) mudouCam(v, c, 't_operacao_c', x); });
-    ligar('oV_' + c.id, el => { const x = numOuAviso(el, 0.0001, 100000, 'Volume'); if (x !== undefined) mudouCam(v, c, 'volume_m3', x); });
+    ligar('oQ_' + c.id, el => { c._quente = el.checked; if (!el.checked && c.t_operacao_c != null) mudouCam(v, c, 't_operacao_c', null); else salvar(); pintar(); });
+    ligar('oT_' + c.id, el => { const x = numOuAviso(el, 200.1, 1499, 'Temperatura'); if (x !== undefined) mudouCam(v, c, 't_operacao_c', x); });
+    const vl = $('oV_' + c.id);
+    if (vl) vl.addEventListener('input', () => { const x = num(vl.value); $('oV_' + c.id + '_c').textContent = x != null && !Number.isNaN(x) && x > 0 ? '= ' + fmt(x / 1000, 4) + ' m³' : ''; });
+    ligar('oV_' + c.id, el => {
+      const x = numOuAviso(el, 1, 100000000, 'Volume (litros)'); if (x === undefined) return;
+      if (x != null && x > 50000) U.toast('Confira: ' + Math.round(x).toLocaleString('pt-BR') + ' litros (' + fmt(x / 1000, 1) + ' m³) é um vaso muito grande. O volume é em litros.');
+      mudouCam(v, c, 'volume_m3', x == null ? null : Math.round(x * 10) / 10000);
+    });
     ligar('oVd_' + c.id, el => { mudouCam(v, c, 'volume_desconhecido', el.checked); if (el.checked) c.volume_m3 = null; pintar(); });
     ligar('oEx_' + c.id, el => { mudouCam(v, c, 'pressao_externa', el.checked); if (!el.checked) c.pmta_externa_plaqueta_mpa = null; pintar(); });
     ligarPressao('oPe_' + c.id, u, m => mudouCam(v, c, 'pmta_externa_plaqueta_mpa', m));
@@ -987,48 +1249,175 @@ function ligarGeo(v){
   }));
   compsAtivos(v).forEach(c => ligar('ap_' + c.id, el => mudouComp(v, c, 'aparafusada', el.checked)));
 }
+function desenhoVaso(v, parte){
+  const cor = p => p === parte ? 'var(--cor,var(--accent))' : '#DBE0E3', jan = parte === 'janela' ? 'var(--cor,var(--accent))' : '#C3CBD0';
+  if (v.posicao === 'vertical') return '<svg viewBox="0 0 40 60" width="28" height="42" aria-hidden="true"><ellipse cx="20" cy="13" rx="12" ry="7" fill="' + cor('superior') + '"/>' +
+    '<ellipse cx="20" cy="47" rx="12" ry="7" fill="' + cor('inferior') + '"/><rect x="8" y="13" width="24" height="34" fill="' + cor('costado') + '"/><circle cx="20" cy="30" r="4" fill="' + jan + '"/></svg>';
+  return '<svg viewBox="0 0 60 40" width="44" height="30" aria-hidden="true"><ellipse cx="13" cy="20" rx="7" ry="12" fill="' + cor('esquerdo') + '"/>' +
+    '<ellipse cx="47" cy="20" rx="7" ry="12" fill="' + cor('direito') + '"/><rect x="13" y="8" width="34" height="24" fill="' + cor('costado') + '"/><circle cx="30" cy="20" r="4" fill="' + jan + '"/></svg>';
+}
+const COR_COMP = c => c.tipo === 'costado' ? '#1B6FA9' : c.tipo === 'janela' ? '#78838A' : c.tipo === 'conico' ? '#8A5A12' : '#1E7A42';
+/** Os cartões da tela: o costado de cada câmara (com as regiões) e cada outro componente. */
+function cartoesComp(v){
+  const fora = v._tirando || {}, cs = ativas(v), out = [];
+  const comps = compsAtivos(v).filter(c => !fora[c.id]).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  cs.forEach(k => {
+    const regs = comps.filter(c => c.tipo === 'costado' && camIdDe(v, c) === k.id).sort((a, b) => ordReg(a) - ordReg(b));
+    if (regs.length) out.push({ chave:'costado:' + k.id, cam:k, c:regs[0], regs });
+    comps.filter(c => c.tipo !== 'costado' && camIdDe(v, c) === k.id).forEach(c => out.push({ chave:c.id, cam:k, c }));
+  });
+  comps.filter(c => !camIdDe(v, c)).forEach(c => out.push({ chave:c.id, cam:null, c, regs:c.tipo === 'costado' ? [c] : null }));
+  return out;
+}
 function telaComponentes(v){
   titulo('Componentes', v.tag);
-  const cs = ativas(v), comps = compsAtivos(v).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
-  let h = '<div class="card">';
-  if (!comps.length) h += '<p class="muted">Nenhum componente.</p>';
-  comps.forEach(c => {
-    h += '<div class="comp"><div class="lin"><label class="f" style="margin-top:0">Tipo<select class="t" data-cp="' + esc(c.id) + '" data-k="tipo">' +
-      Object.keys(TIPOS_COMP).map(t => '<option value="' + t + '"' + (t === c.tipo ? ' selected' : '') + '>' + TIPOS_COMP[t] + '</option>').join('') + '</select></label>' +
-      '<label class="f" style="margin-top:0">Posição<select class="t" data-cp="' + esc(c.id) + '" data-k="posicao"><option value="">—</option>' +
-      POS_COMP.map(p => '<option' + (p === c.posicao ? ' selected' : '') + '>' + p + '</option>').join('') + '</select></label></div>';
-    h += '<label class="f">Nome<input class="t" data-cp="' + esc(c.id) + '" data-k="nome" value="' + esc(c.nome) + '"></label>';
-    if (cs.length > 1) h += '<label class="f">Câmara<select class="t" data-cp="' + esc(c.id) + '" data-k="camara_id">' +
-      cs.map(k => '<option value="' + esc(k.id) + '"' + (k.id === c.camara_id ? ' selected' : '') + '>' + esc(k.nome) + '</option>').join('') + '</select></label>';
-    h += '<div class="lin" style="align-items:center"><div class="chk" style="margin-top:8px"><input type="checkbox" id="nm_' + esc(c.id) + '"' + (c.nao_medir ? ' checked' : '') +
-      '><label for="nm_' + esc(c.id) + '">Não medir</label></div><div style="text-align:right;flex:0 0 auto"><button class="btn peq perigo" data-rmc="' + esc(c.id) + '">Tirar</button></div></div>';
-    h += campoGeo(v, c);
+  const cs = ativas(v), pode = ed(v), multi = cs.length > 1, cards = cartoesComp(v);
+  if (v._compAberto && !cards.some(x => x.chave === v._compAberto)) v._compAberto = null;
+  let h = '';
+  if (!cards.length) h += '<div class="card"><p class="muted">Nenhum componente.</p></div>';
+  cards.forEach(x => {
+    const c = x.c, aberto = v._compAberto === x.chave, sl = semLeitura(v);
+    const titulo1 = x.regs ? 'Costado · ' + x.regs.length + (x.regs.length === 1 ? ' região' : ' regiões') : c.nome + (tampo(c.tipo) ? ' · ' + TIPO_CURTO[c.tipo] : '');
+    const nm = x.regs ? x.regs.every(r => r.nao_medir) : c.nao_medir;
+    const sub = (x.regs ? x.regs.map(r => siglaReg(r) || nomeReg(r)).join(' · ') : (c.posicao || 'sem posição')) + (multi && x.cam ? ' · ' + x.cam.nome : '') + (nm ? ' · não medir' : '');
+    const parte = x.regs ? 'costado' : c.tipo === 'janela' ? 'janela' : c.posicao;
+    h += '<div class="cardc" style="--cor:' + COR_COMP(c) + '"><button class="cardc-cab" data-abre="' + esc(x.chave) + '">' + desenhoVaso(v, parte) +
+      '<span class="cn"><b>' + esc(titulo1) + '</b><small>' + esc(sub) + '</small></span><span class="seta">' + (aberto ? '▾' : '▸') + '</span></button>';
+    if (aberto){
+      h += '<div class="cardc-corpo">';
+      if (x.regs){
+        h += '<p style="margin:10px 0 2px;font-weight:700;font-size:13px;color:var(--ink-2)">Regiões de medição</p>';
+        x.regs.forEach(r => {
+          const n = leiturasDe(v, r.id).length;
+          h += '<div class="reg"><b>' + esc(nomeReg(r)) + '</b><span class="muted">' + (n ? n + ' leitura' + (n > 1 ? 's' : '') : 'sem leitura') + '</span>' +
+            (pode && x.regs.length > 1 ? '<button class="btn peq perigo" style="margin-top:0" data-rmreg="' + esc(r.id) + '">Tirar</button>' : '') + '</div>';
+        });
+        if (pode) h += '<button class="btn peq sec" data-maisreg="' + esc(x.cam ? x.cam.id : '') + '">+ região</button>';
+      } else {
+        h += '<div class="lin"><label class="f" style="margin-top:10px">Tipo<select class="t" data-cp="' + esc(c.id) + '" data-k="tipo">' +
+          Object.keys(TIPOS_COMP).filter(t => t !== 'costado').map(t => '<option value="' + t + '"' + (t === c.tipo ? ' selected' : '') + '>' + TIPOS_COMP[t] + '</option>').join('') + '</select></label>' +
+          '<label class="f" style="margin-top:10px">Posição<select class="t" data-cp="' + esc(c.id) + '" data-k="posicao"><option value="">—</option>' +
+          POS_COMP.map(p => '<option' + (p === c.posicao ? ' selected' : '') + '>' + p + '</option>').join('') + '</select></label></div>';
+        h += campoGeo(v, c);
+      }
+      if (multi) h += '<label class="f">Câmara<select class="t" data-cpcam="' + esc(x.chave) + '">' +
+        cs.map(k => '<option value="' + esc(k.id) + '"' + (x.cam && k.id === x.cam.id ? ' selected' : '') + '>' + esc(k.nome) + '</option>').join('') + '</select></label>';
+      const mot = x.regs ? (sl[x.regs[0].id] || '') : (sl[c.id] || '');
+      if (nm) h += '<div class="alerta" style="margin:10px 0 0"><b>Não medir</b>' + esc(mot || (c.tipo === 'janela' ? 'Janela de visita: não entra no cálculo.' : 'sem motivo')) + '</div>';
+      if (pode) h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        (nm ? '<button class="btn peq sec" data-medir="' + esc(x.chave) + '">Medir</button>' : '<button class="btn peq" data-naomedir="' + esc(x.chave) + '">Não medir…</button>') +
+        '<button class="btn peq perigo" data-rmc="' + esc(x.chave) + '">Tirar ' + (x.regs ? 'o costado' : 'este componente') + '</button></div>';
+      h += '</div>';
+    }
     h += '</div>';
   });
-  h += '</div><button class="btn sec" id="maisComp">+ componente</button>';
-  h += '<p class="muted" style="margin-top:10px">Este é o único lugar onde o tipo do tampo é informado. O ultrassom usa esta mesma lista.</p>';
+  if (pode) h += '<button class="btn sec" id="maisComp">+ componente (tampo, cone ou janela)</button>';
+  h += '<p class="muted" style="margin-top:10px">Toque no componente para abrir. O nome sai do tipo e da posição. O ultrassom usa esta mesma lista.</p>';
   h += '<p class="muted">O raio é calculado pela circunferência (Operação e câmaras) e a eficiência da junta é definida no escritório: nenhum dos dois é digitado em campo.</p>';
   $('tela').innerHTML = h;
+  $('tela').querySelectorAll('[data-abre]').forEach(b => b.addEventListener('click', () => { v._compAberto = v._compAberto === b.dataset.abre ? null : b.dataset.abre; salvar(); pintar(); }));
+  if (!pode){ $('tela').querySelectorAll('.cardc-corpo select, .cardc-corpo input').forEach(el => { el.disabled = true; }); return; }
+  const doCartao = k => cards.find(x => x.chave === k);
   $('tela').querySelectorAll('[data-cp]').forEach(el => el.addEventListener('change', () => {
     const c = v.componentes.find(x => x.id === el.dataset.cp); if (!c) return;
-    let val = el.value;
-    if (el.dataset.k === 'nome'){ val = val.trim(); if (!val){ U.toast('O nome não pode ficar vazio.', 'err'); el.value = c.nome; return; } }
-    if (el.dataset.k === 'posicao') val = val || null;
+    const val = el.dataset.k === 'posicao' ? (el.value || null) : el.value;
     mudouComp(v, c, el.dataset.k, val);
     if (el.dataset.k === 'tipo' && val === 'janela' && !c.nao_medir) mudouComp(v, c, 'nao_medir', true);
-    if (el.dataset.k === 'tipo') pintar();   // a geometria muda com o tipo
+    mudouComp(v, c, 'nome', nomeAuto(v, c));
+    pintar();   // a geometria e o título mudam
   }));
-  comps.forEach(c => ligar('nm_' + c.id, el => mudouComp(v, c, 'nao_medir', el.checked)));
+  $('tela').querySelectorAll('[data-cpcam]').forEach(el => el.addEventListener('change', () => {
+    const x = doCartao(el.dataset.cpcam); if (!x) return;
+    (x.regs || [x.c]).forEach(c => mudouComp(v, c, 'camara_id', el.value));
+    v._compAberto = x.regs ? 'costado:' + el.value : x.chave; pintar();
+  }));
   ligarGeo(v);
-  $('tela').querySelectorAll('[data-rmc]').forEach(b => b.addEventListener('click', () => {
-    const c = v.componentes.find(x => x.id === b.dataset.rmc);
-    N.janela.confirmar('Tirar ' + c.nome + '?', '', 'Tirar', true).then(s => { if (s){ mudouComp(v, c, 'ativo', false); pintar(); } });
+  // "Não medir" guarda o componente e pede o motivo (sai no laudo); "Medir" volta
+  $('tela').querySelectorAll('[data-naomedir]').forEach(b => b.addEventListener('click', () => {
+    const x = doCartao(b.dataset.naomedir); if (!x) return;
+    const lista = x.regs || [x.c], nome = x.regs ? 'Costado' : x.c.nome;
+    janela('Não medir · ' + nome, '<label class="f">Motivo<select class="t" id="nmSel"><option value="">—</option>' +
+      MOTIVOS_US.map(m => '<option>' + esc(m) + '</option>').join('') + '<option value="+">Outro…</option></select></label>' +
+      '<label class="f">Detalhe<small>Obrigatório em "Outro". Sai no laudo.</small><textarea class="t" id="nmTx"></textarea></label>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
+        const sel = $('nmSel').value, tx = ($('nmTx').value || '').trim();
+        const m = sel && sel !== '+' ? (tx ? sel + ' ' + tx : sel) : tx;
+        if (!m){ U.toast('Informe o motivo.', 'err'); return false; }
+        const s2 = Object.assign({}, semLeitura(v));
+        lista.forEach(c => { s2[c.id] = m; mudouComp(v, c, 'nao_medir', true); });
+        v.inspecao.ultrassom_sem_leitura = s2; salvar(); gravarUS(v); N.janela.fechar(); pintar();
+      } }]);
   }));
-  $('maisComp').addEventListener('click', () => {
-    const c = { id:uid(), tipo:'janela', nome:'Janela de visita', posicao:null, camara_id:cs[0] && cs[0].id, nao_medir:true,
-                ordem:v.componentes.length + 1, ativo:true };
-    v.componentes.push(c); salvar(); gravarComp(v, c); pintar();
+  $('tela').querySelectorAll('[data-medir]').forEach(b => b.addEventListener('click', () => {
+    const x = doCartao(b.dataset.medir); if (!x) return;
+    const s2 = Object.assign({}, semLeitura(v));
+    (x.regs || [x.c]).forEach(c => { delete s2[c.id]; mudouComp(v, c, 'nao_medir', false); });
+    v.inspecao.ultrassom_sem_leitura = s2; salvar(); gravarUS(v); pintar();
+  }));
+  // "Tirar" apaga junto o que é do componente (leituras, motivo, fotos), com "Desfazer" por alguns segundos
+  const tirar = (lista, rotulo) => {
+    const nL = lista.reduce((a, c) => a + leiturasDe(v, c.id).length, 0);
+    const nF = ((v.inspecao && v.inspecao.fotos) || []).filter(f => lista.some(c => f.item_ref === c.id)).length;
+    const junto = [nL ? (nL === 1 ? 'a leitura de ultrassom' : 'as ' + nL + ' leituras de ultrassom') : null, nF ? (nF === 1 ? 'a foto' : 'as ' + nF + ' fotos') : null].filter(Boolean);
+    N.janela.confirmar('Tirar ' + rotulo + '?', junto.length ? '<p>' + esc(junto.join(' e ').replace(/^./, m => m.toUpperCase())) + ' também ' + (nL + nF > 1 ? 'serão apagadas' : 'será apagada') + '.</p>' : '<p>Não há leitura nem foto deste componente.</p>', 'Tirar', true).then(sim => {
+      if (!sim) return;
+      v._tirando = Object.assign({}, v._tirando); lista.forEach(c => { v._tirando[c.id] = true; });
+      pintar();
+      desfazer(rotulo.replace(/^./, m => m.toUpperCase()) + ' tirado.', () => { lista.forEach(c => delete v._tirando[c.id]); pintar(); },
+        () => { lista.forEach(c => { delete v._tirando[c.id]; apagarComp(v, c); }); salvar(); if (telaAtual.nome === 'componentes' || telaAtual.nome === 'ultrassom') pintar(); });
+    });
+  };
+  $('tela').querySelectorAll('[data-rmc]').forEach(b => b.addEventListener('click', () => {
+    const x = doCartao(b.dataset.rmc); if (!x) return;
+    tirar(x.regs || [x.c], x.regs ? 'o costado' : 'o ' + x.c.nome);
+  }));
+  $('tela').querySelectorAll('[data-rmreg]').forEach(b => b.addEventListener('click', () => {
+    const c = v.componentes.find(x => x.id === b.dataset.rmreg); if (!c) return;
+    tirar([c], 'a região ' + nomeReg(c));
+  }));
+  $('tela').querySelectorAll('[data-maisreg]').forEach(b => b.addEventListener('click', () => {
+    const camId = b.dataset.maisreg || null, regs = regioesDe(v, camId), usadas = regs.map(r => r.posicao);
+    const livres = REG_ORDEM.filter(p => usadas.indexOf(p) < 0);
+    janela('Nova região do costado', '<div class="seg" id="nrSeg">' + livres.map(p => '<button data-p="' + p + '">' + REGIOES[p][1] + ' (' + REGIOES[p][0] + ')</button>').join('') +
+      '</div><label class="f">Outra região (nome)<input class="t" id="nrNome" placeholder="Ex.: junto à boca de visita"' + SEM_AUTO + '></label>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Acrescentar', classe:'pri', acao:() => {
+        const nmx = ($('nrNome').value || '').trim(); if (!nmx){ U.toast('Escolha a região ou escreva o nome.', 'err'); return false; }
+        novaRegiao(v, camId, null, 'Costado ' + nmx); N.janela.fechar();
+      } }]);
+    document.querySelectorAll('#nrSeg [data-p]').forEach(bt => bt.addEventListener('click', () => { novaRegiao(v, camId, bt.dataset.p, null); N.janela.fechar(); }));
+  }));
+  ligar('maisComp', () => {
+    janela('Novo componente', '<div class="seg" id="ncSeg">' + Object.keys(TIPOS_COMP).filter(t => t !== 'costado').map(t => '<button data-t="' + t + '">' + TIPOS_COMP[t] + '</button>').join('') + '</div>', [{ rotulo:'Cancelar' }]);
+    document.querySelectorAll('#ncSeg [data-t]').forEach(bt => bt.addEventListener('click', () => {
+      const t = bt.dataset.t, c = { id:uid(), tipo:t, nome:'', posicao:null, camara_id:cs[0] && cs[0].id, nao_medir:t === 'janela', ordem:v.componentes.length + 1, ativo:true };
+      c.nome = nomeAuto(v, c); v.componentes.push(c); salvar(); gravarComp(v, c);
+      v._compAberto = c.id; N.janela.fechar(); pintar();
+    }));
+  }, 'click');
+}
+function novaRegiao(v, camId, pos, nome){
+  const regs = regioesDe(v, camId), base = regs[0];
+  // o costado único ainda sem região e sem leitura vira a primeira região escolhida
+  if (regs.length === 1 && !base.posicao && !siglaReg(base) && !leiturasDe(v, base.id).length){
+    mudouComp(v, base, 'posicao', pos); mudouComp(v, base, 'nome', nome || 'Costado ' + REGIOES[pos][0]); pintar(); return;
+  }
+  const c = Object.assign({ id:uid(), tipo:'costado', posicao:pos, nome:nome || 'Costado ' + REGIOES[pos][0], nao_medir:false, ordem:(base ? base.ordem : 1) || 1, ativo:true },
+    base ? pegar(base, ['r_mm','eficiencia_junta','material_id']) : {}, { camara_id:camId || (ativas(v)[0] || {}).id });
+  if (base && base.nao_medir) c.nao_medir = true;
+  v.componentes.push(c); salvar(); gravarComp(v, c); pintar();
+}
+/** Tira o componente de vez: primeiro as leituras e o motivo (o banco só aceita leitura de componente ativo), depois as fotos e o componente. */
+function apagarComp(v, c){
+  const i = v.inspecao;
+  if (leiturasDe(v, c.id).length){ i.leituras = i.leituras.filter(x => x.componente_id !== c.id); gravarLeituras(v, c); }
+  if (semLeitura(v)[c.id] !== undefined){ const s2 = Object.assign({}, semLeitura(v)); delete s2[c.id]; i.ultrassom_sem_leitura = s2; gravarUS(v); }
+  (i.fotos || []).filter(f => f.item_ref === c.id).forEach(f => {
+    const ainda = N.fila.listar({ tipo:'insp', grupo:'insp|' + v.id }).find(e => e.id === 'foto~' + f.id);
+    if (ainda) N.fila.descartar(ainda.assinatura); else enfileirar(v, 'fotorem-' + f.id, 'tirar foto', { funcao:'tf_insp_foto_remover', payload:{ p_id:f.id } }, null, true);
+    delete MINI[f.id];
   });
+  i.fotos = (i.fotos || []).filter(f => f.item_ref !== c.id);
+  c.ativo = false; gravarComp(v, c);
 }
 
 // ── tela 5 · localização ───────────────────────────────────────────────────
@@ -1127,8 +1516,8 @@ function telaLaudo(v){
 }
 // a foto de uma página do laudo marca o laudo como coletado
 const _reg = registrarArquivo;
-registrarArquivo = async function(v, secao, legenda, blob, ext, tipo, mini, item){
-  await _reg(v, secao, legenda, blob, ext, tipo, mini, item);
+registrarArquivo = async function(v, secao, legenda, blob, ext, tipo, mini, item, extra){
+  await _reg(v, secao, legenda, blob, ext, tipo, mini, item, extra);
   if (secao === 'laudo_anterior' && ext !== 'pdf'){ laudoColetado(v, 'fotos_campo'); pintar(); }
 };
 
@@ -1157,9 +1546,9 @@ const acessDe = v => (v.inspecao && v.inspecao.acessorios) || [];
 
 // ── estados das seções ─────────────────────────────────────────────────────
 function estVisual(v){
-  const it = (v.inspecao && v.inspecao.visual) || [];
-  if (!it.length || it.every(x => x.conforme == null)) return 'vazia';
-  const ok = it.every(x => x.conforme === true || (x.conforme === false && (x.anomalia || '').trim() && fotosDe(v, 'visual', x.item).length));
+  const it = (v.inspecao && v.inspecao.visual) || [], det = lugaresDe(v).filter(l => l.secao !== 'plaqueta');   // S140 · item 49: as fotos de detalhe
+  if ((!it.length || it.every(x => x.conforme == null)) && !det.some(l => lugarOk(v, l))) return 'vazia';
+  const ok = it.length && it.every(x => x.conforme === true || (x.conforme === false && (x.anomalia || '').trim() && fotosDe(v, 'visual', x.item).length)) && det.every(l => lugarOk(v, l));
   return ok ? 'ok' : 'inc';
 }
 function estAcess(v){
@@ -1197,7 +1586,9 @@ function estFech(v){
 /** O que impede o envio: a mesma lista do servidor (tf__insp_faltas_envio). */
 function faltasEnvio(v){
   const f = [], i = v.inspecao || {};
-  if (!fotosDe(v, 'plaqueta').length) f.push('Falta a foto da plaqueta.');
+  // S140 · item 49 (416): cada lugar de foto tem a foto ou o motivo; primeiro as placas
+  const lugs = lugaresDe(v), faltaLugar = l => f.push('Foto "' + l.rotulo + '": tire a foto ou diga por que não.');
+  lugs.filter(l => l.secao === 'plaqueta' && !lugarOk(v, l)).forEach(faltaLugar);
   const vis = i.visual || [];
   if (!vis.length || vis.every(x => x.conforme == null)) f.push('Exame visual sem resposta.');
   else {
@@ -1205,6 +1596,7 @@ function faltasEnvio(v){
     vis.filter(x => x.conforme === false && !(x.anomalia || '').trim()).forEach(x => f.push('Exame visual: "' + x.item + '" sem a descrição da anomalia.'));
     vis.filter(x => x.conforme === false && !fotosDe(v, 'visual', x.item).length).forEach(x => f.push('Exame visual: "' + x.item + '" não conforme sem foto.'));
   }
+  lugs.filter(l => l.secao !== 'plaqueta' && !lugarOk(v, l)).forEach(faltaLugar);
   if (!i.acessorios_conferidos) f.push('Acessórios: confirme a lista (mesmo que o vaso não tenha nenhum).');
   acessDe(v).filter(a => !a.situacao).forEach(a => f.push('Acessório "' + (a.tag || a.marca || TIPOS_ACESS[a.tipo] || a.tipo) + '" sem a situação.'));
   const fAf = faltasAfericao(v);
@@ -1263,7 +1655,10 @@ function telaVisual(v){
   const i = v.inspecao;
   if (!i.visual || !i.visual.length){ i.visual = ITENS_VISUAL.map((n, k) => ({ item:n, conforme:null, anomalia:null, ordem:k + 1 })); salvar(); }
   const pode = ed(v);
-  let h = '<p class="muted" style="margin:0 2px 10px">Não conforme pede a descrição e pelo menos uma foto. A conclusão do exame sai sozinha.</p>';
+  // S140 · item 49: as 4 fotos de detalhe, com o lugar certo no laudo (obrigatórias: a foto ou o motivo)
+  const lugV = lugaresDe(v).filter(l => l.secao !== 'plaqueta');
+  let h = '<div class="card"><b>Fotos de detalhe</b><p class="muted" style="margin:2px 0 0">Vão no laudo logo depois do exame visual, com estes nomes.</p>' + lugV.map(l => blocoLugar(v, l)).join('') + '</div>';
+  h += '<p class="muted" style="margin:0 2px 10px">Não conforme pede a descrição e pelo menos uma foto. A conclusão do exame sai sozinha.</p>';
   i.visual.forEach((x, k) => {
     h += '<div class="card"><div class="ct" style="display:flex;align-items:center;gap:8px"><b style="flex:1">' + esc(x.item) + '</b>' +
       (k >= ITENS_VISUAL.length && pode ? '<button class="btn peq perigo" data-vrm="' + k + '">Tirar</button>' : '') + '</div>' +
@@ -1281,6 +1676,7 @@ function telaVisual(v){
     (i.visual.some(x => x.conforme == null) ? 'Responda todos os itens.' : nc ? 'Com anomalias (' + nc + ' não conforme' + (nc > 1 ? 's' : '') + ').' : 'Sem anomalias.') + '</p></div>';
   $('tela').innerHTML = h;
   if (!pode){ $('tela').querySelectorAll('button,textarea').forEach(el => { el.disabled = true; }); somenteLeitura(); return; }
+  ligarLugares(v, lugV);
   $('tela').querySelectorAll('[data-vis]').forEach(seg => seg.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => {
     const x = i.visual[Number(seg.dataset.vis)];
     x.conforme = b.dataset.c === '1'; if (x.conforme) x.anomalia = null;
@@ -1360,6 +1756,9 @@ function resultadoAf(v, a, af){
       r.aprovadaOk = r.aprovada;
     }
   }catch(e){ r = { completo:false, faltas:[e.message], avisos:[], aprovadaOk:false }; }
+  // S140 · item 33: vaso sem laudo anterior não tem PMTA vigente: a abertura é conferida no escritório, contra a PMTA adotada
+  const laSit = v.laudo_anterior && v.laudo_anterior.situacao;
+  if (laSit === 'sem_laudo' || laSit === 'cliente_nao_tem') r.avisos = (r.avisos || []).map(x => /^Sem a PMTA vigente/.test(x) ? 'Vaso sem laudo anterior: a abertura é conferida no escritório, contra a PMTA adotada nesta inspeção.' : x);
   if (!af.padrao_id) r.faltas.push('Escolha o manômetro padrão.');
   if (!(af.lacre_colocado || '').trim()) r.faltas.push('Informe o lacre colocado.');
   r.completo = !r.faltas.length;
@@ -1410,18 +1809,33 @@ function novaAfericao(v, a){
   const pad = (E.padroes || []).find(p => p.id === ultimoPad()) || (E.padroes || [])[0];
   const af = { id:uid(), tipo:vv ? 'valvula' : 'manometro', acessorio_id:a.id, unidade:UN_AF.includes(un) ? un : 'bar',
     padrao_id:pad ? pad.id : null, lacre_retirado:null, lacre_colocado:null,
-    validade_meses:vv ? null : 24, realizada_em:new Date().toISOString(),
+    realizada_em:new Date().toISOString(),
     ajuste:vv && a.pressao_ajuste_mpa != null ? Number(fmt(window.MotorNR13.deMPa(a.pressao_ajuste_mpa, UN_AF.includes(un) ? un : 'bar'), 3).replace(',', '.')) : null,
     leituras:vv ? { aberturas:[null, null, null], assentamentos:[null, null, null] } : { pontos:[] } };
   v.inspecao.afericoes = ((v.inspecao.afericoes) || []).concat([af]); salvar(); gravarAfericao(v, af);
   return af;
 }
-const AF_OK = ['tipo','acessorio_id','padrao_id','unidade','faixa_ini','faixa_fim','resolucao','ajuste','leituras','lacre_retirado','lacre_colocado','validade_meses','realizada_em'];
+const AF_OK = ['tipo','acessorio_id','padrao_id','unidade','faixa_ini','faixa_fim','resolucao','ajuste','leituras','lacre_retirado','lacre_colocado','realizada_em'];   // S140 · item 56: sem validade_meses
 function gravarAfericao(v, af){
   const d = pegar(af, AF_OK); d.inspecao_id = v.inspecao.id;
   enfileirar(v, 'afer-' + af.id, (af.tipo === 'valvula' ? 'teste de válvula' : 'aferição de manômetro'), { funcao:'tf_insp_afericao_gravar', payload:{ p_id:af.id, p_dados:d } });
 }
-const adiarAf = debounce((v, af) => gravarAfericao(v, af), 700);
+const adiarAf = debounce((v, a, af) => {
+  gravarAfericao(v, af);
+  const rr = resultadoAf(v, a, af);
+  if (rr.resultado === 'reprovado' && (a.situacao || 'ok') === 'ok'){ a.situacao = 'substituir'; salvar(); gravarAcess(v, a); }
+}, 700);
+// S140 · itens 55 e 59: o resultado se atualiza a cada número digitado, sem redesenhar a tela (o campo não some, o teclado não fecha)
+function htmlResAf(r, vv){
+  return '<b>Resultado</b>' + (r.faltas.length ? '<ul>' + r.faltas.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '')
+    + (r.avisos.length ? '<div class="alerta" style="margin-top:6px"><ul>' + r.avisos.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '')
+    + (r.completo ? '<p class="info" style="margin:6px 0 0">' + (vv ? (r.aprovadaOk ? 'Aprovada.' : 'Reprovada.') : (r.aprovadaOk ? 'Aprovado.' : 'Reprovado: o acessório vai para "substituir".')) + '</p>' : '');
+}
+function htmlPorPonto(r, pts, un){
+  if (!pts.length || !(r.pontos || []).length) return '';
+  return '<b>Resultado por ponto</b>' + pts.map(p => { const rp = (r.pontos || []).find(x => x.nominal === Number(p.nominal)); return rp ? '<p class="muted" style="margin:6px 0 0">' + esc(fmt(p.nominal)) + ' ' + UN_AF_ROT[un] + ' ' +
+    (rp.ok !== undefined ? (rp.ok ? '<span class="chip ok">ok</span>' : '<span class="chip pend">fora</span>') : '') + (rp.erroMedio !== undefined ? ' · erro médio ' + fmt(rp.erroMedio, 3) + ' · tolerância ±' + fmt(rp.tol, 3) + ' · U ' + fmt(rp.U, 3) : '') + '</p>' : ''; }).join('');
+}
 /** 5 pontos (0, 25, 50, 75, 100%) arredondados para o número mais perto do mostrador. */
 function sugerirPontos(ini, fim){
   const passo = (fim - ini) / 4, mag = Math.pow(10, Math.floor(Math.log10(passo)));
@@ -1435,7 +1849,7 @@ function telaAfericao(v){
   const af = afDe(v, a) || novaAfericao(v, a), vv = af.tipo === 'valvula', pode = ed(v), un = af.unidade || 'bar';
   titulo(vv ? 'Teste da válvula' : 'Aferição do manômetro', v.tag + ' · ' + nomeAc(a));
   const r = resultadoAf(v, a, af);
-  let h = '<div class="card"><div style="display:flex;gap:8px;align-items:center"><b style="flex:1">' + (af.codigo ? esc(af.codigo) : 'Número ao enviar') + '</b>' + chipAf(r.resultado) + '</div>'
+  let h = '<div class="card"><div style="display:flex;gap:8px;align-items:center"><b style="flex:1">' + (af.codigo ? esc(af.codigo) : 'Número ao enviar') + '</b><span id="afChip">' + chipAf(r.resultado) + '</span></div>'
     + '<p class="muted" style="margin:4px 0 0">PR-ENG-001 · ' + (vv ? 'desmontada até onde a construção permite, inspecionada, limpa e testada' : '3 cargas e 3 descargas por ponto') + '</p></div>';
   h += '<div class="card"><label class="f">Manômetro padrão<select class="t" id="afPad"><option value="">—</option>' + (E.padroes || []).map(p => '<option value="' + esc(p.id) + '"' + (p.id === af.padrao_id ? ' selected' : '') + '>'
       + esc((p.descricao || 'Padrão') + (p.numero_serie ? ' · ' + p.numero_serie : '') + (p.validade ? ' · até ' + String(p.validade).slice(5, 7) + '/' + String(p.validade).slice(0, 4) : '')) + '</option>').join('') + '</select></label>'
@@ -1462,48 +1876,50 @@ function telaAfericao(v){
     const pts = L.pontos, linha = (k, n) => {
       const p = pts[k], l = (p.leituras || [])[n] || {};
       return '<tr><td>' + esc(fmt(p.nominal)) + '</td>'
-        + '<td><input class="t" inputmode="decimal" data-pp="' + k + '" data-n="' + n + '" data-c="padrao" value="' + esc(l.padrao == null ? fmt(p.nominal) : fmt(l.padrao)) + '"></td>'
-        + '<td><input class="t" inputmode="decimal" data-pp="' + k + '" data-n="' + n + '" data-c="indicado" value="' + esc(l.indicado == null ? '' : fmt(l.indicado)) + '"></td></tr>';
+        + '<td><input class="t" inputmode="decimal"' + SEM_AUTO + ' data-pp="' + k + '" data-n="' + n + '" data-c="padrao" value="' + esc(l.padrao == null ? fmt(p.nominal) : fmt(l.padrao)) + '"></td>'
+        + '<td><input class="t" inputmode="decimal"' + SEM_AUTO + ' data-pp="' + k + '" data-n="' + n + '" data-c="indicado" value="' + esc(l.indicado == null ? '' : fmt(l.indicado)) + '"></td></tr>';
     };
     const ordem = pts.map((p, k) => k);
     for (let ci = 0; ci < 3 && pts.length; ci++){
       h += '<div class="card"><b>Ciclo ' + (ci + 1) + ' · carga (subindo)</b><table class="comp" style="width:100%"><tr><th>Ponto</th><th>Padrão</th><th>Indicado</th></tr>' + ordem.map(k => linha(k, ci)).join('') + '</table></div>';
       h += '<div class="card"><b>Ciclo ' + (ci + 1) + ' · descarga (descendo)</b><table class="comp" style="width:100%"><tr><th>Ponto</th><th>Padrão</th><th>Indicado</th></tr>' + ordem.slice().reverse().map(k => linha(k, 3 + ci)).join('') + '</table></div>';
     }
-    if (pts.length && (r.pontos || []).length)
-      h += '<div class="card"><b>Resultado por ponto</b>' + pts.map(p => { const rp = (r.pontos || []).find(x => x.nominal === Number(p.nominal)); return rp ? '<p class="muted" style="margin:6px 0 0">' + esc(fmt(p.nominal)) + ' ' + UN_AF_ROT[un] + ' ' +
-        (rp.ok !== undefined ? (rp.ok ? '<span class="chip ok">ok</span>' : '<span class="chip pend">fora</span>') : '') + (rp.erroMedio !== undefined ? ' · erro médio ' + fmt(rp.erroMedio, 3) + ' · tolerância ±' + fmt(rp.tol, 3) + ' · U ' + fmt(rp.U, 3) : '') + '</p>' : ''; }).join('') + '</div>';
+    h += '<div class="card" id="afPorPonto"' + (pts.length && (r.pontos || []).length ? '' : ' hidden') + '>' + htmlPorPonto(r, pts, un) + '</div>';
   }
-  h += '<div class="card">' + campoTexto('Número do lacre', 'afLc', af.lacre_colocado, 'inputmode="numeric"')
-    + (vv ? '' : campoNum('Validade do relatório (meses)', 'afVal', af.validade_meses == null ? 24 : af.validade_meses, 'Padrão: 24 meses (2 anos)')) + '</div>';
-  h += '<div class="card" id="afResultado"><b>Resultado</b>' + (r.faltas.length ? '<ul>' + r.faltas.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '')
-    + (r.avisos.length ? '<div class="alerta" style="margin-top:6px"><ul>' + r.avisos.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '')
-    + (r.completo ? '<p class="info" style="margin:6px 0 0">' + (vv ? (r.aprovadaOk ? 'Aprovada.' : 'Reprovada.') : (r.aprovadaOk ? 'Aprovado.' : 'Reprovado: o acessório vai para "substituir".')) + '</p>' : '') + '</div>';
+  // S140 · item 56: sem a validade (não sai no relatório; o prazo é lembrete interno, mudado no escritório)
+  h += '<div class="card">' + campoTexto('Número do lacre', 'afLc', af.lacre_colocado, 'inputmode="numeric"') + '</div>';
+  h += '<div class="card" id="afResultado">' + htmlResAf(r, vv) + '</div>';
   $('tela').innerHTML = h;
   if (!pode){ $('tela').querySelectorAll('input,select,button').forEach(el => { el.disabled = true; }); return; }
-  const mudou = (repinta) => {
-    salvar(); adiarAf('af:' + af.id, v, af);
+  const atualizar = () => {
     const rr = resultadoAf(v, a, af);
-    if (rr.resultado === 'reprovado' && (a.situacao || 'ok') === 'ok'){ a.situacao = 'substituir'; salvar(); gravarAcess(v, a); }
-    if (repinta) pintar();
+    $('afChip').innerHTML = chipAf(rr.resultado); $('afResultado').innerHTML = htmlResAf(rr, vv);
+    const pp = $('afPorPonto'); if (pp){ const t = htmlPorPonto(rr, (af.leituras && af.leituras.pontos) || [], af.unidade || 'bar'); pp.innerHTML = t; pp.hidden = !t; }
+  };
+  const mudou = (repinta) => {
+    salvar(); adiarAf('af:' + af.id, v, a, af);
+    if (repinta) pintar(); else atualizar();
   };
   const n = x => { const y = num(x); return y == null || Number.isNaN(y) ? null : y; };
+  const aoDigitar = (id, fn) => { const el = $(id); if (el) el.addEventListener('input', () => fn(el)); };
   ligar('afPad', el => { af.padrao_id = el.value || null; LS.set('tfdoc_af_pad', af.padrao_id); mudou(true); });
   ligar('afUn', el => { af.unidade = el.value; mudou(true); });
-  ligar('afLc', el => { af.lacre_colocado = el.value.trim() || null; mudou(true); });
-  ligar('afVal', el => { const x = n(el.value); if (x == null || x < 1 || x > 120){ U.toast('Validade de 1 a 120 meses.', 'err'); el.value = af.validade_meses; return; } af.validade_meses = Math.round(x); mudou(false); });
+  aoDigitar('afLc', el => { af.lacre_colocado = el.value.trim() || null; mudou(false); });   // item 59: o resultado vê o lacre na hora
   if (vv){
-    ligar('afAj', el => { af.ajuste = n(el.value); mudou(true); });
-    [0, 1, 2].forEach(k => ligar('afAb' + k, el => { af.leituras.aberturas[k] = n(el.value); mudou(true); }));
-    [0, 1, 2].forEach(k => ligar('afAs' + k, el => { af.leituras.assentamentos[k] = n(el.value); mudou(true); }));
+    aoDigitar('afAj', el => { af.ajuste = n(el.value); mudou(false); });
+    [0, 1, 2].forEach(k => aoDigitar('afAb' + k, el => { af.leituras.aberturas[k] = n(el.value); mudou(false); }));
+    [0, 1, 2].forEach(k => aoDigitar('afAs' + k, el => { af.leituras.assentamentos[k] = n(el.value); mudou(false); }));
+    encadear(['afAj', 'afAb0', 'afAs0', 'afAb1', 'afAs1', 'afAb2', 'afAs2', 'afLc'].map($).filter(Boolean));   // item 54
   } else {
     const es = af.leituras.escala || (af.leituras.escala = {});
-    ligar('afIni', el => { af.faixa_ini = n(el.value); mudou(true); });
-    ligar('afFim', el => { af.faixa_fim = n(el.value); mudou(true); });
-    ligar('afRes', el => { af.resolucao = n(el.value); mudou(true); });
-    ligar('afGr', el => { es.graduacoes = n(el.value); mudou(false); });
-    ligar('afUi', el => { es.uti_ini = n(el.value); mudou(false); });
-    ligar('afUf', el => { es.uti_fim = n(el.value); mudou(false); });
+    aoDigitar('afIni', el => { af.faixa_ini = n(el.value); mudou(false); });
+    aoDigitar('afFim', el => { af.faixa_fim = n(el.value); mudou(false); });
+    aoDigitar('afRes', el => { af.resolucao = n(el.value); mudou(false); });
+    aoDigitar('afGr', el => { es.graduacoes = n(el.value); mudou(false); });
+    aoDigitar('afUi', el => { es.uti_ini = n(el.value); mudou(false); });
+    aoDigitar('afUf', el => { es.uti_fim = n(el.value); mudou(false); });
+    // item 54: o "Próximo" vai de "Indicado" em "Indicado", na ordem do ensaio (a coluna "Padrão" fica fora; toca-se nela para mudar)
+    encadear(Array.from($('tela').querySelectorAll('[data-c="indicado"]')).concat([$('afLc')]).filter(Boolean));
     const pts = lista => {
       const velhos = af.leituras.pontos || [];
       af.leituras.pontos = lista.map(x => velhos.find(p => Number(p.nominal) === x) || { nominal:x, leituras:[] });
@@ -1519,12 +1935,13 @@ function telaAfericao(v){
       for (let k = 1; k <= g; k++) lista.push(Number((ui + k * passo).toFixed(6)));
       pts(lista);
     }, 'click');
-    $('tela').querySelectorAll('[data-pp]').forEach(el => el.addEventListener('change', () => {
+    // itens 55 e 59: gravar sem redesenhar — o campo em que se digita não some nem muda de lugar
+    $('tela').querySelectorAll('[data-pp]').forEach(el => el.addEventListener('input', () => {
       const p = af.leituras.pontos[Number(el.dataset.pp)], k = Number(el.dataset.n);
       p.leituras = p.leituras || [];
       for (let j = 0; j < 6; j++) if (!p.leituras[j]) p.leituras[j] = { sentido:j < 3 ? 'carga' : 'descarga', padrao:Number(p.nominal), indicado:null };
       p.leituras[k][el.dataset.c] = n(el.value);
-      mudou(true);
+      mudou(false);
     }));
   }
 }
@@ -1855,11 +2272,22 @@ function telaUltrassom(v){
        (manual ? '' : '<button class="btn sec peq" id="usManual">Inserir medição manual</button>') + '</div></div>';
   if (!cs.length) h += '<div class="card"><p class="muted">Nenhum componente para medir. Confira a lista em Componentes.</p></div>';
   const multi = ativas(v).length > 1;
-  (manual ? cs : []).forEach(c => {
+  // S140 · item 52: o costado num cartão só, uma parte por região; o título do componente (e da região) fica fixo no topo enquanto se digita
+  const blocos = [];
+  cs.forEach(c => {
+    if (c.tipo === 'costado'){ const b = blocos.find(x => x.costado && x.cam === camIdDe(v, c)); if (b){ b.comps.push(c); return; } blocos.push({ costado:true, cam:camIdDe(v, c), comps:[c] }); }
+    else blocos.push({ costado:false, comps:[c] });
+  });
+  blocos.forEach(b => b.comps.sort((x, y) => ordReg(x) - ordReg(y)));
+  (manual ? blocos : []).forEach(b => {
+    const c0 = b.comps[0], vr = b.costado && b.comps.length > 1;
+    h += '<div class="card" style="--cor:' + COR_COMP(c0) + '">';
+    if (vr) h += '<div style="font-weight:700;font-size:15.5px;margin-bottom:4px">Costado · ' + b.comps.length + ' regiões' + (multi && camaraDe(v, c0) ? ' <span class="muted">· ' + esc(camaraDe(v, c0).nome) + '</span>' : '') + '</div>';
+    b.comps.forEach(c => {
     const l = leiturasDe(v, c.id), mot = '';
     const nP = Math.max(l.reduce((a, x) => Math.max(a, x.ponto), 0), (c._pontos || 0), mot ? 0 : 1);
-    h += '<div class="card"><div style="display:flex;align-items:center;gap:8px"><b style="flex:1">' + esc(c.nome) + '</b><span class="muted">' + esc(TIPOS_COMP[c.tipo] || c.tipo) +
-      (multi && camaraDe(v, c) ? ' · ' + esc(camaraDe(v, c).nome) : '') + '</span></div>';
+    h += '<div class="usTit">' + esc(b.costado ? (vr ? 'Costado · ' + nomeReg(c) : 'Costado') : c.nome) + '<small>' + esc(b.costado ? 'cilíndrico' : (TIPO_CURTO[c.tipo] || c.tipo)) +
+      (!vr && multi && camaraDe(v, c) ? ' · ' + esc(camaraDe(v, c).nome) : '') + '</small></div>';
     if (mot){
       h += '<div class="alerta" style="margin:8px 0 0"><b>Sem leitura</b>' + esc(mot) + '</div>';
       if (pode) h += '<button class="btn peq" data-usvolta="' + esc(c.id) + '">Medir este componente</button>';
@@ -1869,14 +2297,15 @@ function telaUltrassom(v){
         h += '<div class="lin" style="align-items:flex-end;margin-top:6px"><div style="flex:0 0 34px;font-weight:700;padding-bottom:12px">P' + p + '</div>';
         for (let r = 1; r <= 4; r++){
           const x = l.find(y => y.ponto === p && y.leitura === r);
-          h += '<input class="t" inputmode="decimal" data-us="' + esc(c.id) + '" data-p="' + p + '" data-r="' + r + '" value="' + esc(x ? fmt(x.valor_mm, 2) : '') + '" placeholder="' + r + 'ª"' +
+          h += '<input class="t" inputmode="decimal"' + SEM_AUTO + ' data-us="' + esc(c.id) + '" data-p="' + p + '" data-r="' + r + '" value="' + esc(x ? fmt(x.valor_mm, 2) : '') + '" placeholder="' + r + 'ª"' +
             (x && x.origem === 'csv' ? ' style="background:var(--accent-soft)"' : '') + (pode ? '' : ' disabled') + '>';
         }
         h += '</div>';
       }
-      if (pode) h += '<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn peq sec" data-usmais="' + esc(c.id) + '">+ ponto</button>' +
+      if (pode) h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button class="btn peq sec" data-usmais="' + esc(c.id) + '">+ ponto</button>' +
         '</div>';
     }
+    });
     h += '</div>';
   });
   if (manual) h += '<p class="muted">Até 4 leituras por ponto, em mm. Vale a menor de todas. Em vermelho: abaixo da espessura requerida (prévia; o oficial sai na revisão).</p>';
@@ -1884,6 +2313,7 @@ function telaUltrassom(v){
   $('tela').innerHTML = h;
   if (manual) cs.forEach(c => pintarMin(v, c));
   if (!pode){ $('tela').querySelectorAll('select, #usPasta, #usCsv, #usManual').forEach(el => { el.disabled = true; }); return; }
+  encadear($('tela').querySelectorAll('[data-us]'));   // S140 · item 54: o "Próximo" do teclado vai para a leitura seguinte
   ligar('usManual', () => { v._usManual = true; pintar(); }, 'click');
   ligar('usMed', el => { i.medidor_id = el.value || null; salvar(); gravarUS(v); });
   ligar('usPasta', el => { i.ultrassom_pasta = el.value.trim() || null; salvar(); adiar3('us:' + v.id, 'us', v); });
@@ -2009,6 +2439,12 @@ function conferirCsv(v, d, plano){
 
 // ── a prévia do cálculo (motor no aparelho, sem sinal) ─────────────────────
 const RISCO = { A:4, B:3, C:2, D:1 };
+/** O nome da governante: no costado com regiões, "Costado (menor leitura no CS)" (item 51). */
+function nomeGov(ck){
+  const g = ck.governante; if (!g) return '';
+  if (g.c.tipo === 'costado' && ck.comps.filter(x => x.c.tipo === 'costado').length > 1) return 'Costado (menor leitura no ' + (siglaReg(g.c) || nomeReg(g.c)) + ')';
+  return g.c.nome;
+}
 function previa(v){
   const r = { camaras:[], vaso:null, avisos:[], detalhes:[] };
   const cs = ativas(v), u = unidadeDe(v);
@@ -2043,7 +2479,7 @@ function previa(v){
     const ok = ck.comps.filter(x => x.pmta != null);
     if (ok.length) ck.governante = ok.reduce((a, b) => b.pmta < a.pmta ? b : a);
     const nm = cs.length > 1 ? ' (' + k.nome + ')' : '';
-    if (ck.governante && ck.governante.pmta < P) r.avisos.push('PMTA calculada' + nm + ' de ' + fmt(deMPa(ck.governante.pmta, u), 2) + ' ' + UNID_ROT[u] + ', abaixo da pressão de operação (' + ck.governante.c.nome + ').');
+    if (ck.governante && ck.governante.pmta < P) r.avisos.push('PMTA calculada' + nm + ' de ' + fmt(deMPa(ck.governante.pmta, u), 2) + ' ' + UNID_ROT[u] + ', abaixo da pressão de operação (' + nomeGov(ck) + ').');
     ck.comps.filter(x => x.abaixo).forEach(x => r.avisos.push(x.c.nome + ': espessura medida abaixo da mínima requerida.'));
     ck.comps.filter(x => x.erro).forEach(x => r.detalhes.push(x.c.nome + ': ' + x.erro));
     r.camaras.push(ck);
@@ -2076,13 +2512,19 @@ function telaPrevia(v){
   r.camaras.forEach(ck => {
     h += '<div class="card cam"><div class="ct"><span>' + esc(ck.cam.nome) + '</span></div><div class="classe">Pressão de operação: ' + pr(ck.cam.p_operacao_max_mpa) + '</div>';
     if (ck.erro) h += '<p class="muted" style="margin:6px 0 0">' + esc(ck.erro) + '</p>';
-    ck.comps.forEach(x => {
-      const gov = ck.governante && ck.governante.c.id === x.c.id;
-      h += '<div class="fl"' + (x.abaixo ? ' style="color:var(--crit)"' : '') + '><b>' + esc(x.c.nome) + (gov ? ' · governante' : '') + '</b>' +
+    // S140 · item 51: o costado aparece uma vez (a menor leitura de todas as regiões), com as regiões embaixo
+    const regs = ck.comps.filter(x => x.c.tipo === 'costado'), juntar = regs.length > 1;
+    const linhaComp = (x, nome, gov) => '<div class="fl"' + (x.abaixo ? ' style="color:var(--crit)"' : '') + '><b>' + esc(nome) + (gov ? ' · governante' : '') + '</b>' +
         (x.erro ? '<span class="mot">' + esc(x.erro) + '</span>' : x.tMin == null && (semLeitura(v)[x.c.id] || '').trim() ? '<span class="muted">sem leitura: ' + esc(semLeitura(v)[x.c.id]) + '</span>' :
           'medida ' + (x.tMin == null ? '—' : fmt(x.tMin, 2) + ' mm') + ' · requerida ' + (x.eMin == null ? '—' : fmt(x.eMin, 2) + ' mm') + ' · PMTA ' + pr(x.pmta)) + '</div>';
-    });
-    if (ck.governante) h += '<p style="margin:8px 0 0"><b>PMTA calculada: ' + pr(ck.governante.pmta) + '</b></p>';
+    if (juntar){
+      const comT = regs.filter(x => x.tMin != null), menor = comT.length ? comT.reduce((a, b) => b.tMin < a.tMin ? b : a) : regs[0];
+      const gov = ck.governante && ck.governante.c.tipo === 'costado';
+      h += linhaComp(Object.assign({}, menor, { abaixo:regs.some(x => x.abaixo) }), comT.length ? 'Costado (menor leitura no ' + (siglaReg(menor.c) || nomeReg(menor.c)) + ')' : 'Costado', gov);
+      h += '<div class="muted" style="margin:-4px 0 6px 10px">' + regs.map(x => esc(siglaReg(x.c) || nomeReg(x.c)) + ' ' + (x.tMin == null ? '—' : fmt(x.tMin, 2) + ' mm')).join(' · ') + '</div>';
+    }
+    ck.comps.filter(x => !(juntar && x.c.tipo === 'costado')).forEach(x => { h += linhaComp(x, x.c.nome, ck.governante && ck.governante.c.id === x.c.id); });
+    if (ck.governante) h += '<p style="margin:8px 0 0"><b>PMTA calculada: ' + pr(ck.governante.pmta) + '</b>' + (juntar && ck.governante.c.tipo === 'costado' ? ' <span class="muted">(' + esc(nomeGov(ck)) + ')</span>' : '') + '</p>';
     h += '</div>';
   });
   h += '<div class="card"><b>O vaso · categoria e prazos</b>';
