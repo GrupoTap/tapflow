@@ -9,6 +9,9 @@
 //   5. onclick="fn(...)" (no HTML e dentro das strings que montam HTML) chamando função que não existe;
 //   6. e-mail de verdade no código (item 27, S135): o GitHub é público, e o modo demonstração usa só
 //      endereços fictícios (@example.com). Fora disso, só as dicas genéricas de PERMITIDOS abaixo.
+//   7. CNPJ no código (item 28, S139): os exemplos do modo demonstração usam só CNPJ fictício, com a raiz
+//      começando por 000000 (ex.: 00.000.010/0001-00) ou a máscara 00.000.000/0000-00. Qualquer outro CNPJ
+//      escrito no código (com pontos, ou 14 dígitos num campo "cnpj") recusa.
 //
 // Uso:  node conferir_codigo.mjs <pasta PUBLICAR ou app>  [--aceitos conferir_codigo_aceitos.json] [--gravar-aceitos]
 //   Sai com código 0 quando não há achado NOVO; 1 quando há (a publicação não segue).
@@ -192,6 +195,23 @@ const emails = [];
   }
 })(raiz);
 
+// 7. CNPJ no código (item 28, S139). Vale só a raiz começando por 000000 (fictício); fora da catraca, como o e-mail.
+const cnpjs = [];
+(function varre(dir){
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })){
+    if (/^(Versões anteriores|Vers.es anteriores|node_modules|vendor|\.git)$/.test(e.name)) continue;
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) varre(p);
+    else if (/\.(html|js|mjs|webmanifest|json)$/i.test(e.name) && !/^TF[A-Z]*_/.test(e.name)){
+      const nome = path.relative(raiz, p).split(path.sep).join('/'), txt = fs.readFileSync(p, 'utf8');
+      const achou = (m, num) => { const d = num.replace(/\D/g, ''); if (/^000000/.test(d)) return;
+        cnpjs.push({ arquivo: nome, linha: txt.slice(0, m.index).split('\n').length, num }); };
+      for (const m of txt.matchAll(/(?<![\d.])(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})(?![\d])/g)) achou(m, m[1]);
+      for (const m of txt.matchAll(/cnpj['"]?\s*[:=]\s*['"](\d{14})['"]/gi)) achou(m, m[1]);
+    }
+  }
+})(raiz);
+
 // ── comparar com a catraca ──
 const reais = achados.filter(a => !a.controle);
 // a chave não leva o número da linha (muda a cada rodada): arquivo + regra + texto, contando repetições
@@ -218,7 +238,7 @@ if (novos.length){
 if (gravar){
   // só grava quando não há novo (a catraca só diminui); a 1ª vez (sem o arquivo) grava tudo o que já existia
   const so = (novos.length && fs.existsSync(arqAceitos)) ? null : agora;
-  if (so === null || emails.length){ console.log('\nNão gravei: há achado novo. Corrija no código.'); process.exit(1); }
+  if (so === null || emails.length || cnpjs.length){ console.log('\nNão gravei: há achado novo. Corrija no código.'); process.exit(1); }
   fs.writeFileSync(arqAceitos, JSON.stringify({ como_usar: 'Catraca da conferir_codigo.mjs: achados que já existiam. Não acrescentar à mão; achado novo se corrige no código.', aceitos: so }, null, 1) + '\n');
   console.log('\nCatraca gravada (' + Object.keys(so).length + ' linhas).');
   process.exit(0);
@@ -227,6 +247,10 @@ if (emails.length){
   console.log('\nE-MAIL DE VERDADE NO CÓDIGO (item 27) — trocar por um fictício @example.com:');
   for (const e of emails) console.log('  ✗ ' + e.arquivo + ' (linha ' + e.linha + '): ' + e.end);
 }
-const falhas = novos.length + emails.length;
-console.log(falhas ? '\nRESULTADO: FALHOU (' + novos.length + ' novo(s), ' + emails.length + ' e-mail(s)).' : '\nRESULTADO: ok (nenhum achado novo, nenhum e-mail de verdade).');
+if (cnpjs.length){
+  console.log('\nCNPJ NO CÓDIGO (item 28) — trocar por um fictício com a raiz 000000 (ex.: 00.000.010/0001-00):');
+  for (const c of cnpjs) console.log('  ✗ ' + c.arquivo + ' (linha ' + c.linha + '): ' + c.num);
+}
+const falhas = novos.length + emails.length + cnpjs.length;
+console.log(falhas ? '\nRESULTADO: FALHOU (' + novos.length + ' novo(s), ' + emails.length + ' e-mail(s), ' + cnpjs.length + ' CNPJ).' : '\nRESULTADO: ok (nenhum achado novo, nenhum e-mail de verdade, nenhum CNPJ de verdade).');
 process.exit(falhas ? 1 : 0);
