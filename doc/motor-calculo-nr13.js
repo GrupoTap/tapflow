@@ -247,13 +247,15 @@ function paraMPa(v, unidade) {
 }
 function deMPa(v, unidade) { return v / paraMPa(1, unidade); }
 
-/** Tolerância do manômetro pela posição do ponto na faixa (decisão do Bruno, 24/10):
- *  ±20% de 0 a 25%, ±10% de 25 a 75%, ±5% acima de 75%. No zero: 1 resolução. */
+/** Tolerância do manômetro pela NBR 14105-1, classe B (R00.5 · item 58 da lista, decisão do Bruno, 10/11/2026):
+ *  ±2% do fundo de escala de 25% a 75% da escala; ±3% do fundo de escala fora disso (o zero também).
+ *  O fundo de escala é a escala de indicação (fim − início). Antes (24/10): ±20/10/5% da leitura. */
+const CLASSE_MANOMETRO = { nome: 'B', meio: 0.02, pontas: 0.03 };
 function toleranciaManometro(nominal, faixaIni, faixaFim, refPadrao, resolucao) {
-    const pos = (nominal - faixaIni) / (faixaFim - faixaIni);
-    if (Math.abs(nominal - faixaIni) < 1e-9) return { pct: null, tol: resolucao, trecho: 'zero' };
-    const pct = pos <= 0.25 ? 0.20 : pos <= 0.75 ? 0.10 : 0.05;
-    return { pct, tol: pct * Math.abs(refPadrao), trecho: pos <= 0.25 ? '0–25%' : pos <= 0.75 ? '25–75%' : '75–100%' };
+    const fundo = faixaFim - faixaIni, pos = (nominal - faixaIni) / fundo;
+    const zero = Math.abs(nominal - faixaIni) < 1e-9;
+    const pct = !zero && pos >= 0.25 && pos <= 0.75 ? CLASSE_MANOMETRO.meio : CLASSE_MANOMETRO.pontas;
+    return { pct, tol: pct * fundo, trecho: zero ? 'zero' : pos < 0.25 ? '0–25%' : pos <= 0.75 ? '25–75%' : '75–100%', classe: CLASSE_MANOMETRO.nome };
 }
 
 function media(xs) { return xs.reduce((a, b) => a + b, 0) / xs.length; }
@@ -356,16 +358,16 @@ function testeValvula(v) {
     r.aprovada = r.dentroTolerancia && r.assentamentoOk && !r.acimaPMTA;
     return r;
 }
-    return { UNIDADES_MPA, paraMPa, deMPa, toleranciaManometro, afericaoManometro, toleranciaValvulaMPa, testeValvula };
+    return { UNIDADES_MPA, paraMPa, deMPa, toleranciaManometro, CLASSE_MANOMETRO, afericaoManometro, toleranciaValvulaMPa, testeValvula };
 })();
 
 const MotorNR13 = {
     TIPOS, ESPESSURA_MINIMA_ABSOLUTA, espessuraMinima, pmta, avisosDoComponente, minimaLeituras,
     grupoRisco, categoria, prazos, somarAnos, calcularVaso,
     // R00.3 · R04a
-    UNIDADES_MPA: R04.UNIDADES_MPA, paraMPa: R04.paraMPa, deMPa: R04.deMPa, toleranciaManometro: R04.toleranciaManometro,
+    UNIDADES_MPA: R04.UNIDADES_MPA, paraMPa: R04.paraMPa, deMPa: R04.deMPa, toleranciaManometro: R04.toleranciaManometro, CLASSE_MANOMETRO: R04.CLASSE_MANOMETRO,
     afericaoManometro: R04.afericaoManometro, toleranciaValvulaMPa: R04.toleranciaValvulaMPa, testeValvula: R04.testeValvula,
-    versao: 'R00.4-2026-10-30',
+    versao: 'R00.5-2026-11-10',
 };
 
 if (typeof module !== 'undefined' && module.exports) module.exports = MotorNR13;

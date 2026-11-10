@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S140';   // S140: TapDoc E14 (doc/: itens 44, 49, 50, 51, 53 e 56 da lista; laudo-pdf.js S140; 416)
+const VERSAO = 'H16-S141';   // S141: TapDoc E15 (rodada B da lista; 417) e o motor R00.5
+// const VERSAO = 'H16-S140';   // S140: TapDoc E14 (doc/: itens 44, 49, 50, 51, 53 e 56 da lista; laudo-pdf.js S140; 416)
 // const VERSAO = 'H16-S139';   // S139: Manager S139 (item 28 da lista: nomes de empresas fictícios no modo demonstração)
 // const VERSAO = 'H16-S136';   // S136: o celular da empresa (210): hub H16, núcleo N7, modulos M4, Pessoas e acessos A7, Field S53
 // const VERSAO = 'H15-S135';   // S135: item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
@@ -60,7 +61,7 @@ const ESSENCIAIS = [
   './fin/',
   // S77 · TapDoc do escritório (R02b1) e o motor de cálculo que ele usa
   './doc/',
-  './doc/motor-calculo-nr13.js?v=R00.4',
+  './doc/motor-calculo-nr13.js?v=R00.5',
   // S88 · Acessos P1: a tela do admin
   './acessos/',
   // S116 · TapSeg 1: a Segurança do Trabalho
