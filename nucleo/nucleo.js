@@ -6,8 +6,8 @@
  * aqui (fica no módulo e nas funções tf_*). Sem framework, sem build.
  *
  * COMO UM MÓDULO USA (duas linhas no <head> e uma no boot):
- *   <script src="../nucleo/config.js?v=N7"></script>
- *   <script src="../nucleo/nucleo.js?v=N7"></script>
+ *   <script src="../nucleo/config.js?v=N8"></script>
+ *   <script src="../nucleo/nucleo.js?v=N8"></script>
  *   ...
  *   const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
  *   if (g === 'hub') { irParaHub(Nucleo.recado); return; }     // ANTES do iniciar()
@@ -40,7 +40,8 @@
   'use strict';
   if (window.Nucleo && window.Nucleo.versao) return;
 
-  var VERSAO = 'N7';   // N7 (S136): o celular da empresa (210; desenho processos/aparelho-empresa-desenho.md, A1–A12)
+  var VERSAO = 'N8';   // N8 (S142): no Relatar, o print colado com Ctrl+V (item 37 da lista)
+  // var VERSAO = 'N7';   // N7 (S136): o celular da empresa (210; desenho processos/aparelho-empresa-desenho.md, A1–A12)
   // var VERSAO = 'N6';   // N6 (S132): "Relatar problema ou sugerir" em todos os módulos (209; item #1 da lista) e os últimos erros do app para irem junto
   // var VERSAO = 'N5';   // N5 (S131): o IndexedDB reabre quando o iPhone fecha a ligação
   var SCRIPT = (document.currentScript && document.currentScript.src) || '';
@@ -1943,9 +1944,9 @@
       '<label class="tf-rel-tipo"><input type="radio" name="tfRelTipo" value="sugestao"> Sugestão</label></div>' +
       '<label class="tf-rel-rot" for="tfRelTxt">O que aconteceu (ou o que você sugere)</label>' +
       '<textarea id="tfRelTxt" rows="5" maxlength="4000" placeholder="Ex.: toquei em Bater o ponto e a tela ficou branca."></textarea>' +
-      '<label class="tf-rel-rot" for="tfRelImg">Print da tela (opcional, até 2 imagens da galeria)</label>' +
+      '<label class="tf-rel-rot" for="tfRelImg">Print da tela (opcional, até 2 imagens: escolha o arquivo ou cole com Ctrl+V)</label>' +
       '<input type="file" id="tfRelImg" accept="image/*" multiple>' +
-      '<p id="tfRelImgs"></p>' +
+      '<div id="tfRelImgs" class="tf-rel-mini"></div>' +
       '<p>Vai junto, sem você digitar: o módulo e a tela em que você está, a versão do app e o tipo de aparelho. ' +
       'Só você e quem cuida dos relatos (Bruno e Fernando) veem o que você mandar.</p>' +
       '<button type="button" class="tf-bt pri" id="tfRelEnviar">Enviar</button></section>' +
@@ -1957,6 +1958,8 @@
         '.tf-relato textarea{width:100%;box-sizing:border-box;font:inherit;font-size:15px;padding:10px;border-radius:10px;border:1px solid #263445;background:#0E1621;color:#E8EEF5;resize:vertical}' +
         '.tf-relato input[type=file]{width:100%;color:#C9D4E0;font-size:13px}.tf-rel-it{border-top:1px solid #263445;padding:10px 0}.tf-rel-it:first-child{border-top:0;padding-top:0}' +
         '.tf-rel-it b{display:block;font-size:14px}.tf-rel-it small{display:block;color:#8796A8;font-size:12px;margin-top:2px}.tf-rel-it .tf-rel-resp{margin:6px 0 0;padding:8px 10px;background:#172231;border-radius:8px;font-size:14px;color:#E8EEF5}' +
+        '.tf-rel-mini{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.tf-rel-mini span{position:relative;display:inline-block}.tf-rel-mini img{width:96px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #263445;display:block}' +
+        '.tf-rel-mini button{position:absolute;top:-6px;right:-6px;width:24px;height:24px;border-radius:50%;border:0;background:#C0392B;color:#fff;font-size:14px;line-height:24px;padding:0;cursor:pointer}.tf-rel-mini small{display:block;width:100%;color:#8796A8;font-size:12px}' +
         '.tf-rel-sit{display:inline-block;font-size:11px;padding:2px 7px;border-radius:999px;background:#263445;color:#C9D4E0;margin-left:6px}.tf-rel-sit.novo{background:#3B4A1F;color:#D9F0A3}.tf-rel-sit.respondido{background:#1F3B5A;color:#BFE0FF}';
       document.head.appendChild(st);
     }
@@ -1981,10 +1984,35 @@
         }).join('');
       }, function (e) { cx.innerHTML = '<p>Não deu para abrir a lista agora' + (e && e.rede ? ' (sem sinal)' : '') + '.</p>'; });
     }
-    var imgs = [];
+    // os prints: do arquivo ou colados (Ctrl+V na janela); até 2, com miniatura e um X para tirar
+    var imgs = [], urls = [];
+    function miniaturas(aviso) {
+      urls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} });
+      urls = imgs.map(function (f) { return URL.createObjectURL(f); });
+      el.querySelector('#tfRelImgs').innerHTML = urls.map(function (u, i) {
+        return '<span><img src="' + u + '" alt="Print ' + (i + 1) + '"><button type="button" data-tirar="' + i + '" aria-label="Tirar o print ' + (i + 1) + '">×</button></span>';
+      }).join('') + (aviso ? '<small>' + esc(aviso) + '</small>' : '');
+    }
+    function juntar(lista) {
+      var novas = lista.filter(function (f) { return f && /^image\//.test(f.type); });
+      if (!novas.length) return false;
+      var cabe = 2 - imgs.length;
+      imgs = imgs.concat(novas.slice(0, Math.max(cabe, 0)));
+      miniaturas(novas.length > cabe ? 'Só cabem 2 prints: tire um para pôr outro.' : '');
+      return true;
+    }
     el.querySelector('#tfRelImg').addEventListener('change', function (e) {
-      imgs = Array.prototype.slice.call(e.target.files || []).filter(function (f) { return /^image\//.test(f.type); }).slice(0, 2);
-      el.querySelector('#tfRelImgs').textContent = imgs.length ? imgs.map(function (f) { return f.name; }).join(' · ') + (e.target.files.length > 2 ? ' (só as 2 primeiras)' : '') : '';
+      juntar(Array.prototype.slice.call(e.target.files || []));
+      e.target.value = '';
+    });
+    el.querySelector('#tfRelImgs').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-tirar]'); if (!b) return;
+      imgs.splice(+b.getAttribute('data-tirar'), 1); miniaturas('');
+    });
+    el.addEventListener('paste', function (e) {
+      var it = (e.clipboardData && e.clipboardData.items) || [], fs = [];
+      for (var i = 0; i < it.length; i++) if (it[i].kind === 'file' && /^image\//.test(it[i].type)) { var f = it[i].getAsFile(); if (f) fs.push(f); }
+      if (fs.length && juntar(fs)) e.preventDefault();   // colou imagem: vira print (o texto colado segue normal)
     });
     el.querySelector('#tfRelEnviar').addEventListener('click', function () {
       var bt = this, tipo = (el.querySelector('input[name=tfRelTipo]:checked') || {}).value || 'problema';
@@ -2007,8 +2035,9 @@
           if (caminhos.length) return rpcM('tf_relato_prints', { p_id: id, p_paths: caminhos });
         });
       }).then(function () {
-        el.querySelector('#tfRelTxt').value = ''; el.querySelector('#tfRelImg').value = ''; el.querySelector('#tfRelImgs').textContent = ''; imgs = [];
-        msg('Relato enviado. Obrigado! A resposta aparece aqui embaixo' + (caminhos.length ? '' : (id && imgs.length ? ' (o print não subiu)' : '')) + '.');
+        var tinha = imgs.length;
+        el.querySelector('#tfRelTxt').value = ''; el.querySelector('#tfRelImg').value = ''; imgs = []; miniaturas('');
+        msg('Relato enviado. Obrigado! A resposta aparece aqui embaixo' + (tinha && !caminhos.length ? ' (o print não subiu)' : '') + '.');
         toast('Relato enviado.', 'ok');
         lista();
       }, function (e) {

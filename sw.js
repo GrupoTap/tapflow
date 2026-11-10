@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S141';   // S141: TapDoc E15 (rodada B da lista; 417) e o motor R00.5
+const VERSAO = 'H16-S142';   // S142: núcleo N8 (item 37), Pessoas e acessos A8 (itens 36 e 39), TapRH RH13 (item 38; 616)
+// const VERSAO = 'H16-S141';   // S141: TapDoc E15 (rodada B da lista; 417) e o motor R00.5
 // const VERSAO = 'H16-S140';   // S140: TapDoc E14 (doc/: itens 44, 49, 50, 51, 53 e 56 da lista; laudo-pdf.js S140; 416)
 // const VERSAO = 'H16-S139';   // S139: Manager S139 (item 28 da lista: nomes de empresas fictícios no modo demonstração)
 // const VERSAO = 'H16-S136';   // S136: o celular da empresa (210): hub H16, núcleo N7, modulos M4, Pessoas e acessos A7, Field S53
@@ -50,9 +51,9 @@ const ESSENCIAIS = [
   // O núcleo comum. O endereço tem que ser IDÊNTICO ao do <script>, com o ?v=
   // (o cache compara a consulta inteira). Trocou o ?v= nas páginas? Troque aqui também.
   // S76: hub, Manager, Field e fin/ pedem todos ?v=N2 — saíram as linhas ?v=N1. S123: todos pedem ?v=N3 (Passkey 1). S124: ?v=N4. S131: ?v=N5 (IndexedDB do iPhone).
-  './nucleo/nucleo.js?v=N7',
-  './nucleo/nucleo.css?v=N7',
-  './nucleo/config.js?v=N7',
+  './nucleo/nucleo.js?v=N8',
+  './nucleo/nucleo.css?v=N8',
+  './nucleo/config.js?v=N8',
   // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo" (mesmo ?v= das páginas)
   './nucleo/modulos.js?v=M4',
   // S110 · o gerador de documentos (o Manager o pede com ?v=D1; o jszip e o pdfmake vêm sob demanda)

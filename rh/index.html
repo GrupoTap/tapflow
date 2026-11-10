@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapRH 12 · Recursos Humanos</title>
+<title>TapRH 13 · Recursos Humanos</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2051,6 +2051,8 @@ th.num .tfThFixo{text-align:right}
 .ausLin{display:grid;grid-template-columns:minmax(150px,1.3fr) 130px minmax(160px,1fr) auto;gap:10px;align-items:center;
   padding:9px 12px;border-bottom:1px solid var(--rule);background:var(--surface)}
 .ausLin.canc{opacity:.62}
+.ausAnxL{display:grid;gap:4px;margin:4px 0 6px}.ausAnxI{display:flex;gap:8px;align-items:center;font-size:13px}.ausAnxI .x{margin-left:auto}
+.ausAnxI .x,.ausAnxI .ab{border:1px solid var(--rule);background:var(--surface);border-radius:6px;padding:2px 8px;cursor:pointer;font:inherit;font-size:12px}
 .ausLin.canc .ausPer{text-decoration:line-through}
 .ausLin small{display:block;color:var(--ink-3);font-size:11.5px;margin-top:2px}
 .ausBtns{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
@@ -2360,9 +2362,9 @@ th.num .tfThFixo{text-align:right}
 <!-- S63 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js.
      S76 · ?v=N2, igual ao hub e ao Field (o N2 aceita tudo do N1: o Manager já rodava o N2 com o
      endereço ?v=N1). O sw.js da raiz guarda estes três endereços: trocou aqui, troca lá (é do central). -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N7">
-<script src="../nucleo/config.js?v=N7"></script>
-<script src="../nucleo/nucleo.js?v=N7"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N8">
+<script src="../nucleo/config.js?v=N8"></script>
+<script src="../nucleo/nucleo.js?v=N8"></script>
 <!-- S82 · H10: a tabela única dos módulos (cor, miniatura, menu "Trocar de módulo"). Mudou o ?v=? Troque no sw.js da raiz também (é do central). -->
 <script src="../nucleo/modulos.js?v=M4"></script>
 </head>
@@ -2432,7 +2434,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'RH12';   // TapRH 12 (S139): item 26 da lista: a caixa do espelho esconde também as batidas repetidas
+const APP_VERSION = 'RH13';   // TapRH 13 (S142): item 38 da lista: o atestado anexado à ausência (foto, PDF ou Ctrl+V), em Documentos do Funcionário, guarda de 5 anos (616)
+// const APP_VERSION = 'RH12';   // TapRH 12 (S139): item 26 da lista: a caixa do espelho esconde também as batidas repetidas
 // const APP_VERSION = 'RH11';   // TapRH 11 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const APP_VERSION = 'RH10';   // TapRH 10 (S134): Clientes, Catálogo e Duplicados abrem no TapHub (cadastros/), não mais no Manager (K6)
 // const APP_VERSION = 'RH9';   // TapRH 9 (615, S132): a coluna Banco no espelho e no PDF (item #7), os cartões do EzPoint só até a data-base (#6), o ASO recalculado quando a periodicidade muda (#8), Documentos do Funcionário por vínculo (#9); TapHub nas telas (#10)
@@ -3192,6 +3195,9 @@ async function rhfdCarregar(){
   const el = document.getElementById('rhfdG'); if (!el) return;
   try{ RHFD.painel = await rpc('tf_rh_docs_func_painel', {}); }
   catch(e){ return rhFalha(el, e.message, rhfdCarregar); }
+  // RH13 · item 38: os atestados, só para quem tem a caixa Ausências (dado de saúde)
+  RHFD.atest = null;
+  if (podeVerEstrito('ausencias')) try{ const a = await rpc('tf_ausencia_atestados', {}); if (a && a.pode) RHFD.atest = a.itens || []; }catch(e){}
   rhfdDesenhar();
 }
 
@@ -3209,7 +3215,7 @@ function rhfdDesenhar(){
     nFalta ? nFalta + ' faltando' : ''].filter(Boolean).join(' · ') || 'Tudo em dia.';
   if (!P.length){ el.innerHTML = '<p class="nota" style="padding:12px">' + (q ? 'Ninguém com essa busca.' : 'Nenhuma ficha de RH aberta ainda.') + '</p>'; return; }
   el.innerHTML = '<div class="rhfdWrap"><table class="tbl rhfdTab"><thead><tr><th>Funcionário</th>'
-    + RHFD_TIPOS.map(([, r]) => '<th>' + esc(r) + '</th>').join('') + '<th>ASO</th></tr></thead><tbody>'
+    + RHFD_TIPOS.map(([, r]) => '<th>' + esc(r) + '</th>').join('') + '<th>ASO</th>' + (RHFD.atest ? '<th title="Só quem tem a caixa Ausências vê (dado de saúde)">Atestados</th>' : '') + '</tr></thead><tbody>'
     + P.map(p => '<tr' + (p.situacao === 'desligado' ? ' class="rhfdDesl"' : '') + '><td><button class="lnk" type="button" data-ficha="' + esc(p.usuario_id) + '">'
       + esc(p.nome) + '</button><small>' + esc([p.funcao, p.situacao === 'desligado' ? 'desligado' : ''].filter(Boolean).join(' · ')) + '</small></td>'
       + RHFD_TIPOS.map(([t]) => { const r = rhfdRotulo(p, t);
@@ -3220,7 +3226,10 @@ function rhfdDesenhar(){
             + esc(r + ' — ' + (s.dica || s.txt)) + '">' + esc(s.txt) + (r !== RHFD_ROT[t] ? '<small>' + esc(r) + '</small>' : '') + '</button></td>'; }).join('')
       + (s => '<td><button type="button" class="rhfdC ' + s.cls + '" data-aso="' + esc(p.usuario_id) + '" title="' + esc('ASO — ' + (s.dica || s.txt))
           + '">' + esc(s.txt) + '</button></td>')(rhfdAsoSit(p.aso))
+      + (RHFD.atest ? (L => '<td>' + (L.length ? '<button type="button" class="rhfdC info" data-atest="' + esc(p.usuario_id) + '" title="Atestados anexados às ausências">'
+          + L.length + ' atestado' + (L.length > 1 ? 's' : '') + '</button>' : '<span class="rhfdC nsa">—</span>') + '</td>')(RHFD.atest.filter(a => a.usuario_id === p.usuario_id && (a.anexos || []).length)) : '')
       + '</tr>').join('') + '</tbody></table></div>';
+  el.querySelectorAll('[data-atest]').forEach(b => b.addEventListener('click', () => rhfdAtestados(b.dataset.atest)));
   el.querySelectorAll('[data-ficha]').forEach(b => b.addEventListener('click', () => { RH.sel = b.dataset.ficha; RH.fichaAba = 'docs'; irPara('rhf'); }));
   // S60 · o ASO se lança pela ficha (Documentos › ASO), com as regras de sempre
   el.querySelectorAll('[data-aso]').forEach(b => b.addEventListener('click', () => { RH.sel = b.dataset.aso; RH.fichaAba = 'docs'; RH.focoAso = true; irPara('rhf'); }));
@@ -3231,6 +3240,18 @@ function rhfdDesenhar(){
 }
 
 REPINTA.rhd = rhfdDesenhar;
+
+/** RH13 · item 38: os atestados de uma pessoa (com arquivo), do mais novo ao mais antigo. */
+function rhfdAtestados(uid){
+  const L = (RHFD.atest || []).filter(a => a.usuario_id === uid && (a.anexos || []).length);
+  if (L.length === 1) return ausAnxVer(L[0]);
+  abrirModal('Atestados — ' + ((L[0] || {}).usuario || ''),
+    '<div class="ausAnxL">' + L.map((a, i) => '<div class="ausAnxI"><span>' + esc(ausPer(a)) + ' · ' + a.anexos.length + ' arquivo' + (a.anexos.length > 1 ? 's' : '') + '</span>'
+      + '<button type="button" class="ab" data-i="' + i + '">ver</button></div>').join('') + '</div>'
+    + '<p class="nota">Cada atestado fica 5 anos a contar da data dele e depois é apagado sozinho. Para anexar ou trocar, use "Corrigir" em Ausências.</p>',
+    [{ label: 'Fechar', pri: true, onClick: fecharModal }]);
+  document.querySelectorAll('#mBody [data-i]').forEach(b => b.addEventListener('click', () => ausAnxVer(L[+b.dataset.i])));
+}
 
 async function rhfdLimpar(){
   if (RHFD.limpou) return; RHFD.limpou = true;
@@ -3647,6 +3668,7 @@ async function pintarAusencias(){
   if (visao !== 'rhaus') return;
   contador('nAus', Number(AUS.dados.pedidos_n) || '');
   ausDesenhar();
+  ausGuarda();
 }
 
 REPINTA.rhaus = () => { if (AUS.dados) ausDesenhar(); };
@@ -3710,6 +3732,7 @@ function ausLista(){
            : x.alterado_por ? '<small>Corrigida por ' + esc(x.alterado_por) + (x.alterado_em ? ' em ' + esc(rhDT(x.alterado_em)) : '') + '</small>'
            : x.decidido_por ? '<small>Pedida pelo funcionário · aprovada por ' + esc(x.decidido_por) + (x.decidido_em ? ' em ' + esc(rhDT(x.decidido_em)) : '') + '</small>' : '')
       +   (ped ? '<small>Pedido em ' + esc(rhDT(x.pedido_em)) + '</small>' + ausConfHTML(x.conferencia) : '')
+      +   (x.tipo === 'atestado' && (x.anexos || []).length ? '<small><button class="lnk" type="button" data-a="ax">📎 atestado anexado (' + x.anexos.length + ')</button></small>' : '')
       +   (x.choque_motivo ? '<small class="ausAviso">Com choque de cobertura: ' + esc(x.choque_motivo) + '</small>'
            : chq && !ped ? '<small class="ausErro">⚠ ' + esc(x.choques[0].texto) + '</small>' : '')
       + '</span>'
@@ -3742,6 +3765,7 @@ function ausLista(){
     if (a === 'ca') return ausCancelar(x);
     if (a === 'ap') return ausDecidir(x, true);
     if (a === 'rc') return ausDecidir(x, false);
+    if (a === 'ax') return ausAnxVer(x);
     ausRegistro(x);
   }));
 }
@@ -3999,6 +4023,9 @@ function ausModal(x){
     + '<div id="auConf" aria-live="polite"></div>'
     + '<div class="campo" id="auChqC" hidden><label for="auChq">Motivo para lançar com o choque</label>'
     + '<input id="auChq" type="text" maxlength="200" autocomplete="off" name="auchq_nofill"></div>'
+    + '<div class="campo" id="auAnxC" hidden><span class="rotulo">Atestado anexado <small>(foto ou PDF, até 3; dá para colar o print com Ctrl+V)</small></span>'
+    +   '<div id="auAnxL" class="ausAnxL"></div><input type="file" id="auAnxF" accept="image/*,application/pdf" multiple>'
+    +   '<p class="nota" style="margin:4px 0 0">Dado de saúde (LGPD art. 11): só quem tem a caixa Ausências e o próprio funcionário veem. Fica guardado 5 anos a contar da data do atestado e depois é apagado sozinho.</p></div>'
     + '<div class="campo"><label for="auO">Observação <small>(só quem tem a caixa Ausências vê)</small></label>'
     + '<input id="auO" type="text" maxlength="300" autocomplete="off" name="auo_nofill" data-lpignore="true" data-1p-ignore></div>'
     + '<p class="nota" id="auDica" style="margin:0"></p>'
@@ -4014,6 +4041,7 @@ function ausModal(x){
         if (!u || !t || !i){ msg.textContent = 'Escolha a pessoa, o tipo e o primeiro dia.'; return; }
         if (f < i){ msg.textContent = 'O último dia vem antes do primeiro.'; return; }
         if (pt && (!hi || !hf)){ msg.textContent = 'Parte do dia: escolha a hora de início e a de fim.'; return; }
+        if (ed && x.tipo === 'atestado' && t !== 'atestado' && (x.anexos || []).length){ msg.textContent = 'Esta ausência tem o atestado anexado: tire o anexo (×) e grave antes de mudar o tipo.'; return; }
         if (DEMO){ msg.textContent = 'Modo demonstração: nada é gravado.'; return; }
         try{
           const r = await rpc('tf_ausencia_gravar', { p_id: ed ? x.id : null, p_usuario: u, p_tipo: t,
@@ -4022,6 +4050,11 @@ function ausModal(x){
             p_choque_motivo: document.getElementById('auChq').value.trim() || null,
             p_hora_inicio: pt ? hi : null, p_hora_fim: pt ? hf : null });
           AGENDA.chave = null;
+          // RH13 · item 38: o atestado anexado (só se mudou); a ausência já está gravada, então falha aqui só avisa
+          if (t === 'atestado' && r && r.id && (AUS_ANX.novos.length || AUS_ANX.manter.join('|') !== ((ed && x.anexos) || []).join('|'))){
+            try{ await ausAnxGravar(r.id, u, AUS_ANX.manter, AUS_ANX.novos); }
+            catch(e2){ toast('A ausência foi gravada, mas o atestado não: ' + e2.message + ' Abra "Corrigir" e anexe de novo.', 'err'); }
+          }
           const av = (r && r.avisos) || {};
           if (Number(av.n_agenda || 0) + Number(av.diarias || 0) > 0) ausAvisoDepois(r, i, f);
           else { fecharModal(); toast((ed ? 'Ausência corrigida' : 'Ausência lançada') + ' — já aparece na Agenda.', 'ok'); }
@@ -4075,6 +4108,7 @@ function ausModal(x){
           // S57 · como no Field (S27): folga longa costuma ser engano
           + (t === 'folga' && ausNDias(i, f) > 7 ? ' ⚠ Folga de ' + ausNDias(i, f) + ' dias? Pedidos longos costumam ser férias — confira as datas e o tipo.' : '') : '';
     document.getElementById('auVendaC').hidden = t !== 'ferias';
+    document.getElementById('auAnxC').hidden = t !== 'atestado';
     document.getElementById('auDica').textContent = t === 'folga'
       ? 'Folga só marca o dia (ou as horas): o saldo do banco de horas continua no EZPoint. Não entra em “quem não sai junto”.'
       : t === 'atestado' ? 'Lance também no EZPoint. Quem não tem esta caixa vê só “afastado”. Atestado nunca é barrado e não barra ninguém.'
@@ -4095,7 +4129,112 @@ function ausModal(x){
   eHF.addEventListener('change', conta);
   const eP = document.getElementById('auP'); if (eP) eP.addEventListener('change', conta);
   document.querySelectorAll('#mBody input[name="auT"]').forEach(r => r.addEventListener('change', conta));
+  // RH13 · item 38: o atestado anexado
+  AUS_ANX.manter = ed ? (x.anexos || []).slice() : []; AUS_ANX.novos = []; AUS_ANX.apagado = ed && x.anexos_apagados_em;
+  document.getElementById('auAnxF').addEventListener('change', ev => { ausAnxJuntar(Array.from(ev.target.files || [])); ev.target.value = ''; });
+  document.getElementById('auAnxL').addEventListener('click', ev => {
+    const b = ev.target.closest('button'); if (!b) return;
+    if (b.dataset.ab) return ausAnxAbrir(b.dataset.ab);
+    if (b.dataset.xm != null) AUS_ANX.manter.splice(+b.dataset.xm, 1);
+    if (b.dataset.xn != null) AUS_ANX.novos.splice(+b.dataset.xn, 1);
+    ausAnxDesenhar();
+  });
+  ausAnxDesenhar();
   conta();
+}
+
+/* ── RH13 · item 38 (616): o atestado anexado à ausência ─────────────────────
+ * Foto (reduzida a 1600 px), PDF (até 2 MB) ou print colado com Ctrl+V; até 3 por atestado. Vai para o bucket
+ * privado `ponto` em <pessoa>/atestados/<id>; o pedido de atestado do celular, aprovado, já traz as fotos.
+ * Dado de saúde (LGPD art. 11): só a caixa Ausências e o próprio funcionário veem; 5 anos a contar da data do atestado. */
+const AUS_ANX = { manter: [], novos: [], apagado: null };
+const pontoUrl = c => SUPABASE_URL + '/storage/v1/object/ponto/' + String(c).split('/').map(encodeURIComponent).join('/');
+const ausAnxRot = c => (/\.pdf$/i.test(c) ? 'PDF' : 'foto') + (/\/pedidos\//.test(c) ? ' · enviada pelo celular' : ' · anexada pelo escritório');
+function ausAnxDesenhar(){
+  const L = document.getElementById('auAnxL'); if (!L) return;
+  const n = AUS_ANX.manter.length + AUS_ANX.novos.length;
+  L.innerHTML = (AUS_ANX.apagado ? '<p class="nota" style="margin:0">O atestado desta ausência passou do prazo de guarda (5 anos) e foi apagado.</p>' : '')
+    + AUS_ANX.manter.map((c, i) => '<div class="ausAnxI"><span>📎 Arquivo ' + (i + 1) + ' (' + esc(ausAnxRot(c)) + ')</span>'
+      + '<button type="button" class="ab" data-ab="' + esc(c) + '">abrir</button><button type="button" class="x" data-xm="' + i + '" title="Tirar este arquivo" aria-label="Tirar o arquivo ' + (i + 1) + '">×</button></div>').join('')
+    + AUS_ANX.novos.map((f, i) => '<div class="ausAnxI"><span>➕ ' + esc(f.name || 'print colado') + ' <small>(vai ao gravar)</small></span>'
+      + '<button type="button" class="x" data-xn="' + i + '" title="Tirar este arquivo" aria-label="Tirar ' + esc(f.name || 'o print') + '">×</button></div>').join('')
+    + (!n && !AUS_ANX.apagado ? '<p class="nota" style="margin:0">Nenhum arquivo anexado.</p>' : '');
+  const f = document.getElementById('auAnxF'); if (f) f.disabled = n >= 3 || !!AUS_ANX.apagado;
+}
+function ausAnxJuntar(lista){
+  const ok = lista.filter(f => f && (/^image\//.test(f.type) || f.type === 'application/pdf'));
+  if (lista.length && !ok.length){ toast('Use foto (JPG/PNG) ou PDF.', 'err'); return false; }
+  const cabe = 3 - AUS_ANX.manter.length - AUS_ANX.novos.length;
+  AUS_ANX.novos = AUS_ANX.novos.concat(ok.slice(0, Math.max(cabe, 0)));
+  if (ok.length > cabe) toast('No máximo 3 arquivos por atestado.', 'err');
+  ausAnxDesenhar();
+  return ok.length > 0;
+}
+// colar (Ctrl+V) com a janela de ausência aberta e o tipo atestado
+document.addEventListener('paste', ev => {
+  const c = document.getElementById('auAnxC'); if (!c || c.hidden || AUS_ANX.apagado) return;
+  const fs = Array.from((ev.clipboardData && ev.clipboardData.items) || []).filter(i => i.kind === 'file').map(i => i.getAsFile()).filter(Boolean);
+  if (fs.length && ausAnxJuntar(fs)) ev.preventDefault();
+});
+function novoIdRH(){
+  return (crypto.randomUUID && crypto.randomUUID()) || ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+}
+async function ausAnxGravar(ausId, usuarioId, manter, novos){
+  const caminhos = manter.slice();
+  for (const f of novos){
+    let blob, ext;
+    if (f.type === 'application/pdf'){
+      if (f.size > RHFD_MAX) throw new Error('PDF grande demais (máx. 2 MB): escaneie com resolução menor.');
+      blob = f; ext = 'pdf';
+    } else {
+      const r = await reduzirImagem(f, 1600, 0.82, true, true);
+      blob = new Blob([await (await fetch(r.dados)).blob()], { type: 'image/jpeg' }); ext = 'jpg';
+    }
+    const c = usuarioId + '/atestados/' + novoIdRH() + '.' + ext;
+    const r = await Nucleo.storage.enviar('ponto', c, blob);
+    if (r !== 'ok' && r !== 'ja_existia') throw new Error('o armazenamento recusou o arquivo.');
+    caminhos.push(c);
+  }
+  const g = await rpc('tf_ausencia_anexos', { p_id: ausId, p_anexos: caminhos });
+  if ((g.removidos || []).length)     // o que o escritório tirou some do armazenamento também
+    rhfdFetch(SUPABASE_URL + '/storage/v1/object/ponto', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prefixes: g.removidos }) }).catch(() => {});
+  return g;
+}
+async function ausAnxAbrir(caminho){
+  const w = window.open('', '_blank');
+  if (!w){ toast('O navegador bloqueou a janela nova — libere pop-ups para o TapHub.', 'err'); return; }
+  try{
+    const r = await rhfdFetch(pontoUrl(caminho), {});
+    if (!r.ok) throw new Error('O arquivo não está no armazenamento (HTTP ' + r.status + ').');
+    const bl = await r.blob();
+    w.location.href = URL.createObjectURL(new Blob([bl], { type: /\.pdf$/i.test(caminho) ? 'application/pdf' : 'image/jpeg' }));
+  }catch(e){ try{ w.close(); }catch(_){} toast(e.message, 'err'); }
+}
+/** A janela com os arquivos de um atestado (da lista de Ausências e de Documentos do Funcionário). */
+function ausAnxVer(x){
+  abrirModal('Atestado — ' + (x.usuario || ''),
+    '<p style="margin-top:0">' + esc(ausPer(x)) + (x.guarda_ate ? ' · guardado até ' + esc(dataBR(x.guarda_ate)) : '') + '</p>'
+    + ((x.anexos || []).length ? '<div class="ausAnxL">' + x.anexos.map((c, i) => '<div class="ausAnxI"><span>📎 Arquivo ' + (i + 1) + ' (' + esc(ausAnxRot(c)) + ')</span>'
+        + '<button type="button" class="ab" data-ab="' + esc(c) + '">abrir</button></div>').join('') + '</div>'
+       : '<p class="nota">' + (x.anexos_apagados_em ? 'Apagado: passou do prazo de guarda (5 anos).' : 'Nenhum arquivo anexado. Para anexar, use "Corrigir" em Ausências.') + '</p>')
+    + '<p class="nota">Dado de saúde (LGPD art. 11): não encaminhe por WhatsApp ou e-mail.</p>',
+    [{ label: 'Fechar', pri: true, onClick: fecharModal }]);
+  document.querySelectorAll('#mBody [data-ab]').forEach(b => b.addEventListener('click', () => ausAnxAbrir(b.dataset.ab)));
+}
+/** O prazo de guarda (616): vencidos os 5 anos, apaga no armazenamento e depois no banco. Uma vez por sessão, ao abrir Ausências. */
+let ausGuardou = false;
+async function ausGuarda(){
+  if (ausGuardou || DEMO || !podeVerEstrito('ausencias')) return; ausGuardou = true;
+  try{
+    const L = await rpc('tf_ausencia_guarda_lista', {});
+    if (!(L || []).length) return;
+    const arq = [].concat(...L.map(x => x.anexos || []));
+    if (arq.length){
+      const r = await rhfdFetch(SUPABASE_URL + '/storage/v1/object/ponto', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prefixes: arq }) });
+      if (!r.ok){ ausGuardou = false; return; }
+    }
+    await rpc('tf_ausencia_guarda_apagar', { p_ids: L.map(x => x.id) });
+  }catch(e){ ausGuardou = false; }
 }
 
 function ausAvisoDepois(r, i, f){
