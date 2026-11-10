@@ -211,6 +211,8 @@ function montar(d, opc) {
   const M = (d.modelo && d.modelo.blocos) || {}, T = M.titulos || {};
   const I = d.inspecao || {}, V = d.vaso || {}, R = d.resultado || {}, emp = d.empresa || {};
   const img = opc.imagens || {};
+  // S145 · A2: o carimbo (o desenho confirmado pelo PLH e o texto da aprovação com a digital); só no laudo com número
+  const CAR = opc.numero && opc.carimbo && /^data:image\/(png|jpe?g);base64,/i.test(opc.carimbo.imagem || '') && opc.carimbo.texto ? opc.carimbo : null;
   const numero = opc.numero ? opc.numero + (opc.revisao ? ' Rev. ' + opc.revisao : '') : (opc.marca || 'RASCUNHO');
   const ini = dataSP(I.inicio), fim = dataSP(I.termino || I.inicio);
   const dataTopo = dataBR(fim);
@@ -705,8 +707,16 @@ function montar(d, opc) {
   const mesmo = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
   const reg = x => vazio(x) ? '' : String(x);
   tabela(['Nome', 'Função', 'Registro'], [[{ text: plh ? plh.nome : 'O PLH que emitir o laudo', style: 'thl' }, 'Profissional Legalmente Habilitado (responsável técnico)', reg(plh && plh.registro)]]
-    .concat((d.equipe || []).filter(q => !(plh && mesmo(q.nome, plh.nome))).map(q => [{ text: q.nome, style: 'thl' }, q.funcao || FUNC_PAPEL[q.papel] || 'Equipe de inspeção', reg(q.registro)])), ['*', 190, 110]);
+    .concat((d.equipe || []).filter(q => !(plh && mesmo(q.nome, plh.nome))).map(q => [
+      // S145 · A8: quem confirmou a participação com a digital no celular
+      { stack: [{ text: q.nome, style: 'thl' }].concat(q.confirmado_em ? [{ text: 'Confirmado eletronicamente em ' + dataBR(q.confirmado_em), style: 'nota' }] : []) },
+      q.funcao || FUNC_PAPEL[q.papel] || 'Equipe de inspeção', reg(q.registro)])), ['*', 190, 110]);
   par(M.responsaveis_assinatura, { italics: true, color: CLARO });
+  // S145 · A2: o desenho da assinatura do PLH com o texto da aprovação (o laudo vale pela assinatura com o certificado)
+  if (CAR) C.push({ unbreakable: true, margin: [0, 4, 0, 8], stack: [
+    { image: CAR.imagem, fit: [170, 60] },
+    { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 220, y2: 0, lineWidth: 0.5, lineColor: CINZA }] },
+    { text: CAR.texto, style: 'nota', margin: [0, 2, 0, 0] }] });
   if (opc.numero) par('Relatório nº ' + numero + ', emitido em ' + dataBR(opc.emitidoEm) + (opc.revisao ? '. Revisão ' + opc.revisao + (opc.motivoRev ? ': ' + opc.motivoRev : '') : '') + '.', { color: CLARO });
 
   // ── 15 · anexos ─────────────────────────────────────────────────────────
@@ -720,7 +730,7 @@ function montar(d, opc) {
   const cabDir = [numeroTap ? [{ text: 'Número TAP', style: 'cabMin' }, { text: numeroTap, style: 'cabMin' }] : null,
     [{ text: 'TAG', style: 'cabMin' }, { text: V.tag || '—', style: 'cabMin' }]].filter(Boolean);
   return {
-    pageSize: 'A4', pageMargins: [50, 92, 45, 62],
+    pageSize: 'A4', pageMargins: [50, 92, 45, CAR ? 74 : 62],
     info: { title: 'Relatório de inspeção ' + numero + ' · ' + (V.tag || ''), author: empresaM.nome || 'Engetap', creator: 'TapFlow · TapDoc', producer: 'TapFlow · TapDoc (pdfmake)',
       subject: 'NR-13 · ' + (V.tag || '') + ' · modelo ' + ((d.modelo || {}).versao || '—') },
     watermark: opc.marca ? { text: opc.marca, color: '#B42318', opacity: 0.12, bold: true, fontSize: opc.marca.length > 12 ? 38 : 70 } : undefined,
@@ -736,7 +746,8 @@ function montar(d, opc) {
     footer: () => ({ margin: [50, 14, 45, 0], columns: [
       { image: LOGO_ENGETAP, width: 70 },
       { stack: [{ text: empresaM.nome || '', style: 'rodBold' }, { text: empresaM.contato || '', style: 'rod' }, { text: empresaM.site || '', style: 'rod' }], alignment: 'center' },
-      { text: plh ? plh.nome + '\n' + (plh.registro || '') : '', style: 'rod', alignment: 'right', width: 110 }] }),
+      CAR ? { width: 150, alignment: 'right', stack: [{ image: CAR.imagem, fit: [110, 24], alignment: 'right' }, { text: CAR.texto, style: 'rodCar', alignment: 'right' }] }
+          : { text: plh ? plh.nome + '\n' + (plh.registro || '') : '', style: 'rod', alignment: 'right', width: 110 }] }),
     content: C,
     // título não fica sozinho no pé da página
     pageBreakBefore: (no, seguintes) => !!no.headlineLevel && seguintes.length === 0,
@@ -758,12 +769,12 @@ function montar(d, opc) {
       capaTipo: { fontSize: 17, bold: true, alignment: 'center', color: COR }, capaSub: { fontSize: 11, alignment: 'center', color: CINZA, margin: [0, 2, 0, 0] },
       capaTag: { fontSize: 22, bold: true, alignment: 'center' }, capaRodape: { fontSize: 10, alignment: 'right', color: CINZA },
       cabNum: { fontSize: 9.5, bold: true }, cabTxt: { fontSize: 8, color: CINZA }, cabMin: { fontSize: 7.5 },
-      rod: { fontSize: 7, color: CINZA }, rodBold: { fontSize: 7.5, bold: true, color: CINZA }
+      rod: { fontSize: 7, color: CINZA }, rodCar: { fontSize: 5.5, color: CINZA }, rodBold: { fontSize: 7.5, bold: true, color: CINZA }
     },
     defaultStyle: { font: 'Roboto', fontSize: 10, color: '#14181B' }
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-S144-2026-11-10' };
+const LaudoPDF = { montar, fotosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-S145-2026-11-10' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);

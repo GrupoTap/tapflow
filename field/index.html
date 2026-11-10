@@ -681,7 +681,8 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S56';   // S56 (S144): item 74: "aferição" no lugar de "calibração" nos textos do celular (a calibração é do laboratório) · TapDoc 17
+const APP_VERSION = 'S57';   // S57 (S145): rodada E (A8): a confirmação da participação nas inspeções, com a digital, na aba Eu · TapDoc 18
+// const APP_VERSION = 'S56';   // S56 (S144): item 74: "aferição" no lugar de "calibração" nos textos do celular (a calibração é do laboratório) · TapDoc 17
 // const APP_VERSION = 'S55';   // S55 (S142): item 40: a inspeção só abre para quem está na T06 (aviso com quem está para os outros) · item 38: o aviso do atestado (5 anos, junto da ausência) · núcleo N8
 // const APP_VERSION = 'S54';   // S54 (S139): item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
 // const APP_VERSION = 'S53';   // S53 (S136): o celular da empresa (210): sem a parte pessoal do Eu, "Trocar de pessoa", a fila envia com a sessão de quem fez
@@ -1257,7 +1258,8 @@ async function carregar(silencioso){
       rpc('tf_ferias_minhas', {}).catch(() => null),      // S25 · S54 (sem o 108, a aba não aparece)
       carregarEquipeAus(),                                // S28 · quem da equipe estará fora
       rpc('tf_ponto_meu_dia', {}).then(ptGuardar).catch(() => null),
-      ptCarregarPend(), ptCarregarDatas(), ptCarregarFech(), ptCarregarSaude(), ptPushEstado(), ptCarregarGov() ]);   // S43 · ponto (sem a 601, nada aparece) · S45 · datas a negociar (sem a 606, nada aparece)
+      ptCarregarPend(), ptCarregarDatas(), ptCarregarFech(), ptCarregarSaude(), ptPushEstado(), ptCarregarGov(),
+      rpc('tf_insp_participacao_pendentes', {}).then(x => { PARTIC = Array.isArray(x) ? x : []; }).catch(() => { PARTIC = []; }) ]);   // S57 · A8 (sem a 421, nada aparece)   // S43 · ponto (sem a 601, nada aparece) · S45 · datas a negociar (sem a 606, nada aparece)
     EQUIPE_AUS = eqa;
     MINHAS_AUS = Array.isArray(aus) ? aus : [];
     FER = fer || null;
@@ -4611,6 +4613,32 @@ const RH_MOT_F = { primeira:'primeira entrega', entrega_inicial:'entrega inicial
 
 /* S20 · abasTopo foi para o bloco das Diárias/Documentos (agora são até quatro abas). */
 /** Na lista de OS, a pendência de EPI vem no topo (item 17: "pendências dele no topo"). */
+/** S57 · rodada E (A8, NR-13 13.5.4.11 "m"): o técnico confirma, com a digital, que participou da inspeção.
+ *  O laudo mostra "confirmado eletronicamente em …" ao lado do nome. Não vale o PIN; não vale no celular da empresa. */
+let PARTIC = [];
+function painelParticipacao(){
+  if (!PARTIC || !PARTIC.length) return null;
+  const p = document.createElement('div'); p.className = 'painel epiPend';
+  p.innerHTML = '<div class="et" style="color:var(--warn)">Confirmar participação nas inspeções</div>'
+    + '<p style="margin:4px 0 8px">O laudo de NR-13 traz o nome de quem participou. Confirme, com a sua digital, as inspeções em que você esteve.</p>';
+  PARTIC.forEach(x => {
+    const l = document.createElement('div'); l.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0';
+    l.innerHTML = '<div><b></b><div class="sub" style="font-size:13px;color:var(--ink-3)"></div></div><button class="btn pri sm" type="button">Confirmar</button>';
+    l.querySelector('b').textContent = (x.tag || 'Vaso') + (x.os ? ' · ' + x.os : '');
+    l.querySelector('.sub').textContent = [x.cliente, x.termino ? 'inspeção de ' + new Date(x.termino).toLocaleDateString('pt-BR') : '', x.papel === 'auxiliar' ? 'auxiliar' : 'inspetor'].filter(Boolean).join(' · ');
+    l.querySelector('button').addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => {
+      const c = await Nucleo.confirmarPessoa({ modo: 'servidor', finalidade: 'insp_participacao', referencia: 'inspeção ' + x.id,
+        titulo: 'Confirmar a participação', sub: (x.tag || '') + (x.cliente ? ' · ' + x.cliente : '') });
+      if (!c || !c.ok){ if (c && c.semSinal) toast('Sem sinal: a confirmação precisa de internet.', 'err'); return; }
+      if (c.metodo !== 'digital'){ toast('Confirme com a digital (o PIN não vale aqui).', 'err'); return; }
+      try{ await rpc1('tf_insp_participacao_confirmar', { p_id: x.id, p_confirmacao: c.confirmacao });
+           PARTIC = PARTIC.filter(y => y.id !== x.id); toast('Participação confirmada.', 'ok'); pintarEu(); }
+      catch(e){ toast(e.message, 'err'); }
+    }));
+    p.appendChild(l);
+  });
+  return p;
+}
 function painelEpiPendente(){
   const n = SEG && SEG.tem_ficha ? (SEG.pendentes || []).length : 0;
   const np = SEG && SEG.tem_ficha ? (SEG.presencas || []).filter(x => x.data <= isoHojeF()).length : 0;   // S17
@@ -5377,6 +5405,7 @@ function pintarEu(){
   try{ painelDatasPonto().forEach(x => av.push(x)); }catch(e){ console.error('[ponto datas]', e); }   // S45 · folgar ou trabalhar (P16)
   try{ const pd = painelDocsPendente(); if (pd) av.push(pd); }catch(e){ console.error('[docs]', e); }
   try{ const pe = painelEpiPendente(); if (pe) av.push(pe); }catch(e){ console.error('[epi]', e); }
+  try{ const pq = painelParticipacao(); if (pq) av.push(pq); }catch(e){ console.error('[participação]', e); }   // S57 · A8
   try{ const pl = painelLembreteDiaria(); if (pl) av.push(pl); }catch(e){ console.error('[diarias]', e); }
   try{ const pa = painelMinhaAusencia(); if (pa) av.push(pa); }catch(e){ console.error('[ausencia]', e); }
   av.forEach(x => m.appendChild(x));
