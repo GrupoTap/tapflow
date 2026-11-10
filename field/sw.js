@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S54-T24';   // S140: TapDoc 14 (field/doc/: itens 33, 44, 49 a 56, 59 e 60 da lista; 416)
+const VERSAO = 'S54-T25';   // S141: TapDoc 15 e o motor R00.5 (item 58 da lista: tolerância NBR 14105-1, classe B)
+// const VERSAO = 'S54-T24';   // S140: TapDoc 14 (field/doc/: itens 33, 44, 49 a 56, 59 e 60 da lista; 416)
 // const VERSAO = 'S54-T23';   // S54: item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
 // const VERSAO = 'S53-T22';   // S53: o celular da empresa (210): núcleo N7, modulos M4, sem a parte pessoal do Eu, a fila com a sessão de quem fez
 // const VERSAO = 'S52-T21';   // S52: item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
@@ -55,7 +56,7 @@ const ESSENCIAIS = [
   // S35 · TapDoc 1: a coleta da inspeção (página própria, abre sem sinal)
   './doc/',
   // S80 · TapDoc 4: o motor de cálculo para a prévia sem sinal. Mesmo ?v= do <script> de doc/index.html.
-  './doc/motor-calculo-nr13.js?v=R00.4',
+  './doc/motor-calculo-nr13.js?v=R00.5',
   // S39 · a medição gera o PDF no campo, sem sinal: o pdfmake do TapDoc (mesmo endereço do <script> que a tela carrega)
   '../doc/vendor/pdfmake.min.js',
   '../doc/vendor/vfs_fonts.js'

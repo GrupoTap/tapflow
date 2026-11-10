@@ -10,7 +10,7 @@
 <script src="../../nucleo/config.js?v=N7"></script>
 <script src="../../nucleo/nucleo.js?v=N7"></script>
 <script src="../../nucleo/modulos.js?v=M4"></script>
-<script src="motor-calculo-nr13.js?v=R00.4"></script>
+<script src="motor-calculo-nr13.js?v=R00.5"></script>
 <!--
   TapDoc 4 · a coleta da inspeção no celular (R02a, R02b1, R03a e R03b)
   ─────────────────────────────────────────────────────────────────
@@ -181,7 +181,8 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 14';   // S140 · lista de melhorias, itens 33, 44, 49 a 56, 59 e 60 (416): lugares das fotos, galeria, costado com regiões, cartões dos componentes, volume em litros, temperatura só acima de 200 °C, aferição sem pulos, o que se digita não se perde
+const VERSAO = 'TapDoc 15';   // S141 · item 58 (motor R00.5): a tolerância do manômetro pela NBR 14105-1, classe B, com a regra na tela · item 42: o aviso da coleta anterior
+// const VERSAO = 'TapDoc 14';   // S140 · lista de melhorias, itens 33, 44, 49 a 56, 59 e 60 (416): lugares das fotos, galeria, costado com regiões, cartões dos componentes, volume em litros, temperatura só acima de 200 °C, aferição sem pulos, o que se digita não se perde
 // const VERSAO = 'TapDoc 13';   // S132: o sistema se chama TapHub nas telas (item #10 da lista) e "Relatar problema ou sugerir" no menu (núcleo N6, modulos M2)
 // const VERSAO = 'TapDoc 12';   // S113 · 414: reabrir o que enviou (a equipe, até a revisão começar) · válvula com 3 ciclos (abertura + assentamento) ·   // S112 · 413: correções do teste de 29/10 (posição primeiro; aferição por ciclo e por escala; sem bancada, boroscopia, E e R em campo) · S107 · 412: as leituras não travam o envio (o CSV do medidor entra no escritório) ·   // S94 · 410 (R06a): o ambiente do vaso (local fechado ou céu aberto) na Localização, obrigatório no envio ·   // S86 · 407 (R04a): aferição de manômetro e teste de válvula em campo (TapDoc 7: material do escritório; 6: faixa)
 // 405: uma linha curta com a faixa do material, para conferir com a plaqueta ou o certificado da chapa
@@ -787,6 +788,8 @@ function telaPainel(v){
     (v.inspecao.nao_inspecionado_motivo ? esc(v.inspecao.nao_inspecionado_motivo) + '<br>' : '') + 'O campo não grava mais neste vaso.</div>' +
     (v.inspecao.situacao === 'enviada' ? cartaoReabrir(v) : '');
   if (v.inspecao.instrucoes_campo) h += '<div class="alerta" style="background:var(--accent-soft);color:var(--accent-ink)"><b>Instruções do escritório</b>' + esc(v.inspecao.instrucoes_campo) + '</div>';
+  // S141 · item 42 (417): o escritório marcou o vaso de novo e escolheu começar do zero
+  if (v.inspecao.coleta_anterior && ed) h += '<div class="alerta"><b>Existe uma coleta anterior deste vaso nesta OS</b>O escritório escolheu começar do zero: o que foi lançado antes ficou guardado e não aparece aqui. Lance tudo de novo.</div>';
   if (al.length && ed) h += '<div class="alerta"><b>Atenção</b><ul>' + al.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
   const sec = (k, nome, sub, e) => '<button class="card secao" data-s="' + k + '"' + (ed ? '' : ' disabled') + '><span class="sn">' + nome +
     (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span><span class="est ' + e + '">' + EST_ROT[e] + '</span></button>';
@@ -1831,9 +1834,13 @@ function htmlResAf(r, vv){
     + (r.avisos.length ? '<div class="alerta" style="margin-top:6px"><ul>' + r.avisos.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '')
     + (r.completo ? '<p class="info" style="margin:6px 0 0">' + (vv ? (r.aprovadaOk ? 'Aprovada.' : 'Reprovada.') : (r.aprovadaOk ? 'Aprovado.' : 'Reprovado: o acessório vai para "substituir".')) + '</p>' : '');
 }
-function htmlPorPonto(r, pts, un){
+function htmlPorPonto(r, pts, un, af){
   if (!pts.length || !(r.pontos || []).length) return '';
-  return '<b>Resultado por ponto</b>' + pts.map(p => { const rp = (r.pontos || []).find(x => x.nominal === Number(p.nominal)); return rp ? '<p class="muted" style="margin:6px 0 0">' + esc(fmt(p.nominal)) + ' ' + UN_AF_ROT[un] + ' ' +
+  // S141 · item 58: de onde vem a tolerância (NBR 14105-1, classe B; o fundo de escala é a escala de indicação)
+  const CL = window.MotorNR13.CLASSE_MANOMETRO || { nome:'B', meio:0.02, pontas:0.03 }, fundo = af && af.faixa_fim != null && af.faixa_ini != null ? af.faixa_fim - af.faixa_ini : null;
+  const regra = fundo > 0 ? '<p class="muted" style="margin:4px 0 0">Tolerância pela NBR 14105-1, classe ' + CL.nome + ', fundo de escala ' + esc(fmt(fundo)) + ' ' + UN_AF_ROT[un] + ': ±' + esc(fmt(CL.meio * fundo, 3))
+    + ' ' + UN_AF_ROT[un] + ' (' + fmt(CL.meio * 100, 0) + '%) de 25% a 75% da escala; ±' + esc(fmt(CL.pontas * fundo, 3)) + ' (' + fmt(CL.pontas * 100, 0) + '%) fora disso.</p>' : '';
+  return '<b>Resultado por ponto</b>' + regra + pts.map(p => { const rp = (r.pontos || []).find(x => x.nominal === Number(p.nominal)); return rp ? '<p class="muted" style="margin:6px 0 0">' + esc(fmt(p.nominal)) + ' ' + UN_AF_ROT[un] + ' ' +
     (rp.ok !== undefined ? (rp.ok ? '<span class="chip ok">ok</span>' : '<span class="chip pend">fora</span>') : '') + (rp.erroMedio !== undefined ? ' · erro médio ' + fmt(rp.erroMedio, 3) + ' · tolerância ±' + fmt(rp.tol, 3) + ' · U ' + fmt(rp.U, 3) : '') + '</p>' : ''; }).join('');
 }
 /** 5 pontos (0, 25, 50, 75, 100%) arredondados para o número mais perto do mostrador. */
@@ -1884,7 +1891,7 @@ function telaAfericao(v){
       h += '<div class="card"><b>Ciclo ' + (ci + 1) + ' · carga (subindo)</b><table class="comp" style="width:100%"><tr><th>Ponto</th><th>Padrão</th><th>Indicado</th></tr>' + ordem.map(k => linha(k, ci)).join('') + '</table></div>';
       h += '<div class="card"><b>Ciclo ' + (ci + 1) + ' · descarga (descendo)</b><table class="comp" style="width:100%"><tr><th>Ponto</th><th>Padrão</th><th>Indicado</th></tr>' + ordem.slice().reverse().map(k => linha(k, 3 + ci)).join('') + '</table></div>';
     }
-    h += '<div class="card" id="afPorPonto"' + (pts.length && (r.pontos || []).length ? '' : ' hidden') + '>' + htmlPorPonto(r, pts, un) + '</div>';
+    h += '<div class="card" id="afPorPonto"' + (pts.length && (r.pontos || []).length ? '' : ' hidden') + '>' + htmlPorPonto(r, pts, un, af) + '</div>';
   }
   // S140 · item 56: sem a validade (não sai no relatório; o prazo é lembrete interno, mudado no escritório)
   h += '<div class="card">' + campoTexto('Número do lacre', 'afLc', af.lacre_colocado, 'inputmode="numeric"') + '</div>';
@@ -1894,7 +1901,7 @@ function telaAfericao(v){
   const atualizar = () => {
     const rr = resultadoAf(v, a, af);
     $('afChip').innerHTML = chipAf(rr.resultado); $('afResultado').innerHTML = htmlResAf(rr, vv);
-    const pp = $('afPorPonto'); if (pp){ const t = htmlPorPonto(rr, (af.leituras && af.leituras.pontos) || [], af.unidade || 'bar'); pp.innerHTML = t; pp.hidden = !t; }
+    const pp = $('afPorPonto'); if (pp){ const t = htmlPorPonto(rr, (af.leituras && af.leituras.pontos) || [], af.unidade || 'bar', af); pp.innerHTML = t; pp.hidden = !t; }
   };
   const mudou = (repinta) => {
     salvar(); adiarAf('af:' + af.id, v, a, af);

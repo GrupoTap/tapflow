@@ -10,7 +10,7 @@
 <script src="../nucleo/config.js?v=N7"></script>
 <script src="../nucleo/nucleo.js?v=N7"></script>
 <script src="../nucleo/modulos.js?v=M4"></script>
-<script src="motor-calculo-nr13.js?v=R00.4"></script>
+<script src="motor-calculo-nr13.js?v=R00.5"></script>
 <!--
   TapDoc (escritório) · R02b1 — preparar a inspeção
   ─────────────────────────────────────────────────
@@ -154,7 +154,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E14';   // E14 (S140 · 416): itens 44, 49, 50, 51, 53 e 56 da lista — volume em m³ e litros com aviso, as fotos com lugar (mudar de lugar, "sem foto"), a foto da galeria marcada, aviso acima de 200 °C, o costado com regiões e o lembrete interno da aferição
+const VERSAO = 'TapDoc E15';   // E15 (S141 · 417): rodada B da lista — itens 31, 32, 34, 35, 41, 42, 43, 45, 46, 47, 48, 58 e 61 (Em campo, retomar a coleta, PMTA escolhida na revisão, câmaras corrigidas na revisão, imagens da boroscopia, lacre da aferição, nomes por extenso, laudo com o tipo do teste)
+// const VERSAO = 'TapDoc E14';   // E14 (S140 · 416): itens 44, 49, 50, 51, 53 e 56 da lista — volume em m³ e litros com aviso, as fotos com lugar (mudar de lugar, "sem foto"), a foto da galeria marcada, aviso acima de 200 °C, o costado com regiões e o lembrete interno da aferição
 // const VERSAO = 'TapDoc E13';   // E13 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const VERSAO = 'TapDoc E12';   // E12 (S132): o sistema se chama TapHub nas telas (item #10 da lista) e "Relatar problema ou sugerir" no menu (núcleo N6, modulos M2)
 // const VERSAO = 'TapDoc E11';   // E11 (S113 · 414): tirar o vaso da OS (mesmo em campo, com motivo) · reabrir para o campo na revisão · a boroscopia lançada no escritório ·   // E10 (S107 · 412): o CSV do medidor anexado na revisão (Espessuras do medidor); a revisão exige as espessuras ·   // E9 (S94 · 410, R06a): o laudo em PDF (aba Laudos), a ART na preparação, o ambiente, o PDF do certificado dos instrumentos e as datas do PLH na aprovação ·   // E8 (S93 · 409, R05a): a revisão (A revisar: Revisão 1, Revisão 2 e a aprovação do PLH) ·   // E7 (S92 · 408, Acessos P3): entra quem tem o TapDoc; conferir e decidir é do PLH ·   // E = escritório · E6 (S86 · 407, R04a): padrão com U/k, numeração M/V e as aferições da inspeção (E5: material de campo; E4: faixa)
@@ -282,14 +283,27 @@ async function telaListas(aba){
   const L = LISTAS, nPlh = (L.plh || []).filter(x => !x.decisao).length;
   let nRev = 0; try{ nRev = (await rpc('tf_insp_revisao_lista')).filter(x => x.pode).length; }catch(e){}   // E8: as revisões que são suas
   let nLaudo = 0; try{ nLaudo = (await rpc('tf_laudo_lista')).filter(x => x.situacao === 'liberada' && !(x.laudo && x.laudo.situacao !== 'substituido')).length; }catch(e){}   // E9: liberadas sem laudo
-  const abas = [['os','A preparar', (L.os || []).length], ['conf','Laudos a conferir', (L.a_conferir || []).length], ['plh','Para o PLH', nPlh], ['rev','A revisar', nRev],
+  let CAMPO = []; try{ CAMPO = await rpc('tf_insp_em_campo_lista'); }catch(e){}   // S141 · item 41 (417)
+  const abas = [['os','A preparar', (L.os || []).length], ['campo','Em campo', CAMPO.length], ['conf','Laudos a conferir', (L.a_conferir || []).length], ['plh','Para o PLH', nPlh], ['rev','A revisar', nRev],
                 ['laudos','Laudos', nLaudo], ['inst','Instrumentos', 0], ['mat','Materiais', 0]];   // E2 (S80) · E9 (Laudos)
   let h = '<div class="abas">' + abas.map(([k, r, n]) => '<button data-a="' + k + '" class="' + (aba === k ? 'on' : '') + '">' + r
     + (n ? '<span class="bolha">' + n + '</span>' : '') + '</button>').join('') + '</div>';
   if (aba === 'rev') return abaRevisao(h);   // E8 · R05a
   if (aba === 'laudos') return abaLaudos(h);   // E9 · R06a
   if (aba === 'inst' || aba === 'mat'){ $('tela').innerHTML = h + '<p class="muted">Carregando…</p>'; ligarAbas(); return aba === 'inst' ? telaInstrumentos() : telaMateriais(); }
-  if (aba === 'conf'){
+  if (aba === 'campo'){
+    // S141 · item 41: as OS com a T06 "Executar a inspeção" aberta, vaso por vaso; tocar abre a preparação (marcar ou tirar vaso)
+    const SIT_CAMPO = { em_preparo:['preparado','s-pronto'], em_campo:['começado em campo','s-em_conferencia'], enviada:['enviado','s-pronto'], em_revisao:['em revisão','s-pronto'],
+      liberada:['liberado','s-pronto'], assinada:['assinado','s-pronto'] };
+    h += '<div class="card"><h3>OS em campo (T06 "Executar a inspeção" aberta)</h3><p class="muted">O que o celular da equipe deve mostrar. Toque na OS para marcar ou tirar um vaso.</p>'
+      + (CAMPO.length ? '<table><tr><th>OS</th><th>Cliente</th><th>Visita</th><th>Na T06</th><th>Vasos</th></tr>'
+        + CAMPO.map(o => '<tr class="lin" data-os="' + esc(o.id) + '"><td><b>' + esc(o.numero) + '</b></td><td>' + esc(o.cliente || '') + '</td><td>'
+          + (o.visita ? dataBR(o.visita) + (o.hora ? ' ' + esc(String(o.hora).slice(0, 5)) : '') : '<span class="muted">sem dia</span>') + '</td><td>'
+          + esc([o.designado].concat(o.equipe || []).filter((x, k, a) => x && a.indexOf(x) === k).join(', ') || '—') + '</td><td>'
+          + (o.vasos || []).map(x => { const st = x.nao_inspecionado ? ['não inspecionado', 's-grave'] : (SIT_CAMPO[x.situacao] || [x.situacao, '']);
+              return '<div><b>' + esc(x.tag) + '</b> <span class="chip ' + st[1] + '">' + esc(st[0]) + '</span></div>'; }).join('') + '</td></tr>').join('') + '</table>'
+        : '<p class="vazio">Nenhuma OS em campo agora.</p>') + '</div>';
+  } else if (aba === 'conf'){
     h += '<div class="card"><h3>Laudos pegos em campo, a conferir</h3><p class="muted">A equipe que esteve no cliente digita e confere o laudo a partir das fotos.</p>'
       + ((L.a_conferir || []).length ? '<table><tr><th>Vaso</th><th>Cliente</th><th>OS</th><th>Origem</th></tr>'
         + L.a_conferir.map(x => '<tr class="lin" data-os="' + esc(x.os_id || '') + '" data-v="' + esc(x.equipamento_id) + '"><td><b>' + esc(x.tag) + '</b></td><td>'
@@ -403,7 +417,13 @@ async function cartaoNumeracao(){
       + (esp[tp] ? '<span class="chip s-em_conferencia">' + esp[tp] + ' esperando número</span>' : '<span class="muted">nenhuma esperando</span>') + '</td><td>'
       + (admin ? '<button class="btn mini" data-numtp="' + tp + '">' + (q ? 'Mudar' : 'Informar') + '</button>' : '') + '</td></tr>'; };
   cx.innerHTML = '<h3 style="margin-top:0">Numeração de ' + r.ano + '</h3><p class="muted">O servidor dá o número quando a aferição completa chega. Até a sequência ser informada, ela espera; depois recebe o número na ordem em que foi feita. Número usado não volta.</p>'
-    + '<table>' + linha('manometro') + linha('valvula') + '</table>';
+    + '<table>' + linha('manometro') + linha('valvula') + '</table>'
+    // S141 · item 35 (417): cada um que espera número; o de outro ano não recebe número da sequência deste ano
+    + ((r.esperando_detalhe || []).length ? '<h3 style="margin-top:12px">Esperando número</h3><table><tr><th>Tipo</th><th>OS · vaso</th><th>Data</th><th></th></tr>'
+      + r.esperando_detalhe.map(x => '<tr><td>' + (x.tipo === 'manometro' ? 'Manômetro (M)' : 'Válvula (V)') + '</td><td>' + esc(x.os || '—') + ' · ' + esc(x.tag || '—') + '</td><td>'
+        + dataBR(dataSP(x.realizada_em)) + '</td><td>' + (x.ano !== r.ano ? '<span class="chip s-grave">de ' + x.ano + ': não recebe número de ' + r.ano + '</span>'
+          + '<div class="muted">Teste de treino: peça à equipe para cancelar (reabrindo a inspeção). De verdade com a data errada: a data se corrige pelo banco.</div>'
+          : '<span class="muted">recebe ao gravar de novo</span>') + '</td></tr>').join('') + '</table>' : '');
   cx.querySelectorAll('[data-numtp]').forEach(b => b.addEventListener('click', () => {
     const tp = b.dataset.numtp;
     janela('Próximo número (' + (tp === 'manometro' ? 'M' : 'V') + ', ' + r.ano + ')', '<label class="f">Próximo número<input class="t" id="numProx" inputmode="numeric" placeholder="Ex.: 264"></label>'
@@ -534,7 +554,7 @@ async function telaOS(os){
   h += marc.length ? tabelaVasos(marc, true) : '<p class="vazio">Nenhum vaso marcado. Marque abaixo os vasos que serão inspecionados.</p>';
   h += '</div><h2>Outros vasos do cliente (' + fora.length + ')</h2><div class="card" style="padding:6px 8px">';
   h += fora.length ? tabelaVasos(fora, false) : '<p class="vazio">' + (P.vasos.length ? 'Todos os vasos do cliente estão na OS.'
-        : 'O cliente não tem vasos cadastrados. Importe a planilha do TapWeb pela ficha do cliente (Gestão), ou cadastre abaixo.') + '</p>';
+        : 'O cliente não tem vasos cadastrados. Importe a planilha do TapWeb pela ficha do cliente (Cadastros), ou cadastre abaixo.') + '</p>';
   h += '<div style="padding:8px"><button class="btn sec" id="novo">+ Vaso não cadastrado</button></div></div>';
   $('tela').innerHTML = h;
   const btC = $('concluir');
@@ -543,6 +563,18 @@ async function telaOS(os){
     catch(e){ erro(e); }
   }));
   $('tela').querySelectorAll('[data-marca]').forEach(c => c.addEventListener('change', async () => {
+    // S141 · item 42 (decisão do Bruno, 10/11): o vaso tirado depois de começar em campo e marcado de novo: o escritório escolhe
+    const v0 = (P.vasos || []).find(x => x.id === c.dataset.marca);
+    if (c.checked && v0 && !v0.inspecao && v0.coleta_anterior){
+      const ca = v0.coleta_anterior;
+      janela('Marcar de novo: ' + v0.tag, '<p>Este vaso já foi começado em campo nesta OS e depois tirado' + (ca.motivo ? ' (' + esc(ca.motivo) + ')' : '') + '. '
+        + 'Ficaram guardados ' + (ca.fotos || 0) + ' foto(s) e ' + (ca.leituras || 0) + ' leitura(s).</p>'
+        + '<p><b>Aproveitar</b>: a inspeção antiga volta a valer, com tudo o que foi lançado.<br><b>Começar do zero</b>: inspeção nova, vazia; o celular avisa que existe uma coleta anterior.</p>',
+        [{ rotulo:'Cancelar', acao:() => { c.checked = false; } },
+         { rotulo:'Começar do zero', acao:async () => { try{ await rpc('tf_insp_preparar', { p_os_id: os, p_equip: v0.id, p_marcar: true, p_instrucoes: null }); pintar(); }catch(e){ erro(e); c.checked = false; } } },
+         { rotulo:'Aproveitar o que foi lançado', classe:'pri', acao:async () => { try{ await rpc('tf_insp_retomar', { p_os_id: os, p_equip: v0.id }); U.toast('A coleta anterior voltou a valer.', 'ok'); pintar(); }catch(e){ erro(e); c.checked = false; } } }]);
+      return;
+    }
     c.disabled = true;
     try{ await rpc('tf_insp_preparar', { p_os_id: os, p_equip: c.dataset.marca, p_marcar: c.checked, p_instrucoes: null }); pintar(); }
     catch(e){ erro(e); c.checked = !c.checked; c.disabled = false; }
@@ -597,6 +629,7 @@ function tabelaVasos(lista, marcados){
         + '<td><b>' + esc(v.tag) + '</b>' + (v.nome ? '<div class="muted">' + esc(v.nome) + '</div>' : '') + '</td>'
         + '<td>' + (marcados ? chipSit(v.situacao) : '<span class="chip s-fora">fora desta OS</span>')
         + (emCampo ? '<div class="muted">em campo</div>' : '')
+        + (!ins && v.coleta_anterior ? '<div class="muted" style="color:var(--warn)">tem coleta anterior nesta OS (' + (v.coleta_anterior.fotos || 0) + ' foto(s), ' + (v.coleta_anterior.leituras || 0) + ' leitura(s))</div>' : '')
         + (ins && ins.material_campo && !ins.material_campo.decisao ? '<div><span class="chip s-grave">material alterado em campo</span></div>' : '') + '</td>'
         + (marcados ? '<td class="h-ins"><textarea class="instr" data-instr="' + esc(v.id) + '" placeholder="Ex.: medir também o tampo inferior">' + esc(ins.instrucoes_campo || '') + '</textarea>'
             + '<label class="muted" style="display:flex;gap:6px;align-items:center;margin-top:4px">Ambiente previsto <select data-amb="' + esc(v.id) + '" style="padding:3px 6px;border:1px solid var(--rule);border-radius:4px">'
@@ -906,7 +939,14 @@ function lugaresRev(R){
     [vt ? 'tampo_superior' : 'tampo_direito', 'geral', vt ? 'Tampo superior' : 'Tampo direito'], [vt ? 'tampo_inferior' : 'tampo_esquerdo', 'geral', vt ? 'Tampo inferior' : 'Tampo esquerdo'],
     ['conexoes','geral','Conexões'], ['base','geral','Base de sustentação / aterramento']].map(([lugar, secao, rotulo]) => ({ lugar, secao, rotulo }));
 }
-const ROT_SECAO = { plaqueta:'plaqueta', operacao:'operação', componentes:'componente', localizacao:'local', laudo_anterior:'laudo anterior', geral:'geral', visual:'visual', acessorios:'acessório', boroscopia:'boroscopia', teste:'teste', capa:'capa' };
+const ROT_SECAO = { plaqueta:'Plaqueta', operacao:'Operação', componentes:'Componentes', localizacao:'Localização', laudo_anterior:'Laudo anterior', geral:'Geral', visual:'Visual', acessorios:'Acessórios', boroscopia:'Boroscopia', teste:'Teste', capa:'Capa' };
+// S141 · item 48: os acessórios por extenso; "Não há" não é modelo
+const ROT_ACESS = { valvula_seguranca:'Válvula de segurança', valvula_alivio:'Válvula de alívio', quebra_vacuo:'Quebra-vácuo', manometro:'Manômetro', manovacuometro:'Manovacuômetro',
+  termometro:'Termômetro', pressostato:'Pressostato', dreno:'Dreno', ihm:'IHM', outro:'Outro' };
+const ROT_SIT_AC = { ok:'ok', substituir:'a substituir', ausente:'ausente', inoperante:'inoperante', retirado:'retirado' };
+const semNaoHa = x => (x == null || /^\s*(n[ãa]o h[áa]|nao ha|-+|—)\s*$/i.test(String(x))) ? null : x;
+// S141 · itens 31, 45 e 47: os dados da câmara, na unidade da revisão (MPa entre parênteses), corrigidos com registro
+const REV_CAMPOS_CAM = [['pmta_plaqueta_mpa','PMTA de plaqueta','p'], ['pth_mpa','PTH de plaqueta','p'], ['p_operacao_max_mpa','Pressão máx. de operação','p'], ['volume_m3','Volume','v']];
 // O cálculo é o MESMO da prévia do celular (field/doc, TapDoc 8), copiado
 // para cá dentro de uma função, para os nomes não colidirem com os da página.
 const CALC = (() => {
@@ -1046,7 +1086,7 @@ function previa(v){
 const REV_ITENS = [['dados','Dados contra as fotos'], ['recomendacoes','Anomalias e recomendações'], ['pmta','PMTA'], ['espessuras','Espessuras contra o laudo anterior']];
 const REV_ETAPA = { 1:'Revisão 1 · equipe', 2:'Revisão 2 · outra equipe', 3:'Aprovação do PLH' };
 const REV_CAMPOS_VASO = [['numero_serie','Nº de série'], ['modelo','Modelo'], ['ano_fabricacao','Ano de fabricação'], ['codigo_construcao','Código de construção'],
-                         ['codigo_edicao','Edição do código'], ['pmta_plaqueta_mpa','PMTA de plaqueta (MPa)'], ['pth_mpa','PTH (MPa)']];
+                         ['codigo_edicao','Edição do código']];   // S141 · item 31: a PMTA e a PTH de plaqueta são da câmara (quadro abaixo)
 const REV_CAMPOS_AC = [['tag','TAG'], ['marca','Marca'], ['modelo','Modelo'], ['escala','Escala'], ['lacre_num','Lacre'], ['pressao_ajuste_mpa','Ajuste (MPa)']];
 const TIPO_REC = { seguranca:'Segurança', conservacao:'Conservação', geral:'Geral' };
 // sugestões fixas até a biblioteca (R05b)
@@ -1097,6 +1137,8 @@ function revOk(item){ const e = REV.R.inspecao.etapa; return ((REV.R.oks || {})[
 function pintarRevisao(){
   const { R, v, prev } = REV, I = R.inspecao, eu = R.eu, e = I.etapa;
   const u = CALC.unidadeDe(v), pr = x => x == null ? '—' : fmt(CALC.deMPa(x, u), 2) + ' ' + CALC.UNID_ROT[u];
+  const prM = x => x == null ? '—' : pr(x) + (u !== 'MPa' ? ' (' + fmt(x, 3) + ' MPa)' : '');   // S141 · item 47
+  const volTxt = x => x == null ? '—' : fmt(x, 4) + ' m³ (' + Math.round(Number(x) * 1000).toLocaleString('pt-BR') + ' litros)';
   titulo('Revisão · ' + (I.tag || ''), (I.cliente || '') + ' · OS ' + (I.os || '—'));
   const podeMarcar = eu.pode && e < 3;
   let h = '<div class="card"><div class="linha" style="justify-content:space-between"><div><b style="font-size:17px">' + esc(I.tag || '') + '</b> ' + esc(I.vaso || '')
@@ -1150,7 +1192,12 @@ function pintarRevisao(){
   h += '<div class="card">' + cab('dados', '1 · Dados contra as fotos')
     + '<div class="g2rev"><div><table><tr><th>Plaqueta</th><th></th><th></th></tr>'
     + [['fabricante','Fabricante']].concat(REV_CAMPOS_VASO).map(([k, r]) => '<tr><td class="muted">' + r + '</td><td><b>' + esc(R.vaso[k] == null ? '—' : String(R.vaso[k])) + '</b></td><td>'
-        + (eu.pode && k !== 'fabricante' ? '<button class="btn mini" data-corv="' + k + '">Corrigir</button>' : '') + '</td></tr>').join('') + '</table></div>'
+        + (eu.pode && k !== 'fabricante' ? '<button class="btn mini" data-corv="' + k + '">Corrigir</button>' : '') + '</td></tr>').join('') + '</table>'
+    // S141 · itens 31, 45 e 47: a PMTA e a PTH de plaqueta, a pressão de operação e o volume são da câmara (como vieram do campo)
+    + CALC.ativas(v).map(k => '<table style="margin-top:8px"><tr><th>' + (CALC.ativas(v).length > 1 ? esc(k.nome) : 'Câmara') + '</th><th></th><th></th></tr>'
+        + REV_CAMPOS_CAM.map(([c, r, t]) => '<tr><td class="muted">' + r + '</td><td><b>' + (t === 'p' ? prM(k[c]) : volTxt(k[c])) + '</b></td><td>'
+          + (eu.pode ? '<button class="btn mini" data-corc="' + esc(k.id) + '|' + c + '">Corrigir</button>' : '') + '</td></tr>').join('') + '</table>').join('')
+    + '</div>'
     + '<div><div class="muted" style="margin-bottom:4px">Fotos (' + fotos.length + ')</div><div class="fotosrev">' + fotos.map(f => '<button class="fotorev" data-foto="' + esc(f.path) + '" data-fid="' + esc(f.id) + '" title="' + esc((f.secao || '') + (f.legenda ? ' · ' + f.legenda : '')) + '"'
       + (f.origem === 'galeria' ? ' style="border-style:dashed"' : '') + '>' + esc(rotFoto(f)) + '</button>').join('')
     + '</div>' + (LUG.some(l => semAc[l.lugar]) ? '<p class="muted" style="margin:6px 0 0">Sem foto (o motivo sai no laudo): ' + LUG.filter(l => semAc[l.lugar]).map(l => '<b>' + esc(l.rotulo) + '</b>: ' + esc(semAc[l.lugar])).join(' · ') + '</p>' : '')
@@ -1158,8 +1205,9 @@ function pintarRevisao(){
         ? '<p class="alerta" style="margin:6px 0 0">Sem foto e sem motivo: ' + LUG.filter(l => !semAc[l.lugar] && !fotos.some(f => f.item === 'lugar:' + l.lugar) && !(l.lugar === 'placa_fabricacao' && fotos.some(f => f.secao === 'plaqueta' && !f.item))).map(l => esc(l.rotulo)).join(', ') + '. Ponha uma foto no lugar (clique na foto › Lugar no laudo).</p>' : '')
     + '<div id="revVisor" class="visorrev"><p class="muted">Clique numa foto para ver.</p></div></div></div>'
     + '<h3 style="margin-top:14px">Acessórios</h3>' + ((R.acessorios || []).length ? '<table><tr><th>Acessório</th><th>Marca / modelo</th><th>Lacre</th><th>Ajuste</th><th>Aferição</th><th></th></tr>'
-      + R.acessorios.map(a => '<tr><td><b>' + esc(a.tag || a.tipo) + '</b><div class="muted">' + esc(a.tipo) + (a.situacao ? ' · ' + esc(a.situacao) : '') + '</div></td><td>' + esc([a.marca, a.modelo].filter(Boolean).join(' · ') || '—')
-        + '</td><td>' + esc(a.lacre_num || '—') + '</td><td>' + (a.pressao_ajuste_mpa != null ? pr(a.pressao_ajuste_mpa) : '—') + '</td><td>'
+      + R.acessorios.map(a => '<tr><td><b>' + esc(a.tag || ROT_ACESS[a.tipo] || a.tipo) + '</b><div class="muted">' + esc(a.tag ? (ROT_ACESS[a.tipo] || a.tipo) : '') + (a.situacao ? (a.tag ? ' · ' : '') + esc(ROT_SIT_AC[a.situacao] || a.situacao) : '') + '</div></td><td>'
+        + esc([semNaoHa(a.marca), semNaoHa(a.modelo)].filter(Boolean).join(' · ') || '—')
+        + '</td><td>' + esc((a.afericao && a.afericao.lacre) || a.lacre_num || '—') + (a.afericao && a.afericao.lacre ? '<div class="muted">na aferição</div>' : '') + '</td><td>' + (a.pressao_ajuste_mpa != null ? pr(a.pressao_ajuste_mpa) : '—') + '</td><td>'
         + (a.afericao ? esc(a.afericao.codigo || 'sem número') + ' · ' + (a.afericao.resultado === 'aprovado' ? 'aprovado' : '<b style="color:var(--crit)">' + esc(a.afericao.resultado || '') + '</b>') + (a.afericao.grave ? ' <span class="chip s-grave">grave</span>' : '') : '<span class="muted">—</span>')
         + '</td><td>' + (eu.pode ? '<button class="btn mini" data-cora="' + esc(a.id) + '">Corrigir</button>' : '') + '</td></tr>').join('') + '</table>' : '<p class="vazio">Nenhum acessório.</p>')
     + '</div>';
@@ -1167,8 +1215,8 @@ function pintarRevisao(){
   const recs = R.recomendacoes || [];
   const anom = (R.visual || []).filter(x => x.conforme === false).map(x => ({ ref:'visual:' + x.item, titulo:x.item, texto:x.anomalia, sug:sugestaoRec(x.item, x.anomalia) }))
     .concat((R.acessorios || []).filter(a => a.situacao === 'substituir' || (a.afericao && (a.afericao.grave || a.afericao.resultado === 'reprovado')))
-      .map(a => ({ ref:'acessorio:' + a.id, titulo:(a.tag || a.tipo), texto:a.situacao === 'substituir' ? 'a substituir' : 'aferição ' + (a.afericao.resultado || ''),
-                   sug:(a.tipo === 'valvula' || /válvula/i.test(a.tipo) ? 'Substituir ou reajustar a válvula ' : 'Substituir o ') + (a.tag || a.tipo) + '.' })));
+      .map(a => ({ ref:'acessorio:' + a.id, titulo:(a.tag || ROT_ACESS[a.tipo] || a.tipo), texto:a.situacao === 'substituir' ? 'a substituir' : 'aferição ' + (a.afericao.resultado || ''),
+                   sug:(/valvula|quebra/.test(a.tipo) ? 'Substituir ou reajustar a ' + (ROT_ACESS[a.tipo] || 'válvula').toLowerCase() + ' ' : 'Substituir o ' + (ROT_ACESS[a.tipo] || '').toLowerCase() + ' ') + (a.tag || '') + '.' })));
   h += '<div class="card">' + cab('recomendacoes', '2 · Anomalias e recomendações')
     + (anom.length ? '<table><tr><th>Anomalia</th><th>Recomendação</th><th></th></tr>' + anom.map(x => {
         const rr = recs.filter(r => r.ref === x.ref);
@@ -1183,17 +1231,22 @@ function pintarRevisao(){
   h += '<div class="card">' + cab('pmta', '3 · PMTA') + '<table><tr><th>Câmara</th><th>Operação</th><th>Calculada</th><th>Anterior</th><th>Plaqueta</th><th>Adotada</th></tr>'
     + prev.camaras.map(ck => {
         const k = ck.cam, calc = ck.governante ? ck.governante.pmta : null, ant = k.pmta_vigente_mpa, sug = revRegra(ck);
-        const esc0 = REV.pmta[k.id] || { regra:sug.regra, valor:sug.valor, just:'' };
+        const guard = (R.inspecao.rev_pmta || {})[k.id];
+        const esc0 = REV.pmta[k.id] || (guard ? Object.assign({}, guard) : { regra:sug.regra, valor:sug.valor, just:'' });
         REV.pmta[k.id] = esc0;
+        const adot = revAdotada(ck, esc0), placa = k.pmta_plaqueta_mpa != null ? Number(k.pmta_plaqueta_mpa) : null;
         return '<tr><td><b>' + esc(k.nome) + '</b>' + (ck.governante ? '<div class="muted">governante: ' + esc(nomeGov(ck)) + '</div>' : '') + '</td><td>' + pr(k.p_operacao_max_mpa) + '</td><td>'
           + (calc == null ? '<span style="color:var(--crit)">' + esc(ck.erro || 'sem cálculo') + '</span>' : '<b>' + pr(calc) + '</b>') + '</td><td>' + pr(ant) + '</td><td>' + pr(k.pmta_plaqueta_mpa) + '</td><td>'
-          + (plhAprova ? '<select class="t" data-regra="' + esc(k.id) + '"><option value="calculada"' + (esc0.regra === 'calculada' ? ' selected' : '') + '>a calculada</option>'
-              + (ant != null && calc != null && ant <= calc + 1e-4 ? '<option value="mantida_anterior"' + (esc0.regra === 'mantida_anterior' ? ' selected' : '') + '>manter a anterior</option>' : '')
-              + '<option value="plh"' + (esc0.regra === 'plh' ? ' selected' : '') + '>outra (PLH)</option></select>'
-              + '<div data-plhv="' + esc(k.id) + '"' + (esc0.regra === 'plh' ? '' : ' hidden') + '><input class="t" data-pval="' + esc(k.id) + '" placeholder="PMTA em ' + CALC.UNID_ROT[u] + '" value="' + (esc0.regra === 'plh' && esc0.valor != null ? fmt(CALC.deMPa(esc0.valor, u), 3) : '') + '">'
-              + '<input class="t" data-pjust="' + esc(k.id) + '" placeholder="justificativa" value="' + esc(esc0.just || '') + '"></div>'
-              + (k.pressao_externa ? '<div><input class="t" data-pext="' + esc(k.id) + '" placeholder="PMTA externa (vácuo), ' + CALC.UNID_ROT[u] + '"><input class="t" data-pextj="' + esc(k.id) + '" placeholder="justificativa da externa"></div>' : '')
-            : '<span class="muted">' + (sug.regra === 'mantida_anterior' ? 'sugerida: manter a anterior (' + pr(sug.valor) + ')' : sug.regra === 'calculada' ? 'sugerida: a calculada' : 'o PLH decide') + '</span>')
+          + (eu.pode && calc != null ? '<select class="t" data-regra="' + esc(k.id) + '"><option value="calculada"' + (esc0.regra === 'calculada' ? ' selected' : '') + '>a calculada (' + pr(calc) + ')</option>'
+              + (placa != null && placa <= calc + 1e-4 ? '<option value="plaqueta"' + (esc0.regra === 'plaqueta' ? ' selected' : '') + '>a de plaqueta (' + pr(placa) + ')</option>' : '')
+              + (ant != null && ant <= calc + 1e-4 ? '<option value="mantida_anterior"' + (esc0.regra === 'mantida_anterior' ? ' selected' : '') + '>a anterior (' + pr(ant) + ')</option>' : '')
+              + '<option value="outro"' + (esc0.regra === 'outro' ? ' selected' : '') + '>outro valor…</option></select>'
+              + '<div data-plhv="' + esc(k.id) + '"' + (esc0.regra === 'outro' ? '' : ' hidden') + '><input class="t" data-pval="' + esc(k.id) + '" placeholder="PMTA em ' + CALC.UNID_ROT[u] + '" value="' + (esc0.regra === 'outro' && esc0.valor != null ? fmt(CALC.deMPa(esc0.valor, u), 3) : '') + '"></div>'
+              + '<div data-pjv="' + esc(k.id) + '"' + (esc0.regra === 'outro' || esc0.regra === 'plaqueta' ? '' : ' hidden') + '><input class="t" data-pjust="' + esc(k.id) + '" placeholder="justificativa curta" value="' + esc(esc0.just || '') + '"></div>'
+              + (adot != null && adot > calc + 1e-4 ? '<div style="color:var(--crit);font-size:12px">Acima da calculada: não é aceita.</div>' : '')
+              + (adot != null && placa != null && Math.abs(adot - placa) > 1e-4 ? '<div style="color:var(--warn);font-size:12px">Diferente da plaqueta: a plaqueta precisa ser refeita.</div>' : '')
+              + (plhAprova && k.pressao_externa ? '<div><input class="t" data-pext="' + esc(k.id) + '" placeholder="PMTA externa (vácuo), ' + CALC.UNID_ROT[u] + '"><input class="t" data-pextj="' + esc(k.id) + '" placeholder="justificativa da externa"></div>' : '')
+            : '<span class="muted">' + (adot != null ? '<b>' + pr(adot) + '</b> · ' : '') + ({ mantida_anterior:'a anterior', calculada:'a calculada', plaqueta:'a de plaqueta', outro:'outro valor' }[esc0.regra] || 'o PLH decide') + '</span>')
           + '</td></tr>';
       }).join('') + '</table>'
     + (prev.vaso && !prev.vaso.erro ? '<p class="muted" style="margin:8px 0 0">V = ' + fmt(prev.vaso.V, 3) + ' m³ (' + Math.round(prev.vaso.V * 1000).toLocaleString('pt-BR') + ' litros) · P·V = ' + fmt(prev.vaso.pv, 3) + ' · grupo ' + prev.vaso.grupo + ' · <b>categoria ' + prev.vaso.categoria + '</b> · próximas: externa em ' + prev.vaso.prazos.externo
@@ -1222,7 +1275,13 @@ function pintarRevisao(){
   h += '<div class="card"><div class="linha" style="justify-content:space-between"><h3 style="margin:0">5 · Boroscopia (lançada no escritório)</h3>'
     + (eu.pode ? '<button class="btn mini" id="revBoro">' + (bo ? 'Alterar' : 'Lançar') + '</button>' : '') + '</div>'
     + (bo ? '<p style="margin:8px 0 0">' + (bo.realizada ? 'Realizada: <b>' + (bo.resultado === 'com_anomalia' ? 'com anomalia' : 'sem anomalia') + '</b>' + (bo.anomalia ? ' · ' + esc(bo.anomalia) : '') : 'Não realizada: ' + esc(bo.motivo_nao || '')) + '</p>'
-        : '<p class="muted" style="margin:8px 0 0">Ainda não lançada. Sem ela o laudo sai com "boroscopia sem resposta".</p>') + '</div>';
+        : '<p class="muted" style="margin:8px 0 0">Ainda não lançada. Sem ela o laudo sai com "boroscopia sem resposta".</p>')
+    // S141 · item 46: as imagens do exame (baixadas do cartão do boroscópio), com a legenda; com anomalia, pelo menos uma
+    + (() => { const bi = (R.fotos || []).filter(f => f.secao === 'boroscopia'), pode = ['enviada','em_revisao'].indexOf(I.situacao) >= 0;
+        return '<div class="fotosrev" style="margin-top:8px">' + bi.map(f => '<button class="fotorev" data-bfoto="' + esc(f.path) + '">' + esc(f.legenda || 'imagem') + (pode ? ' <span data-brm="' + esc(f.id) + '" title="Tirar" style="color:var(--crit);padding-left:4px">×</span>' : '') + '</button>').join('')
+          + '</div>' + (pode ? '<button class="btn mini" id="boroAnexar" style="margin-top:6px">Anexar imagens</button><input type="file" id="boroArq" accept="image/*" multiple hidden>' : '')
+          + (bo && bo.resultado === 'com_anomalia' && !bi.length ? '<p class="alerta falta" style="margin-top:6px">Com anomalia: anexe pelo menos uma imagem.</p>' : '')
+          + '<div id="boroVisor"></div>'; })() + '</div>';
   // ações
   h += '<div class="card linha acoesrev">';
   if (eu.pode && (e === 1 || e === 2)) h += '<button class="btn pri" id="revConcluir">Concluir a ' + (e === 1 ? 'Revisão 1' : 'Revisão 2') + '</button>';
@@ -1248,11 +1307,19 @@ function revDatasHtml(prz){
     + '<label class="f">Motivo<input class="t" id="revJust" value="' + esc(D.just || '') + '" placeholder="ex.: vaso horizontal em atmosfera agressiva"></label></div></div></div>';
 }
 // a regra sugerida: mantém a anterior quando ela cabe na calculada; senão, a calculada
+// S141 · item 43 (decisão do Bruno, 10/11: A): a sugestão é a menor entre a calculada, a de plaqueta e a anterior (nenhuma acima da calculada)
 function revRegra(ck){
-  const calc = ck.governante ? ck.governante.pmta : null, ant = ck.cam.pmta_vigente_mpa;
-  if (calc == null) return { regra:'plh', valor:null };
-  if (ant != null && ant <= calc + 1e-4) return { regra:'mantida_anterior', valor:Number(ant) };
-  return { regra:'calculada', valor:calc };
+  const calc = ck.governante ? ck.governante.pmta : null, ant = ck.cam.pmta_vigente_mpa, placa = ck.cam.pmta_plaqueta_mpa;
+  if (calc == null) return { regra:'outro', valor:null };
+  const cand = [{ regra:'calculada', valor:calc }];
+  if (placa != null && Number(placa) <= calc + 1e-4) cand.push({ regra:'plaqueta', valor:Number(placa) });
+  if (ant != null && Number(ant) <= calc + 1e-4) cand.push({ regra:'mantida_anterior', valor:Number(ant) });
+  return cand.reduce((a, b) => b.valor < a.valor - 1e-6 ? b : a);
+}
+function revAdotada(ck, e){
+  const k = ck.cam, calc = ck.governante ? ck.governante.pmta : null;
+  return e.regra === 'calculada' ? calc : e.regra === 'mantida_anterior' ? (k.pmta_vigente_mpa != null ? Number(k.pmta_vigente_mpa) : null)
+    : e.regra === 'plaqueta' ? (k.pmta_plaqueta_mpa != null ? Number(k.pmta_plaqueta_mpa) : null) : e.valor;
 }
 // espessuras: taxa, vida remanescente e a cor (decisão de 20/10)
 function revVidas(){
@@ -1314,10 +1381,17 @@ function revMontarResultado(){
       comps.push({ componente_id:x.c.id, t_min_mm:x.tMin, e_min_mm:x.eMin, pmta_mpa:x.pmta });
     });
     const k = ck.cam, esc0 = REV.pmta[k.id] || revRegra(ck), calc = ck.governante ? ck.governante.pmta : null;
-    let adot = esc0.regra === 'calculada' ? calc : esc0.regra === 'mantida_anterior' ? Number(k.pmta_vigente_mpa) : esc0.valor;
+    const adot = revAdotada(ck, esc0);
     if (adot == null || !(adot > 0)) throw new Error(k.nome + ': informe a PMTA adotada.');
-    const c = { camara_id:k.id, pmta_adotada_mpa:adot, regra_pmta:esc0.regra };
-    if (esc0.regra === 'plh'){ if (!(esc0.just || '').trim()) throw new Error(k.nome + ': a PMTA escolhida pelo PLH precisa de justificativa.'); c.justificativa_pmta = esc0.just.trim(); }
+    if (calc != null && adot > calc + 1e-4) throw new Error(k.nome + ': a PMTA adotada não pode passar da calculada.');
+    // S141 · item 43: a de plaqueta e "outro valor" vão como escolha do PLH, com a justificativa (a de plaqueta já tem uma)
+    const regra = esc0.regra === 'plaqueta' || esc0.regra === 'outro' ? 'plh' : esc0.regra;
+    const c = { camara_id:k.id, pmta_adotada_mpa:adot, regra_pmta:regra };
+    if (regra === 'plh'){
+      const j = (esc0.just || '').trim() || (esc0.regra === 'plaqueta' ? 'Adotada a PMTA de plaqueta, menor que a calculada.' : '');
+      if (!j) throw new Error(k.nome + ': escreva a justificativa da PMTA escolhida.');
+      c.justificativa_pmta = esc0.regra === 'plaqueta' && (esc0.just || '').trim() ? 'PMTA de plaqueta. ' + j : j;
+    }
     if (k.pressao_externa){
       const ex = num(($('tela').querySelector('[data-pext="' + k.id + '"]') || {}).value || ''), ej = (($('tela').querySelector('[data-pextj="' + k.id + '"]') || {}).value || '').trim();
       if (!(ex > 0) || !ej) throw new Error(k.nome + ': informe a PMTA externa (vácuo) e a justificativa.');
@@ -1377,7 +1451,7 @@ function ligarRevisao(){
   T.querySelectorAll('[data-foto]').forEach(b => b.addEventListener('click', async () => {
     await mostrarArquivoEm($('revVisor'), { storage_path:b.dataset.foto });
     const f = (R.fotos || []).find(x => x.id === b.dataset.fid);
-    if (!f || ['enviada','em_revisao'].indexOf(R.inspecao.situacao) < 0 || /\.pdf$/i.test(f.path || '')) return;   // quem tem o TapDoc (o banco confere)
+    if (!f || f.secao === 'boroscopia' || ['enviada','em_revisao'].indexOf(R.inspecao.situacao) < 0 || /\.pdf$/i.test(f.path || '')) return;   // quem tem o TapDoc (o banco confere)
     const LUG = lugaresRev(R), vis = $('revVisor');
     vis.insertAdjacentHTML('beforeend', '<label class="f" style="max-width:340px">Lugar no laudo<select class="t" id="revLugar"><option value="">sem lugar (' + esc(ROT_SECAO[f.secao] || f.secao) + ')</option>'
       + LUG.map(l => '<option value="' + l.lugar + '"' + (f.item === 'lugar:' + l.lugar ? ' selected' : '') + '>' + esc(l.rotulo) + '</option>').join('') + '</select></label>'
@@ -1399,6 +1473,45 @@ function ligarRevisao(){
   };
   T.querySelectorAll('[data-corv]').forEach(b => b.addEventListener('click', () => { corrigir('vaso', null, REV_CAMPOS_VASO, k => R.vaso[k]); $('rcCampo').value = b.dataset.corv; $('rcCampo').dispatchEvent(new Event('change')); }));
   T.querySelectorAll('[data-cora]').forEach(b => b.addEventListener('click', () => { const a = R.acessorios.find(x => x.id === b.dataset.cora); corrigir('acessorio', a.id, REV_CAMPOS_AC, k => a[k]); }));
+  // S141 · itens 31, 45 e 47 (417): corrigir o dado da câmara; pressão na unidade da revisão, volume em m³ ou litros; o cálculo se refaz
+  T.querySelectorAll('[data-corc]').forEach(b => b.addEventListener('click', () => {
+    const [kid, campo] = b.dataset.corc.split('|'), k = CALC.ativas(REV.v).find(x => x.id === kid), def = REV_CAMPOS_CAM.find(x => x[0] === campo);
+    const uR = CALC.unidadeDe(REV.v), pres = def[2] === 'p', atual = k[campo];
+    janela('Corrigir · ' + def[1], (pres ? '<label class="f">Valor certo (' + CALC.UNID_ROT[uR] + ')<input class="t" id="rkV" inputmode="decimal" value="' + (atual != null ? fmt(CALC.deMPa(atual, uR), 4) : '') + '"></label>'
+        : '<label class="f">Valor certo<div class="linha"><input class="t" id="rkV" inputmode="decimal" style="flex:1" value="' + (atual != null ? fmt(Number(atual) * 1000, 1) : '') + '">'
+          + '<select class="t" id="rkU" style="width:110px"><option value="l">litros</option><option value="m3">m³</option></select></div></label>')
+      + '<label class="f">Motivo<input class="t" id="rkMot" placeholder="ex.: conforme a foto da plaqueta"></label><p class="muted">Fica registrado o antes, o depois e o seu nome. O P·V, a categoria e os prazos se refazem.</p>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
+        const x = num($('rkV').value); if (x == null || Number.isNaN(x) || x <= 0){ U.toast('Informe o valor.', 'err'); return false; }
+        const val = pres ? Math.round(x * ({ 'bar':0.1, 'kgf/cm2':0.0980665, 'MPa':1, 'psi':0.00689476 })[uR] * 1e5) / 1e5 : ($('rkU').value === 'l' ? x / 1000 : x);
+        rpc('tf_insp_revisao_corrigir', { p_id:id, p_alvo:'camara', p_ref:kid, p_campo:campo, p_valor:String(val), p_motivo:$('rkMot').value })
+          .then(r => { U.toast(r && r.mudou ? 'Corrigido.' : 'Era o mesmo valor.', 'ok'); N.janela.fechar(); recarregar(); }, erro);
+        return false; } }]);
+  }));
+  // S141 · item 46 (417): as imagens da boroscopia, do computador, com a legenda; entram no laudo
+  T.querySelectorAll('[data-bfoto]').forEach(b => b.addEventListener('click', () => { $('boroVisor').className = 'visorrev'; mostrarArquivoEm($('boroVisor'), { storage_path:b.dataset.bfoto }); }));
+  T.querySelectorAll('[data-brm]').forEach(b => b.addEventListener('click', async ev => {
+    ev.stopPropagation();
+    if (!await N.janela.confirmar('Tirar a imagem?', '<p>Ela sai da revisão e do laudo.</p>', 'Tirar', true)) return;
+    try{ await rpc('tf_insp_foto_escritorio_remover', { p_foto:b.dataset.brm }); recarregar(); }catch(e){ erro(e); }
+  }));
+  const bAn = $('boroAnexar'); if (bAn) bAn.addEventListener('click', () => { $('boroArq').value = ''; $('boroArq').click(); });
+  const bArq = $('boroArq'); if (bArq) bArq.addEventListener('change', () => {
+    const fs = Array.from(bArq.files || []).filter(f => /^image\//.test(f.type)); if (!fs.length) return;
+    janela('Imagens da boroscopia (' + fs.length + ')', fs.map((f, n) => '<label class="f">' + esc(f.name) + '<input class="t" data-bleg="' + n + '" placeholder="legenda curta, ex.: costado interno, região inferior"></label>').join(''),
+      [{ rotulo:'Cancelar' }, { rotulo:'Anexar', classe:'pri', acao:async () => {
+        const base = (R.fotos || []).filter(x => x.secao === 'boroscopia').length;
+        try{
+          for (let n = 0; n < fs.length; n++){
+            const blob = await N.foto.reduzir(fs[n], { lado:1600, qualidade:0.85 }), fid = uid(), caminho = id + '/' + fid + '.jpg';
+            await N.storage.enviar('inspecoes', caminho, blob);
+            await rpc('tf_insp_foto_escritorio', { p_id:fid, p_dados:{ inspecao_id:id, storage_path:caminho, secao:'boroscopia',
+              legenda:(document.querySelector('[data-bleg="' + n + '"]').value || '').trim() || null, ordem:base + n + 1, bytes:blob.size } });
+          }
+          U.toast('Imagens anexadas.', 'ok'); N.janela.fechar(); recarregar();
+        }catch(e){ erro(e); }
+        return false; } }]);
+  });
   const formRec = (r, ref, sug) => {
     r = r || { tipo:'geral', texto:sug || '', prazo:null, ref:ref || null };
     janela(r.id ? 'Editar a recomendação' : 'Nova recomendação', '<label class="f">Tipo<select class="t" id="rTipo">' + Object.entries(TIPO_REC).map(([k, t]) => '<option value="' + k + '"' + (r.tipo === k ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></label>'
@@ -1416,12 +1529,19 @@ function ligarRevisao(){
   }));
   // PMTA (PLH)
   const u = CALC.unidadeDe(REV.v), paraM = x => x == null ? null : Math.round(x * ({ 'bar':0.1, 'kgf/cm2':0.0980665, 'MPa':1, 'psi':0.00689476 })[u] * 1e4) / 1e4;
+  // S141 · item 43 (417): a escolha fica guardada (a próxima etapa da revisão vê o que foi escolhido)
+  const guardarPmta = () => { clearTimeout(guardarPmta.t); guardarPmta.t = setTimeout(() => rpc('tf_insp_revisao_pmta', { p_id:id, p_dados:REV.pmta }).catch(erro), 600); };
   T.querySelectorAll('[data-regra]').forEach(s => s.addEventListener('change', () => {
     const k = s.dataset.regra; REV.pmta[k] = REV.pmta[k] || {}; REV.pmta[k].regra = s.value;
-    T.querySelector('[data-plhv="' + k + '"]').hidden = s.value !== 'plh';
+    if (s.value !== 'outro') REV.pmta[k].valor = null;
+    guardarPmta(); const y = window.scrollY; pintarRevisao(); window.scrollTo(0, y);
   }));
-  T.querySelectorAll('[data-pval]').forEach(i => i.addEventListener('input', () => { REV.pmta[i.dataset.pval].valor = paraM(num(i.value)); }));
-  T.querySelectorAll('[data-pjust]').forEach(i => i.addEventListener('input', () => { REV.pmta[i.dataset.pjust].just = i.value; }));
+  T.querySelectorAll('[data-pval]').forEach(i => i.addEventListener('change', () => {
+    const k = i.dataset.pval, x = paraM(num(i.value)), ck = REV.prev.camaras.find(c => c.cam.id === k), calc = ck && ck.governante ? ck.governante.pmta : null;
+    if (x != null && calc != null && x > calc + 1e-4){ U.toast('Acima da calculada: não é aceita.', 'err'); i.value = ''; REV.pmta[k].valor = null; return; }
+    REV.pmta[k].valor = x; guardarPmta(); const y = window.scrollY; pintarRevisao(); window.scrollTo(0, y);
+  }));
+  T.querySelectorAll('[data-pjust]').forEach(i => i.addEventListener('input', () => { REV.pmta[i.dataset.pjust].just = i.value; guardarPmta(); }));
   const rv = $('revVol'); if (rv) rv.addEventListener('input', () => { REV.volume = num(rv.value); });
   // E9 (410): as datas do PLH
   const rd = $('revDatas'); if (rd) rd.addEventListener('change', () => { REV.datas.ativo = rd.checked; $('revDatasCx').hidden = !rd.checked; });
@@ -1612,7 +1732,7 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S140');
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S141');
     return true;
   })().catch(e => { LIBS = null; throw e; });
   return LIBS;

@@ -245,8 +245,10 @@ function montar(d, opc) {
     par(M.acessorios_intro);
     lista(acs.map(a => {
       const p = [TIPOS_ACESS[a.tipo] || a.tipo, a.tag ? a.tag : null].filter(Boolean).join(' ');
-      const det = [a.marca ? 'marca ' + a.marca : null, a.modelo ? 'modelo ' + a.modelo : null, a.escala ? 'escala ' + a.escala : null,
-        a.pressao_ajuste_mpa != null ? 'ajuste ' + bar(a.pressao_ajuste_mpa) : null, a.conexao ? 'conexão ' + a.conexao : null, a.lacre_num ? 'lacre nº ' + a.lacre_num : null].filter(Boolean).join(', ');
+      // S141 · itens 32 e 48: o lacre é o colocado na aferição; "Não há" não é marca nem modelo
+      const nh = x => x == null || /^\s*(n[ãa]o h[áa]|-+|—)\s*$/i.test(String(x)) ? null : x, lacre = (a.afericao && a.afericao.lacre_colocado) || a.lacre_num;
+      const det = [nh(a.marca) ? 'marca ' + a.marca : null, nh(a.modelo) ? 'modelo ' + a.modelo : null, a.escala ? 'escala ' + a.escala : null,
+        a.pressao_ajuste_mpa != null ? 'ajuste ' + bar(a.pressao_ajuste_mpa) : null, a.conexao ? 'conexão ' + a.conexao : null, lacre ? 'lacre nº ' + lacre : null].filter(Boolean).join(', ');
       const sit = { ok: '', substituir: ' — a substituir', ausente: ' — ausente', inoperante: ' — inoperante', retirado: ' — retirado nesta inspeção' }[a.situacao] || '';
       return p + (det ? ': ' + det : '') + sit + ';';
     }), true);
@@ -257,8 +259,11 @@ function montar(d, opc) {
   sec('7', T.escopo || 'ESCOPO DA INSPEÇÃO');
   par(txt(M.escopo, { periodo: ini === fim ? 'em ' + dataBR(ini) : 'de ' + dataBR(ini) + ' a ' + dataBR(fim) }));
   const B = d.boroscopia || {}, TE = d.teste || {};
+  // S141 · item 61 (decisão do Bruno, 10/11): feito, o título é o tipo do teste; não feito, "Teste Hidrostático", como no modelo
+  const TIT_TESTE = { hidrostatico: 'Teste Hidrostático', pneumatico: 'Teste Pneumático', hidropneumatico: 'Teste Hidropneumático' };
+  const tituloTeste = TE.realizado && TIT_TESTE[TE.tipo] ? TIT_TESTE[TE.tipo] : (T.teste || 'Teste Hidrostático');
   lista(['7.1 ' + (T.visual || 'Exame visual externo') + ';', '7.2 ' + (T.boroscopia || 'Inspeção interna por boroscopia') + (B.realizada ? ';' : ' (não realizada);'),
-    '7.3 ' + (T.ultrassom || 'Medição de espessura por ultrassom') + ';', '7.4 ' + (T.teste || 'Teste de pressão') + (TE.realizado ? ';' : ' (não realizado);'),
+    '7.3 ' + (T.ultrassom || 'Medição de espessura por ultrassom') + ';', '7.4 ' + tituloTeste + (TE.realizado ? ';' : ' (não realizado);'),
     '7.5 ' + (T.manometro || 'Aferição do manômetro') + ';', '7.6 ' + (T.valvula || 'Teste da válvula de segurança') + '.']);
   // 7.1 visual
   sub('7.1', T.visual || 'Exame visual externo');
@@ -311,7 +316,7 @@ function montar(d, opc) {
   }
   fotos('componentes');
   // 7.4 teste
-  sub('7.4', T.teste || 'Teste de pressão');
+  sub('7.4', tituloTeste);
   if (TE.realizado) par(txt(TE.resultado === 'reprovado' ? M.teste_reprovado : M.teste_ok, { tipo: TIPOS_TESTE[TE.tipo] || TE.tipo || 'de pressão', pressao: bar(TE.pressao_mpa),
     duracao: TE.duracao_min ? ', durante ' + fmt(TE.duracao_min, 0) + ' minutos' : '', anomalia: TE.anomalia || 'anomalia registrada' }));
   else par(txt(M.teste_nao, { motivo: TE.motivo_nao || 'não informado' }));
@@ -517,6 +522,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-S140-2026-11-10' };
+const LaudoPDF = { montar, fotosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-S141-2026-11-10' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
