@@ -461,20 +461,24 @@ async function baixar(silencioso){
   try{
     const t0 = Date.now();
     const p = await N.api.rpc('tf_insp_pacote_os', { p_os_id: OS });
+    FORA_T06 = false; ESCALA_T06 = null;
     mesclar(p, t0);
     if (!silencioso) U.toast('Pacote da OS atualizado.');
     pintar();
   }catch(e){
-    if (!E && /fora da sua escala/.test(e.message || '')) avisoForaT06();   // S142 · item 40
+    // S142 · item 40: o servidor disse que a pessoa não está na T06 — o aviso no lugar da tela, mesmo com a OS
+    // guardada no aparelho (quem saiu da T06 não continua vendo nem editando; o guardado fica, sem aparecer)
+    if (/fora da sua escala/.test(e.message || '')){ FORA_T06 = true; avisoForaT06(); }
     else if (!E){ $('tela').innerHTML = '<div class="card vazio">' + esc(e.message || 'Não consegui baixar a OS.') + '</div>'; }
     else if (!silencioso) U.toast(e.message || 'Não consegui atualizar.', 'err');
   }finally{ baixando = false; }
 }
 
 // S142 · item 40 (418, decisão B do Bruno): quem não está na T06 vê quem está, em vez da tela vazia
+var FORA_T06 = false, ESCALA_T06 = null;
 async function avisoForaT06(){
-  let q = null;
-  try{ q = await N.api.rpc('tf_insp_escala_t06', { p_os_id: OS }); }catch(e){}
+  if (!ESCALA_T06) try{ ESCALA_T06 = await N.api.rpc('tf_insp_escala_t06', { p_os_id: OS }); }catch(e){}
+  const q = ESCALA_T06;
   const quem = q ? [q.designado].concat(q.apoios || []).filter(Boolean) : [];
   titulo('Inspeção', q && q.os ? 'OS ' + q.os : VERSAO);
   $('tela').innerHTML = '<div class="card vazio" id="foraT06"><b>Você não está na T06 desta OS.</b><br>Peça ao escritório para te pôr como apoio'
@@ -498,6 +502,7 @@ function titulo(t, s){ $('tTit').textContent = t; $('tSub').textContent = s || '
 function pintar(){
   guardarFocado();   // S140 · item 60
   pintarSinal(); pintarFila();
+  if (FORA_T06) return avisoForaT06();
   if (!E){
     titulo('Inspeção', VERSAO);
     $('tela').innerHTML = '<div class="card vazio">' + (navigator.onLine === false
