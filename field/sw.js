@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S57-T29';   // S146: TapDoc 19 (item 79: os textos prontos do laudo; 422)
+const VERSAO = 'S57-T30';   // S148: TapDoc 20 (itens 85 e 91: a ordem do medidor e a placa com três respostas; 425)
+// const VERSAO = 'S57-T29';   // S146: TapDoc 19 (item 79: os textos prontos do laudo; 422)
 // const VERSAO = 'S57-T28';   // S145: Field S57 e TapDoc 18 (rodada E: a confirmação da participação, A8; 421)
 // const VERSAO = 'S56-T27';   // S144: Field S56 e TapDoc 17 (rodada D2: itens 69, 70, 72, 74, 75 e 78 da lista; 420)
 // const VERSAO = 'S55-T26';   // S142: Field S55 e TapDoc 16 (itens 38 e 40 da lista; 418), núcleo N8 (item 37)
