@@ -290,8 +290,10 @@ function mapaSvg(posicao, siglas) {
 /** As fotos que o laudo usa, na ordem (a página baixa e devolve em `imagens`). */
 function fotosDoLaudo(d) {
   const ordem = ['capa', 'localizacao', 'plaqueta', 'acessorios', 'visual', 'boroscopia', 'componentes', 'teste', 'geral'];
+  const mp = (d.inspecao || {}).mapa;   // S151 · issue 7: a imagem do mapa dos pontos (o desenho 3D gravado na revisão, ou o desenho próprio)
   return (d.fotos || []).filter(f => ordem.indexOf(f.secao) >= 0)
-    .sort((a, b) => ordem.indexOf(a.secao) - ordem.indexOf(b.secao)).map(f => f.path);
+    .sort((a, b) => ordem.indexOf(a.secao) - ordem.indexOf(b.secao)).map(f => f.path)
+    .concat(mp && mp.modo !== '2d' && mp.path ? [mp.path] : []);
 }
 
 /** A comparação das espessuras com a inspeção anterior (a mesma regra da revisão, 20/10). */
@@ -546,7 +548,9 @@ function montar(d, opc) {
   const leit = d.leituras || [], comps = ativos;
   const comLeitura = comps.filter(c => leit.some(l => l.componente_id === c.id));
   const siglasMapa = comLeitura.map(siglaComp).filter(Boolean);
-  const qUS = quadro + 1, fMapa = siglasMapa.length ? fig + 1 : null;
+  // S151 · issue 7: com a imagem guardada (3D ou desenho próprio), é ela que sai; sem ela (laudo antigo, vaso fora do padrão, aparelho sem 3D), o desenho 2D
+  const imgMapa = I.mapa && I.mapa.modo !== '2d' && I.mapa.path && img[I.mapa.path] ? img[I.mapa.path] : null;
+  const qUS = quadro + 1, fMapa = siglasMapa.length || imgMapa ? fig + 1 : null;
   par(txt(M.ultrassom_intro, { medidor: [med.marca, med.modelo].filter(Boolean).join(' ') || med.descricao || '—', serie: med.numero_serie || '—',
     certificado: med.certificado_num || '—', laboratorio: med.laboratorio ? ', ' + med.laboratorio : '', validade: dataBR(med.validade), quadro: qUS }));
   if (fMapa && M.ultrassom_mapa) par(txt(M.ultrassom_mapa, { figura: fMapa }));
@@ -561,7 +565,7 @@ function montar(d, opc) {
     });
   });
   if (linhasUS.length) tabela(['Componente', 'Ponto', 'Leitura 1', 'Leitura 2', 'Leitura 3', 'Leitura 4', 'Mínima'], linhasUS, ['*', 34, 46, 46, 46, 46, 46], 'Medição de espessura (mm)');
-  if (fMapa) { fig++; C.push({ stack: [{ svg: mapaSvg(V.posicao, siglasMapa), alignment: 'center', width: V.posicao === 'vertical' ? 190 : 300 },
+  if (fMapa) { fig++; C.push({ stack: [imgMapa ? { image: imgMapa, fit: [500, 392], alignment: 'center' } : { svg: mapaSvg(V.posicao, siglasMapa), alignment: 'center', width: V.posicao === 'vertical' ? 190 : 300 },
     { text: 'Figura ' + fMapa + ' – ' + presos(T.fig_mapa || 'Representação dos pontos no mapa de medição') + '.', style: 'legenda' }], margin: [0, 4, 0, 10], unbreakable: true }); }
   const semL = I.ultrassom_sem_leitura || {};
   comps.filter(c => (semL[c.id] || '').trim()).forEach(c => par(txt(M.ultrassom_nao_medido, { componente: nomeComp(c), motivo: semL[c.id] })));
@@ -938,6 +942,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, versao: 'R06a-S150-2026-11-11' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, versao: 'R06a-S151-2026-11-11' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
