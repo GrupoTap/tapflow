@@ -164,7 +164,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E21';   // E21 (S148 · 425): itens 80 (foto e arquivo com o login renovado), 85 (um ponto do CSV por componente, na ordem do medidor), 89 (a revisão não volta ao topo), 90 (o certificado do padrão nos anexos), 91 (placa com três respostas) e 93 (boroscopia: imagem × resultado)
+const VERSAO = 'TapDoc E22';   // E22 (S149 · 426): itens 82 (placa de TAG e placa de categoria), 84 (o resultado da boroscopia vem do campo), 88 (as recomendações prontas R3 em diante) e 92 (a revisão mostra o destino da foto)
+// const VERSAO = 'TapDoc E21';   // E21 (S148 · 425): itens 80 (foto e arquivo com o login renovado), 85 (um ponto do CSV por componente, na ordem do medidor), 89 (a revisão não volta ao topo), 90 (o certificado do padrão nos anexos), 91 (placa com três respostas) e 93 (boroscopia: imagem × resultado)
 // const VERSAO = 'TapDoc E20';   // E20 (S147 · 423): item 86 — o laudo assinado (e qualquer arquivo da inspeção) até 50 MB; mensagem do tamanho em português
 // const VERSAO = 'TapDoc E19';   // E19 (S146 · 422): item 79 — os textos prontos do laudo: o quadro "Textos prontos" na revisão (o escritório troca o caso escolhido em campo), o texto pronto do prazo menor (P1) e a aba "Textos do laudo" (propor; o PLH aprova com a digital; versões); laudo-pdf.js S146
 // const VERSAO = 'TapDoc E18';   // E18 (S145 · 421): rodada E — a assinatura do laudo: o desenho do PLH (aceito com a digital), aprovar e emitir com a digital, o carimbo em todas as páginas, o pacote para o token (Assinador SERPRO) e a conferência do PDF assinado (assinatura-pdf.js), a participação dos técnicos
@@ -1084,7 +1085,7 @@ function nomeGov(ck){
 function lugaresRev(R){
   if ((R.inspecao.lugares || []).length) return R.inspecao.lugares;
   const vt = R.inspecao.posicao === 'vertical';
-  return [['placa_fabricacao','plaqueta','Placa de fabricação'], ['placa_tag','plaqueta','Placa de TAG e categoria'],
+  return [['placa_fabricacao','plaqueta','Placa de fabricação'], ['placa_tag','plaqueta','Placa de TAG'], ['placa_categoria','plaqueta','Placa de categoria'],   // S149 · item 82
     [vt ? 'tampo_superior' : 'tampo_direito', 'geral', vt ? 'Tampo superior' : 'Tampo direito'], [vt ? 'tampo_inferior' : 'tampo_esquerdo', 'geral', vt ? 'Tampo inferior' : 'Tampo esquerdo'],
     ['conexoes','geral','Conexões'], ['base','geral','Base de sustentação / aterramento']].map(([lugar, secao, rotulo]) => ({ lugar, secao, rotulo }));
 }
@@ -1342,7 +1343,8 @@ function revTextosHtml(pode){
       + (pode ? '<button class="btn mini" data-tpboro="1">' + (c ? 'Trocar' : 'Escolher') + '</button>' : '') + '</td></tr>');
   }
   const rc = R.inspecao.rec_casos || [];
-  const recs = ['R1','R2'].filter(k => P[k]).map(k => '<div class="chk"><input type="checkbox" id="tprc_' + k + '" data-tprc="' + k + '"' + (rc.indexOf(k) >= 0 ? ' checked' : '') + (pode ? '' : ' disabled') + '><label for="tprc_' + k + '">' + esc(P[k].rotulo) + '</label></div>').join('');
+  const recs = Object.keys(P).filter(k => /^R\d+$/.test(k) && P[k] && P[k].grupo === 'recomendacao').sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)))   // S149 · item 88
+    .map(k => '<div class="chk"><input type="checkbox" id="tprc_' + k + '" data-tprc="' + k + '"' + (rc.indexOf(k) >= 0 ? ' checked' : '') + (pode ? '' : ' disabled') + '><label for="tprc_' + k + '">' + esc(P[k].rotulo) + '</label></div>').join('');
   return '<div class="card" id="revTextos"><h3 style="margin:0">Textos prontos</h3><p class="muted" style="margin:4px 0 8px">O caso escolhido em campo. Quem revisa pode trocar; o texto sai no laudo como aparece aqui, e a frase da conclusão (12) sai junto.</p>'
     + (linhas.length ? '<table><tr><th>Seção</th><th>Item</th><th>Caso</th><th>Texto como sai no laudo</th><th></th></tr>' + linhas.join('') + '</table>' : '<p class="muted">Nenhum acessório sem aferição e nenhuma boroscopia sem fazer.</p>')
     + (recs ? '<h3 style="margin:12px 0 4px">Recomendações prontas (seção 11)</h3>' + recs : '') + '</div>';
@@ -1596,8 +1598,9 @@ function pintarRevisao(){
       + '</td><td>' + esc(c.por || '') + '<div class="muted">' + quandoBR(c.em) + '</div></td></tr>').join('') + '</table></div>';
   // E11 (414): a boroscopia é lançada aqui (o inspetor não a faz no celular)
   const bo = (v.inspecao && v.inspecao.boroscopia) || null;
-  h += '<div class="card"><div class="linha" style="justify-content:space-between"><h3 style="margin:0">5 · Boroscopia (lançada no escritório)</h3>'
+  h += '<div class="card"><div class="linha" style="justify-content:space-between"><h3 style="margin:0">5 · Boroscopia (resultado do campo; as imagens do boroscópio sobem aqui)</h3>'
     + (eu.pode ? '<button class="btn mini" id="revBoro">' + (bo ? 'Alterar' : 'Lançar') + '</button>' : '') + '</div>'
+    + (bo && bo.observacao ? '<p style="margin:8px 0 0">Do campo (o inspetor): ' + esc(bo.observacao) + '</p>' : '')   // S149 · item 84
     + (bo ? '<p style="margin:8px 0 0">' + (bo.realizada ? 'Realizada: <b>' + (bo.resultado === 'com_anomalia' ? 'com anomalia' : 'sem anomalia') + '</b>' + (bo.anomalia ? ' · ' + esc(bo.anomalia) : '') : 'Não realizada: ' + esc(bo.motivo_nao || '')) + '</p>'
         : (() => { const nb = (R.fotos || []).filter(f => f.secao === 'boroscopia').length;   // S148 · item 93: a imagem e o resultado são duas coisas
             return nb ? '<p class="alerta falta" style="margin:8px 0 0">Imagens anexadas (' + nb + '). Falta o resultado: clique em <b>Lançar</b> e diga se foi feita e se há anomalia.</p>'
@@ -1659,7 +1662,7 @@ const PLACA_REC = { ilegivel:'Que a placa de identificação do vaso seja substi
 const placaDe = V => V.placa_situacao || (V.sem_placa ? 'sem' : 'indelevel');
 function revPlacaAlerta(recs){
   const pl = placaDe(REV.R.vaso || {});
-  if (pl === 'indelevel' || recs.some(r => /placa/i.test(r.texto || ''))) return '';
+  if (pl === 'indelevel' || recs.some(r => /placa/i.test(r.texto || '')) || (REV.R.inspecao.rec_casos || []).some(k => k === 'R10' || k === 'R11')) return '';
   return '<p class="alerta crit" style="margin:8px 0 0">Vaso ' + esc(PLACA_ROT[pl]) + ': o laudo cita a recomendação da placa na seção 11. Use a sugestão abaixo (Recomendar).</p>';
 }
 function revSugestoesHtml(recs, pode){
@@ -1866,9 +1869,15 @@ function ligarRevisao(){
     const f = (R.fotos || []).find(x => x.id === b.dataset.fid);
     if (!f || f.secao === 'boroscopia' || ['enviada','em_revisao'].indexOf(R.inspecao.situacao) < 0 || /\.pdf$/i.test(f.path || '')) return;   // quem tem o TapDoc (o banco confere)
     const LUG = lugaresRev(R), vis = $('revVisor');
-    vis.insertAdjacentHTML('beforeend', '<label class="f" style="max-width:340px">Lugar no laudo<select class="t" id="revLugar"><option value="">sem lugar (' + esc(ROT_SECAO[f.secao] || f.secao) + ')</option>'
+    // S149 · item 92: a foto já vem do campo com o destino; aqui só se mostra (e se troca quando a equipe errou)
+    const lugF = LUG.find(l => f.item === 'lugar:' + l.lugar);
+    const destino = (ROT_SECAO[f.secao] || f.secao) + ' › ' + (lugF ? lugF.rotulo : f.legenda || 'foto da seção');
+    vis.style.flexWrap = 'wrap';
+    vis.insertAdjacentHTML('beforeend', '<p style="flex-basis:100%;margin:8px 0 0">Vai no laudo em: <b>' + esc(destino) + '</b> <a href="#" id="revLugarTrocar">trocar</a></p>'
+      + '<label class="f" id="revLugarCx" style="flex-basis:100%" hidden>Lugar no laudo<select class="t" id="revLugar"><option value="">sem lugar (' + esc(ROT_SECAO[f.secao] || f.secao) + ')</option>'
       + LUG.map(l => '<option value="' + l.lugar + '"' + (f.item === 'lugar:' + l.lugar ? ' selected' : '') + '>' + esc(l.rotulo) + '</option>').join('') + '</select></label>'
       + (f.origem === 'galeria' ? '<p class="muted">Da galeria do celular' + (f.tirada_em ? ', tirada em ' + quandoBR(f.tirada_em) : '') + '.</p>' : ''));
+    $('revLugarTrocar').addEventListener('click', ev => { ev.preventDefault(); $('revLugarCx').hidden = false; $('revLugarTrocar').hidden = true; });
     $('revLugar').addEventListener('change', async ev => {
       try{ await rpc('tf_insp_foto_lugar', { p_foto:f.id, p_lugar:ev.target.value || null }); U.toast('Foto no lugar novo.', 'ok'); await recarregar(); }
       catch(e){ erro(e); }
@@ -2193,7 +2202,7 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S148');
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S149');
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S145');
     return true;
   })().catch(e => { LIBS = null; throw e; });

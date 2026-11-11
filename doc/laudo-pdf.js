@@ -126,7 +126,7 @@ function memoria(g, P, S, t) {
 function lugaresDe(d) {
   if (((d.inspecao || {}).lugares || []).length) return d.inspecao.lugares;
   const vt = (d.vaso || {}).posicao === 'vertical';
-  return [['placa_fabricacao', 'plaqueta', 'Placa de fabricação'], ['placa_tag', 'plaqueta', 'Placa de TAG e categoria'],
+  return [['placa_fabricacao', 'plaqueta', 'Placa de fabricação'], ['placa_tag', 'plaqueta', 'Placa de TAG'], ['placa_categoria', 'plaqueta', 'Placa de categoria'],   // S149 · item 82
     [vt ? 'tampo_superior' : 'tampo_direito', 'geral', vt ? 'Tampo superior' : 'Tampo direito'], [vt ? 'tampo_inferior' : 'tampo_esquerdo', 'geral', vt ? 'Tampo inferior' : 'Tampo esquerdo'],
     ['conexoes', 'geral', 'Conexões'], ['base', 'geral', 'Base de sustentação / aterramento']].map(([lugar, secao, rotulo]) => ({ lugar, secao, rotulo }));
 }
@@ -168,6 +168,7 @@ function anexosDoLaudo(d) {
     .concat(['ART – Anotação de Responsabilidade Técnica']);
   return xs.map((x, k) => 'Anexo ' + (k + 1) + ' – ' + x + (k === xs.length - 1 ? '.' : ';'));
 }
+const MESMA_FOTO = /^Mesma foto da placa de TAG/;   // S149 · item 82
 function nomeComp(c) {
   if (!c) return '';
   const sg = siglaComp(c);
@@ -394,7 +395,7 @@ function montar(d, opc) {
   const nPlaca = placas.length ? figura(placas, T.fig_placas || 'Detalhamento das plaquetas de identificação', blocoPlacas) : null;
   par(txt(M.vaso_fonte, { figura: nPlaca ? ' (Figura ' + nPlaca + ')' : '', quadro: qVaso }));
   C.push(...blocoPlacas);
-  LUG.filter(l => l.secao === 'plaqueta' && !fotoDoLugar(l) && String(SEMAC[l.lugar] || '').trim())
+  LUG.filter(l => l.secao === 'plaqueta' && !fotoDoLugar(l) && String(SEMAC[l.lugar] || '').trim() && !MESMA_FOTO.test(SEMAC[l.lugar]))   // S149 · item 82: a mesma foto serve para as duas
     .forEach(l => par(presos(l.rotulo) + ': sem foto (' + String(SEMAC[l.lugar]).trim().replace(/[.\s]+$/, '') + ').', { style: 'legenda' }));
   sub('6.2', T.acessorios || 'Identificação dos acessórios do vaso de pressão');
   const acs = d.acessorios || [];
@@ -532,8 +533,18 @@ function montar(d, opc) {
   const bancadaTxt = bz => { const m = [bz.marca, bz.modelo].filter(x => !vazio(x)).join(' '); return m ? ' (modelo ' + m + ')' : ''; };
   const conc = { man: [], valv: [] }, K = M.conc || {};
   // S144 · item 69: a foto da aferição (tirada no celular, no lugar próprio do acessório) entra como figura
-  const fotoAfer = (a, legenda) => { const fs = (d.fotos || []).filter(f => f.secao === 'acessorios' && f.item === 'afer:' + a.id && img[f.path]);
-    if (fs.length) figura(fs.map(f => img[f.path]), legenda); };
+  // S149 · item 83: as 3 fotos com nome — a bancada montada em cima, larga; o padrão e o instrumento em teste lado a lado embaixo
+  const fotoAfer = (a, legenda) => {
+    const doLugar = k => (d.fotos || []).find(f => f.secao === 'acessorios' && f.item === 'afer:' + a.id + ':' + k && img[f.path]);
+    const ban = doLugar('bancada'), baixo = [doLugar('padrao'), doLugar('instrumento')].filter(Boolean);
+    const soltas = (d.fotos || []).filter(f => f.secao === 'acessorios' && f.item === 'afer:' + a.id && img[f.path]);   // as de antes do S149
+    if (!ban && !baixo.length) { if (soltas.length) figura(soltas.map(f => img[f.path]), legenda); return; }
+    const n = ++fig, st = [];
+    if (ban) st.push({ image: img[ban.path], fit: [480, 230], alignment: 'center', margin: [0, 2, 0, 4] });
+    if (baixo.length) st.push({ columns: baixo.map(f => ({ image: img[f.path], fit: [235, 175], alignment: 'center' })), columnGap: 10, margin: [0, 2, 0, 2] });
+    st.push({ text: 'Figura ' + n + ' – ' + presos(legenda) + '.', style: 'legenda' });
+    C.push({ stack: st, margin: [0, 4, 0, 10], unbreakable: true });
+  };
   sub('7.5', T.manometro || 'Aferição do manômetro');
   const mans = acs.filter(a => (a.tipo === 'manometro' || a.tipo === 'manovacuometro') && (presentes(a) || (a.situacao === 'ausente' && PR[a.afericao_caso])));   // S146: M3–M5
   if (!mans.length) { par(M.manometro_nenhum); conc.man.push(K.man_nenhum); }
@@ -713,10 +724,11 @@ function montar(d, opc) {
   sub('11.1', T.rec_seguranca || 'Recomendações de segurança');
   lista([].concat(recs.filter(r => r.tipo === 'seguranca').map(comPrazo), recs.filter(r => r.tipo === 'geral').map(comPrazo), M.rec_seguranca_gerais || [],
     [I.ambiente && (M.rec_instalacao || {})[I.ambiente]], ['I', 'II'].indexOf(R.categoria) >= 0 ? [txt(M.rec_manual_cat12, { categoria: R.categoria })] : [],
-    (I.rec_casos || []).filter(k => PR[k]).map(k => PR[k].texto),   // S146 · item 79 (T7)
+    (I.rec_casos || []).filter(k => PR[k] && PR[k].tipo !== 'conservacao').map(k => PR[k].texto),   // S146 · item 79 (T7) · S149 · item 88: pelo tipo
     acs.some(a => a.tipo === 'disco_ruptura' && presentes(a) && (a.caso_campos || {}).sem_certificado) && PR.D3 ? [PR.D3.texto] : []), true);
   sub('11.2', T.rec_conservacao || 'Recomendações de conservação');
-  lista([].concat(recs.filter(r => r.tipo === 'conservacao').map(comPrazo), M.rec_conservacao_gerais || []), true);
+  lista([].concat(recs.filter(r => r.tipo === 'conservacao').map(comPrazo), M.rec_conservacao_gerais || [],
+    (I.rec_casos || []).filter(k => PR[k] && PR[k].tipo === 'conservacao').map(k => PR[k].texto)), true);   // S149 · item 88
 
   // ── 12 · conclusão (S143 · item 76: "Conforme a seção 7.x, …", montado pelos resultados) ──
   sec('12', T.conclusao || 'CONCLUSÃO');
@@ -830,6 +842,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-S148-2026-11-11' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-S149-2026-11-11' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
