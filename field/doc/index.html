@@ -10,7 +10,7 @@
 <script src="../../nucleo/config.js?v=N8"></script>
 <script src="../../nucleo/nucleo.js?v=N8"></script>
 <script src="../../nucleo/modulos.js?v=M4"></script>
-<script src="motor-calculo-nr13.js?v=R00.5"></script>
+<script src="motor-calculo-nr13.js?v=R00.6"></script>
 <!--
   TapDoc 4 · a coleta da inspeção no celular (R02a, R02b1, R03a e R03b)
   ─────────────────────────────────────────────────────────────────
@@ -181,7 +181,8 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 21';   // S149 · itens 82, 83, 84, 88 e 92 (426): placa de TAG e placa de categoria; as 3 fotos da aferição; a boroscopia de volta (obrigatória para enviar); as recomendações prontas; a foto pergunta onde vai no laudo
+const VERSAO = 'TapDoc 22';   // S150 · item 81 (427): a aferição em 2 etapas (a 1ª reprovada encerra: NÃO CONFORME, sem leituras); manômetro pela ASME B40.100 Grau D; o teste da válvula pelas regras V1–V5 (abertura encontrada, aviso na hora acima da PMTA e abaixo da operação); "Danificado" vira a aferição reprovada na etapa 1; motor R00.6
+// const VERSAO = 'TapDoc 21';   // S149 · itens 82, 83, 84, 88 e 92 (426): placa de TAG e placa de categoria; as 3 fotos da aferição; a boroscopia de volta (obrigatória para enviar); as recomendações prontas; a foto pergunta onde vai no laudo
 // const VERSAO = 'TapDoc 20';   // S148 · itens 85 e 91 (425): os componentes na ordem do medidor (CF, CT, CS/CLD, CI/CLE, tampos); a placa de identificação com três respostas
 // const VERSAO = 'TapDoc 19';   // S146 · item 79 (422): os textos prontos do laudo — o caso escolhido no acessório não aferido (manômetro, válvula, quebra-vácuo), o disco de ruptura, a boroscopia não feita, o prazo menor (P1), as recomendações prontas (R1, R2) e o equipamento sem pressão (fora da NR-13)
 // const VERSAO = 'TapDoc 18';   // S145 · rodada E (A8): o aviso no Fechamento de que cada um confirma a participação no próprio celular (aba Eu)
@@ -950,7 +951,7 @@ $('arqPdf').addEventListener('change', async () => {
   const arq = $('arqPdf').files && $('arqPdf').files[0];
   if (!arq || !alvoFoto) return;
   const v = vaso(alvoFoto.v); if (!v) return;
-  if (arq.size > 5242880){ U.toast('PDF acima de 5 MB. Fotografe as páginas.', 'err'); return; }
+  if (arq.size > 52428800){ U.toast('PDF acima de 50 MB. Fotografe as páginas.', 'err'); return; }   // S150: o limite do armazenamento das inspeções subiu para 50 MB (S147, item 86; revisor do #15)
   await registrarArquivo(v, 'laudo_anterior', 'PDF do laudo', arq, 'pdf', 'application/pdf', null);
   laudoColetado(v, 'pdf');
   alvoFoto = null; pintar();
@@ -1868,6 +1869,15 @@ function pmtaVigenteCam(v, camId){
   if (c && c.pmta_vigente_mpa) return c.pmta_vigente_mpa;
   const la = v.laudo_anterior; return la && la.situacao === 'conferido' && cs.length <= 1 ? la.pmta_mpa : null;
 }
+// S150 · item 81: a pressão máxima de operação da câmara do acessório (V3: a válvula abre acima dela)
+function operCam(v, camId){
+  const cs = ativas(v), c = cs.find(x => x.id === camId) || (cs.length === 1 ? cs[0] : null);
+  return c && c.p_operacao_max_mpa != null ? Math.abs(Number(c.p_operacao_max_mpa)) : null;
+}
+// S150 · item 81 (decisões 2 e 11): a etapa 1 (inspeção visual e funcional) reprovada
+const DEFEITOS_E1 = { manometro:['Visor quebrado', 'Ponteiro solto', 'Travado', 'Escala ilegível', 'Não volta ao zero', 'Outro'],
+                      valvula:['Danificada', 'Travada', 'Vazamento na sede', 'Avaria ou particulados', 'Sem ajuste possível', 'Outro'] };
+const e1Reprovada = af => !!(af && af.leituras && af.leituras.etapa1 && af.leituras.etapa1.ok === false);
 function avisosAcess(v){
   const a = [], l = acessDe(v).filter(x => x.situacao !== 'retirado');
   l.filter(x => VALVULAS.includes(x.tipo) && x.pressao_ajuste_mpa != null).forEach(x => {
@@ -1912,22 +1922,24 @@ function resultadoAf(v, a, af){
   const M = window.MotorNR13, pad = padraoDe(af.padrao_id);
   let r;
   try{
+    const L = af.leituras || {};
     if (af.tipo === 'manometro'){
       const uPad = pad && pad.u_expandida != null && pad.unidade ? M.deMPa(M.paraMPa(Number(pad.u_expandida), pad.unidade), af.unidade || 'bar') : null;
       r = M.afericaoManometro({ faixaIni:af.faixa_ini, faixaFim:af.faixa_fim, resolucao:af.resolucao, uPadrao:uPad, kPadrao:pad && pad.k || 2,
-        pontos:(af.leituras && af.leituras.pontos) || [] });
+        pontos:(af.leituras && af.leituras.pontos) || [], etapa1:L.etapa1 });
       r.aprovadaOk = r.aprovado;
     } else {
-      r = M.testeValvula({ unidade:af.unidade || 'bar', ajuste:af.ajuste, aberturas:(af.leituras && af.leituras.aberturas) || [],
-        assentamentos:(af.leituras && af.leituras.assentamentos) || [], assentamento:af.leituras && af.leituras.assentamento, pmtaMPa:pmtaVigenteCam(v, a.camara_id) });
+      // S150 · item 81 (V1–V5): sem a pressão de ajuste de referência; a abertura encontrada; acima da PMTA e abaixo da operação
+      r = M.testeValvula({ unidade:af.unidade || 'bar', aberturas:L.aberturas || [], assentamentos:L.assentamentos || [], reajustada:!!L.reajustada, encontrada:L.encontrada,
+        pmtaMPa:pmtaVigenteCam(v, a.camara_id), operMPa:operCam(v, a.camara_id), motivoAcima:L.motivo_acima, motivoAbaixo:L.motivo_abaixo, etapa1:L.etapa1 });
       r.aprovadaOk = r.aprovada;
     }
   }catch(e){ r = { completo:false, faltas:[e.message], avisos:[], aprovadaOk:false }; }
   // S140 · item 33: vaso sem laudo anterior não tem PMTA vigente: a abertura é conferida no escritório, contra a PMTA adotada
   const laSit = v.laudo_anterior && v.laudo_anterior.situacao;
   if (laSit === 'sem_laudo' || laSit === 'cliente_nao_tem') r.avisos = (r.avisos || []).map(x => /^Sem a PMTA vigente/.test(x) ? 'Vaso sem laudo anterior: a abertura é conferida no escritório, contra a PMTA adotada nesta inspeção.' : x);
-  if (!af.padrao_id) r.faltas.push('Escolha o manômetro padrão.');
-  if (!(af.lacre_colocado || '').trim()) r.faltas.push('Informe o lacre colocado.');
+  if (!af.padrao_id && !e1Reprovada(af)) r.faltas.push('Escolha o manômetro padrão.');   // S150: a etapa 1 reprovada não usa o padrão nem lacra
+  if (!(af.lacre_colocado || '').trim() && !e1Reprovada(af)) r.faltas.push('Informe o lacre colocado.');
   r.completo = !r.faltas.length;
   r.resultado = !r.completo ? 'incompleto' : r.aprovadaOk ? 'aprovado' : 'reprovado';
   return r;
@@ -1952,7 +1964,7 @@ function blocoAfericao(v, a, pode){
       // S144 · item 69: a foto da aferição na bancada (sai como figura no 7.5/7.6 do laudo)
       // S149 · item 83: 3 fotos com nome (vão no laudo: a bancada em cima, o padrão e o instrumento embaixo)
       + '<p style="margin:10px 0 0;font-size:13px;font-weight:600;color:var(--ink-2)">Fotos da aferição <small class="muted" style="font-weight:400">(vão no laudo)</small></p>'
-      + lugaresAfer(a).map(l => blocoLugar(v, l)).join('')
+      + lugaresAfer(a).filter(l => !e1Reprovada(af) || /:instrumento$/.test(l.item)).map(l => blocoLugar(v, l)).join('')
       + (fotosDe(v, 'acessorios', 'afer:' + a.id).length ? '<p class="muted" style="margin:6px 0 0">Fotos de antes:</p>' + gradeFotos(v, 'acessorios', fotosDe(v, 'acessorios', 'afer:' + a.id).length, null, 'afer:' + a.id) : '');
   } else if ((a.afericao_motivo || '').trim()){
     const cP = a.afericao_caso && PRONTOS() && PRONTOS()[a.afericao_caso];   // S146 · item 79
@@ -1980,7 +1992,14 @@ function ligarBlocoAfericao(v, l, mudou){
     const cs = casosDe(v, a, false);
     if (cs.length) return janelaCasos('Por que não aferir' + (a.tag ? ' o ' + a.tag : '') + '?', cs, a.afericao_caso, a.caso_campos, a.tipo,
       [{ v:'+', rotulo:'Outro motivo (escrever; o escritório escolhe o texto)', escrever:true, on:!a.afericao_caso && !!a.afericao_motivo, texto:a.afericao_caso ? '' : a.afericao_motivo || '' }],
-      (k, campos, texto) => { a.afericao_caso = k; a.caso_campos = campos; mudou(a, 'afericao_motivo', texto); pintar(); });
+      (k, campos, texto) => {
+        if (k === 'M6' || k === 'V7'){   // S150 · item 81: "Danificado" = a aferição feita, reprovada na etapa 1 (gera o relatório e é cobrada)
+          a.afericao_caso = null; a.caso_campos = null; mudou(a, 'afericao_motivo', null);
+          const af = novaAfericao(v, a), det = (campos && (campos.detalhe || campos.defeito)) || '';
+          af.leituras.etapa1 = { ok:false, defeitos:[], obs:det }; salvar(); gravarAfericao(v, af);
+          return ir({ nome:'afericao', vaso:v.id, ac:a.id });
+        }
+        a.afericao_caso = k; a.caso_campos = campos; mudou(a, 'afericao_motivo', texto); pintar(); });
     janela('Por que não aferir?',
       '<label class="f">Motivo<textarea class="t" id="afMot" placeholder="Ex.: o cliente não liberou a retirada"></textarea></label>',
       [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
@@ -2015,14 +2034,15 @@ const adiarAf = debounce((v, a, af) => {
 function htmlResAf(r, vv){
   return '<b>Resultado</b>' + (r.faltas.length ? '<ul>' + r.faltas.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '')
     + (r.avisos.length ? '<div class="alerta" style="margin-top:6px"><ul>' + r.avisos.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '')
-    + (r.completo ? '<p class="info" style="margin:6px 0 0">' + (vv ? (r.aprovadaOk ? 'Aprovada.' : 'Reprovada.') : (r.aprovadaOk ? 'Aprovado.' : 'Reprovado: o acessório vai para "substituir".')) + '</p>' : '');
+    + (r.completo ? '<p class="info" style="margin:6px 0 0">' + (r.etapa1 ? '<b>NÃO CONFORME</b> na etapa 1 (inspeção visual e funcional). A etapa 2 fica "não aplicável". Gera o relatório de não conformidade e a recomendação de substituir.'
+        : vv ? (r.aprovadaOk ? '<b>CONFORME</b>. Adequada para vasos com PMTA ≥ ' + fmt(r.abertMax) + ' (a maior das 3 aberturas).' : '<b>NÃO CONFORME</b>.') : (r.aprovadaOk ? '<b>CONFORME</b>.' : '<b>NÃO CONFORME</b>: o acessório vai para "substituir" e entra a recomendação de substituir.')) + '</p>' : '');
 }
 function htmlPorPonto(r, pts, un, af){
   if (!pts.length || !(r.pontos || []).length) return '';
-  // S141 · item 58: de onde vem a tolerância (NBR 14105-1, classe B; o fundo de escala é a escala de indicação)
+  // de onde vem a tolerância (S150: ASME B40.100 Grau D; o fundo de escala é a escala de indicação)
   const CL = window.MotorNR13.CLASSE_MANOMETRO || { nome:'B', meio:0.02, pontas:0.03 }, fundo = af && af.faixa_fim != null && af.faixa_ini != null ? af.faixa_fim - af.faixa_ini : null;
-  const regra = fundo > 0 ? '<p class="muted" style="margin:4px 0 0">Tolerância pela NBR 14105-1, classe ' + CL.nome + ', fundo de escala ' + esc(fmt(fundo)) + ' ' + UN_AF_ROT[un] + ': ±' + esc(fmt(CL.meio * fundo, 3))
-    + ' ' + UN_AF_ROT[un] + ' (' + fmt(CL.meio * 100, 0) + '%) de 25% a 75% da escala; ±' + esc(fmt(CL.pontas * fundo, 3)) + ' (' + fmt(CL.pontas * 100, 0) + '%) fora disso.</p>' : '';
+  // S150 · item 81: ASME B40.100, Grau D — ±5% do fundo de escala em qualquer ponto
+  const regra = fundo > 0 ? '<p class="muted" style="margin:4px 0 0">Critério ' + esc(CL.norma || 'ASME B40.100, Grau D') + ': fundo de escala ' + esc(fmt(fundo)) + ' ' + UN_AF_ROT[un] + ', limite ±' + esc(fmt(CL.meio * fundo, 2)) + ' ' + UN_AF_ROT[un] + ' em qualquer ponto.</p>' : '';
   return '<b>Resultado por ponto</b>' + regra + pts.map(p => { const rp = (r.pontos || []).find(x => x.nominal === Number(p.nominal)); return rp ? '<p class="muted" style="margin:6px 0 0">' + esc(fmt(p.nominal)) + ' ' + UN_AF_ROT[un] + ' ' +
     (rp.ok !== undefined ? (rp.ok ? '<span class="chip ok">ok</span>' : '<span class="chip pend">fora</span>') : '') + (rp.erroMedio !== undefined ? ' · erro médio ' + fmt(rp.erroMedio, 3) + ' · tolerância ±' + fmt(rp.tol, 3) + ' · U ' + fmt(rp.U, 3) : '') + '</p>' : ''; }).join('');
 }
@@ -2041,6 +2061,16 @@ function telaAfericao(v){
   const r = resultadoAf(v, a, af);
   let h = '<div class="card"><div style="display:flex;gap:8px;align-items:center"><b style="flex:1">' + (af.codigo ? esc(af.codigo) : 'Número ao enviar') + '</b><span id="afChip">' + chipAf(r.resultado) + '</span></div>'
     + '<p class="muted" style="margin:4px 0 0">PR-ENG-001 · ' + (vv ? 'desmontada até onde a construção permite, inspecionada, limpa e aferida' : '3 cargas e 3 descargas por ponto') + '</p></div>';
+  // S150 · item 81 (decisão 11): etapa 1 — inspeção visual e funcional (visor, ponteiro, retorno ao zero, escala, rosca, lacre)
+  const E1 = (af.leituras || (af.leituras = {})).etapa1 || null, e1n = E1 && E1.ok === false;
+  h += '<div class="card"><b>Etapa 1 · inspeção visual e funcional</b><div class="seg" id="afE1"><button data-e1="1" class="' + (!e1n ? 'on' : '') + '">Aprovado: seguir para a etapa 2</button>'
+    + '<button data-e1="0" class="' + (e1n ? 'on' : '') + '">Reprovado</button></div>';
+  if (e1n) h += '<p class="muted" style="margin:6px 0 2px">O que tem de errado (um ou mais)</p>' + DEFEITOS_E1[vv ? 'valvula' : 'manometro'].map((d, k) => '<div class="chk"><input type="checkbox" id="afD' + k + '" data-def="' + esc(d) + '"'
+      + ((E1.defeitos || []).indexOf(d) >= 0 ? ' checked' : '') + '><label for="afD' + k + '">' + esc(d) + '</label></div>').join('')
+    + '<label class="f">Observação (opcional)<input class="t" id="afE1Obs" value="' + esc(E1.obs || '') + '"></label>'
+    + '<p class="muted" style="margin:6px 0 0">A aferição foi feita e termina aqui: NÃO CONFORME, etapa 2 "não aplicável". Tire a foto do ' + (vv ? 'válvula' : 'manômetro') + ' em teste (na lista de acessórios).</p>';
+  h += '</div>';
+  if (!e1n){
   h += '<div class="card"><label class="f">Manômetro padrão<select class="t" id="afPad"><option value="">—</option>' + (E.padroes || []).map(p => '<option value="' + esc(p.id) + '"' + (p.id === af.padrao_id ? ' selected' : '') + '>'
       + esc((p.descricao || 'Padrão') + (p.numero_serie ? ' · ' + p.numero_serie : '') + (p.validade ? ' · até ' + String(p.validade).slice(5, 7) + '/' + String(p.validade).slice(0, 4) : '')) + '</option>').join('') + '</select></label>'
     + ((E.padroes || []).length ? '' : '<p class="alerta">Nenhum padrão com certificado válido no pacote. O escritório cadastra em TapDoc › Instrumentos.</p>')
@@ -2049,9 +2079,17 @@ function telaAfericao(v){
     const L = af.leituras || (af.leituras = { aberturas:[null, null, null], assentamentos:[null, null, null] });
     // S113 · C8: 3 ciclos, cada um com a abertura e o seu assentamento (o formato antigo, com 1 assentamento, é trocado por este)
     if (!Array.isArray(L.assentamentos)){ L.assentamentos = [null, null, null]; delete L.assentamento; }
-    h += '<div class="card">' + campoNum('Pressão de abertura (plaqueta/certificado) (' + UN_AF_ROT[un] + ')', 'afAj', af.ajuste, 'Como está na válvula ou no certificado')
+    if (!Array.isArray(L.aberturas)) L.aberturas = [null, null, null];
+    // S150 · item 81 (V2): sem pressão de ajuste de referência; se reajustou, antes a abertura encontrada (só registro)
+    h += '<div class="card"><div class="chk" style="margin-top:0"><input type="checkbox" id="afReaj"' + (L.reajustada ? ' checked' : '') + '><label for="afReaj">A válvula foi reajustada</label></div>'
+      + (L.reajustada ? campoNum('Abertura encontrada, antes do ajuste (' + UN_AF_ROT[un] + ')', 'afEnc', L.encontrada, 'Como a válvula chegou (só registro)') : '<p class="muted" style="margin:4px 0 0">Sem ajuste, a 1ª abertura vale como a encontrada.</p>')
       + '</div>' + [0, 1, 2].map(k => '<div class="card"><b>Ciclo ' + (k + 1) + '</b><div class="lin">' +
-          campoNum('Abertura (' + UN_AF_ROT[un] + ')', 'afAb' + k, L.aberturas[k]) + campoNum('Assentamento (' + UN_AF_ROT[un] + ')', 'afAs' + k, L.assentamentos[k]) + '</div></div>').join('');
+          campoNum('Abertura (' + UN_AF_ROT[un] + ')', 'afAb' + k, L.aberturas[k]) + campoNum('Assentamento (' + UN_AF_ROT[un] + ')', 'afAs' + k, L.assentamentos[k]) + '</div></div>').join('')
+      // S150 · item 81 (V4): o aviso na hora; sem ajuste possível, o motivo
+      + '<div class="card alerta" id="afCxAc"' + (r.acimaPMTA ? '' : ' hidden') + ' style="border-color:var(--crit)"><b style="color:var(--crit)">Abre acima da PMTA: reajuste a válvula.</b>'
+      + '<label class="f">Sem ajuste possível: o motivo (fica reprovada)<textarea class="t" id="afMotAc">' + esc(L.motivo_acima || '') + '</textarea></label></div>'
+      + '<div class="card alerta" id="afCxAb"' + (r.abaixoOperacao ? '' : ' hidden') + '><b>Vai abrir com o vaso trabalhando (na operação ou abaixo): reajuste.</b>'
+      + '<label class="f">Sem ajuste possível: o motivo (o PLH vê na revisão)<textarea class="t" id="afMotAb">' + esc(L.motivo_abaixo || '') + '</textarea></label></div>';
   } else {
     const L = af.leituras || (af.leituras = { pontos:[] }), es = L.escala || (L.escala = {});
     // S112 · C4: como no TapDoc do Paulo — escala de indicação, graduações, escala de utilização e resolução; "Gerar os pontos da aferição" monta os pontos
@@ -2078,12 +2116,14 @@ function telaAfericao(v){
   }
   // S140 · item 56: sem a validade (não sai no relatório; o prazo é lembrete interno, mudado no escritório)
   h += '<div class="card">' + campoTexto('Número do lacre', 'afLc', af.lacre_colocado, 'inputmode="numeric"') + '</div>';
+  }   // S150 · fim da etapa 2
   h += '<div class="card" id="afResultado">' + htmlResAf(r, vv) + '</div>';
   $('tela').innerHTML = h;
   if (!pode){ $('tela').querySelectorAll('input,select,button').forEach(el => { el.disabled = true; }); return; }
   const atualizar = () => {
     const rr = resultadoAf(v, a, af);
     $('afChip').innerHTML = chipAf(rr.resultado); $('afResultado').innerHTML = htmlResAf(rr, vv);
+    const cA = $('afCxAc'), cB = $('afCxAb'); if (cA) cA.hidden = !rr.acimaPMTA && !(af.leituras.motivo_acima || '').trim(); if (cB) cB.hidden = !rr.abaixoOperacao && !(af.leituras.motivo_abaixo || '').trim();   // S150 · V4
     const pp = $('afPorPonto'); if (pp){ const t = htmlPorPonto(rr, (af.leituras && af.leituras.pontos) || [], af.unidade || 'bar', af); pp.innerHTML = t; pp.hidden = !t; }
   };
   const mudou = (repinta) => {
@@ -2092,14 +2132,28 @@ function telaAfericao(v){
   };
   const n = x => { const y = num(x); return y == null || Number.isNaN(y) ? null : y; };
   const aoDigitar = (id, fn) => { const el = $(id); if (el) el.addEventListener('input', () => fn(el)); };
+  // S150 · item 81: a etapa 1
+  $('afE1').querySelectorAll('[data-e1]').forEach(b => b.addEventListener('click', () => {
+    af.leituras.etapa1 = b.dataset.e1 === '1' ? { ok:true } : Object.assign({ defeitos:[], obs:'' }, af.leituras.etapa1 || {}, { ok:false });
+    if (b.dataset.e1 === '0' && (a.situacao || 'ok') === 'ok'){ a.situacao = 'substituir'; gravarAcess(v, a); }
+    mudou(true);
+  }));
+  $('tela').querySelectorAll('[data-def]').forEach(el => el.addEventListener('change', () => {
+    const E = af.leituras.etapa1, d = el.dataset.def; E.defeitos = (E.defeitos || []).filter(x => x !== d).concat(el.checked ? [d] : []); mudou(false);
+  }));
+  aoDigitar('afE1Obs', el => { af.leituras.etapa1.obs = el.value; mudou(false); });
+  if (e1n) return;
   ligar('afPad', el => { af.padrao_id = el.value || null; LS.set('tfdoc_af_pad', af.padrao_id); mudou(true); });
   ligar('afUn', el => { af.unidade = el.value; mudou(true); });
   aoDigitar('afLc', el => { af.lacre_colocado = el.value.trim() || null; mudou(false); });   // item 59: o resultado vê o lacre na hora
   if (vv){
-    aoDigitar('afAj', el => { af.ajuste = n(el.value); mudou(false); });
+    ligar('afReaj', el => { af.leituras.reajustada = el.checked; if (!el.checked) af.leituras.encontrada = null; mudou(true); });   // S150 · V2
+    aoDigitar('afEnc', el => { af.leituras.encontrada = n(el.value); mudou(false); });
+    aoDigitar('afMotAc', el => { af.leituras.motivo_acima = el.value.trim() || null; mudou(false); });
+    aoDigitar('afMotAb', el => { af.leituras.motivo_abaixo = el.value.trim() || null; mudou(false); });
     [0, 1, 2].forEach(k => aoDigitar('afAb' + k, el => { af.leituras.aberturas[k] = n(el.value); mudou(false); }));
     [0, 1, 2].forEach(k => aoDigitar('afAs' + k, el => { af.leituras.assentamentos[k] = n(el.value); mudou(false); }));
-    encadear(['afAj', 'afAb0', 'afAs0', 'afAb1', 'afAs1', 'afAb2', 'afAs2', 'afLc'].map($).filter(Boolean));   // item 54
+    encadear(['afEnc', 'afAb0', 'afAs0', 'afAb1', 'afAs1', 'afAb2', 'afAs2', 'afLc'].map($).filter(Boolean));   // item 54
   } else {
     const es = af.leituras.escala || (af.leituras.escala = {});
     aoDigitar('afIni', el => { af.faixa_ini = n(el.value); mudou(false); });

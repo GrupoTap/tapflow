@@ -169,6 +169,88 @@ function anexosDoLaudo(d) {
   return xs.map((x, k) => 'Anexo ' + (k + 1) + ' – ' + x + (k === xs.length - 1 ? '.' : ';'));
 }
 const MESMA_FOTO = /^Mesma foto da placa de TAG/;   // S149 · item 82
+
+/**
+ * S150 · item 81 (desenho 09, 4ª e 5ª rodadas de 11/11): o documento de cada aferição, separado, no pacote do laudo.
+ *  Manômetro: "Relatório de Aferição de Manômetro" — conforme; não conforme pelas leituras (o ponto fora destacado);
+ *  não conforme na etapa 1 (sem leituras: "etapa 2 não aplicável"). Válvula: "Certificado de Inspeção e Teste de
+ *  Válvula de Segurança", com a frase "adequada para vasos com PMTA ≥ X" (X = a maior das 3 aberturas, V5; a PMTA não vai
+ *  no certificado, decisão 10). Sem "Rede Brasileira de Calibração", "17025", "IT.INM033" nem "mínimo 5 ciclos" (decisão 6).
+ *  Devolve a lista de { codigo, resultado, def } (uma definição do pdfmake por documento), na ordem dos acessórios.
+ */
+function documentosAfericao(d, opc) {
+  opc = opc || {};
+  const AZ = '#1B6FA9', CZ = '#515252', VERM = '#A62D18', VERDE = '#1E6B3A';
+  const vazio = x => x == null || /^\s*(—|-|não há|nao ha|n\/a)?\s*$/i.test(String(x));
+  const emp = d.empresa || {}, V = d.vaso || {}, I = d.inspecao || {};
+  const plh = opc.plh || d.plh || null, CAR = opc.carimbo && opc.carimbo.imagem ? opc.carimbo : null;
+  const out = [];
+  (d.acessorios || []).forEach(a => {
+    const f = a.afericao;
+    if (!f || (f.resultado !== 'aprovado' && f.resultado !== 'reprovado')) return;
+    const L = f.leituras || {}, cal = f.calculo || {}, e1 = !!(L.etapa1 && L.etapa1.ok === false);
+    const vv = f.tipo === 'valvula', un = String(f.unidade || 'bar').replace('kgf/cm2', 'kgf/cm²'), ok = f.resultado === 'aprovado';
+    const pz = f.padrao || {};
+    const titulo = vv ? 'Certificado de Inspeção e Teste de Válvula de Segurança' : 'Relatório de Aferição de Manômetro';
+    const C = [];
+    const linha = (r, v) => [{ text: r, style: 'thl' }, { text: v == null || v === '' ? '—' : String(v), style: 'td' }];
+    C.push({ text: titulo, style: 'titulo' }, { text: 'Nº ' + (f.codigo || 'a numerar') + (ok ? '' : ' · NÃO CONFORME'), style: 'numero', color: ok ? CZ : VERM });
+    C.push({ table: { widths: [150, '*'], body: [
+      linha('Cliente', emp.razao_social || emp.nome_fantasia), linha('Vaso de pressão', [V.tag, V.numero_tap ? 'Número TAP ' + V.numero_tap : null].filter(Boolean).join(' · ')),
+      linha(vv ? 'Válvula' : 'Manômetro', [TIPOS_ACESS[a.tipo] || a.tipo, a.tag, !vazio(a.marca) ? 'marca ' + a.marca : null, a.conexao ? 'conexão ' + a.conexao : null].filter(Boolean).join(' · ')),
+      linha(vv ? 'Unidade' : 'Escala de indicação', vv ? un : (f.faixa_fim != null ? fmt(f.faixa_ini || 0, 1) + ' a ' + fmt(f.faixa_fim, 1) + ' ' + un + (f.resolucao ? ' · resolução ' + fmt(f.resolucao, 2) : '') : '—')),
+      linha('Data', dataBR(f.realizada_em || I.termino || I.inicio)),
+      linha('Procedimento', 'PR-ENG-001 (Engetap), aprovado pelo PLH: ' + (vv ? 'desmontada até onde a construção permite, inspecionada, limpa e testada (NR-13, item 13.5.4.9)'
+        : 'etapa 1, inspeção visual e funcional; etapa 2, comparação com o padrão em 3 cargas e 3 descargas por ponto')),
+    ].concat(e1 ? [] : [linha('Padrão', [pz.descricao, pz.numero_serie ? 'nº ' + pz.numero_serie : null, pz.certificado_num ? 'certificado ' + pz.certificado_num : null,
+        pz.laboratorio ? pz.laboratorio : null, pz.validade ? 'válido até ' + dataBR(pz.validade) : null].filter(Boolean).join(' · '))])
+      .concat(!vv && !e1 ? [linha('Critério', 'ASME B40.100, Grau D (±5% do fundo de escala, em qualquer ponto)')] : []) }, layout: 'lightHorizontalLines', margin: [0, 6, 0, 10] });
+    // etapa 1
+    C.push({ text: 'Etapa 1 · inspeção visual e funcional', style: 'h2' });
+    if (e1) {
+      C.push({ text: 'Reprovado: ' + [].concat(L.etapa1.defeitos || []).concat(L.etapa1.obs ? [L.etapa1.obs] : []).join('; ').toLowerCase() + '.', style: 'par' },
+             { text: 'Etapa 2 (comparação com o padrão): não aplicável.', style: 'par', color: CZ });
+    } else C.push({ text: vv ? 'Aprovada: sem dano aparente, desmontada, inspecionada e limpa.' : 'Aprovado: visor, ponteiro, retorno ao zero, escala legível, rosca e lacre em condições.', style: 'par' });
+    // etapa 2
+    if (!e1 && !vv) {
+      C.push({ text: 'Etapa 2 · comparação com o padrão', style: 'h2' });
+      const corpo = [['Ponto', 'Padrão (média)', 'Erro médio', 'Tolerância', 'Incerteza (U, k = 2)', 'Dentro da tolerância?'].map(t => ({ text: t, style: 'th' }))]
+        .concat((cal.pontos || []).map(p => [fmt(p.nominal, 2), fmt(p.ref_padrao, 2), (p.erro_medio > 0 ? '+' : '') + fmt(p.erro_medio, 2), '±' + fmt(p.tol, 2), fmt(p.U, 2),
+          { text: p.ok ? 'Sim' : 'NÃO', bold: !p.ok, color: p.ok ? VERDE : VERM }].map(x => typeof x === 'object' ? Object.assign({ style: 'td', alignment: 'center' }, x) : { text: x, style: 'td', alignment: 'center' })));
+      C.push({ table: { headerRows: 1, widths: ['*', '*', '*', '*', '*', '*'], body: corpo }, layout: 'lightHorizontalLines', margin: [0, 2, 0, 4] },
+             { text: 'Valores em ' + un + '. Incerteza pela EA-4/02: raiz da soma dos quadrados da repetição, da resolução e do padrão, vezes k = 2.', style: 'nota' });
+    }
+    if (!e1 && vv) {
+      C.push({ text: 'Etapa 2 · teste na bancada (3 ciclos)', style: 'h2' });
+      const ab = L.aberturas || [], as = L.assentamentos || [];
+      C.push({ table: { headerRows: 1, widths: ['*', '*', '*'], body: [['Ciclo', 'Abertura (' + un + ')', 'Assentamento (' + un + ')'].map(t => ({ text: t, style: 'th' }))]
+        .concat([0, 1, 2].map(k => [String(k + 1), fmt(ab[k], 2), fmt(as[k], 2)].map(t => ({ text: t, style: 'td', alignment: 'center' })))) }, layout: 'lightHorizontalLines', margin: [0, 2, 0, 4] });
+      const enc = L.reajustada ? L.encontrada : ab[0];
+      if (enc != null) C.push({ text: L.reajustada ? 'Encontrada abrindo a ' + fmt(enc, 2) + ' ' + un + '; foi reajustada.' : 'Encontrada abrindo a ' + fmt(enc, 2) + ' ' + un + ' (sem ajuste).', style: 'par' });
+      const mx = ab.filter(x => x != null).length ? Math.max(...ab.filter(x => x != null).map(Number)) : null;
+      if (ok && mx != null) C.push({ text: 'Adequada para instalação em vasos com PMTA igual ou maior que ' + fmt(mx, 2) + ' ' + un + ' (NR-13, item 13.5.1.2 "a").', style: 'destaque' });
+      if (L.motivo_acima) C.push({ text: 'Sem ajuste possível: ' + L.motivo_acima, style: 'par' });
+      if (L.motivo_abaixo) C.push({ text: 'Observação: ' + L.motivo_abaixo, style: 'par' });
+    }
+    if (f.lacre_colocado && !e1) C.push({ text: 'Lacre colocado nº ' + f.lacre_colocado + '. A violação do lacre implica a perda desta aferição.', style: 'par' });
+    C.push({ text: [{ text: 'Resultado: ' }, { text: ok ? 'CONFORME' : 'NÃO CONFORME', bold: true, color: ok ? VERDE : VERM }, { text: e1 ? ' (reprovado na etapa 1).' : '.' }], style: 'destaque' });
+    if (!ok) C.push({ text: 'Recomendação: substituir ' + (vv ? 'a válvula por outra em condições e testada' : 'o manômetro por outro em condições e aferido') + ' (NR-13, item 13.3.6).', style: 'par' });
+    C.push({ text: 'Verificação por comparação com padrão rastreável; não é calibração acreditada. O padrão tem certificado de calibração de laboratório acreditado (RBC), citado acima.', style: 'nota', margin: [0, 8, 0, 0] });
+    C.push({ margin: [0, 26, 0, 0], unbreakable: true, stack: (CAR ? [{ image: CAR.imagem, fit: [170, 60] }] : [{ text: ' ' }]).concat([
+      { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 220, y2: 0, lineWidth: 0.5, lineColor: CZ }] },
+      { text: plh ? plh.nome + (plh.registro ? ' · ' + plh.registro : '') : 'Profissional Legalmente Habilitado', style: 'td' },
+      { text: CAR ? CAR.texto : 'Profissional Legalmente Habilitado (PLH)', style: 'nota' }]) });
+    out.push({ codigo: f.codigo || null, resultado: f.resultado, etapa1: e1, tipo: f.tipo, def: {
+      pageSize: 'A4', pageMargins: [50, 50, 45, 60], info: { title: titulo + ' ' + (f.codigo || ''), author: 'Engetap', creator: 'TapDoc' },
+      footer: (pag, total) => ({ margin: [50, 20, 45, 0], columns: [{ text: (f.codigo || '') + ' · ' + titulo, style: 'nota' }, { text: 'Página ' + pag + ' de ' + total, style: 'nota', alignment: 'right' }] }),
+      content: C, defaultStyle: { fontSize: 9.5 },
+      styles: { titulo: { fontSize: 14, bold: true, color: AZ, alignment: 'center' }, numero: { fontSize: 11, bold: true, alignment: 'center', margin: [0, 2, 0, 6] },
+        h2: { fontSize: 10.5, bold: true, color: CZ, margin: [0, 8, 0, 3] }, par: { fontSize: 9.5, lineHeight: 1.2, margin: [0, 0, 0, 4] },
+        th: { fontSize: 8.5, bold: true, color: '#164C77', alignment: 'center' }, thl: { fontSize: 8.5, bold: true, color: '#164C77' }, td: { fontSize: 8.5 },
+        nota: { fontSize: 7.5, italics: true, color: '#7A8796' }, destaque: { fontSize: 10, bold: true, margin: [0, 6, 0, 6] } } } });
+  });
+  return out;
+}
 function nomeComp(c) {
   if (!c) return '';
   const sg = siglaComp(c);
@@ -550,7 +632,14 @@ function montar(d, opc) {
   if (!mans.length) { par(M.manometro_nenhum); conc.man.push(K.man_nenhum); }
   mans.forEach(a => {
     const f = a.afericao, tipoNome = a.tipo === 'manovacuometro' ? 'manovacuômetro' : 'manômetro';
-    if (f && (f.resultado === 'aprovado' || f.resultado === 'reprovado')) {
+    const e1m = f && f.leituras && f.leituras.etapa1 && f.leituras.etapa1.ok === false;   // S150 · item 81: reprovado na etapa 1
+    if (e1m && f.resultado === 'reprovado') {
+      par(comResultado('O ' + tipoNome + (!vazio(a.marca) ? ' da marca ' + a.marca : '') + ' foi reprovado na etapa 1 da aferição (inspeção visual e funcional): '
+        + [].concat(f.leituras.etapa1.defeitos || []).concat(f.leituras.etapa1.obs ? [f.leituras.etapa1.obs] : []).join('; ').toLowerCase()
+        + '. A comparação com o padrão (etapa 2) não se aplica. O instrumento deve ser substituído por outro em condições e aferido (NR-13, item 13.3.6). Classificado como: {{resultado}}. Relatório de aferição nº ' + (f.codigo || 'a numerar') + ', no pacote deste relatório.', {}, 'nc'));
+      fotoAfer(a, 'Aferição do ' + tipoNome);
+      conc.man.push(K.man_nc);
+    } else if (f && (f.resultado === 'aprovado' || f.resultado === 'reprovado')) {
       const pz = f.padrao || {}, bz = f.bancada || {}, esc = (f.leituras || {}).escala || {};
       const escala = f.faixa_fim != null ? ', com escala de ' + fmt(f.faixa_ini || 0, 0) + ' a ' + fmt(f.faixa_fim, 0) + ' ' + String(f.unidade || 'bar').replace('kgf/cm2', 'kgf/cm²') : (a.escala ? ', com escala ' + a.escala : '');
       const pontos = Array.isArray((f.leituras || {}).pontos) ? f.leituras.pontos.length : (esc.graduacoes || null);
@@ -582,7 +671,14 @@ function montar(d, opc) {
       else par('O dispositivo de segurança do vaso é um disco de ruptura, com pressão de ruptura de ' + bar(pr) + ', segundo o fabricante.');
       return;
     }
-    if (f && (f.resultado === 'aprovado' || f.resultado === 'reprovado')) {
+    const e1v = f && f.leituras && f.leituras.etapa1 && f.leituras.etapa1.ok === false;   // S150 · item 81: reprovada na etapa 1
+    if (e1v && f.resultado === 'reprovado') {
+      par(comResultado('A ' + tipoNome + (!vazio(a.marca) ? ' da marca ' + a.marca : '') + ' foi reprovada na etapa 1 do teste (inspeção visual e funcional): '
+        + [].concat(f.leituras.etapa1.defeitos || []).concat(f.leituras.etapa1.obs ? [f.leituras.etapa1.obs] : []).join('; ').toLowerCase()
+        + '. O teste em bancada (etapa 2) não se aplica. Deve passar por manutenção ou ser substituída e testada (NR-13, item 13.5.4.9). Classificada como: {{resultado}}. Certificado nº ' + (f.codigo || 'a numerar') + ', no pacote deste relatório.', {}, 'nc'));
+      fotoAfer(a, 'Aferição da ' + tipoNome);
+      conc.valv.push(K.valv_nc);
+    } else if (f && (f.resultado === 'aprovado' || f.resultado === 'reprovado')) {
       const pz = f.padrao || {}, bz = f.bancada || {}, ab = ((f.leituras || {}).aberturas || []).map(Number).filter(x => isFinite(x)),
         asv = ((f.leituras || {}).assentamentos || []).map(Number).filter(x => isFinite(x));
       const pmtaBar = kc.pmta_adotada_mpa != null ? Number(kc.pmta_adotada_mpa) * 10 : null, maior = ab.length ? Math.max(...ab) : null;
@@ -842,6 +938,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-S149-2026-11-11' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, versao: 'R06a-S150-2026-11-11' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);

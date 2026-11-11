@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S149';   // S149: itens 82, 83, 84, 88 e 92 — TapDoc E22 (revisão; laudo-pdf.js S149) e celular 21 (426)
+const VERSAO = 'H16-S150';   // S150: item 81 — TapDoc E23 (os documentos de aferição no pacote do laudo; laudo-pdf.js S150), celular 22 e o motor R00.6 (427)
+// const VERSAO = 'H16-S149';   // S149: itens 82, 83, 84, 88 e 92 — TapDoc E22 (revisão; laudo-pdf.js S149) e celular 21 (426)
 // const VERSAO = 'H16-S148';   // S148: itens 80, 85, 89, 90, 91 e 93 — TapDoc E21 (revisão e laudo-pdf.js S148; celular: a ordem do medidor; 425)
 // const VERSAO = 'H16-S147';   // S147: item 86 — TapDoc E20 (laudo assinado e arquivos da inspeção até 50 MB; 423)
 // const VERSAO = 'H16-S146';   // S146: item 79 — TapDoc E19 (os textos prontos do laudo: revisão e a aba Textos do laudo; laudo-pdf.js S146; 422)
@@ -69,7 +70,7 @@ const ESSENCIAIS = [
   './fin/',
   // S77 · TapDoc do escritório (R02b1) e o motor de cálculo que ele usa
   './doc/',
-  './doc/motor-calculo-nr13.js?v=R00.5',
+  './doc/motor-calculo-nr13.js?v=R00.6',
   // S88 · Acessos P1: a tela do admin
   './acessos/',
   // S116 · TapSeg 1: a Segurança do Trabalho

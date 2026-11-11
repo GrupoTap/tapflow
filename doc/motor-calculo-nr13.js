@@ -1,5 +1,6 @@
 /**
  * Motor de cálculo NR-13 — TapFlow · módulo de inspeção
+ * Versão R00.6 · 11/11/2026 (manômetro pela ASME B40.100 Grau D; teste da válvula pelas regras V1–V5; a etapa 1, S150 · item 81)
  * Versão R00.4 · 30/10/2026 (R00.3 + o teste de válvula com 3 ciclos: abertura e assentamento de cada um, S113)
  * Versão R00.3 · 24/10/2026 (R00.2 de 23/10 + a aferição de manômetro e o teste de válvula, R04a)
  *
@@ -247,10 +248,10 @@ function paraMPa(v, unidade) {
 }
 function deMPa(v, unidade) { return v / paraMPa(1, unidade); }
 
-/** Tolerância do manômetro pela NBR 14105-1, classe B (R00.5 · item 58 da lista, decisão do Bruno, 10/11/2026):
- *  ±2% do fundo de escala de 25% a 75% da escala; ±3% do fundo de escala fora disso (o zero também).
- *  O fundo de escala é a escala de indicação (fim − início). Antes (24/10): ±20/10/5% da leitura. */
-const CLASSE_MANOMETRO = { nome: 'B', meio: 0.02, pontas: 0.03 };
+/** Tolerância do manômetro: ASME B40.100, Grau D (R00.6 · item 81 da lista, decisão do Bruno, 11/11/2026, 13h43):
+ *  ±5% do fundo de escala em qualquer ponto, inclusive no zero (0 a 16 bar: ±0,8 bar).
+ *  O fundo de escala é a escala de indicação (fim − início). Antes: NBR 14105-1 classe B (R00.5) e ±20/10/5% (24/10). */
+const CLASSE_MANOMETRO = { nome: 'D', meio: 0.05, pontas: 0.05, norma: 'ASME B40.100, Grau D (±5% do fundo de escala)' };
 function toleranciaManometro(nominal, faixaIni, faixaFim, refPadrao, resolucao) {
     const fundo = faixaFim - faixaIni, pos = (nominal - faixaIni) / fundo;
     const zero = Math.abs(nominal - faixaIni) < 1e-9;
@@ -280,6 +281,11 @@ function num(v) {
  */
 function afericaoManometro(a) {
     const faltas = [], avisos = [];
+    // R00.6 · item 81 (decisão 11): reprovado na etapa 1 (inspeção visual e funcional) = aferição feita, NÃO CONFORME, etapa 2 não aplicável
+    if (a.etapa1 && a.etapa1.ok === false) {
+        if (!(a.etapa1.defeitos || []).length && !String(a.etapa1.obs || '').trim()) faltas.push('Etapa 1: diga o que tem de errado.');
+        return { aprovado: false, completo: !faltas.length, etapa1: true, faltas, avisos, pontos: [], erroMax: null, Umax: null };
+    }
     const ini = num(a.faixaIni), fim = num(a.faixaFim), res = num(a.resolucao);
     const uPad = num(a.uPadrao), kPad = num(a.kPadrao) || 2;
     if (ini === null || fim === null || !(fim > ini)) faltas.push('Informe a faixa de indicação (o fim maior que o início).');
@@ -321,41 +327,55 @@ function afericaoManometro(a) {
     };
 }
 
-/** Tolerância ASME da abertura: ±2 psi até 70 psi; ±3% acima (decisão do Bruno, 24/10). Em MPa. */
+/** Tolerância ASME da abertura (UG-126(d)): só informativa desde o R00.6 (V3: saiu do critério). Em MPa. */
 function toleranciaValvulaMPa(ajusteMPa) {
     return ajusteMPa <= 70 * 0.00689476 + 1e-12 ? 2 * 0.00689476 : 0.03 * ajusteMPa;
 }
 
 /**
- * Teste de válvula: 3 ciclos, cada um com a abertura e o seu assentamento.
- * v = { unidade, ajuste, aberturas: [a1, a2, a3], assentamentos: [s1, s2, s3] (ou, no formato antigo, assentamento), pmtaMPa }
+ * Teste da válvula (R00.6 · item 81, regras V1–V5 de 11/11/2026):
+ * V1 as 3 aberturas e os 3 assentamentos são sempre obrigatórios;
+ * V2 reajustada: antes, 1 "abertura encontrada" (só registro); sem ajuste, a 1ª abertura vale como encontrada;
+ * V3 critério: as 3 aberturas ≤ PMTA (NR-13 13.5.1.2 "a") e acima da pressão máxima de operação (sem a tolerância do ajuste);
+ * V4 acima da PMTA: não é aprovada; sem ajuste possível, reprovada com o motivo; abaixo da operação: sem ajuste possível, o motivo escrito;
+ * V5 a frase do certificado usa a MAIOR das 3 aberturas.
+ * v = { unidade, aberturas: [a1, a2, a3], assentamentos: [s1, s2, s3], reajustada, encontrada, pmtaMPa, operMPa,
+ *       motivoAcima, motivoAbaixo, etapa1: { ok:false, defeitos:[], obs } }
  */
 function testeValvula(v) {
     const faltas = [], avisos = [];
     const un = v.unidade || 'bar';
-    const aj = num(v.ajuste), ab = (v.aberturas || []).map(num).filter((x) => x !== null);
-    // R00.4 (S113): 3 ciclos, cada um com a abertura e o seu assentamento; o formato antigo (1 assentamento) continua valendo
-    const porCiclo = Array.isArray(v.assentamentos);
-    const asv = porCiclo ? v.assentamentos.map(num).filter((x) => x !== null) : [];
-    const as = porCiclo ? (asv.length ? asv.reduce((x, y) => x + y, 0) / asv.length : null) : num(v.assentamento);
-    if (!(aj > 0)) faltas.push('Informe a pressão de abertura (plaqueta ou certificado).');
-    if (ab.length < 3) faltas.push('Faça 3 aberturas.');
-    if (porCiclo ? asv.length < 3 : as === null) faltas.push(porCiclo ? 'Informe o assentamento dos 3 ciclos.' : 'Informe o assentamento.');
+    if (v.etapa1 && v.etapa1.ok === false) {
+        if (!(v.etapa1.defeitos || []).length && !String(v.etapa1.obs || '').trim()) faltas.push('Etapa 1: diga o que tem de errado.');
+        return { aprovada: false, completo: !faltas.length, grave: false, etapa1: true, faltas, avisos };
+    }
+    const ab = (v.aberturas || []).map(num), as = Array.isArray(v.assentamentos) ? v.assentamentos.map(num) : [];
+    const abv = ab.filter((x) => x !== null), asv = as.filter((x) => x !== null);
+    if (abv.length < 3) faltas.push('Faça as 3 aberturas.');
+    if (asv.length < 3) faltas.push('Informe o assentamento dos 3 ciclos.');
+    const enc = num(v.encontrada);
+    if (v.reajustada && enc === null) faltas.push('Reajustada: informe antes a abertura encontrada (como chegou).');
     if (faltas.length) return { aprovada: false, completo: false, grave: false, faltas, avisos };
-    const ajM = paraMPa(aj, un), med = media(ab), medM = paraMPa(med, un), maxM = paraMPa(Math.max(...ab), un);
-    const tolM = toleranciaValvulaMPa(ajM);
-    const r = { completo: true, faltas, avisos, media: med, tol: deMPa(tolM, un), desvio: med - aj };
-    r.dentroTolerancia = Math.abs(medM - ajM) <= tolM + 1e-9;
-    if (!r.dentroTolerancia) avisos.push('Abertura média ' + med.toFixed(3) + ' ' + un + ' fora da tolerância do ajuste (±' + r.tol.toFixed(3) + ').');
-    r.assentamentoOk = porCiclo ? asv.every((x, k) => x <= ab[k] + 1e-9) : as <= Math.min(...ab) + 1e-9;
+    const maxM = paraMPa(Math.max(...abv), un), minM = paraMPa(Math.min(...abv), un);
+    const r = { completo: true, faltas, avisos, media: media(abv), abertMax: Math.max(...abv), encontrada: v.reajustada ? enc : abv[0], reajustada: !!v.reajustada };
+    r.assentamentoOk = abv.every((x, k) => asv[k] <= x + 1e-9);
     if (!r.assentamentoOk) avisos.push('Assentamento acima da abertura.');
-    r.assentamentoMedio = as;
-    const pm = num(v.pmtaMPa);
+    r.assentamentoMedio = media(asv);
+    const pm = num(v.pmtaMPa), op = num(v.operMPa);
     r.acimaPMTA = pm !== null && maxM > pm + 1e-9;
-    if (r.acimaPMTA) avisos.push('Abertura acima da PMTA vigente (' + deMPa(pm, un).toFixed(3) + ' ' + un + '): NR-13 13.5.1.2 "a".');
+    r.abaixoOperacao = op !== null && minM <= op + 1e-9;
+    if (r.acimaPMTA) {
+        avisos.push('Abre acima da PMTA (' + deMPa(pm, un).toFixed(2) + ' ' + un + '): reajuste a válvula (NR-13 13.5.1.2 "a").');
+        if (!String(v.motivoAcima || '').trim()) faltas.push('Acima da PMTA: reajuste a válvula; sem ajuste possível, escreva o motivo (fica reprovada).');
+    }
+    if (r.abaixoOperacao) {
+        avisos.push('Abre na pressão de operação (' + deMPa(op, un).toFixed(2) + ' ' + un + ') ou abaixo: vai abrir com o vaso trabalhando; reajuste.');
+        if (!String(v.motivoAbaixo || '').trim()) faltas.push('Abaixo da operação: reajuste a válvula; sem ajuste possível, escreva o motivo (o PLH vê na revisão).');
+    }
     if (pm === null) avisos.push('Sem a PMTA vigente: a abertura não foi conferida contra ela.');
+    r.completo = !faltas.length;
     r.grave = r.acimaPMTA;
-    r.aprovada = r.dentroTolerancia && r.assentamentoOk && !r.acimaPMTA;
+    r.aprovada = r.completo && r.assentamentoOk && !r.acimaPMTA;
     return r;
 }
     return { UNIDADES_MPA, paraMPa, deMPa, toleranciaManometro, CLASSE_MANOMETRO, afericaoManometro, toleranciaValvulaMPa, testeValvula };
@@ -367,7 +387,7 @@ const MotorNR13 = {
     // R00.3 · R04a
     UNIDADES_MPA: R04.UNIDADES_MPA, paraMPa: R04.paraMPa, deMPa: R04.deMPa, toleranciaManometro: R04.toleranciaManometro, CLASSE_MANOMETRO: R04.CLASSE_MANOMETRO,
     afericaoManometro: R04.afericaoManometro, toleranciaValvulaMPa: R04.toleranciaValvulaMPa, testeValvula: R04.testeValvula,
-    versao: 'R00.5-2026-11-10',
+    versao: 'R00.6-2026-11-11',
 };
 
 if (typeof module !== 'undefined' && module.exports) module.exports = MotorNR13;
