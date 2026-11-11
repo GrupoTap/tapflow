@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S146';   // S146: item 79 — TapDoc E19 (os textos prontos do laudo: revisão e a aba Textos do laudo; laudo-pdf.js S146; 422)
+const VERSAO = 'H16-S147';   // S147: item 86 — TapDoc E20 (laudo assinado e arquivos da inspeção até 50 MB; 423)
+// const VERSAO = 'H16-S146';   // S146: item 79 — TapDoc E19 (os textos prontos do laudo: revisão e a aba Textos do laudo; laudo-pdf.js S146; 422)
 // const VERSAO = 'H16-S145';   // S145: rodada E — TapDoc E18 (a assinatura do laudo: desenho do PLH, aprovar com a digital, carimbo, pacote para o token e a conferência; laudo-pdf.js e assinatura-pdf.js S145; 421)
 // const VERSAO = 'H16-S144';   // S144: rodada D2 — TapDoc E17 (laudo-pdf.js S144), Pessoas e acessos A9, TapHub Cadastros CAD4 (itens 63, 69 a 72, 74, 75, 77 e 78; 211 e 420)
 // const VERSAO = 'H16-S143';   // S143: TapDoc E16 (rodada D1: texto e cara do laudo, itens 62 a 69, 73 a 76 e 78; laudo-pdf.js S143; 419)
