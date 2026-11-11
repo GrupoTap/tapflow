@@ -164,7 +164,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E23';   // E23 (S150 · 427): item 81 — os documentos de aferição (manômetro: conforme, não conforme pelas leituras, não conforme na etapa 1; válvula: certificado com a PMTA mínima) no pacote do laudo, assinados pelo PLH; motor R00.6 (Grau D, V1–V5)
+const VERSAO = 'TapDoc E24';   // E24 (S151 · 428): issue 7 — o mapa dos pontos de medição em 3D na revisão (mapa-3d.js + vendor/three.min.js), medida × calculada da altura dos tampos, cor, desenho próprio; a imagem guardada no laudo (laudo-pdf.js S151)
+// const VERSAO = 'TapDoc E23';   // E23 (S150 · 427): item 81 — os documentos de aferição (manômetro: conforme, não conforme pelas leituras, não conforme na etapa 1; válvula: certificado com a PMTA mínima) no pacote do laudo, assinados pelo PLH; motor R00.6 (Grau D, V1–V5)
 // const VERSAO = 'TapDoc E22';   // E22 (S149 · 426): itens 82 (placa de TAG e placa de categoria), 84 (o resultado da boroscopia vem do campo), 88 (as recomendações prontas R3 em diante) e 92 (a revisão mostra o destino da foto)
 // const VERSAO = 'TapDoc E21';   // E21 (S148 · 425): itens 80 (foto e arquivo com o login renovado), 85 (um ponto do CSV por componente, na ordem do medidor), 89 (a revisão não volta ao topo), 90 (o certificado do padrão nos anexos), 91 (placa com três respostas) e 93 (boroscopia: imagem × resultado)
 // const VERSAO = 'TapDoc E20';   // E20 (S147 · 423): item 86 — o laudo assinado (e qualquer arquivo da inspeção) até 50 MB; mensagem do tamanho em português
@@ -1395,6 +1396,7 @@ async function telaRevisao(id, manter){
   CALC.usar(P);
   let prev; try{ prev = CALC.previa(v); }catch(e){ prev = { camaras:[], vaso:{ erro:e.message }, avisos:[e.message], detalhes:[] }; }
   REV = { id, R, P, v, prev, volume:null, pmta:{} };
+  try{ REV.M = await rpc('tf_insp_mapa_ver', { p_id:id }); }catch(e){ REV.M = null; }   // S151 · issue 7 (428): as medidas e a imagem do mapa
   try{ REV_PRONTOS = ((await rpc('tf_laudo_textos_prontos')) || {}).prontos || null; }catch(e){ REV_PRONTOS = null; }   // S146 · item 79
   pintarRevisao();
 }
@@ -1552,6 +1554,7 @@ function pintarRevisao(){
   // S144 · item 70: prazo menor que o da norma (campo ou revisão)
   h += revPrazoHtml(prev, eu.pode && e && e <= 3);
   // S144 · item 77: o que vai anexado ao laudo, página por página
+  h += revMapaHtml();   // S151 · issue 7: o mapa dos pontos em 3D
   h += revAnexosHtml();
   // 3 · PMTA
   const plhAprova = e === 3 && eu.pode;
@@ -1621,6 +1624,7 @@ function pintarRevisao(){
   h += '<span class="muted">' + (e === 3 ? 'Aprovar grava o cálculo oficial e libera a inspeção para o laudo (R06).' : 'Para corrigir o que veio do campo, reabra a inspeção para a equipe (vaso › Reabrir).') + '</span></div>';
   $('tela').innerHTML = h;
   ligarRevisao();
+  ligarMapa().catch(e => console.warn('mapa', e));   // S151 · issue 7 (não trava a revisão)
 }
 // E9 (410): as próximas inspeções na aprovação. O PLH só ENCURTA (o banco confere);
 // abaixo de 0 °C o interno é a critério dele, então as datas são obrigatórias.
@@ -1695,6 +1699,205 @@ function revPrazoHtml(prev, pode){
   return h + '</div>';
 }
 // ── S144 · item 77: os anexos do laudo, com a miniatura de cada página ──
+// ════════════════════════════════════════════════════════════════════════════
+// E24 (S151 · 428) · issue 7: O MAPA DOS PONTOS DE MEDIÇÃO EM 3D, feito pelo sistema na revisão.
+// Desenho: processos/mapa-pontos-3d-desenho.md (13 decisões). As contas e o desenho moram em mapa-3d.js;
+// a biblioteca de 3D (vendor/three.min.js) só é carregada quando há o que desenhar.
+// ════════════════════════════════════════════════════════════════════════════
+async function libMapa(com3d){
+  if (!window.Mapa3D) await carregarScript('mapa-3d.js?v=M1');
+  if (com3d && !window.THREE) await carregarScript('vendor/three.min.js?v=r128');
+}
+const MAPA_TAMPOS = ['eliptico', 'torisferico', 'hemisferico', 'conico', 'plano'];
+/** As regiões que têm leitura (o desenho só marca essas); sem nenhuma leitura, todas. */
+function mapaRegioes(posicao, comps, leituras){
+  const com = (comps || []).filter(c => c.ativo !== false && (leituras || []).some(l => l.componente_id === c.id));
+  if (!com.length) return null;
+  const vt = posicao === 'vertical', out = new Set();
+  com.forEach(c => {
+    if (c.tipo === 'costado'){ const sg = siglaReg(c); if (sg) out.add(sg); else (vt ? ['CF', 'CT', 'CLE', 'CLD'] : ['CF', 'CT', 'CS', 'CI']).forEach(s => out.add(s)); }
+    else if (c.tipo === 'janela') out.add('JV');
+    else if (MAPA_TAMPOS.indexOf(c.tipo) >= 0){
+      const pos = c.posicao || ((String(c.nome || '').match(/\b(direito|esquerdo|superior|inferior)\b/i) || [])[1] || '').toLowerCase();
+      const a = pos === 'esquerdo' || pos === 'inferior', b = pos === 'direito' || pos === 'superior';
+      if (a || !b) out.add(vt ? 'TI' : 'TE');
+      if (b || !a) out.add(vt ? 'TS' : 'TD');
+    }
+  });
+  return [...out];
+}
+/** O que o mapa-3d.js recebe: o cadastro do vaso + (na revisão) o que está digitado no quadro. */
+function mapaDados(vaso, comps, nCam, leituras, f){
+  f = f || {};
+  return { posicao: vaso.posicao, circunferencia_mm: vaso.circunferencia_mm,
+    costado_mm: 'costado' in f ? f.costado : vaso.costado_comprimento_mm, cor: 'cor' in f ? f.cor : vaso.cor_mapa,
+    pes: 'pes' in f ? f.pes : vaso.pes, cone_saida_mm: 'saida' in f ? f.saida : vaso.cone_saida_mm, camaras: nCam,
+    componentes: (comps || []).map(c => { const t = (f.tampos || {})[c.id]; return t ? Object.assign({}, c, t) : c; }),
+    regioes: mapaRegioes(vaso.posicao, comps, leituras) };
+}
+/**
+ * Desenha o mapa e, quando a imagem guardada não vale mais (as medidas mudaram), grava a nova.
+ * Não lança: sem 3D ou fora do padrão, o laudo sai com o desenho 2D (decisão 5). Devolve
+ * { mapa, O, canvas, erro3d, velha } — `velha` = ficou guardada uma imagem que não bate com as medidas.
+ */
+async function mapaGarantir(inspId, mapa, dados, podeImagem){
+  mapa = mapa || { modo:'auto' };
+  if (mapa.modo === '2d' || mapa.modo === 'proprio') return { mapa, O:null, canvas:null };
+  await libMapa(false);
+  const O = Mapa3D.calcular(dados);
+  let canvas = null, erro3d = null, velha = false;
+  if (O.pode){ try{ await libMapa(true); canvas = Mapa3D.desenhar(O); }catch(e){ erro3d = e.message || String(e); } }
+  const bate = !!mapa.path && !!canvas && mapa.assinatura === O.assinatura;
+  if (podeImagem && !bate && (canvas || mapa.path)){
+    try{
+      if (canvas){
+        const caminho = inspId + '/mapa-' + uid().slice(0, 8) + '.png';
+        await enviarArq(caminho, await new Promise(ok => canvas.toBlob(ok, 'image/png')), 'O desenho do mapa');
+        mapa = await rpc('tf_insp_mapa_gravar', { p_id: inspId, p_dados: { modo:'auto', path: caminho, assinatura: O.assinatura } });
+      } else mapa = await rpc('tf_insp_mapa_gravar', { p_id: inspId, p_dados: { modo:'auto', path: null } });   // não dá mais para desenhar: a imagem antiga sai
+    }catch(e){ erro3d = erro3d || e.message || String(e); velha = !!mapa.path; }
+  } else if (!podeImagem && !bate && mapa.path) velha = true;
+  return { mapa, O, canvas, erro3d, velha };
+}
+/** Antes de gerar o laudo: garante a imagem do mapa. No rascunho, se não der, sai o 2D; na emissão, a imagem velha trava. */
+async function mapaLaudo(d, aviso, exigir){
+  const I = d.inspecao || {}, V = d.vaso || {};
+  if (!('cor_mapa' in V) || ['enviada', 'em_revisao', 'liberada'].indexOf(I.situacao) < 0) return;
+  let r;
+  try{
+    aviso('Conferindo o desenho do mapa…');
+    r = await mapaGarantir(I.id, I.mapa, mapaDados(V, V.componentes, (V.camaras || []).filter(k => k.ativo !== false).length, d.leituras), true);
+  }catch(e){ if (exigir) throw new Error('Não consegui conferir o desenho do mapa dos pontos: ' + (e.message || e)); return; }
+  if (r.velha && exigir) throw new Error('O desenho do mapa dos pontos guardado não bate com as medidas e não consegui refazer (' + (r.erro3d || 'sem detalhe')
+    + '). Abra a revisão num computador que desenhe em 3D, ou escolha "Usar o desenho 2D" no quadro do mapa.');
+  I.mapa = r.velha ? Object.assign({}, r.mapa, { path:null }) : r.mapa;
+}
+function revMapaHtml(){
+  return REV.M ? '<div class="card" id="revMapa"><h3 style="margin:0">Mapa dos pontos de medição</h3><p class="muted">Carregando o desenho…</p></div>' : '';
+}
+async function ligarMapa(){
+  const M = REV.M, id = REV.id; if (!M || !$('revMapa')) return;
+  try{ await libMapa(false); }catch(e){ if ($('revMapa')) $('revMapa').innerHTML = '<h3 style="margin:0">Mapa dos pontos de medição</h3><p class="alerta falta">' + esc(e.message) + '</p>'; return; }
+  const cx = $('revMapa'); if (!cx || !REV || REV.id !== id) return;
+  const leit = (REV.v.inspecao && REV.v.inspecao.leituras) || [], V = M.vaso, vt = V.posicao === 'vertical';
+  const dados = f => mapaDados(V, M.componentes, M.camaras, leit, f);
+  const O0 = Mapa3D.calcular(dados()), modo = (M.mapa || {}).modo || 'auto', pode = !!M.pode, des = pode ? '' : ' disabled';
+  const temCone = O0.tampos.some(t => t.tipo === 'conico');
+  let h = '<h3 style="margin:0">Mapa dos pontos de medição <span class="muted" style="font-weight:400">· a figura da seção 7.3 do laudo</span></h3>'
+    + '<p class="muted" style="margin:4px 0 8px">O sistema desenha o vaso em 3D com as medidas abaixo. O desenho não precisa ser exato, só proporcional e parecido: o que importa é o mapa dos pontos.</p>'
+    + '<div class="linha" style="gap:14px;align-items:flex-end">'
+    + '<label class="f" style="margin:0;width:150px">Diâmetro (mm)<input class="t" id="mpDiam" value="' + (O0.D ? esc(fmt(O0.D, 1)) : '') + '" disabled title="Vem da circunferência medida"></label>'
+    + '<label class="f" style="margin:0;width:190px">Comprimento do costado (mm)<input class="t" id="mpCostado" inputmode="decimal" value="' + esc(fmt(V.costado_comprimento_mm, 1)) + '" placeholder="entre as soldas"' + des + '></label>'
+    + '<label class="f" style="margin:0;width:140px">Cor do vaso<select class="t" id="mpCor"' + des + '><option value="">(cinza)</option>'
+      + Object.keys(Mapa3D.COR_NOME).map(k => '<option value="' + k + '"' + (V.cor_mapa === k ? ' selected' : '') + '>' + esc(Mapa3D.COR_NOME[k]) + '</option>').join('') + '</select></label>'
+    + (temCone ? '<label class="f" style="margin:0;width:170px">Saída do cone, Ø (mm)<input class="t" id="mpSaida" inputmode="decimal" value="' + esc(fmt(V.cone_saida_mm, 1)) + '"' + des + '></label>' : '')
+    + (vt ? '<label style="display:flex;gap:6px;align-items:center;padding-bottom:9px"><input type="checkbox" id="mpPes"' + (V.pes ? ' checked' : '') + des + '> Pés de apoio (silo)</label>' : '')
+    + '</div>';
+  // decisão 9: medida × calculada, por tampo
+  if (O0.tampos.length) h += '<table style="margin-top:12px" id="mpQuadro"><tr><th>Altura do tampo</th><th>Tipo</th><th>Calculada (mm)</th><th>Medida (mm)</th><th>Diferença</th><th>No desenho (mm)</th></tr>'
+    + O0.tampos.slice().reverse().map(t => '<tr data-mptampo="' + esc(t.id) + '"><td><b>' + esc(t.rotulo) + '</b> (' + t.sigla + ')</td><td>' + esc(t.tipo_nome) + '</td><td data-mpcalc></td>'
+      + '<td><input class="t" style="width:110px;margin:0" inputmode="decimal" data-mpmed="' + esc(t.id) + '" value="' + esc(fmt(t.h_med, 1)) + '"' + des + '></td><td data-mpdif></td>'
+      + '<td><input class="t" style="width:110px;margin:0" inputmode="decimal" data-mpdes="' + esc(t.id) + '" value="' + esc(fmt(t.h_cor, 1)) + '" title="Só preencha para corrigir o valor que o desenho usa"' + des + '></td></tr>').join('')
+    + '</table><p class="muted" style="margin:4px 0 0">O desenho usa a altura medida; sem ela, a calculada pelo tipo do tampo. Preencha "No desenho" só para corrigir.</p><div id="mpObs"></div>';
+  h += '<div class="linha" style="margin-top:10px">' + (pode ? '<button class="btn pri mini" id="mpGravar">Gravar as medidas</button>' : '');
+  if (M.pode_imagem) h += (modo !== 'auto' ? '<button class="btn mini" id="mpAuto">Voltar ao desenho 3D</button>' : '')
+    + '<button class="btn mini" id="mpProprio">' + (modo === 'proprio' ? 'Trocar o desenho próprio' : 'Usar um desenho próprio') + '</button>'
+    + (modo !== '2d' ? '<button class="btn mini" id="mpDois">Usar o desenho 2D</button>' : '') + '<input type="file" id="mpArq" accept="image/png,image/jpeg" hidden>';
+  h += '<span class="muted" id="mpAviso"></span></div><div id="mpFig" style="margin-top:10px"></div>';
+  cx.innerHTML = h;
+  const aviso = t => { const a = $('mpAviso'); if (a) a.textContent = t || ''; };
+  const vivo = () => REV && REV.id === id && $('revMapa') === cx;
+  const form = () => {
+    const f = { tampos:{} }, T = k => (f.tampos[k] = f.tampos[k] || {});
+    f.costado = num($('mpCostado').value); f.cor = $('mpCor').value || null;
+    if ($('mpPes')) f.pes = $('mpPes').checked;
+    if ($('mpSaida')) f.saida = num($('mpSaida').value);
+    cx.querySelectorAll('[data-mpmed]').forEach(el => { T(el.dataset.mpmed).altura_medida_mm = num(el.value); });
+    cx.querySelectorAll('[data-mpdes]').forEach(el => { T(el.dataset.mpdes).altura_desenho_mm = num(el.value); });
+    return f;
+  };
+  const quadro = O => {   // as células que mudam com o que se digita (sem redesenhar os campos)
+    let alerta = false;
+    O.tampos.forEach(t => { const tr = cx.querySelector('tr[data-mptampo="' + t.id + '"]'); if (!tr) return;
+      tr.querySelector('[data-mpcalc]').textContent = t.h_calc != null ? fmt(t.h_calc, 1) + (t.tipo === 'plano' ? ' (espessura)' : '') : '—';
+      tr.querySelector('[data-mpdif]').innerHTML = t.dif_pct != null ? (t.alerta ? '<b>' + fmt(t.dif_pct, 1) + '%</b>' : fmt(t.dif_pct, 1) + '%') : '—';
+      tr.style.background = t.alerta ? 'var(--warn-soft)' : ''; tr.dataset.mpalerta = t.alerta ? '1' : '';
+      const d = tr.querySelector('[data-mpdes]'); if (d) d.placeholder = fmt(t.h_uso, 1);
+      alerta = alerta || t.alerta; });
+    const o = $('mpObs'); if (o) o.innerHTML = alerta ? '<p class="alerta falta" style="margin:8px 0 0">A altura medida difere mais de ' + Mapa3D.ALERTA_PCT + '% da calculada: pode ser a parte reta do tampo ou o tipo de tampo errado.</p>' : '';
+  };
+  const figura = (r, previa) => {
+    const F = $('mpFig'); if (!F) return; F.innerHTML = '';
+    const p = (classe, t) => { const e = document.createElement('p'); e.className = classe; e.style.margin = '0 0 8px'; e.textContent = t; F.appendChild(e); return e; };
+    if (r.O && !r.O.pode) p('alerta falta', 'Ainda não dá para desenhar em 3D: ' + r.O.motivo + ' No laudo sai o desenho 2D, ou envie um desenho pronto.').id = 'mpSem';
+    else if (!r.canvas) p('alerta falta', 'Este aparelho não consegue desenhar em 3D (' + (r.erro3d || 'sem detalhe') + '). No laudo sai o desenho 2D.').id = 'mpSem';
+    else {
+      (r.O.avisos || []).forEach(a => p('alerta falta', a));
+      const st = p('muted', previa ? 'Prévia com o que está digitado. Grave as medidas para valer no laudo.'
+        : r.velha || !(r.mapa && r.mapa.path) ? 'Desenho de conferência (a imagem do laudo é gravada na revisão' + (r.erro3d ? '; não gravou agora: ' + r.erro3d : '') + ').'
+        : 'Este é o desenho que sai no laudo (gravado em ' + quandoBR(r.mapa.em) + ').');
+      st.id = 'mpEstado'; st.dataset.estado = previa ? 'previa' : r.velha || !(r.mapa && r.mapa.path) ? 'conferencia' : 'gravado';
+      r.canvas.id = 'mpCanvas'; r.canvas.style.cssText = 'width:100%;max-width:980px;height:auto;border:1px solid var(--rule);border-radius:4px;background:#fff;display:block';
+      F.appendChild(r.canvas);
+    }
+  };
+  quadro(O0);
+  // como está gravado
+  if (modo === 'proprio'){
+    $('mpFig').innerHTML = '<p class="muted" style="margin:0 0 8px" id="mpEstado" data-estado="proprio">Desenho próprio, enviado pelo revisor: é ele que sai no laudo.</p>';
+    try{ const im = document.createElement('img'); im.id = 'mpImg'; im.alt = 'Desenho próprio do mapa'; im.style.cssText = 'max-width:100%;max-height:520px;border:1px solid var(--rule);border-radius:4px;background:#fff';
+      im.src = dataURLDe(await baixar(M.mapa.path)); if (vivo()) $('mpFig').appendChild(im); }catch(e){ if (vivo()) aviso('Não abriu o desenho próprio: ' + e.message); }
+  } else if (modo === '2d') $('mpFig').innerHTML = '<p class="alerta falta" style="margin:0" id="mpEstado" data-estado="2d">O laudo sai com o desenho 2D (escolha do revisor).</p>';
+  else {
+    aviso('Desenhando…');
+    const r = await mapaGarantir(M.inspecao_id, M.mapa, dados(), !!M.pode_imagem);
+    if (!vivo()) return;
+    M.mapa = r.mapa; aviso(''); figura(r, false);
+  }
+  // a prévia com o que está digitado (sem gravar)
+  let vez = 0, relogio = null;
+  const previa = () => { clearTimeout(relogio); relogio = setTimeout(async () => {
+    const minha = ++vez, O = Mapa3D.calcular(dados(form()));
+    quadro(O);
+    if (((M.mapa || {}).modo || 'auto') !== 'auto') return;
+    let canvas = null, erro3d = null;
+    if (O.pode){ try{ await libMapa(true); canvas = Mapa3D.desenhar(O); }catch(e){ erro3d = e.message; } }
+    if (vivo() && minha === vez) figura({ O, canvas, erro3d }, true);
+  }, 450); };
+  if (pode) cx.querySelectorAll('input.t, select.t, #mpPes').forEach(el => { if (!el.disabled) el.addEventListener(el.tagName === 'SELECT' || el.type === 'checkbox' ? 'change' : 'input', previa); });
+  const bg = $('mpGravar'); if (bg) bg.addEventListener('click', () => U.semDuploEnvio(bg, async () => {
+    const f = form(), ruim = [f.costado, f.saida].concat(Object.values(f.tampos).map(t => [t.altura_medida_mm, t.altura_desenho_mm]).flat()).some(x => x !== null && x !== undefined && isNaN(x));
+    if (ruim){ U.toast('Há um número que não entendi. Use só algarismos e vírgula.', 'err'); return; }
+    const p = { costado_comprimento_mm: f.costado, cor_mapa: f.cor, tampos: Object.keys(f.tampos).map(k => Object.assign({ id:k }, f.tampos[k])) };
+    if ('pes' in f) p.pes = f.pes;
+    if ('saida' in f) p.cone_saida_mm = f.saida;
+    try{ clearTimeout(relogio); vez++; aviso('Gravando…');
+      REV.M = await rpc('tf_insp_mapa_medidas', { p_id: id, p_dados: p });
+      U.toast(REV.M.mudou ? 'Medidas gravadas. O desenho foi refeito.' : 'Nada mudou nas medidas.', 'ok'); await ligarMapa(); }
+    catch(e){ aviso(''); erro(e); }
+  }));
+  const modoPara = async (dadosModo, msg) => { try{ aviso('Gravando…'); REV.M.mapa = await rpc('tf_insp_mapa_gravar', { p_id: id, p_dados: dadosModo }); U.toast(msg, 'ok'); await ligarMapa(); }catch(e){ aviso(''); erro(e); } };
+  const b2 = $('mpDois'); if (b2) b2.addEventListener('click', () => U.semDuploEnvio(b2, () => modoPara({ modo:'2d' }, 'O laudo vai sair com o desenho 2D.')));
+  const ba = $('mpAuto'); if (ba) ba.addEventListener('click', () => U.semDuploEnvio(ba, () => modoPara({ modo:'auto', path:null }, 'Voltou ao desenho 3D.')));
+  const bp = $('mpProprio'), fa = $('mpArq');
+  if (bp) bp.addEventListener('click', () => { fa.value = ''; fa.click(); });
+  if (fa) fa.addEventListener('change', async () => {
+    const arq = fa.files && fa.files[0]; if (!arq) return;
+    try{
+      aviso('Enviando o desenho…');
+      // reduz para caber na folha do laudo (até 2200 × 2200) e grava em JPEG com fundo branco
+      const cv = await new Promise((ok, falha) => { const im = new Image(), url = URL.createObjectURL(arq);
+        im.onload = () => { const k = Math.min(1, 2200 / im.width, 2200 / im.height), c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(im.width * k)); c.height = Math.max(1, Math.round(im.height * k));
+          const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url); ok(c); };
+        im.onerror = () => { URL.revokeObjectURL(url); falha(new Error('Não consegui abrir a imagem (use PNG ou JPG).')); }; im.src = url; });
+      const caminho = M.inspecao_id + '/mapa-proprio-' + uid().slice(0, 8) + '.jpg';
+      await enviarArq(caminho, await new Promise(ok => cv.toBlob(ok, 'image/jpeg', 0.9)), 'O desenho');
+      await modoPara({ modo:'proprio', path: caminho }, 'Desenho próprio gravado: é ele que sai no laudo.');
+    }catch(e){ aviso(''); erro(e); }
+  });
+}
+
 function revAnexosHtml(){
   const A = REV.R.anexos || {}, L = [];
   L.push({ k:'medidor', rot:'Anexo 1 · Certificado de calibração do medidor de espessura' + (A.medidor && A.medidor.descricao ? ' (' + A.medidor.descricao + ')' : ''), path:A.medidor && A.medidor.path });
@@ -2209,7 +2412,7 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S150');
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S151');
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S145');
     return true;
   })().catch(e => { LIBS = null; throw e; });
@@ -2538,6 +2741,7 @@ function ligarLaudo(){
   const br = $('ldRascunho'); if (br) br.addEventListener('click', () => U.semDuploEnvio(br, async () => {
     try{
       const oficial = (d.config || {}).oficial;
+      await mapaLaudo(d, aviso, false);   // S151 · issue 7: a imagem do mapa (sem 3D, o rascunho sai com o 2D)
       const g = await gerarLaudo(d, { marca: oficial ? 'MINUTA — NÃO VALE COMO LAUDO' : 'PILOTO — NÃO VALE COMO LAUDO' }, aviso);
       aviso(g.semFoto.length || g.semAnexo.length ? 'Rascunho pronto. ' + [g.semFoto.length ? g.semFoto.length + ' foto(s) não abriram' : '', g.semAnexo.length ? 'sem ' + g.semAnexo.join(' e ') : ''].filter(Boolean).join('; ') + '.' : 'Rascunho pronto (' + g.paginas + ' páginas).');
       mostrarPdf(g.bytes, nomeLaudo(d, oficial ? 'rascunho' : 'piloto'));
@@ -2562,7 +2766,8 @@ function ligarLaudo(){
     if (!await N.janela.confirmar(atual ? 'Aprovar e emitir a revisão' : 'Aprovar e emitir o laudo', '<p>' + (atual ? 'Sai a <b>Rev. ' + (atual.revisao + 1) + '</b> do ' + esc(atual.numero) + ', com o motivo da reabertura. O anterior fica como substituído.'
         : 'Reserva o próximo número do mês e grava o PDF.') + '</p><p>Você aprova com a <b>sua digital</b> (o PIN não vale). Cada página sai com o desenho da sua assinatura e "Aprovado eletronicamente por …".</p>'
         + '<p class="muted">Depois de aprovado, o laudo não muda: para corrigir, só reabrindo a inspeção (sai uma revisão). Depois, assine o PDF com o token.</p>', 'Aprovar com a digital')) return;
-    try{ aviso('Carregando o gerador…'); await libsLaudo(); const r = await emitirComDigital(); if (r) await gravarPdf(r.id); else aviso(''); }
+    try{ aviso('Carregando o gerador…'); await libsLaudo(); await mapaLaudo(d, aviso, true);   // S151 · issue 7: a imagem entra na fotografia do laudo
+      const r = await emitirComDigital(); if (r) await gravarPdf(r.id); else aviso(''); }
     catch(e){ aviso(''); erro(e); recarregar(); }
   }));
   // S145 · A7.1: a aprovação é a digital do PLH (finalidade laudo_aprovar); retomar o PDF que falhou não pede de novo
@@ -2573,7 +2778,7 @@ function ligarLaudo(){
     return rpc('tf_laudo_emitir', { p_id: LD.id, p_confirmacao: c.confirmacao });
   };
   const bf = $('ldRefazer'); if (bf) bf.addEventListener('click', () => U.semDuploEnvio(bf, async () => {
-    try{ aviso('Carregando o gerador…'); await libsLaudo();
+    try{ aviso('Carregando o gerador…'); await libsLaudo(); await mapaLaudo(d, aviso, true);
       let r; try{ r = await rpc('tf_laudo_emitir', { p_id: LD.id }); }
       catch(e){ if (!/digital/i.test(e.message || '')) throw e; r = await emitirComDigital(); }
       if (r) await gravarPdf(r.id); else aviso(''); }
