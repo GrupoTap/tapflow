@@ -10,7 +10,7 @@
 <script src="../nucleo/config.js?v=N8"></script>
 <script src="../nucleo/nucleo.js?v=N8"></script>
 <script src="../nucleo/modulos.js?v=M4"></script>
-<script src="motor-calculo-nr13.js?v=R00.5"></script>
+<script src="motor-calculo-nr13.js?v=R00.6"></script>
 <!--
   TapDoc (escritório) · R02b1 — preparar a inspeção
   ─────────────────────────────────────────────────
@@ -164,7 +164,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E22';   // E22 (S149 · 426): itens 82 (placa de TAG e placa de categoria), 84 (o resultado da boroscopia vem do campo), 88 (as recomendações prontas R3 em diante) e 92 (a revisão mostra o destino da foto)
+const VERSAO = 'TapDoc E23';   // E23 (S150 · 427): item 81 — os documentos de aferição (manômetro: conforme, não conforme pelas leituras, não conforme na etapa 1; válvula: certificado com a PMTA mínima) no pacote do laudo, assinados pelo PLH; motor R00.6 (Grau D, V1–V5)
+// const VERSAO = 'TapDoc E22';   // E22 (S149 · 426): itens 82 (placa de TAG e placa de categoria), 84 (o resultado da boroscopia vem do campo), 88 (as recomendações prontas R3 em diante) e 92 (a revisão mostra o destino da foto)
 // const VERSAO = 'TapDoc E21';   // E21 (S148 · 425): itens 80 (foto e arquivo com o login renovado), 85 (um ponto do CSV por componente, na ordem do medidor), 89 (a revisão não volta ao topo), 90 (o certificado do padrão nos anexos), 91 (placa com três respostas) e 93 (boroscopia: imagem × resultado)
 // const VERSAO = 'TapDoc E20';   // E20 (S147 · 423): item 86 — o laudo assinado (e qualquer arquivo da inspeção) até 50 MB; mensagem do tamanho em português
 // const VERSAO = 'TapDoc E19';   // E19 (S146 · 422): item 79 — os textos prontos do laudo: o quadro "Textos prontos" na revisão (o escritório troca o caso escolhido em campo), o texto pronto do prazo menor (P1) e a aba "Textos do laudo" (propor; o PLH aprova com a digital; versões); laudo-pdf.js S146
@@ -1701,7 +1702,13 @@ function revAnexosHtml(){
   (A.padroes || []).forEach(p => L.push({ k:'padrao', rot:'Anexo ' + (L.length + 1) + ' · Certificado de calibração do manômetro padrão' + (p.descricao ? ' (' + p.descricao + (p.numero_serie ? ' · nº ' + p.numero_serie : '') + ')' : ''), path:p.path,
     falta:'Sem o PDF do certificado: cadastre em TapDoc › Instrumentos. Sem ele o laudo não é emitido.' }));
   L.push({ k:'art', rot:'Anexo ' + (L.length + 1) + ' · ART' + (A.art && A.art.numero ? ' nº ' + A.art.numero : ''), path:A.art && A.art.path });
-  return '<div class="card"><h3 style="margin:0">Anexos do laudo</h3><p class="muted" style="margin:4px 0 8px">Confira cada página antes de aprovar: o laudo vai para o cliente e anexa exatamente estes arquivos.</p>'
+  // S150 · item 81: os documentos de aferição vão no pacote, logo depois do laudo
+  const AFS = ((REV.v && REV.v.inspecao && REV.v.inspecao.afericoes) || []).filter(x => !x.cancelada_em && (x.resultado === 'aprovado' || x.resultado === 'reprovado'));
+  const docsAf = AFS.length ? '<div style="margin-bottom:10px"><b>Documentos de aferição (no pacote, depois do laudo)</b><ul style="margin:4px 0 0">' + AFS.map(x => '<li>'
+      + esc((x.tipo === 'valvula' ? 'Certificado de Inspeção e Teste de Válvula de Segurança ' : 'Relatório de Aferição de Manômetro ') + (x.codigo || '(número ao enviar)'))
+      + ' · <b style="color:' + (x.resultado === 'aprovado' ? 'var(--ok, #1E6B3A)' : 'var(--crit)') + '">' + (x.resultado === 'aprovado' ? 'conforme' : 'NÃO CONFORME') + '</b>'
+      + (x.leituras && x.leituras.etapa1 && x.leituras.etapa1.ok === false ? ' (etapa 1)' : '') + '</li>').join('') + '</ul></div>' : '';
+  return '<div class="card"><h3 style="margin:0">Anexos do laudo</h3>' + docsAf + '<p class="muted" style="margin:4px 0 8px">Confira cada página antes de aprovar: o laudo vai para o cliente e anexa exatamente estes arquivos.</p>'
     + L.map(x => '<div style="margin-bottom:10px"><b>' + esc(x.rot) + '</b>' + (x.path ? ' <button class="btn mini" data-anexo="' + esc(x.path) + '">Ver as páginas</button><div class="paginas" data-pags="' + esc(x.path) + '"></div>'
         : ' <span class="chip s-grave">sem o arquivo</span>' + (x.falta ? '<div class="alerta crit" style="margin-top:4px">' + esc(x.falta) + '</div>' : '')) + '</div>').join('') + '</div>';
 }
@@ -2202,7 +2209,7 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S149');
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S150');
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S145');
     return true;
   })().catch(e => { LIBS = null; throw e; });
@@ -2250,6 +2257,11 @@ async function gerarLaudo(d, opc, aviso){
   const base = await new Promise((ok, falha) => { try{ pdfMake.createPdf(def).getBuffer(b => ok(b)); }catch(e){ falha(e); } });
   aviso('Juntando os anexos…');
   const out = await PDFLib.PDFDocument.load(base);
+  // S150 · item 81: o documento de cada aferição (relatório do manômetro, certificado da válvula), separado, logo depois do laudo e antes dos anexos
+  for (const dc of LaudoPDF.documentosAfericao(d, opc)){
+    const b = await new Promise((ok, falha) => { try{ pdfMake.createPdf(dc.def).getBuffer(x => ok(x)); }catch(e){ falha(e); } });
+    const src = await PDFLib.PDFDocument.load(b); (await out.copyPages(src, src.getPageIndices())).forEach(pg => out.addPage(pg));
+  }
   // S148 · item 90: medidor, cada manômetro padrão usado, ART (a mesma ordem da lista do item 15 do laudo)
   const anexos = [['o certificado do medidor', d.medidor && d.medidor.certificado_path]]
     .concat((d.padroes || []).map(p => ['o certificado do manômetro padrão' + (p.descricao ? ' ' + p.descricao : ''), p.certificado_path]))

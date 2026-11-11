@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S57-T31';   // S149: TapDoc 21 (itens 82, 83, 84, 88 e 92; 426)
+const VERSAO = 'S57-T32';   // S150: TapDoc 22 e o motor R00.6 (item 81: a aferição em 2 etapas, Grau D, válvula V1–V5; 427)
+// const VERSAO = 'S57-T31';   // S149: TapDoc 21 (itens 82, 83, 84, 88 e 92; 426)
 // const VERSAO = 'S57-T30';   // S148: TapDoc 20 (itens 85 e 91: a ordem do medidor e a placa com três respostas; 425)
 // const VERSAO = 'S57-T29';   // S146: TapDoc 19 (item 79: os textos prontos do laudo; 422)
 // const VERSAO = 'S57-T28';   // S145: Field S57 e TapDoc 18 (rodada E: a confirmação da participação, A8; 421)
@@ -62,7 +63,7 @@ const ESSENCIAIS = [
   // S35 · TapDoc 1: a coleta da inspeção (página própria, abre sem sinal)
   './doc/',
   // S80 · TapDoc 4: o motor de cálculo para a prévia sem sinal. Mesmo ?v= do <script> de doc/index.html.
-  './doc/motor-calculo-nr13.js?v=R00.5',
+  './doc/motor-calculo-nr13.js?v=R00.6',
   // S39 · a medição gera o PDF no campo, sem sinal: o pdfmake do TapDoc (mesmo endereço do <script> que a tela carrega)
   '../doc/vendor/pdfmake.min.js',
   '../doc/vendor/vfs_fonts.js'
