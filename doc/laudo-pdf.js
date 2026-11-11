@@ -148,6 +148,26 @@ function siglaComp(c) {
   const m = String(c.nome || '').match(/\b(direito|esquerdo|superior|inferior)\b/i);
   return c.tipo !== 'conico' && c.tipo !== 'janela' && m ? TAMPO_SIGLA[m[1].toLowerCase()] : null;
 }
+// S148 · item 85: a ordem do medidor (a mesma do celular e da revisão): CF, CT, CS/CLD, CI/CLE, tampo direito ou superior, tampo esquerdo ou inferior
+const ORDEM_SIGLA = { CF: 0, CT: 1, CS: 2, CLD: 2, CI: 3, CLE: 3, TD: 4, TS: 4, TE: 5, TI: 5 };
+function rankMedicao(c) {
+  const sg = siglaComp(c);
+  if (sg && sg in ORDEM_SIGLA) return ORDEM_SIGLA[sg];
+  return c.tipo === 'costado' ? -1 : 6;
+}
+function ordemMedicao(V) {
+  const camOrd = c => { const k = (V.camaras || []).find(x => x.id === c.camara_id); return k ? (k.ordem || 0) : 0; };
+  return (a, b) => camOrd(a) - camOrd(b) || rankMedicao(a) - rankMedicao(b) || (a.ordem || 0) - (b.ordem || 0);
+}
+/** S148 · item 90: os anexos, na ordem em que o PDF os junta: medidor, cada manômetro padrão usado, ART.
+ *  Laudo de antes (a fotografia sem "padroes"): null, e vale a lista do modelo. */
+function anexosDoLaudo(d) {
+  if (!Array.isArray(d.padroes)) return null;
+  const xs = ['Certificado de calibração do medidor de espessura']
+    .concat(d.padroes.map(p => 'Certificado de calibração do manômetro padrão' + (p.descricao ? ' ' + p.descricao : '') + (p.numero_serie ? ' (nº ' + p.numero_serie + ')' : '')))
+    .concat(['ART – Anotação de Responsabilidade Técnica']);
+  return xs.map((x, k) => 'Anexo ' + (k + 1) + ' – ' + x + (k === xs.length - 1 ? '.' : ';'));
+}
 function nomeComp(c) {
   if (!c) return '';
   const sg = siglaComp(c);
@@ -338,11 +358,15 @@ function montar(d, opc) {
   sub('6.1', T.vaso || 'Identificação do vaso de pressão');
   const funcao = V.funcao ? String(V.funcao).toLowerCase().replace(/^(um|uma) /, '') : null;
   const qVaso = quadro + 1;
-  par(txt(V.sem_placa && M.vaso_intro_sem_placa ? M.vaso_intro_sem_placa : M.vaso_intro, { serie: V.numero_serie || 'não informado',
+  // S148 · item 91: a placa com três respostas (com placa indelével, ilegível ou não indelével, sem placa)
+  const placa = V.placa_situacao || (V.sem_placa ? 'sem' : 'indelevel');
+  const introIlegivel = M.vaso_intro_placa_ilegivel || (M.vaso_intro_sem_placa ? M.vaso_intro_sem_placa.replace('não possui placa de identificação, exigida pelo',
+    'possui placa de identificação ilegível ou não indelével, em desacordo com o') : null);
+  par(txt(placa === 'sem' && M.vaso_intro_sem_placa ? M.vaso_intro_sem_placa : placa === 'ilegivel' && introIlegivel ? introIlegivel : M.vaso_intro, { serie: V.numero_serie || 'não informado',
     fabricante: V.fabricante || 'fabricante não identificado', funcao: funcao ? ' e funciona como ' + funcao : '', quadro: qVaso }));
   const volume = cams.reduce((a, k) => a + (Number(k.volume_m3) || 0), 0) || (R.volume_m3 != null ? Number(R.volume_m3) : null);
   // S143 · item 78: "Tampos: 2, elípticos 2:1" e "Costado: cilíndrico" no lugar das siglas soltas
-  const ativos = (V.componentes || []).filter(c => c.ativo !== false);
+  const ativos = (V.componentes || []).filter(c => c.ativo !== false).sort(ordemMedicao(V));   // S148 · item 85
   const TAMPO_PL = { eliptico: ['elíptico 2:1', 'elípticos 2:1'], torisferico: ['torisférico', 'torisféricos'], hemisferico: ['hemisférico', 'hemisféricos'], plano: ['plano', 'planos'] };
   const tampos = ativos.filter(c => TAMPO_PL[c.tipo]);
   const porTipo = {}; tampos.forEach(c => { porTipo[c.tipo] = (porTipo[c.tipo] || 0) + 1; });
@@ -752,7 +776,7 @@ function montar(d, opc) {
 
   // ── 15 · anexos ─────────────────────────────────────────────────────────
   sec('15', T.anexos || 'ANEXOS');
-  lista(M.anexos);
+  lista(anexosDoLaudo(d) || M.anexos);   // S148 · item 90: a mesma lista que o PDF junta (medidor, padrões, ART)
 
   // ── a página ────────────────────────────────────────────────────────────
   const logoCli = emp.logo && /^data:image\/(png|jpe?g);base64,/i.test(emp.logo) ? emp.logo : null;
@@ -806,6 +830,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-S146-2026-11-10' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-S148-2026-11-11' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);

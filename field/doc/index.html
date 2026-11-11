@@ -181,7 +181,8 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 19';   // S146 · item 79 (422): os textos prontos do laudo — o caso escolhido no acessório não aferido (manômetro, válvula, quebra-vácuo), o disco de ruptura, a boroscopia não feita, o prazo menor (P1), as recomendações prontas (R1, R2) e o equipamento sem pressão (fora da NR-13)
+const VERSAO = 'TapDoc 20';   // S148 · itens 85 e 91 (425): os componentes na ordem do medidor (CF, CT, CS/CLD, CI/CLE, tampos); a placa de identificação com três respostas
+// const VERSAO = 'TapDoc 19';   // S146 · item 79 (422): os textos prontos do laudo — o caso escolhido no acessório não aferido (manômetro, válvula, quebra-vácuo), o disco de ruptura, a boroscopia não feita, o prazo menor (P1), as recomendações prontas (R1, R2) e o equipamento sem pressão (fora da NR-13)
 // const VERSAO = 'TapDoc 18';   // S145 · rodada E (A8): o aviso no Fechamento de que cada um confirma a participação no próprio celular (aba Eu)
 // const VERSAO = 'TapDoc 17';   // S144 · rodada D2 (420): função do vaso e "sem placa" na plaqueta; prazo menor que o da norma no fechamento (item 70); sem o "modelo" do acessório (item 72); "aferição" também na válvula (item 74); aviso de válvula sem conexão (item 75); foto da aferição (item 69); a sigla da região pelo nome (item 78)
 // const VERSAO = 'TapDoc 16';   // S142 · item 40 (418): quem não está na T06 vê um aviso com quem está
@@ -1051,7 +1052,11 @@ function telaPlaqueta(v){
   // S144 · item 78: o que o vaso é (sai no laudo: "funciona como …") e o vaso sem placa (sai no laudo e vira recomendação)
   h += '<label class="f">Função do vaso<select class="t" id="pFunc"><option value="">—</option>' + FUNCOES_VASO.map(f => '<option' + (f === v.funcao ? ' selected' : '') + '>' + esc(f) + '</option>').join('') +
     (v.funcao && FUNCOES_VASO.indexOf(v.funcao) < 0 ? '<option selected>' + esc(v.funcao) + '</option>' : '') + '<option value="+">Outra (escrever)…</option></select></label>';
-  h += '<div class="chk"><input type="checkbox" id="pSemPlaca"' + (v.sem_placa ? ' checked' : '') + '><label for="pSemPlaca">O vaso não tem placa de identificação</label></div>';
+  // S148 · item 91: a placa com três respostas (NR-13, 13.5.1.3: placa indelével, em local visível). As respostas 2 e 3 dispensam os dados que não dão para ler
+  const plv = v.placa_situacao || (v.sem_placa ? 'sem' : 'indelevel');
+  h += '<label class="f">Placa de identificação<select class="t" id="pPlaca">' + [['indelevel','Com placa indelével'], ['ilegivel','Placa ilegível ou não indelével'], ['sem','Sem placa']]
+    .map(([k, r]) => '<option value="' + k + '"' + (k === plv ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></label>'
+    + (plv !== 'indelevel' ? '<p class="muted" style="margin:-4px 0 8px">Preencha só o que dá para ler. O laudo recomenda ' + (plv === 'sem' ? 'providenciar' : 'substituir por') + ' a placa de identificação indelével.</p>' : '');
   h += campoTexto('Nº de série', 'pSerie', v.numero_serie);
   h += '<div class="lin">' + campoTexto('Modelo', 'pModelo', v.modelo) + campoNum('Ano de fabricação', 'pAno', v.ano_fabricacao, null, 'inputmode="numeric"') + '</div>';
   h += '<div class="chk"><input type="checkbox" id="pSemCod"' + (v.sem_codigo_construcao ? ' checked' : '') + '><label for="pSemCod">Sem código de construção (não consta)</label></div>';
@@ -1101,7 +1106,7 @@ function telaPlaqueta(v){
     }
     mudouVaso(v, 'funcao', el.value || null);
   });
-  ligar('pSemPlaca', el => mudouVaso(v, 'sem_placa', el.checked));
+  ligar('pPlaca', el => { v.sem_placa = el.value === 'sem'; mudouVaso(v, 'placa_situacao', el.value); pintar(); });   // S148 · item 91
   ligar('pModelo', el => mudouVaso(v, 'modelo', el.value.trim() || null));
   ligar('pAno', el => { const a = numOuAviso(el, 1900, new Date().getFullYear() + 1, 'Ano'); if (a !== undefined) mudouVaso(v, 'ano_fabricacao', a == null ? null : Math.round(a)); });
   ligar('pSemCod', el => { mudouVaso(v, 'sem_codigo_construcao', el.checked); if (el.checked){ mudouVaso(v, 'codigo_construcao', null); } pintar(); });
@@ -1299,9 +1304,9 @@ const COR_COMP = c => c.tipo === 'costado' ? '#1B6FA9' : c.tipo === 'janela' ? '
 /** Os cartões da tela: o costado de cada câmara (com as regiões) e cada outro componente. */
 function cartoesComp(v){
   const fora = v._tirando || {}, cs = ativas(v), out = [];
-  const comps = compsAtivos(v).filter(c => !fora[c.id]).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  const comps = compsAtivos(v).filter(c => !fora[c.id]).sort(ordemMedicao(v));   // S148 · item 85: a ordem do medidor
   cs.forEach(k => {
-    const regs = comps.filter(c => c.tipo === 'costado' && camIdDe(v, c) === k.id).sort((a, b) => ordReg(a) - ordReg(b));
+    const regs = comps.filter(c => c.tipo === 'costado' && camIdDe(v, c) === k.id);
     if (regs.length) out.push({ chave:'costado:' + k.id, cam:k, c:regs[0], regs });
     comps.filter(c => c.tipo !== 'costado' && camIdDe(v, c) === k.id).forEach(c => out.push({ chave:c.id, cam:k, c }));
   });
@@ -2412,7 +2417,18 @@ const MOTIVOS_US = ['Sem acesso ao componente.', 'Isolamento térmico no compone
 const MAX_PONTOS = 60;
 const leiturasDe = (v, cid) => ((v.inspecao && v.inspecao.leituras) || []).filter(l => l.componente_id === cid);
 const semLeitura = v => (v.inspecao && v.inspecao.ultrassom_sem_leitura) || {};
-const compsMedir = v => compsAtivos(v).filter(c => !c.nao_medir).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+// S148 · item 85: a ORDEM ÚNICA, a do medidor (a mesma no celular, na revisão, na janela do CSV e no laudo):
+// CF, CT, CS (horizontal) ou CLD (vertical), CI ou CLE, tampo direito ou superior, tampo esquerdo ou inferior; o resto depois.
+const ORDEM_SIGLA = { CF:0, CT:1, CS:2, CLD:2, CI:3, CLE:3 };
+function rankMedicao(c){
+  if (c.tipo === 'costado'){ const sg = siglaReg(c); return sg in ORDEM_SIGLA ? ORDEM_SIGLA[sg] : -1; }
+  if (c.tipo === 'conico' || c.tipo === 'janela' || c.tipo === 'unica') return 6;
+  const pos = c.posicao || ((String(c.nome || '').match(/\b(direito|esquerdo|superior|inferior)\b/i) || [])[1] || '').toLowerCase();
+  return pos === 'direito' || pos === 'superior' ? 4 : pos === 'esquerdo' || pos === 'inferior' ? 5 : 6;
+}
+const ordCam = (v, c) => { const k = camaraDe(v, c); return k ? (k.ordem || 0) : 0; };
+const ordemMedicao = v => (a, b) => ordCam(v, a) - ordCam(v, b) || rankMedicao(a) - rankMedicao(b) || (a.ordem || 0) - (b.ordem || 0);
+const compsMedir = v => compsAtivos(v).filter(c => !c.nao_medir).sort(ordemMedicao(v));
 function estUltra(v){
   const i = v.inspecao || {}, cs = compsMedir(v);
   const feitos = cs.filter(c => leiturasDe(v, c.id).length || (semLeitura(v)[c.id] || '').trim()).length;

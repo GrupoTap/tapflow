@@ -146,6 +146,9 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 .txlado del{background:#F8E5E0;color:#7A1E10}
 .txmud{margin-top:10px}
 @media (max-width:760px){.txlado{grid-template-columns:1fr}}
+/* S148 · item 89: o realce curto na linha que acabou de mudar */
+@keyframes realce{ from{ background:var(--warn-soft, #fcefd8); } to{ background:transparent; } }
+.realce{ animation:realce 1.2s ease-out; }
 </style>
 </head>
 <body>
@@ -161,7 +164,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E20';   // E20 (S147 · 423): item 86 — o laudo assinado (e qualquer arquivo da inspeção) até 50 MB; mensagem do tamanho em português
+const VERSAO = 'TapDoc E21';   // E21 (S148 · 425): itens 80 (foto e arquivo com o login renovado), 85 (um ponto do CSV por componente, na ordem do medidor), 89 (a revisão não volta ao topo), 90 (o certificado do padrão nos anexos), 91 (placa com três respostas) e 93 (boroscopia: imagem × resultado)
+// const VERSAO = 'TapDoc E20';   // E20 (S147 · 423): item 86 — o laudo assinado (e qualquer arquivo da inspeção) até 50 MB; mensagem do tamanho em português
 // const VERSAO = 'TapDoc E19';   // E19 (S146 · 422): item 79 — os textos prontos do laudo: o quadro "Textos prontos" na revisão (o escritório troca o caso escolhido em campo), o texto pronto do prazo menor (P1) e a aba "Textos do laudo" (propor; o PLH aprova com a digital; versões); laudo-pdf.js S146
 // const VERSAO = 'TapDoc E18';   // E18 (S145 · 421): rodada E — a assinatura do laudo: o desenho do PLH (aceito com a digital), aprovar e emitir com a digital, o carimbo em todas as páginas, o pacote para o token (Assinador SERPRO) e a conferência do PDF assinado (assinatura-pdf.js), a participação dos técnicos
 // const VERSAO = 'TapDoc E17';   // E17 (S144 · 420 e 211): rodada D2 — itens 63, 69, 70, 71, 72, 75, 77 e 78 da lista (Número TAP, função e "sem placa" na revisão; prazo menor que o da norma; anexos com miniaturas; tampos com E diferente; sugestões de recomendação; cadastro do padrão; laudo-pdf.js S144)
@@ -946,9 +950,7 @@ async function mostrarArquivo(a){
   if (DEMO){ vis.innerHTML = '<p class="muted">Demonstração: sem o arquivo.</p>'; return; }
   try{
     if (!blobs[a.storage_path]){
-      const s = N.sessao();
-      const r = await fetch(SUPA_URL + '/storage/v1/object/authenticated/inspecoes/' + a.storage_path.split('/').map(encodeURIComponent).join('/'),
-        { headers:{ apikey:SUPA_ANON, Authorization:'Bearer ' + s.token } });
+      const r = await lerArmazem(a.storage_path);   // S148 · item 80
       if (!r.ok) throw new Error('O arquivo não abriu (HTTP ' + r.status + ').');
       blobs[a.storage_path] = URL.createObjectURL(await r.blob());
     }
@@ -1141,7 +1143,18 @@ function geoDe(v, c){
 
 const leiturasDe = (v, cid) => ((v.inspecao && v.inspecao.leituras) || []).filter(l => l.componente_id === cid);
 const semLeitura = v => (v.inspecao && v.inspecao.ultrassom_sem_leitura) || {};
-const compsMedir = v => compsAtivos(v).filter(c => !c.nao_medir).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+// S148 · item 85: a ORDEM ÚNICA, a do medidor (a mesma no celular, na revisão, na janela do CSV e no laudo):
+// CF, CT, CS (horizontal) ou CLD (vertical), CI ou CLE, tampo direito ou superior, tampo esquerdo ou inferior; o resto depois.
+const ORDEM_SIGLA = { CF:0, CT:1, CS:2, CLD:2, CI:3, CLE:3 };
+function rankMedicao(c){
+  if (c.tipo === 'costado'){ const sg = siglaReg(c); return sg in ORDEM_SIGLA ? ORDEM_SIGLA[sg] : -1; }
+  if (c.tipo === 'conico' || c.tipo === 'janela' || c.tipo === 'unica') return 6;
+  const pos = c.posicao || ((String(c.nome || '').match(/\b(direito|esquerdo|superior|inferior)\b/i) || [])[1] || '').toLowerCase();
+  return pos === 'direito' || pos === 'superior' ? 4 : pos === 'esquerdo' || pos === 'inferior' ? 5 : 6;
+}
+const ordCam = (v, c) => { const k = camaraDe(v, c); return k ? (k.ordem || 0) : 0; };
+const ordemMedicao = v => (a, b) => ordCam(v, a) - ordCam(v, b) || rankMedicao(a) - rankMedicao(b) || (a.ordem || 0) - (b.ordem || 0);
+const compsMedir = v => compsAtivos(v).filter(c => !c.nao_medir).sort(ordemMedicao(v));
 function estUltra(v){
   const i = v.inspecao || {}, cs = compsMedir(v);
   const feitos = cs.filter(c => leiturasDe(v, c.id).length || (semLeitura(v)[c.id] || '').trim()).length;
@@ -1232,7 +1245,7 @@ function previa(v){
 
 const REV_ITENS = [['dados','Dados contra as fotos'], ['recomendacoes','Anomalias e recomendações'], ['pmta','PMTA'], ['espessuras','Espessuras contra o laudo anterior']];
 const REV_ETAPA = { 1:'Revisão 1 · equipe', 2:'Revisão 2 · outra equipe', 3:'Aprovação do PLH' };
-const REV_CAMPOS_VASO = [['numero_tap','Número TAP'], ['funcao','Função do vaso'], ['sem_placa','Vaso sem placa'], ['numero_serie','Nº de série'], ['modelo','Modelo'], ['ano_fabricacao','Ano de fabricação'], ['codigo_construcao','Código de construção'],
+const REV_CAMPOS_VASO = [['numero_tap','Número TAP'], ['funcao','Função do vaso'], ['placa_situacao','Placa de identificação'], ['numero_serie','Nº de série'], ['modelo','Modelo'], ['ano_fabricacao','Ano de fabricação'], ['codigo_construcao','Código de construção'],
                          ['codigo_edicao','Edição do código']];   // S144 · itens 63 e 78: Número TAP (nº do cliente + TAG sem prefixo), função e "sem placa"   // S141 · item 31: a PMTA e a PTH de plaqueta são da câmara (quadro abaixo)
 const REV_CAMPOS_AC = [['tag','TAG'], ['marca','Marca'], ['conexao','Conexão'], ['escala','Escala'], ['lacre_num','Lacre'], ['pressao_ajuste_mpa','Ajuste (MPa)']];   // S144 · itens 72 e 75: sem "modelo"; a conexão
 // S144 · item 78: o que a revisão sugere (o revisor escolhe; nada é marcado sozinho)
@@ -1369,9 +1382,9 @@ async function abaRevisao(h){
 
 // ── a tela da inspeção ─────────────────────────────────────────────────────
 let REV = null;
-async function telaRevisao(id){
-  titulo('Revisão', 'carregando…');
-  $('tela').innerHTML = '<p class="muted">Carregando…</p>';
+async function telaRevisao(id, manter){
+  // S148 · item 89: ao gravar (manter), a tela fica como está até os dados novos chegarem
+  if (!manter){ titulo('Revisão', 'carregando…'); $('tela').innerHTML = '<p class="muted">Carregando…</p>'; }
   const R = await rpc('tf_insp_revisao_ver', { p_id:id });
   const P = await rpc('tf_insp_pacote_os', { p_os_id:R.inspecao.os_id });
   const v = (P.vasos || []).find(x => x.inspecao && x.inspecao.id === id);
@@ -1381,6 +1394,47 @@ async function telaRevisao(id){
   REV = { id, R, P, v, prev, volume:null, pmta:{} };
   try{ REV_PRONTOS = ((await rpc('tf_laudo_textos_prontos')) || {}).prontos || null; }catch(e){ REV_PRONTOS = null; }   // S146 · item 79
   pintarRevisao();
+}
+// S148 · item 89: depois de gravar, a revisão volta ao MESMO quadro (não a um número de pixels) e realça a linha mexida
+const LUGAR_SEL = 'h2, h3, tr, .card, label.f, p.alerta';
+function chaveEl(el){
+  const T = $('tela'), tag = el.matches('tr') ? 'tr' : el.matches('h2') ? 'h2' : el.matches('h3') ? 'h3' : el.matches('.card') ? '.card' : el.matches('label.f') ? 'label.f' : 'p.alerta';
+  return { sel:tag, idx:Array.prototype.indexOf.call(T.querySelectorAll(tag), el), txt:(el.textContent || '').trim().slice(0, 60) };
+}
+function acharEl(k){
+  if (!k) return null;
+  const L = Array.from($('tela').querySelectorAll(k.sel)), mesmos = L.map((x, i) => [x, i]).filter(([x]) => (x.textContent || '').trim().slice(0, 60) === k.txt);
+  if (mesmos.length) return mesmos.sort((a, b) => Math.abs(a[1] - k.idx) - Math.abs(b[1] - k.idx))[0][0];
+  return L[Math.min(k.idx, L.length - 1)] || null;
+}
+function guardarLugar(){
+  let melhor = null;
+  $('tela').querySelectorAll(LUGAR_SEL).forEach(el => {
+    const r = el.getBoundingClientRect(); if (!r.height || r.bottom <= 0) return;
+    if (r.top <= 60 && (!melhor || r.top >= melhor.top)) melhor = { el, top:r.top };
+  });
+  if (!melhor){ const el = Array.from($('tela').querySelectorAll(LUGAR_SEL)).find(x => x.getBoundingClientRect().top > 0); if (el) melhor = { el, top:el.getBoundingClientRect().top }; }
+  return melhor ? { k:chaveEl(melhor.el), dy:melhor.top } : null;
+}
+// quem rola é o <main> (o corpo da página não rola): por isso o window.scrollY de antes não voltava
+const rolador = () => document.querySelector('main') || document.scrollingElement;
+function voltarAoLugar(g){
+  if (!g) return;
+  const el = acharEl(g.k); if (!el) return;
+  rolador().scrollTop += el.getBoundingClientRect().top - g.dy;
+}
+let REV_ULTIMO = null;   // a linha (ou o quadro) do último clique na revisão
+async function manterLugar(fazer){
+  const g = guardarLugar(), alvo = REV_ULTIMO;
+  await fazer();
+  voltarAoLugar(g);
+  // as fotos e os quadros que carregam depois mudam a altura: volta de novo, a menos que a pessoa já tenha rolado
+  let mexeu = false; const parar = () => { mexeu = true; };
+  ['wheel','touchmove','keydown','mousedown'].forEach(ev => window.addEventListener(ev, parar, { once:true, passive:true }));
+  $('tela').querySelectorAll('img').forEach(im => { if (!im.complete) im.addEventListener('load', () => { if (!mexeu) voltarAoLugar(g); }, { once:true }); });
+  setTimeout(() => { if (!mexeu) voltarAoLugar(g); }, 400);
+  setTimeout(() => ['wheel','touchmove','keydown','mousedown'].forEach(ev => window.removeEventListener(ev, parar)), 1600);
+  const r = acharEl(alvo); if (r){ r.classList.remove('realce'); void r.offsetWidth; r.classList.add('realce'); setTimeout(() => r.classList.remove('realce'), 1300); }
 }
 function revOk(item){ const e = REV.R.inspecao.etapa; return ((REV.R.oks || {})[e] || []).indexOf(item) >= 0; }
 function pintarRevisao(){
@@ -1455,7 +1509,7 @@ function pintarRevisao(){
       + (f.origem === 'galeria' ? ' · galeria' + (f.tirada_em ? ', tirada em ' + dataBR(dataSP(f.tirada_em)).slice(0, 5) : '') : ''); };
   h += '<div class="card">' + cab('dados', '1 · Dados contra as fotos')
     + '<div class="g2rev"><div><table><tr><th>Plaqueta</th><th></th><th></th></tr>'
-    + [['fabricante','Fabricante']].concat(REV_CAMPOS_VASO).map(([k, r]) => '<tr><td class="muted">' + r + '</td><td><b>' + esc(k === 'sem_placa' ? (R.vaso[k] ? 'sim' : 'não') : R.vaso[k] == null ? '—' : String(R.vaso[k])) + '</b></td><td>'
+    + [['fabricante','Fabricante']].concat(REV_CAMPOS_VASO).map(([k, r]) => '<tr><td class="muted">' + r + '</td><td><b>' + esc(k === 'placa_situacao' ? PLACA_ROT[placaDe(R.vaso)] : R.vaso[k] == null ? '—' : String(R.vaso[k])) + '</b></td><td>'
         + (eu.pode && k !== 'fabricante' ? '<button class="btn mini" data-corv="' + k + '">Corrigir</button>' : '') + '</td></tr>').join('') + '</table>'
     // S141 · itens 31, 45 e 47: a PMTA e a PTH de plaqueta, a pressão de operação e o volume são da câmara (como vieram do campo)
     + CALC.ativas(v).map(k => '<table style="margin-top:8px"><tr><th>' + (CALC.ativas(v).length > 1 ? esc(k.nome) : 'Câmara') + '</th><th></th><th></th></tr>'
@@ -1490,7 +1544,7 @@ function pintarRevisao(){
     + '<h3 style="margin-top:14px">Todas as recomendações (' + recs.length + ')</h3>' + (recs.length ? '<table>' + recs.map(r => '<tr><td>' + esc(r.texto) + '</td><td class="muted">' + TIPO_REC[r.tipo]
         + (r.prazo ? ' · até ' + dataBR(r.prazo) : '') + (r.ref ? '' : ' · livre') + '</td><td>' + (eu.pode ? '<button class="btn mini" data-edrec="' + esc(r.id) + '">Editar</button> <button class="btn mini perigo" data-rmrec="' + esc(r.id) + '">Tirar</button>' : '') + '</td></tr>').join('') + '</table>' : '<p class="muted">Nenhuma.</p>')
     + (eu.pode ? '<button class="btn mini" data-novarec="" data-sug="" style="margin-top:8px">+ recomendação livre</button>' : '')
-    + revSugestoesHtml(recs, eu.pode) + '</div>';
+    + revPlacaAlerta(recs) + revSugestoesHtml(recs, eu.pode) + '</div>';   // S148 · item 91
   h += revTextosHtml(eu.pode && e && e <= 3);   // S146 · item 79
   // S144 · item 70: prazo menor que o da norma (campo ou revisão)
   h += revPrazoHtml(prev, eu.pode && e && e <= 3);
@@ -1545,7 +1599,9 @@ function pintarRevisao(){
   h += '<div class="card"><div class="linha" style="justify-content:space-between"><h3 style="margin:0">5 · Boroscopia (lançada no escritório)</h3>'
     + (eu.pode ? '<button class="btn mini" id="revBoro">' + (bo ? 'Alterar' : 'Lançar') + '</button>' : '') + '</div>'
     + (bo ? '<p style="margin:8px 0 0">' + (bo.realizada ? 'Realizada: <b>' + (bo.resultado === 'com_anomalia' ? 'com anomalia' : 'sem anomalia') + '</b>' + (bo.anomalia ? ' · ' + esc(bo.anomalia) : '') : 'Não realizada: ' + esc(bo.motivo_nao || '')) + '</p>'
-        : '<p class="muted" style="margin:8px 0 0">Ainda não lançada. Sem ela o laudo sai com "boroscopia sem resposta".</p>')
+        : (() => { const nb = (R.fotos || []).filter(f => f.secao === 'boroscopia').length;   // S148 · item 93: a imagem e o resultado são duas coisas
+            return nb ? '<p class="alerta falta" style="margin:8px 0 0">Imagens anexadas (' + nb + '). Falta o resultado: clique em <b>Lançar</b> e diga se foi feita e se há anomalia.</p>'
+                      : '<p class="muted" style="margin:8px 0 0">Falta o resultado: clique em <b>Lançar</b> e diga se foi feita e se há anomalia. Sem ele o laudo sai com "boroscopia sem resposta".</p>'; })())
     // S141 · item 46: as imagens do exame (baixadas do cartão do boroscópio), com a legenda; com anomalia, pelo menos uma
     + (() => { const bi = (R.fotos || []).filter(f => f.secao === 'boroscopia'), pode = ['enviada','em_revisao'].indexOf(I.situacao) >= 0;
         return '<div class="fotosrev" style="margin-top:8px">' + bi.map(f => '<button class="fotorev" data-bfoto="' + esc(f.path) + '">' + esc(f.legenda || 'imagem') + (pode ? ' <span data-brm="' + esc(f.id) + '" title="Tirar" style="color:var(--crit);padding-left:4px">×</span>' : '') + '</button>').join('')
@@ -1590,8 +1646,21 @@ function revSugestoes(){
   if (amb === 'aberto') out.push({ tipo:'conservacao', texto:'Que seja providenciada uma cobertura, para evitar que o vaso fique exposto às intempéries.' });
   if (vis.some(x => x.conforme === false && /corros|pintur|ferrugem|oxida/i.test((x.anomalia || '') + ' ' + x.item))) out.push({ tipo:'conservacao', texto:'Que se providencie a pintura do vaso, para desacelerar a corrosão.' });
   if (vis.some(x => /aterr/i.test(x.item) && x.conforme === false)) out.push({ tipo:'seguranca', texto:'Instalar ou reparar o aterramento do vaso e medir a continuidade.' });
-  if ((R.vaso || {}).sem_placa) out.push({ tipo:'seguranca', texto:'Que seja instalada a placa de identificação do vaso, conforme o item 13.5.1.3 da NR-13.' });
+  // S148 · item 91: placa ilegível ou não indelével → substituir; sem placa → providenciar (NR-13, 13.5.1.3; o PLH confere a citação)
+  const pl = placaDe(R.vaso || {});
+  if (pl === 'ilegivel') out.push({ tipo:'seguranca', texto:PLACA_REC.ilegivel });
+  if (pl === 'sem') out.push({ tipo:'seguranca', texto:PLACA_REC.sem });
   return out;
+}
+// S148 · item 91: a placa de identificação com três respostas (decisão B do Bruno, 11/11)
+const PLACA_ROT = { indelevel:'com placa indelével', ilegivel:'placa ilegível ou não indelével', sem:'sem placa' };
+const PLACA_REC = { ilegivel:'Que a placa de identificação do vaso seja substituída por placa de identificação indelével, conforme o item 13.5.1.3 da NR-13.',
+                    sem:'Que seja providenciada a placa de identificação indelével do vaso, conforme o item 13.5.1.3 da NR-13.' };
+const placaDe = V => V.placa_situacao || (V.sem_placa ? 'sem' : 'indelevel');
+function revPlacaAlerta(recs){
+  const pl = placaDe(REV.R.vaso || {});
+  if (pl === 'indelevel' || recs.some(r => /placa/i.test(r.texto || ''))) return '';
+  return '<p class="alerta crit" style="margin:8px 0 0">Vaso ' + esc(PLACA_ROT[pl]) + ': o laudo cita a recomendação da placa na seção 11. Use a sugestão abaixo (Recomendar).</p>';
 }
 function revSugestoesHtml(recs, pode){
   const norm = x => String(x || '').toLowerCase().replace(/[^a-zà-ú]/g, '').slice(0, 40);
@@ -1625,10 +1694,13 @@ function revPrazoHtml(prev, pode){
 function revAnexosHtml(){
   const A = REV.R.anexos || {}, L = [];
   L.push({ k:'medidor', rot:'Anexo 1 · Certificado de calibração do medidor de espessura' + (A.medidor && A.medidor.descricao ? ' (' + A.medidor.descricao + ')' : ''), path:A.medidor && A.medidor.path });
-  L.push({ k:'art', rot:'Anexo 2 · ART' + (A.art && A.art.numero ? ' nº ' + A.art.numero : ''), path:A.art && A.art.path });
+  // S148 · item 90: o certificado de cada manômetro padrão usado nas aferições e testes (uma vez cada), antes da ART
+  (A.padroes || []).forEach(p => L.push({ k:'padrao', rot:'Anexo ' + (L.length + 1) + ' · Certificado de calibração do manômetro padrão' + (p.descricao ? ' (' + p.descricao + (p.numero_serie ? ' · nº ' + p.numero_serie : '') + ')' : ''), path:p.path,
+    falta:'Sem o PDF do certificado: cadastre em TapDoc › Instrumentos. Sem ele o laudo não é emitido.' }));
+  L.push({ k:'art', rot:'Anexo ' + (L.length + 1) + ' · ART' + (A.art && A.art.numero ? ' nº ' + A.art.numero : ''), path:A.art && A.art.path });
   return '<div class="card"><h3 style="margin:0">Anexos do laudo</h3><p class="muted" style="margin:4px 0 8px">Confira cada página antes de aprovar: o laudo vai para o cliente e anexa exatamente estes arquivos.</p>'
     + L.map(x => '<div style="margin-bottom:10px"><b>' + esc(x.rot) + '</b>' + (x.path ? ' <button class="btn mini" data-anexo="' + esc(x.path) + '">Ver as páginas</button><div class="paginas" data-pags="' + esc(x.path) + '"></div>'
-        : ' <span class="chip s-grave">sem o arquivo</span>') + '</div>').join('') + '</div>';
+        : ' <span class="chip s-grave">sem o arquivo</span>' + (x.falta ? '<div class="alerta crit" style="margin-top:4px">' + esc(x.falta) + '</div>' : '')) + '</div>').join('') + '</div>';
 }
 async function revMostrarPaginas(path, cx){
   cx.innerHTML = '<p class="muted">Abrindo…</p>';
@@ -1758,7 +1830,8 @@ function revMontarResultado(){
 }
 function ligarRevisao(){
   const { R } = REV, id = REV.id, T = $('tela');
-  const recarregar = async () => { const y = window.scrollY; await telaRevisao(id); window.scrollTo(0, y); };
+  const recarregar = () => manterLugar(() => telaRevisao(id, true));   // S148 · item 89: todos os botões passam por aqui
+  if (!T._revClique){ T._revClique = true; T.addEventListener('click', ev => { const el = ev.target.closest && ev.target.closest('tr, .card'); if (el && T.contains(el)) REV_ULTIMO = chaveEl(el); }, true); }
   // E11 (414): devolver ao celular (a equipe corrige a coleta; a revisão recomeça depois do novo envio)
   const brc = $('revReabrirCampo'); if (brc) brc.addEventListener('click', () => {
     janela('Reabrir para o campo', '<p>A equipe volta a poder alterar o que coletou. Depois do novo envio, a revisão recomeça.</p>'
@@ -1811,11 +1884,11 @@ function ligarRevisao(){
         return false; } }]);
     // S144 · itens 63 e 78: a lista das funções do vaso; "sem placa" é sim ou não; o Número TAP é o nº do cliente + a TAG sem o prefixo
     const DICA = { numero_tap:'Nº do cliente + "-" + a TAG sem o prefixo (ex.: VP-23 do cliente 33 → 33-23). Depois de gravado na placa, não muda mais.',
-      sem_placa:'Escreva "sim" (o vaso não tem placa) ou "não".', conexao:'Ex.: 1/2" (a bitola da rosca).' };
+      placa_situacao:'Escolha: com placa indelével, placa ilegível ou não indelével, ou sem placa (NR-13, 13.5.1.3).', conexao:'Ex.: 1/2" (a bitola da rosca).' };
     const sel = $('rcCampo'), pinta = () => {
       const k = sel.value, a = atual(k);
-      $('rcValor').value = k === 'sem_placa' ? (a ? 'sim' : 'não') : a == null ? '' : String(a);
-      $('rcLista').innerHTML = (k === 'funcao' ? FUNCOES_VASO : k === 'sem_placa' ? ['sim', 'não'] : []).map(x => '<option value="' + esc(x) + '">').join('');
+      $('rcValor').value = k === 'placa_situacao' ? PLACA_ROT[placaDe(REV.R.vaso || {})] : a == null ? '' : String(a);
+      $('rcLista').innerHTML = (k === 'funcao' ? FUNCOES_VASO : k === 'placa_situacao' ? Object.values(PLACA_ROT) : []).map(x => '<option value="' + esc(x) + '">').join('');
       $('rcDica').textContent = DICA[k] || '';
     };
     sel.addEventListener('change', pinta); pinta();
@@ -1857,7 +1930,11 @@ function ligarRevisao(){
             await rpc('tf_insp_foto_escritorio', { p_id:fid, p_dados:{ inspecao_id:id, storage_path:caminho, secao:'boroscopia',
               legenda:(document.querySelector('[data-bleg="' + n + '"]').value || '').trim() || null, ordem:base + n + 1, bytes:blob.size } });
           }
-          U.toast('Imagens anexadas.', 'ok'); N.janela.fechar(); recarregar();
+          U.toast('Imagens anexadas.', 'ok'); N.janela.fechar();
+          // S148 · item 93: sem o resultado lançado, anexar já abre a pergunta, com "Realizada" marcado
+          const semRes = !(REV.v.inspecao && REV.v.inspecao.boroscopia);
+          await recarregar();
+          if (semRes){ const bb = $('revBoro'); if (bb) bb.click(); }
         }catch(e){ erro(e); }
         return false; } }]);
   });
@@ -1921,12 +1998,12 @@ function ligarRevisao(){
   T.querySelectorAll('[data-regra]').forEach(s => s.addEventListener('change', () => {
     const k = s.dataset.regra; REV.pmta[k] = REV.pmta[k] || {}; REV.pmta[k].regra = s.value;
     if (s.value !== 'outro') REV.pmta[k].valor = null;
-    guardarPmta(); const y = window.scrollY; pintarRevisao(); window.scrollTo(0, y);
+    guardarPmta(); manterLugar(async () => pintarRevisao());
   }));
   T.querySelectorAll('[data-pval]').forEach(i => i.addEventListener('change', () => {
     const k = i.dataset.pval, x = paraM(num(i.value)), ck = REV.prev.camaras.find(c => c.cam.id === k), calc = ck && ck.governante ? ck.governante.pmta : null;
     if (x != null && calc != null && x > calc + 1e-4){ U.toast('Acima da calculada: não é aceita.', 'err'); i.value = ''; REV.pmta[k].valor = null; return; }
-    REV.pmta[k].valor = x; guardarPmta(); const y = window.scrollY; pintarRevisao(); window.scrollTo(0, y);
+    REV.pmta[k].valor = x; guardarPmta(); manterLugar(async () => pintarRevisao());
   }));
   T.querySelectorAll('[data-pjust]').forEach(i => i.addEventListener('input', () => { REV.pmta[i.dataset.pjust].just = i.value; guardarPmta(); }));
   const rv = $('revVol'); if (rv) rv.addEventListener('input', () => { REV.volume = num(rv.value); });
@@ -2015,30 +2092,27 @@ function espLerCsv(txt){
   return { spots, por };
 }
 function espDistribuir(d, nome, recarregar){
+  // S148 · item 85: um ponto do arquivo por componente, já preenchido na ordem do medidor (1, 2, 3…)
   const v = REV.v, cs = CALC.compsMedir(v).filter(c => !(espSem(v)[c.id] || '').trim()), n = d.spots.length;
   if (!cs.length){ U.toast('Todos os componentes estão como "não deu para medir".', 'err'); return; }
-  const passo = Math.max(1, Math.floor(n / cs.length));
   let h = '<p style="margin-top:0">O arquivo <b>' + esc(nome) + '</b> tem <b>' + n + ' ponto' + (n > 1 ? 's' : '') + '</b> (do ' + esc(d.spots[0]) + ' ao ' + esc(d.spots[n - 1])
-    + '). Diga quais pontos (pela ordem no arquivo, 1 a ' + n + ') são de cada componente. Componente em branco fica como está.</p>'
-    + '<p class="muted">Substitui as leituras que o componente já tinha.</p><table><tr><th>Componente</th><th>de</th><th>até</th></tr>';
+    + '). Cada componente é um ponto do arquivo (pela ordem no arquivo, 1 a ' + n + '), na ordem em que o medidor grava. Componente em branco fica como está.</p>'
+    + '<p class="muted">Substitui as leituras que o componente já tinha.</p><table><tr><th>Componente</th><th>Ponto no arquivo</th></tr>';
   cs.forEach((c, k) => {
-    const de = k * passo + 1, ate = k === cs.length - 1 ? n : Math.min(n, (k + 1) * passo);
     h += '<tr><td><b>' + esc(c.nome) + '</b>' + (espLeit(v, c.id).length ? '<div class="muted">já tem ' + espLeit(v, c.id).length + ' leitura(s)</div>' : '') + '</td>'
-      + '<td><input class="t" style="width:80px" inputmode="numeric" id="ed_' + esc(c.id) + '" value="' + (de <= n ? de : '') + '"></td>'
-      + '<td><input class="t" style="width:80px" inputmode="numeric" id="ea_' + esc(c.id) + '" value="' + (de <= n ? ate : '') + '"></td></tr>';
+      + '<td><input class="t" style="width:80px" inputmode="numeric" id="ep_' + esc(c.id) + '" value="' + (k + 1 <= n ? k + 1 : '') + '"></td></tr>';
   });
   h += '</table>';
   janela('Anexar o CSV do medidor', h, [{ rotulo:'Cancelar' }, { rotulo:'Conferir', classe:'pri', acao:() => {
     const usados = new Set(), plano = [];
     for (const c of cs){
-      const de = num($('ed_' + c.id).value), ate = num($('ea_' + c.id).value);
-      if (de == null && ate == null) continue;
-      if (!(Number.isInteger(de) && Number.isInteger(ate) && de >= 1 && ate >= de && ate <= n)){ U.toast(c.nome + ': faixa inválida (1 a ' + n + ').', 'err'); return false; }
-      if (ate - de + 1 > ESP_MAX_PONTOS){ U.toast(c.nome + ': no máximo ' + ESP_MAX_PONTOS + ' pontos.', 'err'); return false; }
-      for (let q = de; q <= ate; q++){ if (usados.has(q)){ U.toast('O ponto ' + q + ' do arquivo está em dois componentes.', 'err'); return false; } usados.add(q); }
-      plano.push({ c, de, ate });
+      const p = num($('ep_' + c.id).value);
+      if (p == null) continue;
+      if (!(Number.isInteger(p) && p >= 1 && p <= n)){ U.toast(c.nome + ': ponto inválido (1 a ' + n + ').', 'err'); return false; }
+      if (usados.has(p)){ U.toast('O ponto ' + p + ' do arquivo está em dois componentes.', 'err'); return false; }
+      usados.add(p); plano.push({ c, de:p, ate:p });
     }
-    if (!plano.length){ U.toast('Nenhuma faixa preenchida.', 'err'); return false; }
+    if (!plano.length){ U.toast('Nenhum ponto preenchido.', 'err'); return false; }
     setTimeout(() => espConferir(d, nome, plano, recarregar), 0);
   } }]);
 }
@@ -2053,10 +2127,10 @@ function espConferir(d, nome, plano, recarregar){
     }
     return { c, l };
   });
-  let h = '<table><tr><th>Componente</th><th>Pontos do arquivo</th><th>Leituras</th><th>Menor</th><th>Requerida</th></tr>';
+  let h = '<table><tr><th>Componente</th><th>Ponto do arquivo</th><th>Leituras</th><th>Menor</th><th>Requerida</th></tr>';
   lotes.forEach(({ c, l }) => {
     const pl = plano.find(x => x.c === c), mn = MotorNR13.minimaLeituras(l.map(x => x.valor)), req = CALC.eMinDe(v, c), baixo = req.valor != null && mn < req.valor;
-    h += '<tr' + (baixo ? ' style="background:var(--crit-soft)"' : '') + '><td><b>' + esc(c.nome) + '</b></td><td>' + esc(d.spots[pl.de - 1]) + ' a ' + esc(d.spots[pl.ate - 1]) + '</td><td>' + l.length
+    h += '<tr' + (baixo ? ' style="background:var(--crit-soft)"' : '') + '><td><b>' + esc(c.nome) + '</b></td><td>' + esc(d.spots[pl.de - 1]) + (pl.ate > pl.de ? ' a ' + esc(d.spots[pl.ate - 1]) : '') + '</td><td>' + l.length
       + '</td><td><b' + (baixo ? ' style="color:var(--crit)"' : '') + '>' + fmt(mn, 2) + ' mm</b></td><td>' + (req.valor != null ? fmt(req.valor, 2) + ' mm' : '<span class="muted">' + esc(req.erro || '—') + '</span>') + '</td></tr>';
   });
   h += '</table>' + (corte ? '<p class="alerta falta" style="margin-top:8px">' + corte + ' ponto(s) com mais de 4 leituras: ficaram as 4 primeiras.</p>' : '')
@@ -2119,16 +2193,32 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S146');
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S148');
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S145');
     return true;
   })().catch(e => { LIBS = null; throw e; });
   return LIBS;
 }
+// S148 · item 80: o login vale 1 hora; o armazenamento recusa o vencido com 400 (e não 401), então o núcleo
+// não renovava sozinho. Antes de ler, renova se falta menos de 1 minuto; se o armazenamento recusar, renova e tenta
+// mais uma vez. A renovação passa por uma chamada ao banco (o núcleo renova no 401 e tenta de novo).
+function vencimentoDoLogin(){
+  try{ const p = String(N.sessao().token || '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/'); return (JSON.parse(atob(p)).exp || 0) * 1000; }catch(e){ return 0; }
+}
+async function renovarLogin(forcar){
+  if (!forcar && vencimentoDoLogin() - Date.now() > 60000) return;
+  try{ await rpc('tf_tem_poder', { p_poder:'plh' }); }catch(e){}
+}
+async function lerArmazem(path){
+  const url = SUPA_URL + '/storage/v1/object/authenticated/inspecoes/' + String(path).split('/').map(encodeURIComponent).join('/');
+  const pedir = () => fetch(url, { headers:{ apikey:SUPA_ANON, Authorization:'Bearer ' + N.sessao().token } });
+  await renovarLogin(false);
+  let r = await pedir();
+  if (!r.ok && [400, 401, 403].indexOf(r.status) >= 0){ await renovarLogin(true); r = await pedir(); }
+  return r;
+}
 async function baixar(path){
-  const s = N.sessao();
-  const r = await fetch(SUPA_URL + '/storage/v1/object/authenticated/inspecoes/' + path.split('/').map(encodeURIComponent).join('/'),
-    { headers:{ apikey:SUPA_ANON, Authorization:'Bearer ' + s.token } });
+  const r = await lerArmazem(path);
   if (!r.ok) throw new Error('Não abriu o arquivo ' + path.split('/').pop() + ' (HTTP ' + r.status + ').');
   return new Uint8Array(await r.arrayBuffer());
 }
@@ -2151,7 +2241,10 @@ async function gerarLaudo(d, opc, aviso){
   const base = await new Promise((ok, falha) => { try{ pdfMake.createPdf(def).getBuffer(b => ok(b)); }catch(e){ falha(e); } });
   aviso('Juntando os anexos…');
   const out = await PDFLib.PDFDocument.load(base);
-  const anexos = [['o certificado do medidor', d.medidor && d.medidor.certificado_path], ['a ART', d.art && d.art.path]];
+  // S148 · item 90: medidor, cada manômetro padrão usado, ART (a mesma ordem da lista do item 15 do laudo)
+  const anexos = [['o certificado do medidor', d.medidor && d.medidor.certificado_path]]
+    .concat((d.padroes || []).map(p => ['o certificado do manômetro padrão' + (p.descricao ? ' ' + p.descricao : ''), p.certificado_path]))
+    .concat([['a ART', d.art && d.art.path]]);
   const semAnexo = [];
   for (const [nome, path] of anexos){
     if (!path){ semAnexo.push(nome); continue; }
@@ -2416,7 +2509,7 @@ function pintarLaudo(){
 }
 function ligarLaudo(){
   const d = LD.d, T = $('tela'), aviso = t => { const a = $('ldAviso'); if (a) a.textContent = t || ''; };
-  const recarregar = async () => { const y = window.scrollY; await telaLaudo(LD.id); window.scrollTo(0, y); };
+  const recarregar = async () => { const m = rolador(), y = m.scrollTop; await telaLaudo(LD.id); m.scrollTop = y; };   // S148 · item 89: quem rola é o <main>
   const ba = $('ldAmbGravar'); if (ba) ba.addEventListener('click', () => U.semDuploEnvio(ba, async () => {
     if (!$('ldAmb').value){ U.toast('Escolha o ambiente.', 'err'); return; }
     try{ await rpc('tf_insp_ambiente_gravar', { p_id: LD.id, p_ambiente: $('ldAmb').value }); U.toast('Ambiente gravado.', 'ok'); recarregar(); }catch(e){ erro(e); }
@@ -2508,9 +2601,7 @@ async function mostrarArquivoEm(vis, a){
   if (DEMO){ vis.innerHTML = '<p class="muted">Demonstração: sem o arquivo.</p>'; return; }
   try{
     if (!blobs[a.storage_path]){
-      const s = N.sessao();
-      const r = await fetch(SUPA_URL + '/storage/v1/object/authenticated/inspecoes/' + a.storage_path.split('/').map(encodeURIComponent).join('/'),
-        { headers:{ apikey:SUPA_ANON, Authorization:'Bearer ' + s.token } });
+      const r = await lerArmazem(a.storage_path);   // S148 · item 80
       if (!r.ok) throw new Error('A foto não abriu (HTTP ' + r.status + ').');
       blobs[a.storage_path] = URL.createObjectURL(await r.blob());
     }
