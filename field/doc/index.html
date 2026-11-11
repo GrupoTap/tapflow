@@ -1708,7 +1708,7 @@ function estVisual(v){
 }
 function estAcess(v){
   const l = acessDe(v);
-  if (v.inspecao && v.inspecao.acessorios_conferidos && l.every(a => a.situacao) && !faltasAfericao(v).length) return 'ok';
+  if (v.inspecao && v.inspecao.acessorios_conferidos && l.every(a => a.situacao) && !faltasAfericao(v).length && !faltasEnvio(v).some(x => /foto da aferição/.test(x))) return 'ok';   // S149 · item 83
   return l.length || (v.inspecao && v.inspecao.acessorios_conferidos) ? 'inc' : 'vazia';
 }
 function boroValida(b){
@@ -1763,6 +1763,14 @@ function faltasEnvio(v){
   if (!testeValido(i.teste)) f.push('Teste de pressão sem resposta.');
   else if (i.teste.resultado === 'reprovado' && !fotosDe(v, 'teste').length) f.push('Teste de pressão reprovado sem foto.');
   fAf.forEach(x => f.push(x));   // S86 · R04a (mesma ordem do servidor: antes da capa)
+  // S149 · item 83 (426): as 3 fotos da aferição feita, ou o motivo (reprovada na etapa 1: só a do instrumento; a foto de antes do S149 vale)
+  acessDe(v).forEach(a => {
+    const af = afDe(v, a); if (!af || ['aprovado','reprovado'].indexOf(resultadoAf(v, a, af).resultado) < 0) return;
+    if (fotosDe(v, 'acessorios', 'afer:' + a.id).length) return;
+    const e1 = af.leituras && af.leituras.etapa1 && af.leituras.etapa1.ok === false;
+    lugaresAfer(a).filter(l => !e1 || /:instrumento$/.test(l.item)).filter(l => !lugarOk(v, l))
+      .forEach(l => f.push('Acessório "' + (a.tag || a.marca || 'sem TAG') + '": foto da aferição (' + ({ bancada:'bancada montada', padrao:'manômetro padrão', instrumento:'instrumento em teste' })[l.item.split(':')[2]] + ') ou o motivo de não ter.'));
+  });
   if (!i.ambiente) f.push('Localização: diga se o vaso fica em local fechado ou a céu aberto.');   // S94 · 410 (mesma ordem do servidor)
   if (!fotosDe(v, 'capa').length) f.push('Falta a foto de capa.');
   return f;
