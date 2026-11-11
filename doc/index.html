@@ -139,6 +139,13 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 .visorrev img{max-width:100%;max-height:360px} .visorrev iframe{width:100%;height:360px;border:0}
 .acoesrev{gap:10px;flex-wrap:wrap;align-items:center}
 @media(max-width:900px){.revcols,.g2rev{grid-template-columns:1fr}}
+/* S146 · item 79: antes e depois dos textos do laudo */
+.txlado{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}
+.txlado>div{border:1px solid var(--rule);border-radius:6px;padding:8px 10px;line-height:1.5;white-space:pre-wrap}
+.txlado ins{background:#DFF0E6;color:#14532D;text-decoration:underline}
+.txlado del{background:#F8E5E0;color:#7A1E10}
+.txmud{margin-top:10px}
+@media (max-width:760px){.txlado{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -154,7 +161,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E18';   // E18 (S145 · 421): rodada E — a assinatura do laudo: o desenho do PLH (aceito com a digital), aprovar e emitir com a digital, o carimbo em todas as páginas, o pacote para o token (Assinador SERPRO) e a conferência do PDF assinado (assinatura-pdf.js), a participação dos técnicos
+const VERSAO = 'TapDoc E19';   // E19 (S146 · 422): item 79 — os textos prontos do laudo: o quadro "Textos prontos" na revisão (o escritório troca o caso escolhido em campo), o texto pronto do prazo menor (P1) e a aba "Textos do laudo" (propor; o PLH aprova com a digital; versões); laudo-pdf.js S146
+// const VERSAO = 'TapDoc E18';   // E18 (S145 · 421): rodada E — a assinatura do laudo: o desenho do PLH (aceito com a digital), aprovar e emitir com a digital, o carimbo em todas as páginas, o pacote para o token (Assinador SERPRO) e a conferência do PDF assinado (assinatura-pdf.js), a participação dos técnicos
 // const VERSAO = 'TapDoc E17';   // E17 (S144 · 420 e 211): rodada D2 — itens 63, 69, 70, 71, 72, 75, 77 e 78 da lista (Número TAP, função e "sem placa" na revisão; prazo menor que o da norma; anexos com miniaturas; tampos com E diferente; sugestões de recomendação; cadastro do padrão; laudo-pdf.js S144)
 // const VERSAO = 'TapDoc E16';   // E16 (S143 · 419): rodada D1 — texto e cara do laudo (itens 62 a 69, 73 a 76 e 78 da lista; só o laudo-pdf.js S143)
 // const VERSAO = 'TapDoc E15';   // E15 (S141 · 417): rodada B da lista — itens 31, 32, 34, 35, 41, 42, 43, 45, 46, 47, 48, 58 e 61 (Em campo, retomar a coleta, PMTA escolhida na revisão, câmaras corrigidas na revisão, imagens da boroscopia, lacre da aferição, nomes por extenso, laudo com o tipo do teste)
@@ -287,12 +295,14 @@ async function telaListas(aba){
   let nRev = 0; try{ nRev = (await rpc('tf_insp_revisao_lista')).filter(x => x.pode).length; }catch(e){}   // E8: as revisões que são suas
   let nLaudo = 0; try{ nLaudo = (await rpc('tf_laudo_lista')).filter(x => x.situacao === 'liberada' && !(x.laudo && x.laudo.situacao !== 'substituido')).length; }catch(e){}   // E9: liberadas sem laudo
   let CAMPO = []; try{ CAMPO = await rpc('tf_insp_em_campo_lista'); }catch(e){}   // S141 · item 41 (417)
+  let nTex = 0; try{ nTex = ((await rpc('tf_laudo_textos_ver')).propostas || []).filter(x => x.situacao === 'pendente').length; }catch(e){}   // S146 · item 79
   const abas = [['os','A preparar', (L.os || []).length], ['campo','Em campo', CAMPO.length], ['conf','Laudos a conferir', (L.a_conferir || []).length], ['plh','Para o PLH', nPlh], ['rev','A revisar', nRev],
-                ['laudos','Laudos', nLaudo], ['inst','Instrumentos', 0], ['mat','Materiais', 0]];   // E2 (S80) · E9 (Laudos)
+                ['laudos','Laudos', nLaudo], ['textos','Textos do laudo', nTex], ['inst','Instrumentos', 0], ['mat','Materiais', 0]];   // S146 · item 79   // E2 (S80) · E9 (Laudos)
   let h = '<div class="abas">' + abas.map(([k, r, n]) => '<button data-a="' + k + '" class="' + (aba === k ? 'on' : '') + '">' + r
     + (n ? '<span class="bolha">' + n + '</span>' : '') + '</button>').join('') + '</div>';
   if (aba === 'rev') return abaRevisao(h);   // E8 · R05a
   if (aba === 'laudos') return abaLaudos(h);   // E9 · R06a
+  if (aba === 'textos') return abaTextos(h);   // S146 · item 79
   if (aba === 'inst' || aba === 'mat'){ $('tela').innerHTML = h + '<p class="muted">Carregando…</p>'; ligarAbas(); return aba === 'inst' ? telaInstrumentos() : telaMateriais(); }
   if (aba === 'campo'){
     // S141 · item 41: as OS com a T06 "Executar a inspeção" aberta, vaso por vaso; tocar abre a preparação (marcar ou tirar vaso)
@@ -341,6 +351,112 @@ async function telaListas(aba){
   $('tela').querySelectorAll('[data-plh]').forEach(b => b.addEventListener('click', () => decidirPLH(b.dataset.plh)));
 }
 function ligarAbas(){ $('tela').querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => ir({ aba:b.dataset.a }))); }
+
+// ── S146 · item 79 (422): Textos do laudo — quem tem o TapDoc propõe; o PLH aprova com a digital ──
+let TXT = null, TXT_FILTRO = '';
+function textosPlanos(B){
+  const L = [], anda = (o, cam) => { if (typeof o === 'string'){ L.push([cam.join('.'), o]); return; }
+    if (Array.isArray(o)) o.forEach((x, n) => anda(x, cam.concat(String(n)))); else if (o && typeof o === 'object') Object.keys(o).forEach(k => anda(o[k], cam.concat(k))); };
+  anda(B, []); return L.filter(([ch, t]) => !/^empresa_emissora|^prontos\.[A-Z0-9]+\.(grupo|secao|res)$/.test(ch) && !/\.campos\./.test(ch) && t.length > 2);
+}
+function rotTexto(ch, B){
+  const p = ch.split('.');
+  if (p[0] === 'prontos'){ const c = (B.prontos || {})[p[1]] || {}; return p[1] + ' · ' + (c.rotulo || '') + ({ texto:'', conc:' · frase da conclusão (12)', rotulo:' · nome na lista' }[p[2]] != null ? { texto:'', conc:' · frase da conclusão (12)', rotulo:' · nome na lista' }[p[2]] : ' · ' + p.slice(2).join('.')); }
+  if (p[0] === 'conc') return 'Conclusão (12) · ' + p.slice(1).join('.');
+  if (p[0] === 'titulos') return 'Título · ' + p.slice(1).join('.');
+  return ch;
+}
+/** antes e depois, palavra por palavra: o que sai riscado em vermelho, o que entra sublinhado em verde */
+function difPalavras(a, b){
+  const A = String(a || '').split(/(\s+)/), B = String(b || '').split(/(\s+)/), n = A.length, m = B.length;
+  if (n * m > 400000) return ['<del>' + esc(a) + '</del>', '<ins>' + esc(b) + '</ins>'];
+  const L = Array.from({ length:n + 1 }, () => new Int32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  let i = 0, j = 0, ha = '', hb = '';
+  while (i < n && j < m){
+    if (A[i] === B[j]){ ha += esc(A[i]); hb += esc(B[j]); i++; j++; }
+    else if (L[i + 1][j] >= L[i][j + 1]){ ha += /^\s+$/.test(A[i]) ? esc(A[i]) : '<del>' + esc(A[i]) + '</del>'; i++; }
+    else { hb += /^\s+$/.test(B[j]) ? esc(B[j]) : '<ins>' + esc(B[j]) + '</ins>'; j++; }
+  }
+  while (i < n){ ha += /^\s+$/.test(A[i]) ? esc(A[i]) : '<del>' + esc(A[i]) + '</del>'; i++; }
+  while (j < m){ hb += /^\s+$/.test(B[j]) ? esc(B[j]) : '<ins>' + esc(B[j]) + '</ins>'; j++; }
+  return [ha, hb];
+}
+function propostaHtml(p, B){
+  const ms = p.mudancas || [];
+  const corpo = ms.map(m => {
+    if (m.antes == null && m.depois && typeof m.depois === 'object'){
+      const c = m.depois;
+      return '<div class="txmud"><b>' + esc(m.chave.replace(/^prontos\./, '') + ' · ' + (c.rotulo || '')) + '</b> <span class="chip s-pronto">novo</span> <span class="muted">seção ' + esc(c.secao || '') + '</span>'
+        + '<div class="txlado"><div><span class="muted">Antes</span>\n<i class="muted">(não existe)</i></div><div><span class="muted">Depois</span>\n<ins>' + esc(c.texto || '') + '</ins>'
+        + (c.conc ? '\n\n<span class="muted">Conclusão (12): </span><ins>' + esc(c.conc) + '</ins>' : '') + '</div></div></div>';
+    }
+    const [a, d] = difPalavras(typeof m.antes === 'string' ? m.antes : '', typeof m.depois === 'string' ? m.depois : JSON.stringify(m.depois));
+    return '<div class="txmud"><b>' + esc(rotTexto(m.chave, B)) + '</b><div class="txlado"><div><span class="muted">Antes · em uso</span>\n' + a + '</div><div><span class="muted">Depois · proposta</span>\n' + d + '</div></div></div>';
+  }).join('');
+  return '<div style="border:1px solid var(--rule);border-radius:8px;padding:10px 12px;margin-top:8px" data-txp="' + esc(p.id) + '"><div class="linha" style="justify-content:space-between"><b>' + esc(p.titulo) + '</b>'
+    + '<span class="muted">' + esc(p.proposto_por || '') + ' · ' + quandoBR(p.proposto_em) + ' · ' + ms.length + (ms.length === 1 ? ' texto' : ' textos') + '</span></div>'
+    + (p.motivo ? '<p style="margin:6px 0">' + esc(p.motivo) + '</p>' : '')
+    + '<details' + (ms.length <= 3 ? ' open' : '') + '><summary style="cursor:pointer;color:var(--accent);font-weight:600">Ver antes e depois</summary>' + corpo + '</details>'
+    + '<p class="muted" style="margin:6px 0 0">Enquanto espera, nenhum laudo usa esta proposta. Ao aprovar, vira uma versão nova; os laudos já emitidos não mudam.</p>'
+    + (TXT.eu_plh ? '<div class="linha" style="margin-top:8px"><button class="btn pri" data-txapr="' + esc(p.id) + '">Aprovar · digital</button><button class="btn perigo" data-txrec="' + esc(p.id) + '">Recusar…</button></div>'
+       : '<p class="muted" style="margin:6px 0 0">Só o PLH aprova textos do laudo.</p>') + '</div>';
+}
+async function abaTextos(h){
+  $('tela').innerHTML = h + '<p class="muted">Carregando…</p>'; ligarAbas();
+  try{ TXT = await rpc('tf_laudo_textos_ver'); }
+  catch(e){ $('tela').innerHTML = h + '<div class="card vazio"></div>'; $('tela').querySelector('.vazio').textContent = e.message || 'Não deu para carregar.'; ligarAbas(); return; }
+  pintarTextos(h);
+}
+function pintarTextos(h){
+  const M = TXT.modelo || {}, B = M.blocos || {}, todas = TXT.propostas || [], pend = todas.filter(p => p.situacao === 'pendente'), dec = todas.filter(p => p.situacao !== 'pendente');
+  let x = h + '<div class="card"><div class="linha" style="justify-content:space-between"><h3 style="margin:0">Textos do laudo</h3><span class="muted">Versão em uso: <b id="txVersao">' + esc(M.versao || '—') + '</b>'
+    + (M.criado_em ? ' · desde ' + quandoBR(M.criado_em) : '') + '</span></div><p class="muted" style="margin:6px 0 0">Qualquer pessoa com o TapDoc propõe uma mudança; ela só vale depois que o PLH aprova, com a digital, e vira uma versão nova. O laudo já emitido continua com os textos com que saiu.</p></div>';
+  x += '<div class="card" id="txPend"><h3>Esperando o PLH (' + pend.length + ')</h3>' + (pend.length ? pend.map(p => propostaHtml(p, B)).join('') : '<p class="vazio">Nenhuma proposta esperando.</p>') + '</div>';
+  const f = TXT_FILTRO.toLowerCase(), L = textosPlanos(B);
+  const vis = L.filter(([ch, t]) => !f || ch.toLowerCase().indexOf(f) >= 0 || t.toLowerCase().indexOf(f) >= 0 || rotTexto(ch, B).toLowerCase().indexOf(f) >= 0);
+  x += '<div class="card"><h3>Os textos da versão ' + esc(M.versao || '') + '</h3><input class="t" id="txFiltro" placeholder="Procurar (ex.: V9, boroscopia, 13.5.1.2)" value="' + esc(TXT_FILTRO) + '">'
+    + '<table style="margin-top:8px"><tr><th style="width:240px">Texto</th><th>Como está</th><th></th></tr>'
+    + vis.slice(0, 100).map(([ch, t]) => '<tr><td><b>' + esc(rotTexto(ch, B)) + '</b><div class="muted" style="font-size:11px">' + esc(ch) + '</div></td><td style="white-space:pre-wrap">' + esc(t) + '</td><td><button class="btn mini" data-txprop="' + esc(ch) + '">Propor mudança</button></td></tr>').join('')
+    + '</table>' + (vis.length > 100 ? '<p class="muted">E mais ' + (vis.length - 100) + ': use a busca.</p>' : '') + '</div>';
+  x += '<div class="card"><h3>Versões</h3><table><tr><th>Versão</th><th>Quando</th><th>Observação</th></tr>' + (TXT.versoes || []).map(v => '<tr><td><b>' + esc(v.versao) + '</b>' + (v.ativo ? ' <span class="chip s-pronto">em uso</span>' : '') + '</td><td>'
+      + quandoBR(v.criado_em) + (v.por ? '<div class="muted">' + esc(v.por) + '</div>' : '') + '</td><td>' + esc(v.observacao || '') + '</td></tr>').join('') + '</table>'
+    + (dec.length ? '<h3 style="margin-top:12px">Propostas decididas</h3><table>' + dec.map(p => '<tr><td>' + esc(p.titulo) + '<div class="muted">' + esc(p.proposto_por || '') + ' · ' + quandoBR(p.proposto_em) + '</div></td><td>'
+      + (p.situacao === 'aprovada' ? '<span class="chip s-pronto">aprovada · versão ' + esc(p.versao_criada) + '</span>' : '<span class="chip s-grave">recusada</span><div class="muted">' + esc(p.recusa_motivo || '') + '</div>')
+      + '<div class="muted">' + esc(p.decidido_por || '') + ' · ' + quandoBR(p.decidido_em) + '</div></td></tr>').join('') + '</table>' : '') + '</div>';
+  $('tela').innerHTML = x; ligarAbas();
+  const fl = $('txFiltro'); fl.addEventListener('input', debTextos);
+  $('tela').querySelectorAll('[data-txprop]').forEach(b => b.addEventListener('click', () => {
+    const ch = b.dataset.txprop, atual = (L.find(y => y[0] === ch) || [])[1] || '';
+    janela('Propor mudança · ' + rotTexto(ch, B), '<label class="f">Texto novo<textarea class="t" id="txNovo" rows="8">' + esc(atual) + '</textarea></label>'
+      + '<p class="muted" style="margin:2px 0 8px">O que está entre chaves, como {{pressao}}, o sistema preenche sozinho: não apague.</p>'
+      + '<label class="f">Por que mudar<textarea class="t" id="txMot" rows="2" placeholder="o PLH lê antes de aprovar"></textarea></label>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Enviar ao PLH', classe:'pri', acao:async () => {
+        const novo = ($('txNovo').value || '').trim(), mot = ($('txMot').value || '').trim();
+        if (novo === atual.trim()){ U.toast('O texto novo é igual ao de hoje.', 'err'); return false; }
+        if (mot.length < 5){ U.toast('Diga por que mudar.', 'err'); return false; }
+        const fa = (atual.match(/\{\{\w+\}\}/g) || []).filter(c => novo.indexOf(c) < 0);
+        if (fa.length && !await N.janela.confirmar('Faltam campos no texto novo', '<p>O texto de hoje tem ' + esc(fa.join(', ')) + ', que o sistema preenche. Enviar assim mesmo?</p>', 'Enviar')) return false;
+        try{ await rpc('tf_laudo_texto_propor', { p_dados:{ chave:ch, texto:novo, motivo:mot, titulo:rotTexto(ch, B) } }); U.toast('Proposta enviada: o PLH recebeu o aviso.', 'ok'); abaTextos(h); }
+        catch(e){ erro(e); return false; }
+      } }]);
+  }));
+  $('tela').querySelectorAll('[data-txapr]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
+    const c = await N.confirmarPessoa({ modo:'servidor', finalidade:'laudo_texto', referencia:'proposta ' + b.dataset.txapr, titulo:'Aprovar o texto do laudo', sub:'com a sua digital' });
+    if (!c || !c.ok){ if (c && c.semSinal) U.toast('Sem sinal: a aprovação precisa de internet.', 'err'); return; }
+    if (c.metodo !== 'digital'){ U.toast('A aprovação dos textos do laudo é só com a digital (o PIN não vale).', 'err'); return; }
+    try{ const r = await rpc('tf_laudo_texto_decidir', { p_id:b.dataset.txapr, p_aprovar:true, p_motivo:null, p_confirmacao:c.confirmacao });
+      U.toast('Aprovado: versão ' + r.versao + ' em uso.', 'ok'); abaTextos(h); }catch(e){ erro(e); }
+  })));
+  $('tela').querySelectorAll('[data-txrec]').forEach(b => b.addEventListener('click', () => janela('Recusar a proposta',
+    '<label class="f">Por quê<textarea class="t" id="txRec" rows="3" placeholder="volta para quem propôs"></textarea></label>',
+    [{ rotulo:'Cancelar' }, { rotulo:'Recusar', classe:'pri', acao:async () => {
+      const m = ($('txRec').value || '').trim(); if (m.length < 5){ U.toast('Diga por que recusar.', 'err'); return false; }
+      try{ await rpc('tf_laudo_texto_decidir', { p_id:b.dataset.txrec, p_aprovar:false, p_motivo:m, p_confirmacao:null }); U.toast('Proposta recusada.', 'ok'); abaTextos(h); }
+      catch(e){ erro(e); return false; }
+    } }])));
+  function debTextos(){ clearTimeout(debTextos.t); debTextos.t = setTimeout(() => { TXT_FILTRO = fl.value; pintarTextos(h); const n = $('txFiltro'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 300); }
+}
 
 // ── E2 (S80) · instrumentos e materiais ────────────────────────────────────
 const TIPOS_INST = { medidor_espessura:'Medidor de espessura', manometro_padrao:'Manômetro padrão', bancada:'Bancada', outro:'Outro' };
@@ -1107,6 +1223,103 @@ const REV_CAMPOS_AC = [['tag','TAG'], ['marca','Marca'], ['conexao','Conexão'],
 // S144 · item 78: o que a revisão sugere (o revisor escolhe; nada é marcado sozinho)
 const FUNCOES_VASO = ['Reservatório de ar comprimido', 'Pulmão de ar comprimido', 'Secador de ar comprimido', 'Filtro', 'Separador de condensado', 'Acumulador hidráulico',
   'Autoclave', 'Trocador de calor', 'Reservatório de gás', 'Tanque de pressão'];
+// ── S146 · item 79 (422): os textos prontos do laudo ───────────────────────
+let REV_PRONTOS = null;
+const GRUPO_AC = { manometro:'manometro', manovacuometro:'manometro', valvula_seguranca:'valvula', valvula_alivio:'valvula', quebra_vacuo:'quebra_vacuo' };
+const NOME_AC = { manometro:'Manômetro', manovacuometro:'Manovacuômetro', valvula_seguranca:'Válvula de segurança', valvula_alivio:'Válvula de alívio', quebra_vacuo:'Quebra-vácuo', disco_ruptura:'Disco de ruptura' };
+const ordemCaso = (a, b) => a[0].charAt(0) === b[0].charAt(0) ? Number(a[0].slice(1)) - Number(b[0].slice(1)) : a[0] < b[0] ? -1 : 1;
+function trocarPalavra(tipo, k, t){
+  t = String(t || '');
+  if (tipo === 'manovacuometro') t = t.replace(/manômetro/g, 'manovacuômetro');
+  if (tipo === 'valvula_alivio' && k !== 'V4' && k !== 'V5') t = t.replace(/válvula de segurança/g, 'válvula de alívio');
+  return t;
+}
+const RES_CASO = { ok:'CONFORME', nc:'NÃO CONFORME' };
+function textoCaso(k, c, campos, tipo){
+  const vs = Object.assign({ resultado:RES_CASO[c.res] || '' }, campos || {});
+  return trocarPalavra(tipo, k, String(c.texto || '').replace(/\{\{(\w+)\}\}/g, (m, x) => vs[x] != null && String(vs[x]).trim() !== '' ? String(vs[x]).trim() : '…'));
+}
+function casosRev(a, ausente){
+  const P = REV_PRONTOS, g = GRUPO_AC[a.tipo]; if (!P || !g) return [];
+  const cam = ((REV.v || {}).camaras || []).find(k => k.id === a.camara_id) || ((REV.v || {}).camaras || [])[0] || {};
+  const alavanca = /^(ar\b|ar comprimido|vapor|água|agua)/i.test(String(cam.fluido || '').trim());
+  return Object.keys(P).map(k => [k, P[k]]).filter(([k, c]) => c && c.grupo === g && !!c.ausente === !!ausente
+    && (a.tipo !== 'manovacuometro' || ['M1','M2','M5','M6'].indexOf(k) >= 0) && (a.tipo === 'valvula_alivio' || !c.so_alivio) && (!c.alavanca || alavanca)).sort(ordemCaso);
+}
+/** a janela de escolha do caso (a mesma do celular). ok(caso, campos, texto) grava. */
+function janelaCasos(tit, lista, atual, campos0, tipo, extra, ok){
+  const P = REV_PRONTOS || {};
+  const html = '<p class="muted" style="margin:0 0 6px">Escolha o caso: o texto vai pronto para o laudo.</p><div id="csLista">'
+    + lista.map(([k, c]) => '<label style="display:flex;gap:10px;align-items:center;min-height:34px"><input type="radio" name="csR" value="' + esc(k) + '"' + (k === atual ? ' checked' : '') + '><span>' + esc(k + ' · ' + c.rotulo) + '</span></label>').join('')
+    + (extra || []).map(x => '<label style="display:flex;gap:10px;align-items:center;min-height:34px"><input type="radio" name="csR" value="' + esc(x.v) + '"' + (x.on ? ' checked' : '') + '><span>' + esc(x.rotulo) + '</span></label>').join('')
+    + '</div><div id="csCampos"></div><div id="csOutro" hidden><label class="f">Motivo<textarea class="t" id="csOutroTx" rows="3"></textarea></label></div>'
+    + '<div id="csPrev" style="margin-top:8px;font-size:13px;line-height:1.45;border:1px solid var(--rule);border-radius:8px;padding:8px 10px" hidden></div>';
+  const campos = Object.assign({}, campos0 || {});
+  const marcado = () => { const r = document.querySelector('input[name="csR"]:checked'); return r ? r.value : null; };
+  const prev = () => {
+    const k = marcado(), c = k && P[k], el = $('csPrev');
+    el.hidden = !c; if (!c) return;
+    el.innerHTML = '<b style="font-size:12px">VAI NO LAUDO · ' + esc(c.secao) + (RES_CASO[c.res] ? ' · <span style="color:' + (c.res === 'ok' ? 'var(--ok)' : 'var(--crit)') + '">' + RES_CASO[c.res] + '</span>' : '') + '</b><div style="margin-top:4px">' + esc(textoCaso(k, c, campos, tipo)) + '</div>';
+  };
+  const pintarCaso = () => {
+    const k = marcado(), c = k && P[k], ex = (extra || []).find(x => x.v === k);
+    $('csOutro').hidden = !(ex && ex.escrever);
+    if (ex && ex.escrever && ex.texto != null && !$('csOutroTx').value) $('csOutroTx').value = ex.texto;
+    $('csCampos').innerHTML = c ? (c.campos || []).map(f => '<label class="f">' + esc(f.rotulo) + '<input class="t" data-csk="' + esc(f.k) + '" placeholder="ex.: ' + esc(f.ex || '') + '" value="' + esc(campos[f.k] || '') + '"></label>').join('') : '';
+    $('csCampos').querySelectorAll('[data-csk]').forEach(el => el.addEventListener('input', () => { campos[el.dataset.csk] = el.value; prev(); }));
+    prev();
+  };
+  janela(tit, html, [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
+    const k = marcado(); if (!k){ U.toast('Escolha o caso.', 'err'); return false; }
+    const c = P[k], ex = (extra || []).find(x => x.v === k);
+    if (c){
+      if (!(c.campos || []).every(f => String(campos[f.k] || '').trim())){ U.toast('Preencha o que o texto pede.', 'err'); return false; }
+      const cs = {}; (c.campos || []).forEach(f => { cs[f.k] = String(campos[f.k]).trim(); });
+      return ok(k, Object.keys(cs).length ? cs : null, textoCaso(k, c, cs, tipo));
+    }
+    if (ex && ex.limpar) return ok(null, null, null);
+    const t = ex && ex.escrever ? ($('csOutroTx').value || '').trim() : ex ? ex.texto : '';
+    if (!t || t.length < 5){ U.toast('Escreva o motivo.', 'err'); return false; }
+    return ok(null, null, t);
+  } }]);
+  document.querySelectorAll('input[name="csR"]').forEach(r => r.addEventListener('change', pintarCaso));
+  pintarCaso();
+}
+/** o quadro da revisão: o caso de cada acessório não aferido, da boroscopia não feita e as recomendações prontas */
+function revTextosHtml(pode){
+  const P = REV_PRONTOS;
+  if (!P) return '<div class="card"><h3 style="margin:0">Textos prontos</h3><p class="muted" style="margin:6px 0 0">A versão dos textos do laudo com os textos prontos ainda espera a aprovação do PLH (aba "Textos do laudo"). Até lá vale o motivo escrito em campo.</p></div>';
+  const R = REV.R, linhas = [];
+  (R.acessorios || []).forEach(a => {
+    if (!GRUPO_AC[a.tipo] && a.tipo !== 'disco_ruptura') return;
+    if ((a.afericao && (a.afericao.resultado === 'aprovado' || a.afericao.resultado === 'reprovado')) || a.situacao === 'retirado') return;
+    const nome = (NOME_AC[a.tipo] || a.tipo) + (a.tag ? ' ' + a.tag : '');
+    if (a.tipo === 'disco_ruptura'){
+      const sc = !!(a.caso_campos || {}).sem_certificado;
+      linhas.push('<tr><td>7.6</td><td><b>' + esc(nome) + '</b></td><td>Disco de ruptura</td><td class="muted">Pressão de ruptura ' + (a.pressao_ajuste_mpa != null ? fmt(a.pressao_ajuste_mpa * 10, 2) + ' bar' : '—') + ' (do fabricante): o laudo compara com a PMTA.'
+        + '<div class="chk" style="margin-top:4px"><input type="checkbox" id="tpdsc_' + esc(a.id) + '" data-tpdsc="' + esc(a.id) + '"' + (sc ? ' checked' : '') + (pode ? '' : ' disabled') + '><label for="tpdsc_' + esc(a.id) + '">Sem o certificado do fabricante (recomenda obtê-lo)</label></div></td><td></td></tr>');
+      return;
+    }
+    const aus = a.situacao === 'ausente'; if (aus && !casosRev(a, true).length) return;
+    const c = a.afericao_caso && P[a.afericao_caso], falta = !aus && !c;
+    linhas.push('<tr' + (falta ? ' style="background:var(--crit-soft)"' : '') + '><td>' + esc(c ? c.secao : GRUPO_AC[a.tipo] === 'manometro' ? '7.5' : '7.6') + '</td><td><b>' + esc(nome) + '</b>' + (aus ? '<div class="muted">ausente</div>' : '') + '</td><td>'
+      + (c ? esc(a.afericao_caso + ' · ' + c.rotulo) : aus ? '<span class="muted">nenhum</span>' : '<b style="color:var(--crit)">falta escolher</b>' + (a.afericao_motivo ? '<div class="muted">em campo: outro motivo</div>' : ''))
+      + '</td><td>' + esc(a.afericao_motivo || '') + (falta ? '<div style="color:var(--crit);font-size:12px">Sem o texto pronto o laudo não é emitido.</div>' : '') + '</td><td>'
+      + (pode ? '<button class="btn mini" data-tpac="' + esc(a.id) + '">' + (c ? 'Trocar' : 'Escolher') + '</button>' : '') + '</td></tr>');
+  });
+  const bo = REV.v && REV.v.inspecao && REV.v.inspecao.boroscopia;
+  if (bo && bo.realizada === false){
+    const c = bo.caso && P[bo.caso];
+    linhas.push('<tr><td>7.2</td><td><b>Boroscopia</b><div class="muted">não feita</div></td><td>' + (c ? esc(bo.caso + ' · ' + c.rotulo) : '<span class="muted">motivo escrito</span>') + '</td><td>' + esc(bo.motivo_nao || '') + '</td><td>'
+      + (pode ? '<button class="btn mini" data-tpboro="1">' + (c ? 'Trocar' : 'Escolher') + '</button>' : '') + '</td></tr>');
+  }
+  const rc = R.inspecao.rec_casos || [];
+  const recs = ['R1','R2'].filter(k => P[k]).map(k => '<div class="chk"><input type="checkbox" id="tprc_' + k + '" data-tprc="' + k + '"' + (rc.indexOf(k) >= 0 ? ' checked' : '') + (pode ? '' : ' disabled') + '><label for="tprc_' + k + '">' + esc(P[k].rotulo) + '</label></div>').join('');
+  return '<div class="card" id="revTextos"><h3 style="margin:0">Textos prontos</h3><p class="muted" style="margin:4px 0 8px">O caso escolhido em campo. Quem revisa pode trocar; o texto sai no laudo como aparece aqui, e a frase da conclusão (12) sai junto.</p>'
+    + (linhas.length ? '<table><tr><th>Seção</th><th>Item</th><th>Caso</th><th>Texto como sai no laudo</th><th></th></tr>' + linhas.join('') + '</table>' : '<p class="muted">Nenhum acessório sem aferição e nenhuma boroscopia sem fazer.</p>')
+    + (recs ? '<h3 style="margin:12px 0 4px">Recomendações prontas (seção 11)</h3>' + recs : '') + '</div>';
+}
+
 const PRAZO_MOTIVOS = ['Atmosfera agressiva (corrosão acelerada)', 'Perda de espessura acima do esperado', 'Vida remanescente menor que o prazo da norma', 'Histórico de anomalias no vaso', 'Condições de operação severas'];
 const TIPO_REC = { seguranca:'Segurança', conservacao:'Conservação', geral:'Geral' };
 // sugestões fixas até a biblioteca (R05b)
@@ -1151,6 +1364,7 @@ async function telaRevisao(id){
   CALC.usar(P);
   let prev; try{ prev = CALC.previa(v); }catch(e){ prev = { camaras:[], vaso:{ erro:e.message }, avisos:[e.message], detalhes:[] }; }
   REV = { id, R, P, v, prev, volume:null, pmta:{} };
+  try{ REV_PRONTOS = ((await rpc('tf_laudo_textos_prontos')) || {}).prontos || null; }catch(e){ REV_PRONTOS = null; }   // S146 · item 79
   pintarRevisao();
 }
 function revOk(item){ const e = REV.R.inspecao.etapa; return ((REV.R.oks || {})[e] || []).indexOf(item) >= 0; }
@@ -1262,6 +1476,7 @@ function pintarRevisao(){
         + (r.prazo ? ' · até ' + dataBR(r.prazo) : '') + (r.ref ? '' : ' · livre') + '</td><td>' + (eu.pode ? '<button class="btn mini" data-edrec="' + esc(r.id) + '">Editar</button> <button class="btn mini perigo" data-rmrec="' + esc(r.id) + '">Tirar</button>' : '') + '</td></tr>').join('') + '</table>' : '<p class="muted">Nenhuma.</p>')
     + (eu.pode ? '<button class="btn mini" data-novarec="" data-sug="" style="margin-top:8px">+ recomendação livre</button>' : '')
     + revSugestoesHtml(recs, eu.pode) + '</div>';
+  h += revTextosHtml(eu.pode && e && e <= 3);   // S146 · item 79
   // S144 · item 70: prazo menor que o da norma (campo ou revisão)
   h += revPrazoHtml(prev, eu.pode && e && e <= 3);
   // S144 · item 77: o que vai anexado ao laudo, página por página
@@ -1387,6 +1602,7 @@ function revPrazoHtml(prev, pode){
   if (pode) h += '<div class="g3"><label class="f">Externo (anos)<input class="t" id="przExt" inputmode="numeric" value="' + esc(PR && PR.externo != null ? PR.externo : '') + '" placeholder="' + (prz ? 'norma: ' + prz.externo : '') + '"></label>'
     + '<label class="f">Interno (anos)<input class="t" id="przInt" inputmode="numeric" value="' + esc(PR && PR.interno != null ? PR.interno : (sug != null && !PR ? sug : '')) + '" placeholder="' + (prz && prz.interno != null ? 'norma: ' + prz.interno : '') + '"></label>'
     + '<label class="f">Justificativa<input class="t" id="przJust" list="przMotivos" value="' + esc(PR ? PR.just || '' : '') + '" placeholder="escolha ou escreva"><datalist id="przMotivos">' + PRAZO_MOTIVOS.map(m => '<option value="' + esc(m) + '">').join('') + '</datalist></label></div>'
+    + (REV_PRONTOS && REV_PRONTOS.P1 && REV.v && REV.v.posicao === 'horizontal' ? '<div class="linha" style="margin:4px 0"><button class="btn mini sec" id="przP1">Usar o texto pronto: ' + esc(REV_PRONTOS.P1.rotulo) + '</button></div>' : '')   // S146 · P1
     + '<div class="linha"><button class="btn mini" id="przGravar">Gravar o prazo reduzido</button>' + (PR ? '<button class="btn mini" id="przTirar">Voltar ao prazo da norma</button>' : '') + '</div>';
   return h + '</div>';
 }
@@ -1644,8 +1860,29 @@ function ligarRevisao(){
   T.querySelectorAll('[data-sugrec]').forEach(b => b.addEventListener('click', () => formRec({ tipo:b.dataset.sugrec, texto:b.dataset.sug, prazo:null, ref:null })));
   // S144 · item 77: as páginas de cada anexo
   T.querySelectorAll('[data-anexo]').forEach(b => b.addEventListener('click', () => revMostrarPaginas(b.dataset.anexo, T.querySelector('[data-pags="' + b.dataset.anexo + '"]'))));
+  // S146 · item 79: trocar o caso (acessório, boroscopia), o disco sem certificado e as recomendações prontas
+  const caso = d => rpc('tf_insp_caso_corrigir', { p_id:id, p_dados:d }).then(() => { U.toast('Texto pronto gravado.', 'ok'); recarregar(); }, e => { erro(e); return false; });
+  T.querySelectorAll('[data-tpac]').forEach(b => b.addEventListener('click', () => {
+    const a = R.acessorios.find(x => x.id === b.dataset.tpac), aus = a.situacao === 'ausente';
+    janelaCasos('Texto pronto · ' + (NOME_AC[a.tipo] || a.tipo) + (a.tag ? ' ' + a.tag : ''), casosRev(a, aus), a.afericao_caso, a.caso_campos, a.tipo,
+      aus ? [{ v:'-', rotulo:'Nenhum (o laudo diz só que não há)', limpar:true }] : [],
+      (k, campos, texto) => caso({ alvo:'acessorio', id:a.id, caso:k, campos, motivo:texto }));
+  }));
+  const btb = T.querySelector('[data-tpboro]'); if (btb) btb.addEventListener('click', () => {
+    const bo = REV.v.inspecao.boroscopia, P = REV_PRONTOS || {}, VAL = 'A inspeção interna está dentro do prazo de validade.';
+    janelaCasos('Texto pronto · boroscopia não feita', Object.keys(P).map(k => [k, P[k]]).filter(([k, c]) => c && c.grupo === 'boroscopia').sort(ordemCaso), bo.caso, bo.caso_campos, null,
+      [{ v:'val', rotulo:'A inspeção interna está dentro do prazo de validade', texto:VAL, on:!bo.caso && bo.motivo_nao === VAL },
+       { v:'+', rotulo:'Outro motivo (escrever)', escrever:true, on:!bo.caso && bo.motivo_nao !== VAL, texto:bo.caso ? '' : bo.motivo_nao || '' }],
+      (k, campos, texto) => caso({ alvo:'boroscopia', caso:k, campos, motivo:texto }));
+  });
+  T.querySelectorAll('[data-tprc]').forEach(el => el.addEventListener('change', () =>
+    caso({ alvo:'recomendacoes', casos:[...T.querySelectorAll('[data-tprc]')].filter(x => x.checked).map(x => x.dataset.tprc) })));
+  T.querySelectorAll('[data-tpdsc]').forEach(el => el.addEventListener('change', () =>
+    caso({ alvo:'acessorio', id:el.dataset.tpdsc, caso:null, campos:el.checked ? { sem_certificado:true } : null, motivo:null })));
   // S144 · item 70: gravar ou tirar o prazo reduzido
-  const prz = (ext, int, just) => rpc('tf_insp_prazo_reduzir', { p_id:id, p_dados:{ externo:ext, interno:int, justificativa:just } })
+  const p1t = REV_PRONTOS && REV_PRONTOS.P1 ? REV_PRONTOS.P1.texto : null;   // S146 · item 79: o texto pronto do prazo (P1)
+  const bp1 = $('przP1'); if (bp1) bp1.addEventListener('click', () => { $('przJust').value = p1t; });
+  const prz = (ext, int, just) => rpc('tf_insp_prazo_reduzir', { p_id:id, p_dados:{ externo:ext, interno:int, justificativa:just, caso:just && p1t && just === p1t ? 'P1' : null } })
     .then(r => { U.toast(r && r.mudou ? 'Prazo gravado.' : 'Nada mudou.', 'ok'); REV.datas = null; recarregar(); }, erro);
   const bpg = $('przGravar'); if (bpg) bpg.addEventListener('click', () => U.semDuploEnvio(bpg, async () => {
     const n = id => { const x = ($(id).value || '').trim(); if (!x) return null; const y = Number(x); if (!Number.isInteger(y) || y < 1) throw new Error('Prazo em anos inteiros (1 ou mais).'); return y; };
@@ -1867,7 +2104,7 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S145');
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S146');
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S145');
     return true;
   })().catch(e => { LIBS = null; throw e; });

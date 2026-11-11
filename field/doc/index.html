@@ -181,7 +181,8 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 18';   // S145 · rodada E (A8): o aviso no Fechamento de que cada um confirma a participação no próprio celular (aba Eu)
+const VERSAO = 'TapDoc 19';   // S146 · item 79 (422): os textos prontos do laudo — o caso escolhido no acessório não aferido (manômetro, válvula, quebra-vácuo), o disco de ruptura, a boroscopia não feita, o prazo menor (P1), as recomendações prontas (R1, R2) e o equipamento sem pressão (fora da NR-13)
+// const VERSAO = 'TapDoc 18';   // S145 · rodada E (A8): o aviso no Fechamento de que cada um confirma a participação no próprio celular (aba Eu)
 // const VERSAO = 'TapDoc 17';   // S144 · rodada D2 (420): função do vaso e "sem placa" na plaqueta; prazo menor que o da norma no fechamento (item 70); sem o "modelo" do acessório (item 72); "aferição" também na válvula (item 74); aviso de válvula sem conexão (item 75); foto da aferição (item 69); a sigla da região pelo nome (item 78)
 // const VERSAO = 'TapDoc 16';   // S142 · item 40 (418): quem não está na T06 vê um aviso com quem está
 // const VERSAO = 'TapDoc 15';   // S141 · item 58 (motor R00.5): a tolerância do manômetro pela NBR 14105-1, classe B, com a regra na tela · item 42: o aviso da coleta anterior
@@ -465,6 +466,7 @@ async function baixar(silencioso){
     const p = await N.api.rpc('tf_insp_pacote_os', { p_os_id: OS });
     FORA_T06 = false; ESCALA_T06 = null;
     mesclar(p, t0);
+    await baixarProntos();   // S146 · item 79
     if (!silencioso) U.toast('Pacote da OS atualizado.');
     pintar();
   }catch(e){
@@ -1565,19 +1567,94 @@ registrarArquivo = async function(v, secao, legenda, blob, ext, tipo, mini, item
 const ITENS_VISUAL = ['Costado', 'Tampos', 'Conexões', 'Base ou suporte', 'Aterramento'];   // decisão 5 (19/10)
 // S112 · C13: termômetro, pressostato e dreno não são objeto de inspeção (pressostato e dreno: oportunidade de venda, anotada em "Observações do vaso")
 const TIPOS_ACESS = { valvula_seguranca:'Válvula de segurança', valvula_alivio:'Válvula de alívio', quebra_vacuo:'Quebra-vácuo',
-  manometro:'Manômetro', manovacuometro:'Manovacuômetro', ihm:'IHM', outro:'Outro' };
+  manometro:'Manômetro', manovacuometro:'Manovacuômetro', disco_ruptura:'Disco de ruptura', ihm:'IHM', outro:'Outro' };   // S146 · T4: o disco
 const VALVULAS = ['valvula_seguranca', 'valvula_alivio', 'quebra_vacuo'];
 const MEDIDORES = ['manometro', 'manovacuometro'];
 const SIT_ACESS = { ok:'ok', substituir:'substituir', ausente:'ausente', inoperante:'inoperante', retirado:'retirado' };
 const FUNCOES_VASO = ['Reservatório de ar comprimido', 'Pulmão de ar comprimido', 'Secador de ar comprimido', 'Filtro', 'Separador de condensado', 'Acumulador hidráulico',
   'Autoclave', 'Trocador de calor', 'Reservatório de gás', 'Tanque de pressão'];   // S144 · item 78 (a mesma lista do escritório)
 const BITOLAS = ['1/8"', '1/4"', '3/8"', '1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"'];
+const SEM_PRESSAO = 'O equipamento não opera com pressão interna (ex.: silo de queda): fora da NR-13.';   // S146 · T8
 const MOTIVOS_BORO = ['O fluido do vaso inviabiliza a boroscopia.', 'O vaso não tem conexão para a boroscopia.',
   'A inspeção interna está dentro do prazo de validade.', 'O vaso está em operação: não foi possível parar e abrir.',
   'A boroscopia foi substituída pela medição de espessura, conforme o procedimento aplicado em campo.'];
 const MOTIVOS_TESTE = ['O teste hidrostático foi feito anteriormente: para preservar o vaso, não foi repetido.',
   'O vaso está em operação: não foi possível parar para o teste.', 'O cliente não autorizou o teste.'];
-const MOTIVOS_NAO_INSP = ['O vaso está desligado ou fora de operação.', 'Não houve acesso ao vaso.', 'O vaso foi retirado ou vendido.'];
+const MOTIVOS_NAO_INSP = ['O vaso está desligado ou fora de operação.', 'Não houve acesso ao vaso.', 'O vaso foi retirado ou vendido.', SEM_PRESSAO];
+
+// ── S146 · item 79 (422): os textos prontos do laudo ───────────────────────
+// O modelo em uso vem do servidor (tf_laudo_textos_prontos) e fica guardado no aparelho para usar sem sinal.
+// Sem ele (a versão com os textos ainda não aprovada pelo PLH), o celular pede o motivo escrito, como antes.
+const PRONTOS = () => { const t = LS.get('tfdoc_prontos', null); return t && t.prontos && typeof t.prontos === 'object' ? t.prontos : null; };
+async function baixarProntos(){ try{ const t = await N.api.rpc('tf_laudo_textos_prontos'); LS.set('tfdoc_prontos', t || null); }catch(e){} }
+const GRUPO_AC = { manometro:'manometro', manovacuometro:'manometro', valvula_seguranca:'valvula', valvula_alivio:'valvula', quebra_vacuo:'quebra_vacuo' };
+const ordemCaso = (a, b) => a[0].charAt(0) === b[0].charAt(0) ? Number(a[0].slice(1)) - Number(b[0].slice(1)) : a[0] < b[0] ? -1 : 1;
+/** a válvula de ar, vapor ou água pede alavanca (V9, UG-136(a)(3)) */
+function fluidoAlavanca(v, a){
+  const c = (v.camaras || []).find(k => k.id === a.camara_id) || ativas(v)[0] || {};
+  return /^(ar\b|ar comprimido|vapor|água|agua)/i.test(String(c.fluido || '').trim());
+}
+/** os casos que servem a este acessório (T2, T3) */
+function casosDe(v, a, ausente){
+  const P = PRONTOS(), g = GRUPO_AC[a.tipo]; if (!P || !g) return [];
+  return Object.keys(P).map(k => [k, P[k]]).filter(([k, c]) => c && c.grupo === g && !!c.ausente === !!ausente
+    && (a.tipo !== 'manovacuometro' || ['M1','M2','M5','M6'].indexOf(k) >= 0)
+    && (a.tipo === 'valvula_alivio' || !c.so_alivio)
+    && (!c.alavanca || fluidoAlavanca(v, a))).sort(ordemCaso);
+}
+/** o texto do caso com o que foi digitado e a palavra certa (manovacuômetro, válvula de alívio) */
+function trocarPalavra(tipo, k, t){
+  t = String(t || '');
+  if (tipo === 'manovacuometro') t = t.replace(/manômetro/g, 'manovacuômetro');
+  if (tipo === 'valvula_alivio' && k !== 'V4' && k !== 'V5') t = t.replace(/válvula de segurança/g, 'válvula de alívio');
+  return t;
+}
+const RES_CASO = { ok:'CONFORME', nc:'NÃO CONFORME' };
+function textoCaso(k, c, campos, tipo){
+  const vs = Object.assign({ resultado:RES_CASO[c.res] || '' }, campos || {});
+  return trocarPalavra(tipo, k, String(c.texto || '').replace(/\{\{(\w+)\}\}/g, (m, x) => vs[x] != null && String(vs[x]).trim() !== '' ? String(vs[x]).trim() : '…'));
+}
+const camposOk = (c, campos) => (c.campos || []).every(f => String((campos || {})[f.k] || '').trim().length > 0);
+/** a janela de escolha: os casos, os campos do caso e o texto como sai no laudo. ok(caso, campos, texto) grava. */
+function janelaCasos(tit, lista, atual, campos0, tipo, extra, ok){
+  const P = PRONTOS();
+  const html = '<p class="muted" style="margin:0 0 6px">Escolha o caso: o texto vai pronto para o laudo.</p><div id="csLista">'
+    + lista.map(([k, c]) => '<label style="display:flex;gap:10px;align-items:center;min-height:42px"><input type="radio" name="csR" value="' + esc(k) + '"' + (k === atual ? ' checked' : '') + '><span>' + esc(c.rotulo) + '</span></label>').join('')
+    + (extra || []).map(x => '<label style="display:flex;gap:10px;align-items:center;min-height:42px"><input type="radio" name="csR" value="' + esc(x.v) + '"' + (x.on ? ' checked' : '') + '><span>' + esc(x.rotulo) + '</span></label>').join('')
+    + '</div><div id="csCampos"></div><div id="csOutro" hidden><label class="f">Motivo<textarea class="t" id="csOutroTx"></textarea></label></div>'
+    + '<div id="csPrev" style="margin-top:8px;font-size:13px;line-height:1.45;border:1px solid var(--rule);border-radius:8px;padding:8px 10px;background:var(--surface-2)" hidden></div>';
+  const campos = Object.assign({}, campos0 || {});
+  const marcado = () => { const r = document.querySelector('input[name="csR"]:checked'); return r ? r.value : null; };
+  const prev = () => {
+    const k = marcado(), c = k && P[k], el = $('csPrev');
+    el.hidden = !c; if (!c) return;
+    el.innerHTML = '<b style="font-size:12px;color:var(--ink-2)">VAI NO LAUDO · ' + esc(c.secao) + (RES_CASO[c.res] ? ' · <span style="color:' + (c.res === 'ok' ? 'var(--ok)' : 'var(--crit)') + '">' + RES_CASO[c.res] + '</span>' : '') + '</b><div style="margin-top:4px">' + esc(textoCaso(k, c, campos, tipo)) + '</div>';
+  };
+  const pintarCaso = () => {
+    const k = marcado(), c = k && P[k], ex = (extra || []).find(x => x.v === k);
+    $('csOutro').hidden = !(ex && ex.escrever);
+    if (ex && ex.escrever && ex.texto != null && !$('csOutroTx').value) $('csOutroTx').value = ex.texto;
+    $('csCampos').innerHTML = c ? (c.campos || []).map(f => '<label class="f">' + esc(f.rotulo) + '<input class="t" data-csk="' + esc(f.k) + '"' + (f.num ? ' inputmode="decimal"' : '')
+      + ' placeholder="ex.: ' + esc(f.ex || '') + '" value="' + esc(campos[f.k] || '') + '"></label>').join('') : '';
+    $('csCampos').querySelectorAll('[data-csk]').forEach(el => el.addEventListener('input', () => { campos[el.dataset.csk] = el.value; prev(); }));
+    prev();
+  };
+  janela(tit, html, [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
+    const k = marcado(); if (!k){ U.toast('Escolha o caso.', 'err'); return false; }
+    const c = P[k], ex = (extra || []).find(x => x.v === k);
+    if (c){
+      if (!camposOk(c, campos)){ U.toast('Preencha o que o texto pede.', 'err'); return false; }
+      const cs = {}; (c.campos || []).forEach(f => { cs[f.k] = String(campos[f.k]).trim(); });
+      return ok(k, Object.keys(cs).length ? cs : null, textoCaso(k, c, cs, tipo));
+    }
+    if (ex && ex.limpar) return ok(null, null, null);
+    const t = ex && ex.escrever ? ($('csOutroTx').value || '').trim() : ex ? ex.texto : '';
+    if (!t || t.length < 5){ U.toast('Escreva o motivo.', 'err'); return false; }
+    return ok(null, null, t);
+  } }]);
+  document.querySelectorAll('input[name="csR"]').forEach(r => r.addEventListener('change', pintarCaso));
+  pintarCaso();
+}
 
 function somenteLeitura(){ $('tela').querySelectorAll('.foto.add, .foto .x').forEach(el => el.remove()); }
 const ed = v => v.inspecao && v.inspecao.situacao === 'em_campo' && v.inspecao.pode_editar !== false;
@@ -1666,14 +1743,15 @@ function gravarVisual(v){
     anomalia: x.conforme === false ? (x.anomalia || '').trim() || null : null }));
   enfileirar(v, 'visual', 'exame visual', { funcao:'tf_insp_visual_gravar', payload:{ p_id:v.inspecao.id, p_itens:itens } });
 }
-const ACESS_OK = ['id','tipo','tag','marca','modelo','conexao','escala','pressao_ajuste_mpa','lacre_num','situacao','camara_id','unidade_campo','observacao','ordem','origem_id','afericao_motivo'];
+const ACESS_OK = ['id','tipo','tag','marca','modelo','conexao','escala','pressao_ajuste_mpa','lacre_num','situacao','camara_id','unidade_campo','observacao','ordem','origem_id','afericao_motivo','afericao_caso','caso_campos'];   // S146 · item 79
 function gravarAcess(v, a){
   enfileirar(v, 'acess-' + a.id, (TIPOS_ACESS[a.tipo] || 'acessório').toLowerCase(), { funcao:'tf_insp_acessorio_gravar',
     payload:{ p_id:v.inspecao.id, p_dados:pegar(a, ACESS_OK) } });
 }
 function gravarBoro(v){
   const b = v.inspecao.boroscopia;
-  const dados = boroValida(b) ? { realizada:b.realizada, resultado:b.realizada ? b.resultado : null, anomalia:b.anomalia || null, motivo_nao:b.realizada ? null : b.motivo_nao } : null;
+  const dados = boroValida(b) ? { realizada:b.realizada, resultado:b.realizada ? b.resultado : null, anomalia:b.anomalia || null, motivo_nao:b.realizada ? null : b.motivo_nao,
+    caso:b.realizada ? null : b.caso || null, campos:b.realizada ? null : b.caso_campos || null } : null;   // S146 · item 79
   enfileirar(v, 'boro', 'boroscopia', { funcao:'tf_insp_boroscopia_gravar', payload:{ p_id:v.inspecao.id, p_dados:dados } });
 }
 function gravarTeste(v){
@@ -1753,7 +1831,7 @@ function avisosAcess(v){
   l.filter(x => VALVULAS.includes(x.tipo) && x.situacao !== 'ausente' && !(x.conexao || '').trim()).forEach(x => a.push(TIPOS_ACESS[x.tipo] + ': informe a conexão (bitola).'));
   const cs = ativas(v);
   cs.forEach(c => {
-    const tem = l.some(x => x.tipo === 'valvula_seguranca' && (cs.length === 1 || x.camara_id === c.id));
+    const tem = l.some(x => (x.tipo === 'valvula_seguranca' || x.tipo === 'disco_ruptura') && x.situacao !== 'ausente' && (cs.length === 1 || x.camara_id === c.id));   // S146: o disco também protege
     if (!tem && (v.inspecao && v.inspecao.acessorios_conferidos)) a.push('Sem válvula de segurança' + (cs.length > 1 ? ' na câmara ' + c.nome : '') + '.');
   });
   return a;
@@ -1819,7 +1897,9 @@ function blocoAfericao(v, a, pode){
       // S144 · item 69: a foto da aferição na bancada (sai como figura no 7.5/7.6 do laudo)
       + '<p style="margin:10px 0 0;font-size:13px;font-weight:600;color:var(--ink-2)">Foto da aferição <small class="muted" style="font-weight:400">(na bancada; vai no laudo)</small></p>' + gradeFotos(v, 'acessorios', 2, null, 'afer:' + a.id);
   } else if ((a.afericao_motivo || '').trim()){
-    h += '<b>Não ' + (vv ? 'aferida' : 'aferido') + '</b><p class="muted" style="margin:4px 0 0">' + esc(a.afericao_motivo) + '</p>'
+    const cP = a.afericao_caso && PRONTOS() && PRONTOS()[a.afericao_caso];   // S146 · item 79
+    h += '<b>Não ' + (vv ? 'aferida' : 'aferido') + (cP ? ' · ' + esc(cP.rotulo) : '') + '</b><p class="muted" style="margin:4px 0 0">' + esc(a.afericao_motivo) + '</p>'
+      + (pode && cP ? '<button class="btn sec" data-afnao="' + esc(a.id) + '" style="margin-top:6px;margin-right:6px">Trocar o caso</button>' : '')
       + (pode ? '<button class="btn sec" data-afdesf="' + esc(a.id) + '" style="margin-top:6px">' + 'Aferir mesmo assim</button>' : '');
   } else {
     h += '<b>' + (vv ? 'Aferição da válvula' : 'Aferição do manômetro') + '</b><p class="muted" style="margin:4px 0 0">O envio pede a aferição ou o motivo.</p>'
@@ -1838,6 +1918,11 @@ function ligarBlocoAfericao(v, l, mudou){
   }));
   $('tela').querySelectorAll('[data-afnao]').forEach(b => b.addEventListener('click', () => {
     const a = l.find(x => x.id === b.dataset.afnao);
+    // S146 · item 79: com os textos prontos, a lista de casos (T1); sem eles, o motivo escrito
+    const cs = casosDe(v, a, false);
+    if (cs.length) return janelaCasos('Por que não aferir' + (a.tag ? ' o ' + a.tag : '') + '?', cs, a.afericao_caso, a.caso_campos, a.tipo,
+      [{ v:'+', rotulo:'Outro motivo (escrever; o escritório escolhe o texto)', escrever:true, on:!a.afericao_caso && !!a.afericao_motivo, texto:a.afericao_caso ? '' : a.afericao_motivo || '' }],
+      (k, campos, texto) => { a.afericao_caso = k; a.caso_campos = campos; mudou(a, 'afericao_motivo', texto); pintar(); });
     janela('Por que não aferir?',
       '<label class="f">Motivo<textarea class="t" id="afMot" placeholder="Ex.: o cliente não liberou a retirada"></textarea></label>',
       [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
@@ -2017,6 +2102,12 @@ function telaAcessorios(v){
       (pode && !a.origem_id ? '<button class="btn peq perigo" data-acrm="' + esc(a.id) + '">Tirar</button>' : '') + '</div>';
     h += '<label class="f">Tipo<select class="t" data-k="tipo">' + Object.keys(TIPOS_ACESS).map(t => '<option value="' + t + '"' + (t === a.tipo ? ' selected' : '') + '>' + TIPOS_ACESS[t] + '</option>').join('') + '</select></label>';
     h += '<label class="f">Situação<div class="seg sit" data-sit>' + Object.keys(SIT_ACESS).map(s => '<button data-s="' + s + '" class="' + (a.situacao === s ? 'on' : '') + '">' + SIT_ACESS[s] + '</button>').join('') + '</div></label>';
+    if (a.situacao === 'ausente' && casosDe(v, a, true).length){   // S146 · item 79: o texto do laudo para o que falta
+      const cP = a.afericao_caso && PRONTOS()[a.afericao_caso];
+      h += '<div class="afBloco" style="margin-top:10px;padding:8px 10px;border:1px solid var(--rule-2);border-radius:6px"><b>Texto do laudo' + (cP ? ' · ' + esc(cP.rotulo) : '') + '</b>'
+        + '<p class="muted" style="margin:4px 0 0">' + esc(cP ? a.afericao_motivo || '' : 'Opcional: diga como a pressão é indicada (ou que não é).') + '</p>'
+        + (pode ? '<button class="btn sec" data-acaus="' + esc(a.id) + '" style="margin-top:6px">' + (cP ? 'Trocar' : 'Escolher') + '</button>' : '') + '</div>';
+    }
     if (a.situacao !== 'retirado' && a.situacao !== 'ausente'){
       // S112 · C12: manômetro e válvula não têm TAG · C11: o lacre (o novo) é informado na tela de teste/aferição
       if (!AFERIVEIS.includes(a.tipo)) h += campoTexto('TAG', 'ac_tag_' + a.id, a.tag, 'data-k="tag"');
@@ -2024,11 +2115,17 @@ function telaAcessorios(v){
       h += '<label class="f">Conexão<select class="t" data-k="conexao"><option value="">—</option>' + BITOLAS.map(b => '<option' + (b === a.conexao ? ' selected' : '') + '>' + esc(b) + '</option>').join('') +
         (a.conexao && BITOLAS.indexOf(a.conexao) < 0 ? '<option selected>' + esc(a.conexao) + '</option>' : '') + '<option value="+">Outra…</option></select></label>';
       if (VALVULAS.includes(a.tipo)) h += campoPressao('Pressão de abertura (plaqueta/certificado)', 'ac_p_' + a.id, a.pressao_ajuste_mpa, u, 'Como está na válvula ou no certificado');
+      if (a.tipo === 'disco_ruptura'){   // S146 · T4 (D4): vale a pressão do certificado do fabricante
+        const pm = pmtaVigenteCam(v, a.camara_id);
+        h += campoPressao('Pressão de ruptura (certificado ou etiqueta)', 'ac_p_' + a.id, a.pressao_ajuste_mpa, u, 'Não se afere em bancada: vale a do fabricante');
+        if (pm != null && a.pressao_ajuste_mpa != null && a.pressao_ajuste_mpa > pm + 1e-9) h += '<p class="alerta" style="margin:6px 0 0">Acima da PMTA vigente: o laudo sai NÃO CONFORME e pede a troca do disco.</p>';
+        h += '<div class="chk"><input type="checkbox" id="dsc_' + esc(a.id) + '" data-dsc="' + esc(a.id) + '"' + ((a.caso_campos || {}).sem_certificado ? ' checked' : '') + '><label for="dsc_' + esc(a.id) + '">O cliente não tem o certificado (o laudo recomenda obtê-lo)</label></div>';
+      }
       if (MEDIDORES.includes(a.tipo)) h += campoTexto('Escala', 'ac_esc_' + a.id, a.escala, 'data-k="escala" placeholder="Ex.: 0 a 16 bar"');
       if (cs.length > 1) h += '<label class="f">Câmara<select class="t" data-k="camara_id"><option value="">—</option>' +
         cs.map(c => '<option value="' + esc(c.id) + '"' + (c.id === a.camara_id ? ' selected' : '') + '>' + esc(c.nome) + '</option>').join('') + '</select></label>';
       if (AFERIVEIS.includes(a.tipo)) h += blocoAfericao(v, a, pode);
-      h += '<p style="margin:12px 0 0;font-size:13px;font-weight:600;color:var(--ink-2)">Foto do item</p>' + gradeFotos(v, 'acessorios', 3, null, a.id);
+      h += '<p style="margin:12px 0 0;font-size:13px;font-weight:600;color:var(--ink-2)">' + (a.tipo === 'disco_ruptura' ? 'Foto do certificado ou da etiqueta' : 'Foto do item') + '</p>' + gradeFotos(v, 'acessorios', 3, null, a.id);
     }
     h += '</div>';
   });
@@ -2057,6 +2154,17 @@ function telaAcessorios(v){
     ligarPressao('ac_p_' + a.id, a.unidade_campo || unidadeDe(v), m => { mudou(a, 'pressao_ajuste_mpa', m); pintar(); });
   });
   ligarBlocoAfericao(v, l, mudou);
+  // S146 · item 79: o texto do laudo do acessório que falta e o disco sem certificado
+  $('tela').querySelectorAll('[data-acaus]').forEach(b => b.addEventListener('click', () => {
+    const a = l.find(x => x.id === b.dataset.acaus);
+    janelaCasos('Texto do laudo · ' + (TIPOS_ACESS[a.tipo] || a.tipo), casosDe(v, a, true), a.afericao_caso, a.caso_campos, a.tipo,
+      [{ v:'-', rotulo:'Nenhum (o laudo diz só que não há)', limpar:true, on:false }],
+      (k, campos, texto) => { a.afericao_caso = k; a.caso_campos = campos; mudou(a, 'afericao_motivo', k ? texto : null); pintar(); });
+  }));
+  $('tela').querySelectorAll('[data-dsc]').forEach(el => el.addEventListener('change', () => {
+    const a = l.find(x => x.id === el.dataset.dsc);
+    mudou(a, 'caso_campos', el.checked ? { sem_certificado:true } : null);
+  }));
   $('tela').querySelectorAll('[data-acrm]').forEach(b => b.addEventListener('click', () => {
     const a = l.find(x => x.id === b.dataset.acrm);
     if (a.origem_id){ U.toast('Este veio da inspeção anterior: se saiu do vaso, marque "retirado" (o laudo registra).', 'err'); return; }
@@ -2085,6 +2193,7 @@ function telaAcessorios(v){
 }
 
 // ── boroscopia ─────────────────────────────────────────────────────────────
+const casosBoro = () => { const P = PRONTOS() || {}; return Object.keys(P).map(k => [k, P[k]]).filter(([k, c]) => c && c.grupo === 'boroscopia').sort(ordemCaso); };
 function telaBoroscopia(v){
   titulo('Boroscopia', v.tag);
   const i = v.inspecao, pode = ed(v);
@@ -2097,6 +2206,11 @@ function telaBoroscopia(v){
       '<button data-x="com_anomalia" class="' + (b.resultado === 'com_anomalia' ? 'on' : '') + '">Com anomalia</button></div></label>';
     if (b.resultado === 'com_anomalia') h += '<label class="f">O que foi encontrado<textarea class="t" id="bAn">' + esc(b.anomalia || '') + '</textarea></label>';
     h += '<p style="margin:12px 0 0;font-size:13px;font-weight:600;color:var(--ink-2)">Fotos' + (b.resultado === 'com_anomalia' ? ' (obrigatória)' : '') + '</p>' + gradeFotos(v, 'boroscopia', 4);
+  } else if (b.realizada === false && PRONTOS() && casosBoro().length){   // S146 · item 79 (T5)
+    const cP = b.caso && PRONTOS()[b.caso];
+    h += '<p style="margin:12px 0 4px;font-weight:600">Por quê</p>' + (cP ? '<div class="alerta" style="margin:0"><b>' + esc(cP.rotulo) + '</b>' + esc(b.motivo_nao || '') + '</div>'
+        : b.motivo_nao ? '<div class="alerta" style="margin:0">' + esc(b.motivo_nao) + '</div>' : '<p class="muted" style="margin:0">Ainda não escolhido.</p>')
+      + '<button class="btn sec" id="bCaso" style="margin-top:8px">' + (b.motivo_nao ? 'Trocar' : 'Escolher o motivo') + '</button>';
   } else if (b.realizada === false){
     h += '<label class="f">Motivo<select class="t" id="bMot"><option value="">—</option>' + MOTIVOS_BORO.map(m => '<option' + (m === b.motivo_nao ? ' selected' : '') + '>' + esc(m) + '</option>').join('') +
       '<option value="+"' + (motOutro || b._outro ? ' selected' : '') + '>Outro…</option></select></label>';
@@ -2108,8 +2222,13 @@ function telaBoroscopia(v){
   if (!pode){ $('tela').querySelectorAll('input,select,button,textarea').forEach(el => { el.disabled = true; }); somenteLeitura(); return; }
   const mudou = () => { salvar(); adiar2('boro:' + v.id, 'boro', v); };
   $('bR').querySelectorAll('[data-r]').forEach(x => x.addEventListener('click', () => {
-    b.realizada = x.dataset.r === '1'; b.resultado = null; b.anomalia = null; b.motivo_nao = null; b._outro = false; mudou(); pintar();
+    b.realizada = x.dataset.r === '1'; b.resultado = null; b.anomalia = null; b.motivo_nao = null; b._outro = false; b.caso = null; b.caso_campos = null; mudou(); pintar();
   }));
+  const VALIDADE = 'A inspeção interna está dentro do prazo de validade.';
+  ligar('bCaso', () => janelaCasos('Por que a boroscopia não foi feita?', casosBoro(), b.caso, b.caso_campos, null,
+    [{ v:'val', rotulo:'A inspeção interna está dentro do prazo de validade', texto:VALIDADE, on:!b.caso && b.motivo_nao === VALIDADE },
+     { v:'+', rotulo:'Outro motivo (escrever)', escrever:true, on:!b.caso && !!b.motivo_nao && b.motivo_nao !== VALIDADE, texto:b.caso ? '' : b.motivo_nao || '' }],
+    (k, campos, texto) => { b.caso = k; b.caso_campos = campos; b.motivo_nao = texto; mudou(); pintar(); }), 'click');
   const res = $('bRes'); if (res) res.querySelectorAll('[data-x]').forEach(x => x.addEventListener('click', () => { b.resultado = x.dataset.x; if (b.resultado !== 'com_anomalia') b.anomalia = null; mudou(); pintar(); }));
   ligar('bAn', el => { b.anomalia = el.value; mudou(); }, 'input');
   ligar('bMot', el => { if (el.value === '+'){ b._outro = true; b.motivo_nao = null; mudou(); pintar(); return; } b._outro = false; b.motivo_nao = el.value || null; mudou(); pintar(); });
@@ -2186,6 +2305,7 @@ function ligarReabrir(v){
 
 // ── fechamento e envio ─────────────────────────────────────────────────────
 // ── S144 · item 70: prazo menor que o da norma (externo e interno separados), com a justificativa ──
+const p1De = v => (v.posicao === 'horizontal' && PRONTOS() && PRONTOS().P1) || null;   // S146 · item 79 (T6): só vaso horizontal
 const PRAZO_MOTIVOS = ['Atmosfera agressiva (corrosão acelerada)', 'Perda de espessura acima do esperado', 'Histórico de anomalias no vaso', 'Condições de operação severas'];
 function cartaoPrazo(v){
   const i = v.inspecao, PR = i.prazo_red || null;
@@ -2197,18 +2317,19 @@ function cartaoPrazo(v){
     + 'Só menor, nunca maior. O escritório e o PLH veem antes de aprovar.</p>'
     + '<div class="lin"><label class="f">Exame externo<select class="t" id="przExt">' + opc(pz && pz.externo, PR && PR.externo) + '</select></label>'
     + '<label class="f">Exame interno<select class="t" id="przInt">' + opc(pz && pz.interno != null ? pz.interno : 10, PR && PR.interno) + '</select></label></div>'
-    + '<label class="f">Por quê<select class="t" id="przMot"><option value="">—</option>' + PRAZO_MOTIVOS.map(m => '<option' + (PR && PR.just === m ? ' selected' : '') + '>' + esc(m) + '</option>').join('')
-    + '<option value="+"' + (PR && PR.just && PRAZO_MOTIVOS.indexOf(PR.just) < 0 ? ' selected' : '') + '>Outro (escrever)</option></select></label>'
-    + '<label class="f" id="przOutroL"' + (PR && PR.just && PRAZO_MOTIVOS.indexOf(PR.just) < 0 ? '' : ' hidden') + '>Motivo<textarea class="t" id="przOutro">' + esc(PR && PRAZO_MOTIVOS.indexOf(PR.just) < 0 ? PR.just || '' : '') + '</textarea></label></div></div>';
+    + '<label class="f">Por quê<select class="t" id="przMot"><option value="">—</option>' + (p1De(v) ? '<option value="P1"' + (PR && PR.caso === 'P1' ? ' selected' : '') + '>' + esc(p1De(v).rotulo) + ' (texto pronto)</option>' : '') + PRAZO_MOTIVOS.map(m => '<option' + (PR && PR.just === m ? ' selected' : '') + '>' + esc(m) + '</option>').join('')
+    + '<option value="+"' + (PR && PR.just && !PR.caso && PRAZO_MOTIVOS.indexOf(PR.just) < 0 ? ' selected' : '') + '>Outro (escrever)</option></select></label>'
+    + '<label class="f" id="przOutroL"' + (PR && PR.just && !PR.caso && PRAZO_MOTIVOS.indexOf(PR.just) < 0 ? '' : ' hidden') + '>Motivo<textarea class="t" id="przOutro">' + esc(PR && !PR.caso && PRAZO_MOTIVOS.indexOf(PR.just) < 0 ? PR.just || '' : '') + '</textarea></label></div></div>';
 }
 function ligarPrazo(v){
   const i = v.inspecao;
   const gravar = () => {
     const on = $('przOn').checked, ext = on ? Number($('przExt').value) || null : null, int = on ? Number($('przInt').value) || null : null;
-    const just = $('przMot').value === '+' ? ($('przOutro').value || '').trim() : $('przMot').value;
+    const caso = $('przMot').value === 'P1' && p1De(v) ? 'P1' : null;
+    const just = caso ? p1De(v).texto : $('przMot').value === '+' ? ($('przOutro').value || '').trim() : $('przMot').value;
     if (on && (ext || int) && just.length < 5) return;   // grava quando o motivo estiver dito
-    i.prazo_red = on && (ext || int) ? { externo:ext, interno:int, just, origem:'campo' } : null; salvar();
-    enfileirar(v, 'prazo', 'prazo das próximas inspeções', { funcao:'tf_insp_prazo_reduzir', payload:{ p_id:i.id, p_dados:{ externo:ext, interno:int, justificativa:on ? just : null } } });
+    i.prazo_red = on && (ext || int) ? { externo:ext, interno:int, just, origem:'campo', caso } : null; salvar();
+    enfileirar(v, 'prazo', 'prazo das próximas inspeções', { funcao:'tf_insp_prazo_reduzir', payload:{ p_id:i.id, p_dados:{ externo:ext, interno:int, justificativa:on ? just : null, caso:on ? caso : null } } });
   };
   ligar('przOn', el => { $('przCx').hidden = !el.checked; if (!el.checked && i.prazo_red) gravar(); });
   ligar('przExt', gravar); ligar('przInt', gravar);
@@ -2218,7 +2339,7 @@ function ligarPrazo(v){
 function avisoPrazo(v){
   const i = v.inspecao, on = $('przOn') && $('przOn').checked;
   if (!on) return null;
-  const ext = Number($('przExt').value) || null, int = Number($('przInt').value) || null, just = $('przMot').value === '+' ? ($('przOutro').value || '').trim() : $('przMot').value;
+  const ext = Number($('przExt').value) || null, int = Number($('przInt').value) || null, just = $('przMot').value === 'P1' ? 'P1 texto pronto' : $('przMot').value === '+' ? ($('przOutro').value || '').trim() : $('przMot').value;
   if (!ext && !int) return 'Prazo menor: escolha o prazo do exame externo, do interno ou dos dois (ou desmarque).';
   if (just.length < 5) return 'Prazo menor: diga por quê.';
   return null;
@@ -2242,6 +2363,9 @@ function telaFechamento(v){
   h += '<div class="card"><label class="f">Observações do vaso<small>O que o escritório precisa saber e não coube nas seções.</small><textarea class="t" id="fObs">' + esc(i.observacao || '') + '</textarea></label></div>';
   h += '<div class="card"><b>Foto de capa</b><p class="muted" style="margin:2px 0 0">O vaso inteiro, de frente: vai na capa do laudo.</p>' + gradeFotos(v, 'capa', 1) + '</div>';
   h += cartaoPrazo(v);   // S144 · item 70
+  const PR7 = PRONTOS(), rc = i.rec_casos || [];   // S146 · item 79 (T7): recomendações que o inspetor marca
+  if (PR7 && (PR7.R1 || PR7.R2)) h += '<div class="card"><b>Recomendações a mais</b><p class="muted" style="margin:2px 0 0">Saem na seção 11 do laudo.</p>'
+    + ['R1','R2'].filter(k => PR7[k]).map(k => '<div class="chk"><input type="checkbox" id="frc_' + k + '" data-frc="' + k + '"' + (rc.indexOf(k) >= 0 ? ' checked' : '') + '><label for="frc_' + k + '">' + esc(PR7[k].rotulo) + '</label></div>').join('') + '</div>';
   h += '<button class="btn pri" id="fEnviar"' + (f.length ? ' disabled' : '') + '>Enviar a inspeção deste vaso</button>';
   h += '<p class="muted" style="text-align:center;margin-top:6px">Depois de enviar, você ainda pode reabrir para corrigir, até o escritório começar a revisão. Sem sinal, vai quando o sinal voltar.</p>'
      + '<p class="muted" style="text-align:center;margin-top:2px">Depois do envio, cada um da equipe confirma a participação no próprio celular, com a digital (aba Eu): o laudo traz o nome de quem participou.</p>';
@@ -2250,6 +2374,11 @@ function telaFechamento(v){
   ligarFotos(v, 'capa', () => 'Capa');
   ligar('fObs', el => { i.observacao = el.value.trim() || null; salvar(); adiar2('fech:' + v.id, 'fech', v); }, 'input');
   ligarPrazo(v);
+  $('tela').querySelectorAll('[data-frc]').forEach(el => el.addEventListener('change', () => {
+    const k = el.dataset.frc, x = (i.rec_casos || []).filter(y => y !== k);
+    i.rec_casos = el.checked ? x.concat([k]).sort() : x; salvar();
+    enfileirar(v, 'fechrec', 'recomendações', { funcao:'tf_insp_fechamento_gravar', payload:{ p_id:i.id, p_dados:{ rec_casos:i.rec_casos } } });
+  }));
   const fechar = (situ, motivo) => {
     i.situacao = 'enviada'; i.pode_editar = false; if (motivo) i.nao_inspecionado_motivo = motivo; salvar();
   };
@@ -2265,14 +2394,15 @@ function telaFechamento(v){
   }, 'click');
   ligar('fNao', () => janela('Não foi possível inspecionar', '<label class="f">Motivo<select class="t" id="niSel"><option value="">—</option>' +
       MOTIVOS_NAO_INSP.map(m => '<option>' + esc(m) + '</option>').join('') + '<option value="+">Outro…</option></select></label>' +
-      '<label class="f">Detalhe<small>Obrigatório em "Outro". Ex.: o cliente pediu nova data.</small><textarea class="t" id="niTx"></textarea></label>',
+      '<label class="f">Detalhe<small>Obrigatório em "Outro". Ex.: o cliente pediu nova data.</small><textarea class="t" id="niTx"></textarea></label>'
+      + '<div class="alerta" id="niSilo" hidden><b>Fora da NR-13</b>Sem pressão interna o equipamento não é vaso de pressão: não sai laudo de NR-13. Tire foto da placa, se houver, para o escritório.</div>',
     [{ rotulo:'Cancelar' }, { rotulo:'Confirmar', classe:'pri', acao:() => {
       const s = $('niSel').value, tx = ($('niTx').value || '').trim();
       const m = s && s !== '+' ? (tx ? s + ' ' + tx : s) : tx;
       if (!m){ U.toast('Informe o motivo.', 'err'); return false; }
       enfileirar(v, 'naoinsp-' + i.id, 'vaso não inspecionado', { funcao:'tf_insp_nao_inspecionado', payload:{ p_id:i.id, p_motivo:m } }, null, true);
       fechar('enviada', m); N.janela.fechar(); ir({ nome:'lista' });
-    } }]), 'click');
+    } }]) || ligar('niSel', el => { $('niSilo').hidden = el.value !== SEM_PRESSAO; }), 'click');
 }
 
 // ════════════════════════════════════════════════════════════════════════════

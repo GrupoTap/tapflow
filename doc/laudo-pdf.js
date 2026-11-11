@@ -75,7 +75,7 @@ const emBar = (v, un) => v == null ? null : Number(v) * (EM_BAR[String(un || 'ba
 const TIPOS_COMP = { costado: 'Costado', eliptico: 'Tampo elíptico 2:1', torisferico: 'Tampo torisférico', hemisferico: 'Tampo hemisférico',
   conico: 'Cone', plano: 'Tampo plano', janela: 'Janela de visita' };
 const TIPOS_ACESS = { valvula_seguranca: 'Válvula de segurança', valvula_alivio: 'Válvula de alívio', quebra_vacuo: 'Quebra-vácuo',
-  manometro: 'Manômetro', manovacuometro: 'Manovacuômetro', termometro: 'Termômetro', pressostato: 'Pressostato', dreno: 'Dreno', ihm: 'IHM', outro: 'Outro' };
+  manometro: 'Manômetro', manovacuometro: 'Manovacuômetro', disco_ruptura: 'Disco de ruptura', termometro: 'Termômetro', pressostato: 'Pressostato', dreno: 'Dreno', ihm: 'IHM', outro: 'Outro' };
 const TIPOS_TESTE = { hidrostatico: 'hidrostático', pneumatico: 'pneumático', hidropneumatico: 'hidropneumático' };
 const POSICAO = { horizontal: 'Horizontal', vertical: 'Vertical' };
 const LEG_FOTO = { plaqueta: 'Placa de identificação do vaso', acessorios: 'Acessório do vaso', localizacao: 'Local de instalação do vaso',
@@ -209,6 +209,16 @@ function espessuras(d) {
 function montar(d, opc) {
   opc = opc || {};
   const M = (d.modelo && d.modelo.blocos) || {}, T = M.titulos || {};
+  // S146 · item 79: os textos prontos (o caso escolhido em campo ou na revisão), da versão do modelo do laudo
+  const PR = M.prontos || {};
+  const trocarPalavra = (tipo, k, t) => { t = String(t || '');
+    if (tipo === 'manovacuometro') t = t.replace(/manômetro/g, 'manovacuômetro');
+    if (tipo === 'valvula_alivio' && k !== 'V4' && k !== 'V5') t = t.replace(/válvula de segurança/g, 'válvula de alívio');
+    return t; };
+  const caso = (k, campos, tipo, extra) => { const c = k && PR[k]; if (!c) return null;
+    const vs = Object.assign({}, campos || {}, extra || {});
+    return { c, texto: trocarPalavra(tipo, k, txt(c.texto, Object.assign({}, vs, { resultado: '{{resultado}}' }))), conc: c.conc ? trocarPalavra(tipo, k, txt(c.conc, vs)) : null }; };
+  const parCaso = x => par(x.c.res === 'ok' || x.c.res === 'nc' ? comResultado(x.texto, {}, x.c.res) : presos(x.texto.replace('{{resultado}}', '')));
   const I = d.inspecao || {}, V = d.vaso || {}, R = d.resultado || {}, emp = d.empresa || {};
   const img = opc.imagens || {};
   // S145 · A2: o carimbo (o desenho confirmado pelo PLH e o texto da aprovação com a digital); só no laudo com número
@@ -376,7 +386,7 @@ function montar(d, opc) {
       const escala = ehMed ? (f.faixa_fim != null ? 'escala de ' + fmt(f.faixa_ini || 0, 0) + ' a ' + fmt(f.faixa_fim, 0) + ' ' + String(f.unidade || 'bar').replace('kgf/cm2', 'kgf/cm²')
         : (nh(a.escala) ? 'escala ' + String(a.escala).replace(/^escala\s*/i, '') : null)) : null;
       const det = [nh(a.marca) ? 'marca ' + a.marca : null, escala,
-        a.pressao_ajuste_mpa != null ? 'ajuste ' + bar(a.pressao_ajuste_mpa) : null, a.conexao ? 'conexão ' + a.conexao : null, lacre ? 'lacre nº ' + lacre : null].filter(Boolean).join(', ');
+        a.pressao_ajuste_mpa != null ? (a.tipo === 'disco_ruptura' ? 'ruptura ' : 'ajuste ') + bar(a.pressao_ajuste_mpa) : null, a.conexao ? 'conexão ' + a.conexao : null, lacre ? 'lacre nº ' + lacre : null].filter(Boolean).join(', ');
       const sit = { ok: '', substituir: ' — a substituir', ausente: ' — ausente', inoperante: ' — inoperante', retirado: ' — retirado nesta inspeção' }[a.situacao] || '';
       return p + (det ? ': ' + det : '') + sit + ';';
     }), true);
@@ -420,6 +430,7 @@ function montar(d, opc) {
   sub('7.2', T.boroscopia || 'Inspeção interna por boroscopia');
   const boroSubst = m => /fluido|conex|opera|substitu/i.test(m || '');
   if (B.realizada) par(comResultado(B.resultado === 'com_anomalia' ? M.boro_anomalia : M.boro_ok, { anomalia: B.anomalia || 'anomalia registrada' }, B.resultado === 'com_anomalia' ? 'nc' : 'ok'));
+  else if (caso(B.caso, B.caso_campos)) parCaso(caso(B.caso, B.caso_campos));   // S146 · item 79 (B1–B6)
   else { par(txt(M.boro_nao, { motivo: B.motivo_nao || 'não informado' })); if (boroSubst(B.motivo_nao)) par(M.boro_substituida); }
   fotos('boroscopia');
   // 7.3 ultrassom
@@ -500,7 +511,7 @@ function montar(d, opc) {
   const fotoAfer = (a, legenda) => { const fs = (d.fotos || []).filter(f => f.secao === 'acessorios' && f.item === 'afer:' + a.id && img[f.path]);
     if (fs.length) figura(fs.map(f => img[f.path]), legenda); };
   sub('7.5', T.manometro || 'Aferição do manômetro');
-  const mans = acs.filter(a => (a.tipo === 'manometro' || a.tipo === 'manovacuometro') && presentes(a));
+  const mans = acs.filter(a => (a.tipo === 'manometro' || a.tipo === 'manovacuometro') && (presentes(a) || (a.situacao === 'ausente' && PR[a.afericao_caso])));   // S146: M3–M5
   if (!mans.length) { par(M.manometro_nenhum); conc.man.push(K.man_nenhum); }
   mans.forEach(a => {
     const f = a.afericao, tipoNome = a.tipo === 'manovacuometro' ? 'manovacuômetro' : 'manômetro';
@@ -514,14 +525,23 @@ function montar(d, opc) {
         codigo: f.codigo || 'a numerar' }, padraoVars(pz)), f.resultado === 'aprovado' ? 'ok' : 'nc'));
       fotoAfer(a, 'Aferição do ' + tipoNome);
       conc.man.push(f.resultado === 'aprovado' ? K.man_ok : K.man_nc);
-    } else { par(txt(M.manometro_nao, { acessorio: !vazio(a.marca) ? a.marca : '', motivo: a.afericao_motivo || 'não informado' })); conc.man.push(txt(K.man_nao, { motivo: a.afericao_motivo || 'motivo não informado' })); }
+    } else if (caso(a.afericao_caso, a.caso_campos, a.tipo)) { const x = caso(a.afericao_caso, a.caso_campos, a.tipo); parCaso(x); conc.man.push(x.conc); }   // S146 · item 79
+    else { par(txt(M.manometro_nao, { acessorio: !vazio(a.marca) ? a.marca : '', motivo: a.afericao_motivo || 'não informado' })); conc.man.push(txt(K.man_nao, { motivo: a.afericao_motivo || 'motivo não informado' })); }
   });
   sub('7.6', tituloValv);
-  const valvs = acs.filter(a => ['valvula_seguranca', 'valvula_alivio', 'quebra_vacuo'].indexOf(a.tipo) >= 0 && presentes(a));
+  const valvs = acs.filter(a => ['valvula_seguranca', 'valvula_alivio', 'quebra_vacuo', 'disco_ruptura'].indexOf(a.tipo) >= 0 && (presentes(a) || (a.situacao === 'ausente' && PR[a.afericao_caso])));   // S146: o disco, V4 e Q2
   if (!valvs.length) { par(M.valvula_nenhuma); conc.valv.push(K.valv_nenhuma); }
   valvs.forEach(a => {
     const f = a.afericao, tipoNome = (TIPOS_ACESS[a.tipo] || 'Válvula de segurança').toLowerCase();
     const kc = rcams.find(k => k.camara_id === a.camara_id) || rcams[0] || {};
+    if (a.tipo === 'disco_ruptura') {   // S146 · item 79 (T4, D4): vale a pressão do certificado do fabricante
+      const pr = a.pressao_ajuste_mpa != null ? Number(a.pressao_ajuste_mpa) : null, pm = kc.pmta_adotada_mpa != null ? Number(kc.pmta_adotada_mpa) : null;
+      const acima = pr != null && pm != null && pr > pm + 1e-9;
+      const x = caso(acima ? 'D2' : 'D1', null, a.tipo, { pressao: bar(pr), pmta: bar(pm) });
+      if (x) { parCaso(x); conc.valv.push(x.conc); }
+      else par('O dispositivo de segurança do vaso é um disco de ruptura, com pressão de ruptura de ' + bar(pr) + ', segundo o fabricante.');
+      return;
+    }
     if (f && (f.resultado === 'aprovado' || f.resultado === 'reprovado')) {
       const pz = f.padrao || {}, bz = f.bancada || {}, ab = ((f.leituras || {}).aberturas || []).map(Number).filter(x => isFinite(x)),
         asv = ((f.leituras || {}).assentamentos || []).map(Number).filter(x => isFinite(x));
@@ -537,7 +557,8 @@ function montar(d, opc) {
       else par(comResultado(M.valvula_reprovada, Object.assign(vars, { motivo: acima ? txt(M.valvula_motivo_pmta, vars) : M.valvula_motivo_tolerancia }), 'nc'));
       fotoAfer(a, 'Aferição da ' + tipoNome);
       conc.valv.push(f.resultado === 'aprovado' ? K.valv_ok : K.valv_nc);
-    } else { par(txt(M.valvula_nao, { acessorio: !vazio(a.marca) ? a.marca : '', motivo: a.afericao_motivo || 'não informado' })); conc.valv.push(txt(K.valv_nao, { motivo: a.afericao_motivo || 'motivo não informado' })); }
+    } else if (caso(a.afericao_caso, a.caso_campos, a.tipo)) { const x = caso(a.afericao_caso, a.caso_campos, a.tipo); parCaso(x); conc.valv.push(x.conc); }   // S146 · item 79
+    else { par(txt(M.valvula_nao, { acessorio: !vazio(a.marca) ? a.marca : '', motivo: a.afericao_motivo || 'não informado' })); conc.valv.push(txt(K.valv_nao, { motivo: a.afericao_motivo || 'motivo não informado' })); }
   });
 
   // ── 8 · espessura mínima requerida ──────────────────────────────────────
@@ -590,7 +611,8 @@ function montar(d, opc) {
   sec('9', T.pmta || 'PRESSÃO MÁXIMA DE TRABALHO ADMISSÍVEL (PMTA)');
   // 9.1 · o código de construção (S143 · item 78: sai do 8 e vem para cá, como no modelo)
   sub('9.1', T.pmta_codigo || 'Código de construção');
-  par(V.sem_codigo_construcao ? M.codigo_sem : V.codigo_construcao ? txt(M.codigo_conhecido, { codigo }) : M.codigo_estimado);
+  par(V.sem_codigo_construcao ? M.codigo_sem : V.codigo_construcao ? txt(M.codigo_conhecido, /\{\{edicao\}\}/.test(M.codigo_conhecido || '')
+    ? { codigo: V.codigo_construcao, edicao: V.codigo_edicao ? ', edição ' + V.codigo_edicao : '' } : { codigo }) : M.codigo_estimado);   // S146 · C1
   // 9.2 · os parâmetros
   sub('9.2', T.pmta_parametros || 'Parâmetros do cálculo');
   const fonteS = String(mat.fonte || 'ASME Seção II, Parte D').replace(/\s*\(imagens da pasta[^)]*\)\)?/i, '').replace(/ASME\s+II-D/i, 'ASME Seção II, Parte D').replace(/\s+$/, '');
@@ -661,7 +683,9 @@ function montar(d, opc) {
   const comPrazo = r => r.texto.replace(/[;.\s]*$/, '') + ';' + (r.prazo ? ' ' + txt(M.rec_prazo, { prazo: dataBR(r.prazo) }) : '');
   sub('11.1', T.rec_seguranca || 'Recomendações de segurança');
   lista([].concat(recs.filter(r => r.tipo === 'seguranca').map(comPrazo), recs.filter(r => r.tipo === 'geral').map(comPrazo), M.rec_seguranca_gerais || [],
-    [I.ambiente && (M.rec_instalacao || {})[I.ambiente]], ['I', 'II'].indexOf(R.categoria) >= 0 ? [txt(M.rec_manual_cat12, { categoria: R.categoria })] : []), true);
+    [I.ambiente && (M.rec_instalacao || {})[I.ambiente]], ['I', 'II'].indexOf(R.categoria) >= 0 ? [txt(M.rec_manual_cat12, { categoria: R.categoria })] : [],
+    (I.rec_casos || []).filter(k => PR[k]).map(k => PR[k].texto),   // S146 · item 79 (T7)
+    acs.some(a => a.tipo === 'disco_ruptura' && presentes(a) && (a.caso_campos || {}).sem_certificado) && PR.D3 ? [PR.D3.texto] : []), true);
   sub('11.2', T.rec_conservacao || 'Recomendações de conservação');
   lista([].concat(recs.filter(r => r.tipo === 'conservacao').map(comPrazo), M.rec_conservacao_gerais || []), true);
 
@@ -684,7 +708,8 @@ function montar(d, opc) {
   // S144 · item 70: o prazo reduzido em campo ou na revisão (o PLH aprovou com as datas desse prazo)
   const RED = I.prazo_red && R.datas_pelo_plh && R.justificativa_datas === I.prazo_red.just ? I.prazo_red : null;
   const anosTxt = n => n + (Number(n) === 1 ? ' ano' : ' anos');
-  if (RED) par(txt(M.proximas_reduzido || 'Os prazos foram reduzidos para {{prazos}}, a critério do PLH, em razão de: {{justificativa}}.',
+  if (RED && RED.caso && PR[RED.caso]) par(PR[RED.caso].texto);   // S146 · item 79 (P1)
+  else if (RED) par(txt(M.proximas_reduzido || 'Os prazos foram reduzidos para {{prazos}}, a critério do PLH, em razão de: {{justificativa}}.',
     { prazos: [RED.externo != null ? anosTxt(RED.externo) + ' (exame externo)' : null, RED.interno != null ? anosTxt(RED.interno) + ' (exame interno)' : null].filter(Boolean).join(' e '),
       justificativa: String(RED.just || '').replace(/[.\s]+$/, '').replace(/^./, x => x.toLowerCase()) }));
   else if (R.datas_pelo_plh && R.justificativa_datas) par(txt(M.proximas_plh, { justificativa: R.justificativa_datas }));
@@ -775,6 +800,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-S145-2026-11-10' };
+const LaudoPDF = { montar, fotosDoLaudo, espessuras, memoria, geoDe, fmt, versao: 'R06a-S146-2026-11-10' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
