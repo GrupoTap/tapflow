@@ -536,8 +536,13 @@ function montar(d, opc) {
     const kc = rcams.find(k => k.camara_id === a.camara_id) || rcams[0] || {};
     if (a.tipo === 'disco_ruptura') {   // S146 · item 79 (T4, D4): vale a pressão do certificado do fabricante
       const pr = a.pressao_ajuste_mpa != null ? Number(a.pressao_ajuste_mpa) : null, pm = kc.pmta_adotada_mpa != null ? Number(kc.pmta_adotada_mpa) : null;
-      const acima = pr != null && pm != null && pr > pm + 1e-9;
-      const x = caso(acima ? 'D2' : 'D1', null, a.tipo, { pressao: bar(pr), pmta: bar(pm) });
+      if (pr == null || pm == null) {   // sem as duas pressões não há comparação: nada de "conforme"
+        par('O dispositivo de segurança do vaso é um disco de ruptura' + (pr != null ? ', com pressão de ruptura de ' + bar(pr) + ', segundo o fabricante' : ', sem a pressão de ruptura informada')
+          + '; a comparação com a PMTA não foi feita.');
+        conc.valv.push('Conforme a seção 7.6, o disco de ruptura não foi comparado com a PMTA;');
+        return;
+      }
+      const x = caso(pr > pm + 1e-9 ? 'D2' : 'D1', null, a.tipo, { pressao: bar(pr), pmta: bar(pm) });
       if (x) { parCaso(x); conc.valv.push(x.conc); }
       else par('O dispositivo de segurança do vaso é um disco de ruptura, com pressão de ruptura de ' + bar(pr) + ', segundo o fabricante.');
       return;
@@ -695,7 +700,8 @@ function montar(d, opc) {
   const motivoCurto = m => String(m || 'motivo não informado').replace(/[.\s]+$/, '').replace(/^./, x => x.toLowerCase());
   const tituloTesteMin = tituloTeste.replace(/^Teste /, 'teste ').replace(/Hidrostático|Pneumático|Hidropneumático/, x => x.toLowerCase());
   lista([nc.length ? K.visual_nc : K.visual_ok,
-    B.realizada ? (B.resultado === 'com_anomalia' ? K.boro_anomalia : K.boro_ok) : txt(K.boro_nao, { motivo: motivoCurto(B.motivo_nao) }),
+    B.realizada ? (B.resultado === 'com_anomalia' ? K.boro_anomalia : K.boro_ok)
+      : caso(B.caso, B.caso_campos) && caso(B.caso, B.caso_campos).conc ? caso(B.caso, B.caso_campos).conc : txt(K.boro_nao, { motivo: motivoCurto(B.motivo_nao) }),   // S146: a frase do caso
     abaixoAlgum ? K.us_abaixo : K.us_ok,
     TE.realizado ? txt(TE.resultado === 'reprovado' ? K.teste_reprovado : K.teste_ok, { tipo: tituloTesteMin, pressao: bar(TE.pressao_mpa) })
       : (M.teste_nao_cond && visOk && !abaixoAlgum ? txt(K.teste_desaconselhado, { tipo: tituloTesteMin }) : txt(K.teste_nao, { tipo: tituloTesteMin, motivo: motivoCurto(TE.motivo_nao) }))]
