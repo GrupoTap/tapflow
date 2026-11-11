@@ -161,7 +161,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E19';   // E19 (S146 · 422): item 79 — os textos prontos do laudo: o quadro "Textos prontos" na revisão (o escritório troca o caso escolhido em campo), o texto pronto do prazo menor (P1) e a aba "Textos do laudo" (propor; o PLH aprova com a digital; versões); laudo-pdf.js S146
+const VERSAO = 'TapDoc E20';   // E20 (S147 · 423): item 86 — o laudo assinado (e qualquer arquivo da inspeção) até 50 MB; mensagem do tamanho em português
+// const VERSAO = 'TapDoc E19';   // E19 (S146 · 422): item 79 — os textos prontos do laudo: o quadro "Textos prontos" na revisão (o escritório troca o caso escolhido em campo), o texto pronto do prazo menor (P1) e a aba "Textos do laudo" (propor; o PLH aprova com a digital; versões); laudo-pdf.js S146
 // const VERSAO = 'TapDoc E18';   // E18 (S145 · 421): rodada E — a assinatura do laudo: o desenho do PLH (aceito com a digital), aprovar e emitir com a digital, o carimbo em todas as páginas, o pacote para o token (Assinador SERPRO) e a conferência do PDF assinado (assinatura-pdf.js), a participação dos técnicos
 // const VERSAO = 'TapDoc E17';   // E17 (S144 · 420 e 211): rodada D2 — itens 63, 69, 70, 71, 72, 75, 77 e 78 da lista (Número TAP, função e "sem placa" na revisão; prazo menor que o da norma; anexos com miniaturas; tampos com E diferente; sugestões de recomendação; cadastro do padrão; laudo-pdf.js S144)
 // const VERSAO = 'TapDoc E16';   // E16 (S143 · 419): rodada D1 — texto e cara do laudo (itens 62 a 69, 73 a 76 e 78 da lista; só o laudo-pdf.js S143)
@@ -235,6 +236,20 @@ function uid(){ try{ if (crypto.randomUUID) return crypto.randomUUID(); }catch(e
 function num(s){ if (s == null) return null; let t = String(s).trim().replace(/\s/g, ''); if (!t) return null;
   if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.'); const v = Number(t); return isFinite(v) ? v : NaN; }
 function fmt(v, c){ if (v == null || v === '' || !isFinite(Number(v))) return ''; return String(Number(Number(v).toFixed(c == null ? 4 : c))).replace('.', ','); }
+// S147 · item 86: o armazenamento das inspeções aceita até 50 MB por arquivo (423; antes, 5 MB). Passou disso, a
+// mensagem diz o tamanho, em português, e não fala em "foto" quando o arquivo é o laudo ou um PDF.
+const ARQ_MAX_MB = 50;
+const mbDe = b => fmt((b && b.size || 0) / 1048576, 1);
+async function enviarArq(caminho, blob, oQue){
+  oQue = oQue || 'O arquivo';
+  if ((blob && blob.size || 0) > ARQ_MAX_MB * 1048576) throw new Error(oQue + ' tem ' + mbDe(blob) + ' MB; o máximo é ' + ARQ_MAX_MB + ' MB.');
+  try{ await N.storage.enviar('inspecoes', caminho, blob); }
+  catch(e){
+    if (e && (e.status === 413 || /maximum allowed size|exceeded|too large/i.test(e.message || '')))
+      throw new Error(oQue + ' tem ' + mbDe(blob) + ' MB e o armazenamento recusou pelo tamanho (o limite do servidor ainda não foi aumentado para ' + ARQ_MAX_MB + ' MB: avise o escritório).');
+    throw e;
+  }
+}
 const dataBR = d => d ? String(d).slice(8,10) + '/' + String(d).slice(5,7) + '/' + String(d).slice(0,4) : '—';
 const UNID = { 'bar':0.1, 'kgf/cm2':0.0980665, 'MPa':1, 'psi':0.00689476 };
 const UNID_ROT = { 'bar':'bar', 'kgf/cm2':'kgf/cm²', 'MPa':'MPa', 'psi':'psi' };
@@ -522,14 +537,14 @@ function editarInstrumento(x){
         if (d.u_expandida == null){ U.toast('O padrão precisa da U do certificado.', 'err'); return false; }
       }
       const arq = $('in_cert').files && $('in_cert').files[0];
-      if (arq && arq.size > 5242880){ U.toast('O certificado passa de 5 MB.', 'err'); return false; }
+      if (arq && arq.size > ARQ_MAX_MB * 1048576){ U.toast('O certificado tem ' + mbDe(arq) + ' MB; o máximo é ' + ARQ_MAX_MB + ' MB.', 'err'); return false; }
       try{
         const id = await rpc('tf_insp_instrumento_gravar', { p_dados:d });
         if (arq){
           const pdf = /pdf/i.test(arq.type) || /\.pdf$/i.test(arq.name);
           const blob = pdf ? new Blob([arq], { type:'application/pdf' }) : await N.foto.reduzir(arq, { lado:2000, qualidade:0.9 });
           const caminho = 'instrumentos/' + (id || x.id) + '/' + uid() + (pdf ? '.pdf' : '.jpg');
-          await N.storage.enviar('inspecoes', caminho, blob);
+          await enviarArq(caminho, blob, pdf ? 'O PDF do certificado' : 'A foto do certificado');
           await rpc('tf_insp_instrumento_gravar', { p_dados:{ id: id || x.id, certificado_path: caminho } });
         }
         U.toast('Gravado.', 'ok'); pintar();
@@ -743,9 +758,9 @@ function ligarArt(os, P){
   $('artArq').addEventListener('change', async () => {
     const f = $('artArq').files && $('artArq').files[0]; if (!f) return;
     if (!/pdf/i.test(f.type) && !/\.pdf$/i.test(f.name)){ U.toast('A ART vai em PDF.', 'err'); return; }
-    if (f.size > 5242880){ U.toast('Arquivo acima de 5 MB.', 'err'); return; }
+    if (f.size > ARQ_MAX_MB * 1048576){ U.toast('A ART tem ' + mbDe(f) + ' MB; o máximo é ' + ARQ_MAX_MB + ' MB.', 'err'); return; }
     const caminho = 'art/' + os + '/' + uid() + '.pdf';
-    try{ U.toast('Enviando…'); await N.storage.enviar('inspecoes', caminho, new Blob([f], { type:'application/pdf' }));
+    try{ U.toast('Enviando…'); await enviarArq(caminho, new Blob([f], { type:'application/pdf' }), 'A ART');
       await rpc('tf_insp_art_gravar', { p_os: os, p_numero: $('artNum').value, p_path: caminho }); U.toast('ART anexada.', 'ok'); pintar(); }
     catch(e){ erro(e); }
   });
@@ -943,14 +958,14 @@ async function mostrarArquivo(a){
 }
 $('arqPdf').addEventListener('change', async () => {
   const f = $('arqPdf').files && $('arqPdf').files[0]; if (!f || !VASO || !VASO.inspecao) return;
-  if (f.size > 5242880){ U.toast('Arquivo acima de 5 MB.', 'err'); return; }
+  if (f.size > ARQ_MAX_MB * 1048576){ U.toast('O arquivo tem ' + mbDe(f) + ' MB; o máximo é ' + ARQ_MAX_MB + ' MB.', 'err'); return; }
   const pdf = /pdf/i.test(f.type) || /\.pdf$/i.test(f.name);
   let blob = f;
   try{ if (!pdf) blob = await N.foto.reduzir(f, { lado:1600, qualidade:0.85 }); }catch(e){ erro(e); return; }
   const fid = uid(), caminho = VASO.inspecao.id + '/' + fid + (pdf ? '.pdf' : '.jpg');
   try{
     U.toast('Enviando…');
-    await N.storage.enviar('inspecoes', caminho, pdf ? new Blob([blob], { type:'application/pdf' }) : blob);
+    await enviarArq(caminho, pdf ? new Blob([blob], { type:'application/pdf' }) : blob, pdf ? 'O PDF' : 'A foto');
     await rpc('tf_insp_foto_registrar', { p_id: fid, p_dados:{ inspecao_id: VASO.inspecao.id, storage_path: caminho, secao: 'laudo_anterior',
       legenda: pdf ? 'PDF do laudo' : 'Página do laudo', bytes: blob.size } });
     U.toast('Anexado.', 'ok'); await carregarOS(PREP.os.id); pintar();
@@ -1838,7 +1853,7 @@ function ligarRevisao(){
         try{
           for (let n = 0; n < fs.length; n++){
             const blob = await N.foto.reduzir(fs[n], { lado:1600, qualidade:0.85 }), fid = uid(), caminho = id + '/' + fid + '.jpg';
-            await N.storage.enviar('inspecoes', caminho, blob);
+            await enviarArq(caminho, blob, 'A imagem da boroscopia');
             await rpc('tf_insp_foto_escritorio', { p_id:fid, p_dados:{ inspecao_id:id, storage_path:caminho, secao:'boroscopia',
               legenda:(document.querySelector('[data-bleg="' + n + '"]').value || '').trim() || null, ordem:base + n + 1, bytes:blob.size } });
           }
@@ -2222,7 +2237,7 @@ async function devolverAssinado(l, b, aviso){
   let pags; try{ pags = (await PDFLib.PDFDocument.load(b, { ignoreEncryption:true, updateMetadata:false })).getPageCount(); }catch(e){ throw new Error('Não consegui ler o PDF assinado.'); }
   aviso('Enviando…');
   const caminho = l.inspecao_id + '/laudo-' + l.numero + (l.revisao ? '-rev' + l.revisao : '') + '-assinado-' + uid().slice(0, 8) + '.pdf';
-  await N.storage.enviar('inspecoes', caminho, new Blob([b], { type:'application/pdf' }));
+  await enviarArq(caminho, new Blob([b], { type:'application/pdf' }), 'O laudo assinado');
   delete c.original_fim;
   await rpc('tf_laudo_assinado', { p_laudo: l.id, p_path: caminho, p_paginas: pags, p_conferencia: c });
   return c;
@@ -2421,7 +2436,7 @@ function ligarLaudo(){
     const g = await gerarLaudo(dd, { numero: L.numero, revisao: L.revisao, emitidoEm: dd.emitido_em, motivoRev: L.motivo_rev, plh: dd.plh, exigirAnexos: true, carimbo }, aviso);
     aviso('Gravando o PDF…');
     const caminho = L.inspecao_id + '/laudo-' + L.numero + (L.revisao ? '-rev' + L.revisao : '') + '-' + uid().slice(0, 8) + '.pdf';
-    await N.storage.enviar('inspecoes', caminho, new Blob([g.bytes], { type:'application/pdf' }));
+    await enviarArq(caminho, new Blob([g.bytes], { type:'application/pdf' }), 'O laudo');
     await rpc('tf_laudo_pdf_gravar', { p_laudo: laudoId, p_path: caminho, p_sha: g.sha, p_paginas: g.paginas });
     aviso('');
     U.toast('Laudo ' + L.numero + (L.revisao ? ' Rev. ' + L.revisao : '') + ' aprovado e gravado (' + g.paginas + ' páginas). Assine com o token (aba Laudos › Para assinar).', 'ok');
