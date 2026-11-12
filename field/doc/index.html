@@ -181,7 +181,8 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 23';   // S152 · issue 7, Parte 2 (429): a seção "Medidas do vaso" em Componentes — circunferência, comprimento do costado entre as soldas, altura de cada tampo e outras medidas (nome + valor), para o desenho do mapa dos pontos
+const VERSAO = 'TapDoc 24';   // S154 · issue 9 (430): a foto da medição de espessura na tela Ultrassom (uma por vaso; a foto ou o motivo, obrigatória para enviar)
+// const VERSAO = 'TapDoc 23';   // S152 · issue 7, Parte 2 (429): a seção "Medidas do vaso" em Componentes — circunferência, comprimento do costado entre as soldas, altura de cada tampo e outras medidas (nome + valor), para o desenho do mapa dos pontos
 // const VERSAO = 'TapDoc 22';   // S150 · item 81 (427): a aferição em 2 etapas (a 1ª reprovada encerra: NÃO CONFORME, sem leituras); manômetro pela ASME B40.100 Grau D; o teste da válvula pelas regras V1–V5 (abertura encontrada, aviso na hora acima da PMTA e abaixo da operação); "Danificado" vira a aferição reprovada na etapa 1; motor R00.6
 // const VERSAO = 'TapDoc 21';   // S149 · itens 82, 83, 84, 88 e 92 (426): placa de TAG e placa de categoria; as 3 fotos da aferição; a boroscopia de volta (obrigatória para enviar); as recomendações prontas; a foto pergunta onde vai no laudo
 // const VERSAO = 'TapDoc 20';   // S148 · itens 85 e 91 (425): os componentes na ordem do medidor (CF, CT, CS/CLD, CI/CLE, tampos); a placa de identificação com três respostas
@@ -359,6 +360,7 @@ function normVaso(sv){
     leituras:(sv.inspecao.leituras || []).map(x => Object.assign({}, x)),
     ultrassom_sem_leitura:Object.assign({}, sv.inspecao.ultrassom_sem_leitura || {}),
     fotos_sem_acesso:Object.assign({}, sv.inspecao.fotos_sem_acesso || {}),   // S140 · item 49 (416)
+    pede_foto_medicao:sv.inspecao.pede_foto_medicao !== false,   // S154 · issue 9 (430): a inspeção enviada antes da 430 não pede
     // S86 · R04a: as aferições
     afericoes:(sv.inspecao.afericoes || []).map(x => Object.assign({}, x, { leituras:JSON.parse(JSON.stringify(x.leituras || {})) })) }) : null;
   v.acessorios_anteriores = sv.acessorios_anteriores || [];
@@ -541,7 +543,9 @@ function lugaresDe(v){
     { lugar:vt ? 'tampo_superior' : 'tampo_direito', secao:'geral', rotulo:vt ? 'Tampo superior' : 'Tampo direito' },
     { lugar:vt ? 'tampo_inferior' : 'tampo_esquerdo', secao:'geral', rotulo:vt ? 'Tampo inferior' : 'Tampo esquerdo' },
     { lugar:'conexoes', secao:'geral', rotulo:'Conexões' },
-    { lugar:'base', secao:'geral', rotulo:'Base de sustentação / aterramento' }];
+    { lugar:'base', secao:'geral', rotulo:'Base de sustentação / aterramento' }]
+    // S154 · issue 9 (430): a foto da medição de espessura (tela Ultrassom); a inspeção enviada antes da 430 não pede
+    .concat(v.inspecao && v.inspecao.pede_foto_medicao === false ? [] : [{ lugar:'medicao_espessura', secao:'componentes', rotulo:'Medição de espessura' }]);
 }
 const semAcessoDe = v => (v.inspecao && v.inspecao.fotos_sem_acesso) || {};
 /** O lugar está resolvido: tem a foto ou o motivo de não ter. A foto da plaqueta sem lugar (antes do TapDoc 14) vale como a placa de fabricação. */
@@ -552,6 +556,8 @@ function lugarOk(v, l){
     || !!String(semAcessoDe(v)[l.lugar] || '').trim();
 }
 const MOTIVOS_LUGAR = ['Sem acesso a esta parte do vaso.', 'O vaso não tem esta placa.', 'Isolamento ou proteção cobre esta parte.'];
+// S154 · issue 9: os motivos de não ter a foto da medição de espessura
+const MOTIVOS_MEDICAO = ['Não foi feita a medição de espessura neste vaso.', 'Isolamento ou proteção cobre os pontos de medição.', 'Não foi possível fotografar durante a medição.'];
 // S149 · item 82: a placa de categoria pode estar na mesma foto da placa de TAG (decisão B do Bruno, 11/11)
 const MESMA_FOTO = 'Mesma foto da placa de TAG (as duas placas aparecem nela).';
 // S149 · item 83: o lugar pode ser de uma foto da aferição (l.item = 'afer:<acessório>:<lugar>'); senão é 'lugar:<chave>'
@@ -561,7 +567,7 @@ function blocoLugar(v, l){
   let h = '<div class="lugar"><div class="lt"><b>' + esc(l.rotulo) + '</b>' + (lugarOk(v, l) ? '<span class="chip ok">ok</span>' : '<span class="chip inc">falta</span>') + '</div>';
   if (mot === MESMA_FOTO) h += '<p class="muted" style="margin:4px 0 0">Na mesma foto da placa de TAG.</p><button class="btn peq" data-lsdesf="' + l.lugar + '">Tirar uma foto só desta placa</button>';
   else if (mot) h += '<p class="muted" style="margin:4px 0 0">Sem foto: ' + esc(mot) + '</p><button class="btn peq" data-lsdesf="' + l.lugar + '">Tirar a foto em vez disso</button>';
-  else h += gradeFotos(v, l.secao, 1, null, item) + (tem ? '' : '<button class="btn peq" data-lsem="' + l.lugar + '">Sem acesso / não há</button>'
+  else h += gradeFotos(v, l.secao, 1, null, item) + (tem ? '' : '<button class="btn peq" data-lsem="' + l.lugar + '">' + (l.lugar === 'medicao_espessura' ? 'Sem foto (dizer o motivo)' : 'Sem acesso / não há') + '</button>'
     + (l.lugar === 'placa_categoria' ? ' <button class="btn peq" data-lmesma="' + l.lugar + '">A foto da placa de TAG mostra as duas</button>' : ''));
   return h + '</div>';
 }
@@ -577,7 +583,7 @@ function ligarLugares(v, lista){
   $('tela').querySelectorAll('[data-lsem]').forEach(b => b.addEventListener('click', () => {
     const l = lista.find(x => x.lugar === b.dataset.lsem); if (!l) return;
     janela('Sem foto · ' + l.rotulo, '<label class="f">Por que não dá para fotografar<select class="t" id="lsSel"><option value="">—</option>' +
-      MOTIVOS_LUGAR.map(m => '<option>' + esc(m) + '</option>').join('') + '<option value="+">Outro…</option></select></label>' +
+      (l.lugar === 'medicao_espessura' ? MOTIVOS_MEDICAO : MOTIVOS_LUGAR).map(m => '<option>' + esc(m) + '</option>').join('') + '<option value="+">Outro…</option></select></label>' +
       '<label class="f">Detalhe<small>Obrigatório em "Outro". Sai no laudo no lugar da foto.</small><textarea class="t" id="lsTx"></textarea></label>',
       [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
         const sel = $('lsSel').value, tx = ($('lsTx').value || '').trim();
@@ -1736,7 +1742,7 @@ const acessDe = v => (v.inspecao && v.inspecao.acessorios) || [];
 
 // ── estados das seções ─────────────────────────────────────────────────────
 function estVisual(v){
-  const it = (v.inspecao && v.inspecao.visual) || [], det = lugaresDe(v).filter(l => l.secao !== 'plaqueta');   // S140 · item 49: as fotos de detalhe
+  const it = (v.inspecao && v.inspecao.visual) || [], det = lugaresDe(v).filter(l => l.secao === 'geral');   // S140 · item 49: as fotos de detalhe (S154: a da medição fica no Ultrassom)
   if ((!it.length || it.every(x => x.conforme == null)) && !det.some(l => lugarOk(v, l))) return 'vazia';
   const ok = it.length && it.every(x => x.conforme === true || (x.conforme === false && (x.anomalia || '').trim() && fotosDe(v, 'visual', x.item).length)) && det.every(l => lugarOk(v, l));
   return ok ? 'ok' : 'inc';
@@ -1856,7 +1862,7 @@ function telaVisual(v){
   if (!i.visual || !i.visual.length){ i.visual = ITENS_VISUAL.map((n, k) => ({ item:n, conforme:null, anomalia:null, ordem:k + 1 })); salvar(); }
   const pode = ed(v);
   // S140 · item 49: as 4 fotos de detalhe, com o lugar certo no laudo (obrigatórias: a foto ou o motivo)
-  const lugV = lugaresDe(v).filter(l => l.secao !== 'plaqueta');
+  const lugV = lugaresDe(v).filter(l => l.secao === 'geral');   // S154: a da medição fica no Ultrassom
   let h = '<div class="card"><b>Fotos de detalhe</b><p class="muted" style="margin:2px 0 0">Vão no laudo logo depois do exame visual, com estes nomes.</p>' + lugV.map(l => blocoLugar(v, l)).join('') + '</div>';
   h += '<p class="muted" style="margin:0 2px 10px">Não conforme pede a descrição e pelo menos uma foto. A conclusão do exame sai sozinha.</p>';
   i.visual.forEach((x, k) => {
@@ -2577,8 +2583,9 @@ const compsMedir = v => compsAtivos(v).filter(c => !c.nao_medir).sort(ordemMedic
 function estUltra(v){
   const i = v.inspecao || {}, cs = compsMedir(v);
   const feitos = cs.filter(c => leiturasDe(v, c.id).length || (semLeitura(v)[c.id] || '').trim()).length;
-  if (!i.medidor_id && !feitos) return 'vazia';
-  return i.medidor_id ? 'ok' : 'inc';   // S107 · 412: as leituras são opcionais aqui (o CSV entra no escritório)
+  const lugM = lugaresDe(v).filter(l => l.secao === 'componentes');   // S154 · issue 9: a foto da medição
+  if (!i.medidor_id && !feitos && !lugM.some(l => lugarOk(v, l))) return 'vazia';
+  return i.medidor_id && lugM.every(l => lugarOk(v, l)) ? 'ok' : 'inc';   // S107 · 412: as leituras são opcionais aqui (o CSV entra no escritório)
 }
 function minimaDe(v, cid){
   const l = leiturasDe(v, cid); if (!l.length) return null;
@@ -2651,6 +2658,9 @@ function telaUltrassom(v){
   const manual = !!v._usManual || cs.some(c => leiturasDe(v, c.id).length);
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn sec peq" id="usCsv">Importar o CSV do medidor</button>' +
        (manual ? '' : '<button class="btn sec peq" id="usManual">Inserir medição manual</button>') + '</div></div>';
+  // S154 · issue 9 (430): a foto da medição de espessura (o medidor encostado no vaso); sai no laudo no 7.3
+  const lugM = lugaresDe(v).filter(l => l.secao === 'componentes');
+  if (lugM.length) h += '<div class="card"><b>Foto da medição de espessura</b><p class="muted" style="margin:2px 0 0">Uma foto do medidor encostado no vaso. Sai no laudo na medição de espessura. Obrigatória para enviar (a foto ou o motivo).</p>' + lugM.map(l => blocoLugar(v, l)).join('') + '</div>';
   if (!cs.length) h += '<div class="card"><p class="muted">Nenhum componente para medir. Confira a lista em Componentes.</p></div>';
   const multi = ativas(v).length > 1;
   // S140 · item 52: o costado num cartão só, uma parte por região; o título do componente (e da região) fica fixo no topo enquanto se digita
@@ -2693,7 +2703,8 @@ function telaUltrassom(v){
   h += '<p class="info">O CSV do medidor é anexado no escritório (T07), antes da revisão. No campo, basta escolher o medidor usado. Use "Inserir medição manual" só se for anotar leituras à mão.</p>';
   $('tela').innerHTML = h;
   if (manual) cs.forEach(c => pintarMin(v, c));
-  if (!pode){ $('tela').querySelectorAll('select, #usPasta, #usCsv, #usManual').forEach(el => { el.disabled = true; }); return; }
+  if (!pode){ $('tela').querySelectorAll('select, #usPasta, #usCsv, #usManual, .lugar button').forEach(el => { el.disabled = true; }); if (lugM.length) carregarMinis(v); return; }
+  ligarLugares(v, lugM);   // S154 · issue 9
   encadear($('tela').querySelectorAll('[data-us]'));   // S140 · item 54: o "Próximo" do teclado vai para a leitura seguinte
   ligar('usManual', () => { v._usManual = true; pintar(); }, 'click');
   ligar('usMed', el => { i.medidor_id = el.value || null; salvar(); gravarUS(v); });
