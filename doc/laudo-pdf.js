@@ -10,11 +10,16 @@
  * lógica de qual texto entra. Desenho: inspecao-nr13/rodadas/R06-laudo-desenho.md.
  * A conta da espessura mínima e da PMTA é a do motor (motor-calculo-nr13.js);
  * aqui ela só é ESCRITA com os números (a memória de cálculo do laudo).
+ *
+ * S153 · issue 6 (11/11/2026): a APARÊNCIA do laudo conforme as escolhas do Bruno (texto 12 preto; cabeçalho e
+ * quadros em letra 10; rodapé com o carimbo legível; capa com o logo e a foto grandes; legendas 10 sem itálico;
+ * quadro de rótulo e valor curto centralizado e longo em dois pares; fórmulas em bloco; PMTA final em caixa).
+ * O texto dos modelos e a conta não mudaram.
  */
 (function (raiz) {
 'use strict';
 const LOGO_ENGETAP = 'data:image/png;base64,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';
-const COR = '#1B6FA9', CINZA = '#515252', CLARO = '#78838A';
+const COR = '#1B6FA9', CINZA = '#515252', CLARO = '#78838A', PRETO = '#000000', FAIXA = '#F1F4F7';
 
 // ── formatação (pt-BR: vírgula decimal, decisão do desenho, pergunta 7) ─────
 function fmt(v, c) {
@@ -335,41 +340,66 @@ function montar(d, opc) {
   const pmtaVaso = rcams.length ? Math.min(...rcams.map(k => Number(k.pmta_adotada_mpa))) : (R.pmta_adotada_mpa != null ? Number(R.pmta_adotada_mpa) : null);
   const numeroTap = V.numero_tap || null;   // S143 · item 63: o campo nasce na D2; sem ele, a linha não sai
   let fig = 0, quadro = 0;
+  const FOTO_SO = [420, 300];   // S153 · item 9: a foto sozinha
   const C = [];   // o conteúdo
   const sec = (n, t) => C.push({ text: n + '  ' + t, style: 'h1', tocItem: true, tocMargin: [0, 0, 0, 0], headlineLevel: 1 });
   const sub = (n, t) => C.push({ text: n + '  ' + t, style: 'h2', tocItem: true, tocMargin: [14, 0, 0, 0], headlineLevel: 2 });
   const par = (t, extra) => { if (t && (typeof t !== 'string' || t.trim())) C.push(Object.assign({ text: Array.isArray(t) ? t : presos(t), style: 'par' }, extra || {})); };
   const lista = (itens, ol) => { const xs = (itens || []).filter(Boolean).map(presos); if (xs.length) C.push(Object.assign({ style: 'lista', margin: [14, 2, 0, 8] }, ol ? { ol: xs } : { ul: xs })); };
   const vazio = x => x == null || x === '' || /^\s*(—|-+|n[ãa]o h[áa]|n\/a)\s*$/i.test(String(x));
-  const tabela = (cab, linhas, larg, titulo) => {
+  // S153: o bloco que não se parte (quadro pequeno, conta) leva junto o título que vem logo antes dele, para o título não ficar sozinho no pé da página
+  const junto = no => { const u = C[C.length - 1];
+    if (u && u.headlineLevel && no.unbreakable) { C.pop(); C.push({ stack: [Object.assign({}, u, { headlineLevel: undefined }), Object.assign({}, no, { unbreakable: false })], unbreakable: true }); } else C.push(no); };
+  // (um bloco só, e o título de dentro sem a regra da quebra: uma quebra de página dentro do bloco que não se parte some com o conteúdo)
+  // S153 · issue 6, itens 10 a 12: com cabeçalho, as colunas depois da primeira saem centralizadas (os números);
+  // `centro` = quadro só da largura do conteúdo, no meio da página
+  const tabela = (cab, linhas, larg, titulo, centro) => {
     // quadro pequeno não se parte entre páginas (título, cabeçalho e linhas juntos); o grande repete o cabeçalho
     const alvo = linhas.length <= 14 ? [] : C;
     if (titulo) alvo.push({ text: 'Quadro ' + (++quadro) + ' – ' + titulo, style: 'legenda', margin: [0, 6, 0, 3] });
-    alvo.push({ table: { headerRows: cab ? 1 : 0, dontBreakRows: true, widths: larg || Array((cab || linhas[0]).length).fill('*'),
-      body: (cab ? [cab.map(x => ({ text: x, style: 'th' }))] : []).concat(linhas.map(l => l.map(x => typeof x === 'object' && x !== null ? x : { text: x == null ? '—' : presos(String(x)), style: 'td' }))) },
-      layout: { hLineColor: '#C9D2D8', vLineColor: '#C9D2D8', fillColor: (i) => cab && i === 0 ? '#E3EEF7' : null, paddingTop: () => 3, paddingBottom: () => 3 }, margin: [0, 0, 0, 10] });
-    if (alvo !== C) C.push({ stack: alvo, unbreakable: true });
+    const tb = { table: { headerRows: cab ? 1 : 0, dontBreakRows: true, widths: larg || Array((cab || linhas[0]).length).fill('*'),
+      body: (cab ? [cab.map(x => ({ text: x, style: 'th' }))] : []).concat(linhas.map(l => l.map((x, k) => {
+        const cel = typeof x === 'object' && x !== null ? x : { text: x == null ? '—' : presos(String(x)), style: 'td' };
+        if (cab && k > 0 && cel.text != null && cel.alignment == null) cel.alignment = 'center';
+        return cel; }))) },
+      layout: { hLineColor: '#C9D2D8', vLineColor: '#C9D2D8', fillColor: (i) => cab && i === 0 ? '#E3EEF7' : null, paddingTop: () => 3, paddingBottom: () => 3 } };
+    alvo.push(centro ? { columns: [{ width: '*', text: '' }, Object.assign({ width: 'auto' }, tb), { width: '*', text: '' }], margin: [0, 0, 0, 10] } : Object.assign(tb, { margin: [0, 0, 0, 10] }));
+    if (alvo !== C) junto({ stack: alvo, unbreakable: true });
   };
   // linhas "rótulo | valor" que somem quando o valor está vazio (S143 · regra geral do "bem bolado")
   const tabelaRV = (linhas, larg, titulo) => {
-    const ls = linhas.filter(([, b]) => !vazio(b)).map(([a, b]) => [{ text: a, style: 'thl' }, String(b)]);
-    if (ls.length) tabela(null, ls, larg, titulo);
+    // S153 · issue 6 (regra geral): quadro curto (até 10 linhas) só da largura do conteúdo e centralizado; o longo, com
+    // dois pares de rótulo e valor por linha, na largura toda
+    const ls = linhas.filter(([, b]) => !vazio(b));
+    if (!ls.length) return;
+    if (ls.length <= 10) { tabela(null, ls.map(([a, b]) => [{ text: a, style: 'thl' }, String(b)]), ['auto', 'auto'], titulo, true); return; }
+    const corpo = [];
+    for (let k = 0; k < ls.length; k += 2) { const a = ls[k], b = ls[k + 1];
+      corpo.push([{ text: a[0], style: 'thl' }, String(a[1]), b ? { text: b[0], style: 'thl' } : { text: '' }, b ? String(b[1]) : { text: '' }]); }
+    tabela(null, corpo, ['auto', '*', 'auto', '*'], titulo);
   };
   // S143 · item 65: as figuras numeradas na ordem em que aparecem; uma figura pode ter várias fotos lado a lado
   const figura = (imgs, legenda, alvo) => {
-    const n = ++fig, fit = imgs.length >= 3 ? [160, 150] : [235, 175];
+    const n = ++fig, fit = imgs.length >= 3 ? [160, 150] : imgs.length === 1 ? FOTO_SO : [235, 175];   // S153 · item 9
     const linhas = [];
     for (let k = 0; k < imgs.length; k += (imgs.length >= 3 ? 3 : 2)) linhas.push(imgs.slice(k, k + (imgs.length >= 3 ? 3 : 2)));
-    const bloco = { stack: linhas.map(l => ({ columns: l.map(im => ({ image: im, fit, alignment: 'center' })), columnGap: 10, margin: [0, 2, 0, 2] }))
+    const bloco = { stack: linhas.map(l => l.length === 1 ? { image: l[0], fit, alignment: 'center', margin: [0, 2, 0, 2] }
+        : { columns: l.map(im => ({ image: im, fit, alignment: 'center' })), columnGap: 10, margin: [0, 2, 0, 2] })
       .concat([{ text: 'Figura ' + n + ' – ' + presos(legenda) + '.', style: 'legenda' }]), margin: [0, 4, 0, 10], unbreakable: true };
     (alvo || C).push(bloco);
     return n;
   };
   // duas figuras pequenas por linha (os detalhes do vaso: tampos, conexões, base)
+  // S153 · item 9: a foto sozinha sai grande e no meio; a que sobra de uma grade ímpar, no meio, no tamanho da grade
   const pares = (cel) => {
+    if (cel.length === 1) {
+      const im = (cel[0].stack || [])[0]; if (im && im.image) im.fit = FOTO_SO;
+      C.push(Object.assign({}, cel[0], { margin: [0, 4, 0, 10], unbreakable: true })); return;
+    }
     for (let k = 0; k < cel.length; k += 2) {
-      const par2 = cel.slice(k, k + 2); if (par2.length === 1) par2.push({ text: '' });
-      C.push({ columns: par2, columnGap: 12, margin: [0, 4, 0, 10], unbreakable: true });
+      const par2 = cel.slice(k, k + 2);
+      C.push(par2.length === 1 ? { columns: [{ width: '*', text: '' }, Object.assign({ width: 244 }, par2[0]), { width: '*', text: '' }], margin: [0, 4, 0, 10], unbreakable: true }
+        : { columns: par2, columnGap: 12, margin: [0, 4, 0, 10], unbreakable: true });
     }
   };
   // S140 · item 49: as fotos de lugar, na ordem dos lugares; sem foto, o motivo no lugar dela (2 por linha: 4 detalhes = grade 2×2)
@@ -397,20 +427,20 @@ function montar(d, opc) {
   const capaFoto = (d.fotos || []).find(f => f.secao === 'capa' && img[f.path]);
   const exames = I.exame_externo && I.exame_interno ? 'ambos' : I.exame_interno ? 'interno' : 'externo';
   const capa = [
-    { image: LOGO_ENGETAP, width: 200, alignment: 'center', margin: [0, 10, 0, 30] },
+    { image: LOGO_ENGETAP, width: 280, alignment: 'center', margin: [0, -36, 0, 20] },   // S153 · item 6: a capa não tem cabeçalho; o logo sobe
     { text: emp.razao_social || '', style: 'capaEmp' },
     { text: emp.cnpj ? 'CNPJ: ' + emp.cnpj : '', style: 'capaCnpj' },
     { text: (M.capa_tipo || {})[I.tipo] || 'INSPEÇÃO', style: 'capaTipo' },
     { text: (M.capa_exames || {})[exames] || '', style: 'capaSub' },
-    capaFoto ? { image: img[capaFoto.path], fit: [380, 260], alignment: 'center', margin: [0, 18, 0, 18] } : { text: '', margin: [0, 120, 0, 0] },
+    capaFoto ? { image: img[capaFoto.path], fit: [470, 320], alignment: 'center', margin: [0, 14, 0, 14] } : { text: '', margin: [0, 120, 0, 0] },
     { text: V.tag || '', style: 'capaTag' },
     // S143 · item 63: o Número TAP no lugar da OS (a OS não aparece no laudo)
     { text: [numeroTap ? 'Número TAP ' + numeroTap : null, opc.numero ? 'Relatório nº ' + numero : null].filter(Boolean).join(' · '), style: 'capaSub' },
-    { text: [cidadeLaudo(emp.cidade), emp.uf].filter(Boolean).join(' – '), style: 'capaRodape', margin: [0, 40, 0, 0] },
+    { text: [cidadeLaudo(emp.cidade), emp.uf].filter(Boolean).join(' – '), style: 'capaRodape', margin: [0, 24, 0, 0] },
     { text: txt(ini === fim ? M.capa_data_um_dia : M.capa_data_periodo, { inicio: dataBR(ini), termino: dataBR(fim) }), style: 'capaRodape', pageBreak: 'after' }
   ];
   C.push(...capa);
-  C.push({ toc: { title: { text: 'SUMÁRIO', style: 'sumario' }, numberStyle: { fontSize: 9 } }, pageBreak: 'after' });
+  C.push({ toc: { title: { text: 'SUMÁRIO', style: 'sumario' }, textStyle: { fontSize: 11 }, numberStyle: { fontSize: 11 } }, pageBreak: 'after' });
 
   // ── 1 a 3 ───────────────────────────────────────────────────────────────
   sec('1', T.objetivo || 'OBJETIVO'); par(M.objetivo);
@@ -564,8 +594,8 @@ function montar(d, opc) {
         .concat([{ text: fmt(Math.min(...vs), 2), style: 'td', bold: true }]));
     });
   });
-  if (linhasUS.length) tabela(['Componente', 'Ponto', 'Leitura 1', 'Leitura 2', 'Leitura 3', 'Leitura 4', 'Mínima'], linhasUS, ['*', 34, 46, 46, 46, 46, 46], 'Medição de espessura (mm)');
-  if (fMapa) { fig++; C.push({ stack: [imgMapa ? { image: imgMapa, fit: [500, 392], alignment: 'center' } : { svg: mapaSvg(V.posicao, siglasMapa), alignment: 'center', width: V.posicao === 'vertical' ? 190 : 300 },
+  if (linhasUS.length) tabela(['Componente', 'Ponto', 'Leitura 1', 'Leitura 2', 'Leitura 3', 'Leitura 4', 'Mínima'], linhasUS, ['*', 38, 54, 54, 54, 54, 52], 'Medição de espessura (mm)');
+  if (fMapa) { fig++; C.push({ stack: [imgMapa ? { image: imgMapa, fit: [500, 392], alignment: 'center' } : { svg: mapaSvg(V.posicao, siglasMapa), alignment: 'center', width: V.posicao === 'vertical' ? 240 : 380 },
     { text: 'Figura ' + fMapa + ' – ' + presos(T.fig_mapa || 'Representação dos pontos no mapa de medição') + '.', style: 'legenda' }], margin: [0, 4, 0, 10], unbreakable: true }); }
   const semL = I.ultrassom_sem_leitura || {};
   comps.filter(c => (semL[c.id] || '').trim()).forEach(c => par(txt(M.ultrassom_nao_medido, { componente: nomeComp(c), motivo: semL[c.id] })));
@@ -574,7 +604,7 @@ function montar(d, opc) {
   if (ES.length) {
     tabela(['Componente', 'Mínima medida', 'Mínima requerida', 'Anterior', 'Taxa de perda'],
       ES.map(x => [x.nome, fmt(x.atual, 2) + ' mm', fmt(x.req, 2) + ' mm', x.ant != null ? fmt(x.ant, 2) + ' mm (' + dataBR(x.dataAnt) + ')' : '—',
-        x.taxa != null ? fmt(x.taxa, 3) + ' mm/ano' : x.semPerda ? 'sem perda mensurável' : '—']), ['*', 70, 75, 105, 85], 'Espessuras: medida, requerida e anterior');
+        x.taxa != null ? fmt(x.taxa, 3) + ' mm/ano' : x.semPerda ? 'sem perda mensurável' : '—']), ['*', 62, 66, 108, 88], 'Espessuras: medida, requerida e anterior');
     // S143 · item 78 (7.3): a frase final sai da perda (nunca fixa): perda que esgota a espessura antes do prazo do exame interno é "perda significativa"
     const comAnt = ES.filter(x => x.ant != null), fonte = comAnt.length ? comAnt[0].fonte + (comAnt[0].dataAnt ? ' de ' + dataBR(comAnt[0].dataAnt) : '') : null;
     const prazoRef = Number(R.prazo_interno_anos || R.prazo_externo_anos) || null;
@@ -733,17 +763,24 @@ function montar(d, opc) {
   const ORD_FAM = { costado: 0, cone: 1, tampos: 2, janela: 3 };
   gruposCalc.sort((a, b) => ORD_FAM[a.fam] - ORD_FAM[b.fam]);
   const TIT_FAM = { costado: 'Costado', tampos: 'Tampos', cone: 'Cone', janela: 'Janelas de visita' };
+  // S153 · issue 6, item 13: o bloco da conta — o nome em negrito com a referência da norma em cinza à direita; a fórmula e a
+  // conta numa faixa cinza-clara (os "e =" e os "PMTA =" alinhados à esquerda); o resultado em negrito logo abaixo
+  const blocoConta = (nome, ref, contas, resultado) => ({ unbreakable: true, margin: [0, 2, 0, 14], stack: [
+    nome ? { columns: [{ width: '*', text: presos(nome), style: 'h3' }, { width: 'auto', text: ref || '', style: 'refNorma' }], columnGap: 10 } : null,
+    { table: { widths: ['*'], body: [[{ stack: contas.map(t => ({ text: t, style: 'formula' })), fillColor: FAIXA }]] },
+      layout: { hLineWidth: () => 0, vLineWidth: i => i === 0 ? 2.5 : 0, vLineColor: () => COR, paddingLeft: () => 10, paddingRight: () => 8, paddingTop: () => 5, paddingBottom: () => 5 },
+      margin: [0, 2, 0, 4] },
+    resultado || null].filter(Boolean) });
   const siglasDe = rcs => eLista(rcs.map(rc => siglaComp(compDe(rc.componente_id)) || rc.nome));
   gruposCalc.forEach((g, k) => {
     const unica = g.contas.length === 1;
     sub('8.' + (k + 1), camNome(g.cam) + TIT_FAM[g.fam] + (unica ? ' (' + siglasDe(g.contas[0].rcs) + ') – ' + g.contas[0].m.ref : ''));
     g.contas.forEach(ct => {
       const m = ct.m, emin = Math.max(...ct.rcs.map(rc => Number(rc.e_min_mm)));
-      const st = [];
-      if (!unica) st.push({ text: presos(ct.rcs.map(rc => nomeComp(compDe(rc.componente_id)) || rc.nome).join(' e ') + ' – ' + m.ref), style: 'h3' });
-      st.push({ text: m.fe, style: 'formula' }, { text: m.se + ' = ' + fmt(m.e, 3) + ' mm', style: 'formula' },
-        { text: 'Espessura mínima requerida: ' + fmt(emin, 3) + ' mm' + (m.e < 1.5 ? ' (mínimo de 1,5 mm)' : '') + (cor ? ', com ' + fmt(cor, 2) + ' mm de corrosão' : '') + '.', style: 'par' });
-      C.push({ stack: st, unbreakable: true });
+      // conta única: o nome e a norma já estão no título da subseção
+      junto(blocoConta(unica ? null : ct.rcs.map(rc => nomeComp(compDe(rc.componente_id)) || rc.nome).join(' e '), unica ? null : m.ref,
+        [m.fe, m.se + ' = ' + fmt(m.e, 3) + ' mm'],
+        { text: 'Espessura mínima requerida: ' + fmt(emin, 3) + ' mm' + (m.e < 1.5 ? ' (mínimo de 1,5 mm)' : '') + (cor ? ', com ' + fmt(cor, 2) + ' mm de corrosão' : '') + '.', style: 'resConta' }));
     });
   });
 
@@ -778,14 +815,13 @@ function montar(d, opc) {
   rcCalc.forEach(rc => {
     const m = MEM[rc.componente_id]; if (!m || !m.sp) return;
     const gov = rcams.some(x => x.governante_id === rc.componente_id);
-    C.push({ stack: [{ text: presos(camNome(rc.camara_id) + rc.nome + (gov ? ' — governante' : '')), style: 'h3' }, { text: m.fp, style: 'formula' },
-      { text: m.sp + ' = ' + fmt(m.p, 3) + ' MPa (' + bar(m.p) + ')', style: 'formula' }], unbreakable: true, margin: [0, 0, 0, 6] });
+    junto(blocoConta(camNome(rc.camara_id) + rc.nome + (gov ? ' — governante' : ''), m.ref, [m.fp, m.sp + ' = ' + fmt(m.p, 3) + ' MPa (' + bar(m.p) + ')']));
   });
   tabela(['Componente', 't medida', 't útil', 'E', 'PMTA'], rcCalc.map(rc => {
     const m = MEM[rc.componente_id] || {}, gov = rcams.some(x => x.governante_id === rc.componente_id);
     return [{ text: presos(camNome(rc.camara_id) + rc.nome + (gov ? ' (governante)' : '')), style: 'td', bold: gov }, fmt(rc.t_min_mm, 2) + ' mm', m.tU != null ? fmt(m.tU, 2) + ' mm' : '—',
       m.g ? fmt(m.g.E, 2) : '—', rc.pmta_mpa != null ? fmt(rc.pmta_mpa, 3) + ' MPa (' + bar(rc.pmta_mpa) + ')' : '—'];
-  }), ['*', 55, 55, 35, 110], 'PMTA por componente');
+  }), ['*', 58, 58, 38, 122], 'PMTA por componente');
   // 9.4 · a PMTA adotada, com o texto montado pela regra (S143 · item 78: some o "Justificativa: …" cru)
   sub('9.4', T.pmta_adotada || 'PMTA adotada');
   const ant = d.laudo_anterior || null;
@@ -808,7 +844,11 @@ function montar(d, opc) {
     par(nm + txt(t, vars));
     if (k.pmta_externa_mpa != null) par(nm + txt(M.pmta_externa, { pmta: bar(k.pmta_externa_mpa), justificativa: k.justificativa_externa || '' }));
   });
-  C.push({ text: presos(txt(M.pmta_final, { pmta: bar(pmtaVaso) })), style: 'destaque' });
+  // S153 · issue 6, item 14: a PMTA final dentro de uma caixa, no meio da página
+  C.push({ unbreakable: true, margin: [0, 8, 0, 12], columns: [{ width: '*', text: '' },
+    { width: 'auto', table: { body: [[{ text: presos(txt(M.pmta_final, { pmta: bar(pmtaVaso) })), style: 'caixaPmta', noWrap: true }]] },
+      layout: { hLineWidth: () => 1.2, vLineWidth: () => 1.2, hLineColor: () => COR, vLineColor: () => COR, paddingLeft: () => 16, paddingRight: () => 16, paddingTop: () => 8, paddingBottom: () => 8 } },
+    { width: '*', text: '' }] });
 
   // ── 10 · categoria ──────────────────────────────────────────────────────
   sec('10', T.categoria || 'CATEGORIA DO VASO');
@@ -897,51 +937,61 @@ function montar(d, opc) {
   const cabDir = [numeroTap ? [{ text: 'Número TAP', style: 'cabMin' }, { text: numeroTap, style: 'cabMin' }] : null,
     [{ text: 'TAG', style: 'cabMin' }, { text: V.tag || '—', style: 'cabMin' }]].filter(Boolean);
   return {
-    pageSize: 'A4', pageMargins: [50, 92, 45, CAR ? 74 : 62],
+    // S153 · issue 6: o cabeçalho em letra 10 e o rodapé cerca de 1 cm mais alto (o carimbo legível); a mesma margem com e sem o carimbo,
+    // para o rascunho quebrar as páginas como o laudo emitido
+    pageSize: 'A4', pageMargins: [50, 98, 45, 100],
     info: { title: 'Relatório de inspeção ' + numero + ' · ' + (V.tag || ''), author: empresaM.nome || 'Engetap', creator: 'TapFlow · TapDoc', producer: 'TapFlow · TapDoc (pdfmake)',
       subject: 'NR-13 · ' + (V.tag || '') + ' · modelo ' + ((d.modelo || {}).versao || '—') },
     watermark: opc.marca ? { text: opc.marca, color: '#B42318', opacity: 0.12, bold: true, fontSize: opc.marca.length > 12 ? 38 : 70 } : undefined,
     header: (pag, total) => pag === 1 ? null : {
-      margin: [50, 22, 45, 0],
-      table: { widths: [95, '*', 150], body: [[
-        logoCli ? { image: logoCli, fit: [85, 36], alignment: 'center', margin: [0, 3, 0, 0] } : { text: emp.nome_fantasia || emp.razao_social || '', style: 'cabTxt', margin: [0, 10, 0, 0] },
-        { stack: [{ text: 'Relatório nº ' + numero, style: 'cabNum' }, { text: 'ART: ' + ((d.art || {}).numero || '—'), style: 'cabTxt' }], alignment: 'center', margin: [0, 6, 0, 0] },
-        { table: { widths: [52, '*'], body: cabDir.concat([[{ text: dataTopo, style: 'cabMin' }, { text: 'Página ' + pag + ' de ' + total, style: 'cabMin' }]]) },
-          layout: { hLineColor: '#C9D2D8', vLineColor: '#C9D2D8' } }]] },
+      margin: [50, 20, 45, 0],
+      table: { widths: [112, '*', 190], body: [[
+        logoCli ? { image: logoCli, fit: [104, 46], alignment: 'center', margin: [0, 3, 0, 0] } : { text: emp.nome_fantasia || emp.razao_social || '', style: 'cabTxt', margin: [0, cabDir.length > 1 ? 12 : 6, 0, 0] },
+        { stack: [{ text: 'Relatório nº ' + numero, style: 'cabNum' }, { text: 'ART: ' + ((d.art || {}).numero || '—'), style: 'cabTxt' }], alignment: 'center', margin: [0, cabDir.length > 1 ? 12 : 5, 0, 0] },
+        { table: { widths: [64, '*'], body: cabDir.concat([[{ text: dataTopo, style: 'cabMin' }, { text: 'Página ' + pag + ' de ' + total, style: 'cabMin' }]]) },
+          layout: { hLineColor: '#C9D2D8', vLineColor: '#C9D2D8', paddingTop: () => 1, paddingBottom: () => 1 } }]] },
       layout: { hLineColor: '#C9D2D8', vLineColor: '#C9D2D8' }
     },
-    footer: () => ({ margin: [50, 14, 45, 0], columns: [
-      { image: LOGO_ENGETAP, width: 70 },
-      { stack: [{ text: empresaM.nome || '', style: 'rodBold' }, { text: empresaM.contato || '', style: 'rod' }, { text: empresaM.site || '', style: 'rod' }], alignment: 'center' },
-      CAR ? { width: 150, alignment: 'right', stack: [{ image: CAR.imagem, fit: [110, 24], alignment: 'right' }, { text: CAR.texto, style: 'rodCar', alignment: 'right' }] }
-          : { text: plh ? plh.nome + '\n' + (plh.registro || '') : '', style: 'rod', alignment: 'right', width: 110 }] }),
+    // S153 · issue 6, item 5: o carimbo com cerca de 4 cm, a linha da aprovação em letra 8 na largura toda, o logo maior; a capa (item 6) sem o logo
+    footer: (pag) => ({ margin: [50, 8, 45, 0], stack: [{ columns: [
+      pag === 1 ? { width: 105, text: '' } : { image: LOGO_ENGETAP, width: 105 },
+      { stack: [{ text: empresaM.nome || '', style: 'rodBold' }, { text: empresaM.contato || '', style: 'rod' }, { text: empresaM.site || '', style: 'rod' }], alignment: 'center', margin: [0, 4, 0, 0] },
+      CAR ? { width: 120, image: CAR.imagem, fit: [114, 46], alignment: 'right' }
+          : { text: plh ? plh.nome + '\n' + (plh.registro || '') : '', style: 'rodCar', alignment: 'right', width: 150, margin: [0, 8, 0, 0] }] }]
+      .concat(CAR ? [{ text: CAR.texto, style: 'rodCar', alignment: 'right', margin: [0, 3, 0, 0] }] : []) }),
     content: C,
-    // título não fica sozinho no pé da página
-    pageBreakBefore: (no, seguintes) => !!no.headlineLevel && seguintes.length === 0,
+    // título não fica sozinho no pé da página. S153: o pdfmake conta como "seguintes" também os nós do cabeçalho e do rodapé
+    // da página; aqui só vale o que vem ABAIXO do título, dentro da área do texto, e que não seja outro título
+    pageBreakBefore: (no, seguintes) => !!no.headlineLevel && !!no.startPosition
+      && !seguintes.some(n => !n.headlineLevel && n.startPosition && n.startPosition.top > no.startPosition.top && n.startPosition.top < 841.89 - 100),
     styles: {
-      h1: { fontSize: 11.5, bold: true, color: COR, margin: [0, 14, 0, 6] },
-      h2: { fontSize: 10.5, bold: true, color: CINZA, margin: [0, 10, 0, 4] },
-      h3: { fontSize: 10, bold: true, color: CINZA, margin: [0, 6, 0, 2] },
-      par: { fontSize: 10, lineHeight: 1.25, alignment: 'justify', margin: [0, 0, 0, 6] },
-      lista: { fontSize: 10, lineHeight: 1.2 },
-      th: { fontSize: 8.5, bold: true, color: '#164C77', alignment: 'center' },
-      thl: { fontSize: 8.5, bold: true, color: '#164C77' },
-      td: { fontSize: 8.5 },
-      legenda: { fontSize: 8.5, italics: true, alignment: 'center', color: CINZA, margin: [0, 3, 0, 0] },
-      formula: { fontSize: 9.5, margin: [14, 1, 0, 1] },
+      // S153 · issue 6: texto corrido 12, preto, sem recuo (item 2); quadros em letra 10 (itens 10 a 12); legendas 10, pretas, sem itálico (itens 8 e 9)
+      h1: { fontSize: 13, bold: true, color: COR, margin: [0, 16, 0, 7] },
+      h2: { fontSize: 12, bold: true, color: CINZA, margin: [0, 11, 0, 5] },
+      h3: { fontSize: 11, bold: true, color: CINZA, margin: [0, 6, 0, 2] },
+      par: { fontSize: 12, lineHeight: 1.25, alignment: 'justify', color: PRETO, margin: [0, 0, 0, 7] },
+      lista: { fontSize: 12, lineHeight: 1.2, color: PRETO },
+      th: { fontSize: 10, bold: true, color: '#164C77', alignment: 'center' },
+      thl: { fontSize: 10, bold: true, color: '#164C77' },
+      td: { fontSize: 10 },
+      legenda: { fontSize: 10, alignment: 'center', color: PRETO, margin: [0, 3, 0, 0] },
+      formula: { fontSize: 11, margin: [0, 1, 0, 1] },
+      refNorma: { fontSize: 10, color: CLARO, margin: [0, 8, 0, 0] },
+      resConta: { fontSize: 12, bold: true, color: PRETO },
+      caixaPmta: { fontSize: 12, bold: true, color: PRETO, alignment: 'center' },
       nota: { fontSize: 8, italics: true, color: CLARO },
-      destaque: { fontSize: 10.5, bold: true, margin: [0, 6, 0, 10] },
+      destaque: { fontSize: 12, bold: true, margin: [0, 6, 0, 10] },
       sumario: { fontSize: 14, bold: true, color: COR, alignment: 'center', margin: [0, 0, 0, 14] },
       capaEmp: { fontSize: 15, bold: true, alignment: 'center' }, capaCnpj: { fontSize: 11, alignment: 'center', margin: [0, 2, 0, 18] },
-      capaTipo: { fontSize: 17, bold: true, alignment: 'center', color: COR }, capaSub: { fontSize: 11, alignment: 'center', color: CINZA, margin: [0, 2, 0, 0] },
-      capaTag: { fontSize: 22, bold: true, alignment: 'center' }, capaRodape: { fontSize: 10, alignment: 'right', color: CINZA },
-      cabNum: { fontSize: 9.5, bold: true }, cabTxt: { fontSize: 8, color: CINZA }, cabMin: { fontSize: 7.5 },
-      rod: { fontSize: 7, color: CINZA }, rodCar: { fontSize: 5.5, color: CINZA }, rodBold: { fontSize: 7.5, bold: true, color: CINZA }
+      capaTipo: { fontSize: 17, bold: true, alignment: 'center' }, capaSub: { fontSize: 11, alignment: 'center', margin: [0, 2, 0, 0] },   // S153 · item 6: a capa em preto
+      capaTag: { fontSize: 22, bold: true, alignment: 'center' }, capaRodape: { fontSize: 11, alignment: 'right' },
+      cabNum: { fontSize: 10, bold: true }, cabTxt: { fontSize: 10, color: CINZA }, cabMin: { fontSize: 10 },   // S153 · item 4
+      rod: { fontSize: 8, color: CINZA }, rodCar: { fontSize: 8, color: CINZA }, rodBold: { fontSize: 8.5, bold: true, color: CINZA }   // S153 · item 5
     },
-    defaultStyle: { font: 'Roboto', fontSize: 10, color: '#14181B' }
+    defaultStyle: { font: 'Roboto', fontSize: 10, color: PRETO }
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, versao: 'R06a-S151-2026-11-11' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, versao: 'R06a-S153-2026-11-11' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
