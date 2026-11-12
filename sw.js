@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S153';   // S153: issue 6 — TapDoc E26 (a aparência do laudo: laudo-pdf.js S153)
+const VERSAO = 'H16-S154';   // S154: issue 9 — TapDoc E27 (laudo-pdf.js S154: a foto da medição de espessura no 7.3) e celular 24 (a foto no Ultrassom) (430)
+// const VERSAO = 'H16-S153';   // S153: issue 6 — TapDoc E26 (a aparência do laudo: laudo-pdf.js S153)
 // const VERSAO = 'H16-S152';   // S152: issue 7, Parte 2 — TapDoc E25 (modelo de vaso, outras medidas, o desenho na ficha do vaso; mapa-3d.js M2) e celular 23 (a seção "Medidas do vaso") (429)
 // const VERSAO = 'H16-S151';   // S151: issue 7 — TapDoc E24 (o mapa dos pontos de medição em 3D na revisão: doc/mapa-3d.js e doc/vendor/three.min.js; laudo-pdf.js S151) (428)
 // const VERSAO = 'H16-S150';   // S150: item 81 — TapDoc E23 (os documentos de aferição no pacote do laudo; laudo-pdf.js S150), celular 22 e o motor R00.6 (427)

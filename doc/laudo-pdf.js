@@ -11,6 +11,8 @@
  * A conta da espessura mínima e da PMTA é a do motor (motor-calculo-nr13.js);
  * aqui ela só é ESCRITA com os números (a memória de cálculo do laudo).
  *
+ * S154 · issue 9 (12/11/2026): a foto da medição de espessura tem lugar próprio (430, "lugar:medicao_espessura", seção
+ *   componentes): sai no 7.3, grande e no meio; sem ela, o motivo. Os detalhes do 7.1 são só os lugares da seção "geral".
  * S153 · issue 6 (11/11/2026): a APARÊNCIA do laudo conforme as escolhas do Bruno (texto 12 preto; cabeçalho e
  * quadros em letra 10; rodapé com o carimbo legível; capa com o logo e a foto grandes; legendas 10 sem itálico;
  * quadro de rótulo e valor curto centralizado e longo em dois pares; fórmulas em bloco; PMTA final em caixa).
@@ -562,7 +564,7 @@ function montar(d, opc) {
     : x.conforme === true ? ((M.visual_ok || {})[x.item] || txt(M.visual_ok_outro, { item: x.item })) : x.item + ': não avaliado;'));
   par(comResultado(M.visual_conclusao, {}, nc.length ? 'nc' : 'ok'));
   if (ncFora.length && M.visual_fora_integridade) par(txt(M.visual_fora_integridade, { itens: eLista(ncFora.map(x => String(x.item).toLowerCase())) }));
-  fotosLugares(LUG.filter(l => l.secao !== 'plaqueta'));   // os detalhes do vaso (tampos, conexões, base), logo depois da lista
+  fotosLugares(LUG.filter(l => l.secao === 'geral'));   // os detalhes do vaso (tampos, conexões, base), logo depois da lista (S154: a da medição vai no 7.3)
   fotos('visual');
   fotos('geral', null, f => !deLugar(f));
   // 7.2 boroscopia
@@ -616,7 +618,9 @@ function montar(d, opc) {
     const abaixo = ES.filter(x => x.abaixo).map(x => x.nome);
     if (abaixo.length) par(txt(M.ultrassom_abaixo, { componentes: eLista(abaixo) }), { bold: true });
   }
-  fotos('componentes', T.fig_medicao || 'Medição de espessura');
+  // S154 · issue 9 (430): a foto da medição de espessura (lugar próprio; sem ela, o motivo); as outras fotos da seção, como antes
+  fotosLugares(LUG.filter(l => l.secao === 'componentes'));
+  fotos('componentes', T.fig_medicao || 'Medição de espessura', f => !deLugar(f));
   // 7.4 teste
   sub('7.4', tituloTeste);
   const visOk = !nc.length && vis.some(x => x.conforme === true);
@@ -992,6 +996,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, versao: 'R06a-S153-2026-11-11' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, versao: 'R06a-S154-2026-11-12' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
