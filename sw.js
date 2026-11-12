@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S155';   // S155: issue 8 — TapDoc E28 (a arte da placa de identificação para a gráfica: doc/placa-pdf.js P1, doc/vendor/placa-letras.js e doc/vendor/qrcode.js) (431)
+const VERSAO = 'H16-S156';   // S156: issue 1 (passo 2) — o Manager vira o TapFlow puro (manager/ S156: sem o código parado de Cadastros, das Configurações que saíram e de Fornecedores; o nome nas telas é "TapFlow"); TapDoc E29, Pessoas e acessos A10 e TapRH RH14 (só as frases que diziam "Manager")
+// const VERSAO = 'H16-S155';   // S155: issue 8 — TapDoc E28 (a arte da placa de identificação para a gráfica: doc/placa-pdf.js P1, doc/vendor/placa-letras.js e doc/vendor/qrcode.js) (431)
 // const VERSAO = 'H16-S154';   // S154: issue 9 — TapDoc E27 (laudo-pdf.js S154: a foto da medição de espessura no 7.3) e celular 24 (a foto no Ultrassom) (430)
 // const VERSAO = 'H16-S153';   // S153: issue 6 — TapDoc E26 (a aparência do laudo: laudo-pdf.js S153)
 // const VERSAO = 'H16-S152';   // S152: issue 7, Parte 2 — TapDoc E25 (modelo de vaso, outras medidas, o desenho na ficha do vaso; mapa-3d.js M2) e celular 23 (a seção "Medidas do vaso") (429)
