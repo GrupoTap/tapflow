@@ -856,19 +856,19 @@ async function quadroPlacas(os){
         + (l.avisos.length ? '<div class="muted" style="color:var(--warn)">' + l.avisos.map(esc).join('<br>') + '</div>' : '') + '</td>'
       + '<td class="h-ins"><div class="linha" style="flex-wrap:nowrap"><input class="t" data-pllink="' + esc(v.equipamento_id) + '" style="margin:0;min-width:180px" placeholder="https://…" value="' + esc(v.tapweb_link || '') + '">'
         + '<button class="btn mini sec" data-plgrava="' + esc(v.equipamento_id) + '">Gravar</button></div></td>'
-      + '<td class="acoes" style="text-align:right;white-space:nowrap">' + (l.pronta ? '<button class="btn mini" data-plbaixa="' + esc(v.equipamento_id) + '">Baixar a placa</button>' : '') + '</td></tr>';
+      + '<td class="acoes" style="text-align:right;white-space:nowrap">' + (l.pronta ? '<button class="btn mini" data-plbaixa="' + esc(v.inspecao_id) + '">Baixar a placa</button>' : '') + '</td></tr>';
   }).join('') + '</table>';
   cx.innerHTML = h;
   const gerar = (l) => { const r = PlacaPDF.gerar(l.v, ctx); return { nome: r.nome, bytes: r.bytes }; };
   cx.querySelectorAll('[data-plgrava]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
-    const link = (cx.querySelector('[data-pllink="' + b.dataset.plgrava + '"]').value || '').trim();
+    const link = (b.closest('tr').querySelector('[data-pllink]').value || '').trim();   // o campo da própria linha (o mesmo vaso pode ter duas inspeções na OS)
     if (link && !/^https:\/\/\S+$/i.test(link)){ U.toast('O link precisa começar com https:// e não pode ter espaço.', 'err'); return; }
     try{ await rpc('tf_placa_link_gravar', { p_equip: b.dataset.plgrava, p_link: link });
       U.toast(link ? (/tapweb/i.test(link) ? 'Link gravado.' : 'Link gravado. Confira: ele não parece ser do TapWeb.') : 'Link apagado.', 'ok'); await quadroPlacas(os); }
     catch(e){ erro(e); }
   })));
   cx.querySelectorAll('[data-plbaixa]').forEach(b => b.addEventListener('click', () => {
-    try{ const a = gerar(linhas.find(l => l.v.equipamento_id === b.dataset.plbaixa)); baixarBytes(a.nome, new Blob([a.bytes], { type:'application/pdf' })); }
+    try{ const a = gerar(linhas.find(l => l.v.inspecao_id === b.dataset.plbaixa)); baixarBytes(a.nome, new Blob([a.bytes], { type:'application/pdf' })); }
     catch(e){ erro(e); }
   }));
   $('plTodas').addEventListener('click', () => {
