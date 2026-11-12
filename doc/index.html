@@ -164,7 +164,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E24';   // E24 (S151 · 428): issue 7 — o mapa dos pontos de medição em 3D na revisão (mapa-3d.js + vendor/three.min.js), medida × calculada da altura dos tampos, cor, desenho próprio; a imagem guardada no laudo (laudo-pdf.js S151)
+const VERSAO = 'TapDoc E25';   // E25 (S152 · 429): issue 7, Parte 2 — o modelo de vaso (as medidas padrão dos silos iguais) e as outras medidas do campo no quadro do mapa; o quadro "Desenho do mapa" na ficha do vaso (cor, modelo, comprimento do costado); mapa-3d.js M2
+// const VERSAO = 'TapDoc E24';   // E24 (S151 · 428): issue 7 — o mapa dos pontos de medição em 3D na revisão (mapa-3d.js + vendor/three.min.js), medida × calculada da altura dos tampos, cor, desenho próprio; a imagem guardada no laudo (laudo-pdf.js S151)
 // const VERSAO = 'TapDoc E23';   // E23 (S150 · 427): item 81 — os documentos de aferição (manômetro: conforme, não conforme pelas leituras, não conforme na etapa 1; válvula: certificado com a PMTA mínima) no pacote do laudo, assinados pelo PLH; motor R00.6 (Grau D, V1–V5)
 // const VERSAO = 'TapDoc E22';   // E22 (S149 · 426): itens 82 (placa de TAG e placa de categoria), 84 (o resultado da boroscopia vem do campo), 88 (as recomendações prontas R3 em diante) e 92 (a revisão mostra o destino da foto)
 // const VERSAO = 'TapDoc E21';   // E21 (S148 · 425): itens 80 (foto e arquivo com o login renovado), 85 (um ponto do CSV por componente, na ordem do medidor), 89 (a revisão não volta ao topo), 90 (o certificado do padrão nos anexos), 91 (placa com três respostas) e 93 (boroscopia: imagem × resultado)
@@ -874,7 +875,9 @@ async function telaVaso(os, vid){
     + '<button class="btn mini" id="maisValv" style="margin-top:6px">+ válvula</button></details>'
     + '<div class="linha" style="margin-top:14px"><button class="btn pri" id="gravar">Gravar e conferir</button><span class="muted">* mínimo para concluir</span></div></div>';
   h += '<div class="card" id="cxConf"><h3>2 · Conferência</h3><p class="muted">Grave o que o laudo declara para ver a conferência.</p></div></div></div>';
+  h += '<div id="vsMapa"></div>';   // S152 · issue 7 (decisão 10): a cor, o modelo e o comprimento do costado, no cadastro do vaso
   $('tela').innerHTML = h;
+  cartaoMapaVaso(vid).catch(e => console.warn('mapa do vaso', e));
   ligarMaterialCampo(VASO.inspecao || {});
   cartaoAfericoes(VASO.inspecao);
 
@@ -1705,7 +1708,7 @@ function revPrazoHtml(prev, pode){
 // a biblioteca de 3D (vendor/three.min.js) só é carregada quando há o que desenhar.
 // ════════════════════════════════════════════════════════════════════════════
 async function libMapa(com3d){
-  if (!window.Mapa3D) await carregarScript('mapa-3d.js?v=M1');
+  if (!window.Mapa3D) await carregarScript('mapa-3d.js?v=M2');
   if (com3d && !window.THREE) await carregarScript('vendor/three.min.js?v=r128');
 }
 const MAPA_TAMPOS = ['eliptico', 'torisferico', 'hemisferico', 'conico', 'plano'];
@@ -1714,26 +1717,26 @@ function mapaRegioes(posicao, comps, leituras){
   const com = (comps || []).filter(c => c.ativo !== false && (leituras || []).some(l => l.componente_id === c.id));
   if (!com.length) return null;
   const vt = posicao === 'vertical', out = new Set();
+  // S152: o tampo sem posição fica no MESMO lado que o desenho lhe dá (Mapa3D.doisTampos), para não marcar ponto no tampo sem leitura
+  const dt = Mapa3D.doisTampos((comps || []).filter(c => c.ativo !== false));
   com.forEach(c => {
     if (c.tipo === 'costado'){ const sg = siglaReg(c); if (sg) out.add(sg); else (vt ? ['CF', 'CT', 'CLE', 'CLD'] : ['CF', 'CT', 'CS', 'CI']).forEach(s => out.add(s)); }
     else if (c.tipo === 'janela') out.add('JV');
     else if (MAPA_TAMPOS.indexOf(c.tipo) >= 0){
-      const pos = c.posicao || ((String(c.nome || '').match(/\b(direito|esquerdo|superior|inferior)\b/i) || [])[1] || '').toLowerCase();
-      const a = pos === 'esquerdo' || pos === 'inferior', b = pos === 'direito' || pos === 'superior';
-      if (a || !b) out.add(vt ? 'TI' : 'TE');
-      if (b || !a) out.add(vt ? 'TS' : 'TD');
+      if (c === dt.cA) out.add(vt ? 'TI' : 'TE');
+      else if (c === dt.cB) out.add(vt ? 'TS' : 'TD');
     }
   });
   return [...out];
 }
 /** O que o mapa-3d.js recebe: o cadastro do vaso + (na revisão) o que está digitado no quadro. */
-function mapaDados(vaso, comps, nCam, leituras, f){
+function mapaDados(vaso, comps, nCam, leituras, f, modelo){
   f = f || {};
-  return { posicao: vaso.posicao, circunferencia_mm: vaso.circunferencia_mm,
+  return Mapa3D.comModelo({ posicao: vaso.posicao, circunferencia_mm: vaso.circunferencia_mm,
     costado_mm: 'costado' in f ? f.costado : vaso.costado_comprimento_mm, cor: 'cor' in f ? f.cor : vaso.cor_mapa,
     pes: 'pes' in f ? f.pes : vaso.pes, cone_saida_mm: 'saida' in f ? f.saida : vaso.cone_saida_mm, camaras: nCam,
     componentes: (comps || []).map(c => { const t = (f.tampos || {})[c.id]; return t ? Object.assign({}, c, t) : c; }),
-    regioes: mapaRegioes(vaso.posicao, comps, leituras) };
+    regioes: mapaRegioes(vaso.posicao || (modelo || {}).posicao, comps, leituras) }, modelo || null);   // S152 · decisão 12: o modelo completa o que falta
 }
 /**
  * Desenha o mapa e, quando a imagem guardada não vale mais (as medidas mudaram), grava a nova.
@@ -1766,11 +1769,64 @@ async function mapaLaudo(d, aviso, exigir){
   let r;
   try{
     aviso('Conferindo o desenho do mapa…');
-    r = await mapaGarantir(I.id, I.mapa, mapaDados(V, V.componentes, (V.camaras || []).filter(k => k.ativo !== false).length, d.leituras), true);
+    r = await mapaGarantir(I.id, I.mapa, mapaDados(V, V.componentes, (V.camaras || []).filter(k => k.ativo !== false).length, d.leituras, null, V.modelo_mapa), true);
   }catch(e){ if (exigir) throw new Error('Não consegui conferir o desenho do mapa dos pontos: ' + (e.message || e)); return; }
   if (r.velha && exigir) throw new Error('O desenho do mapa dos pontos guardado não bate com as medidas e não consegui refazer (' + (r.erro3d || 'sem detalhe')
     + '). Abra a revisão num computador que desenhe em 3D, ou escolha "Usar o desenho 2D" no quadro do mapa.');
   I.mapa = r.velha ? Object.assign({}, r.mapa, { path:null }) : r.mapa;
+}
+/** S152 · decisão 12: a janela do modelo de vaso (as medidas padrão de vasos iguais). Só o PLH grava (regra 10 do TapDoc). */
+function janelaModelo(x, depois){
+  x = x || { posicao:'vertical', tampo_b_tipo:'torisferico', tampo_a_tipo:'eliptico' };
+  const tipos = sel => Object.keys(TIPO_TAMPO_ROT).map(k => '<option value="' + k + '"' + (sel === k ? ' selected' : '') + '>' + TIPO_TAMPO_ROT[k] + '</option>').join('');
+  const cn = (rot, id, v, peq) => '<label class="f" style="flex:1;min-width:150px">' + rot + (peq ? ' <small>' + peq + '</small>' : '') + '<input class="t" id="' + id + '" inputmode="decimal" value="' + esc(fmt(v, 1)) + '"></label>';
+  janela(x.id ? 'Corrigir o modelo de vaso' : 'Novo modelo de vaso',
+    '<label class="f">Nome<input class="t" id="mdNome" value="' + esc(x.nome || '') + '" placeholder="ex.: Silo Ø 2.500 × 3.000"></label>'
+    + '<div class="linha" style="align-items:flex-end"><label class="f" style="flex:1;min-width:150px">Posição<select class="t" id="mdPos"><option value="vertical"' + (x.posicao !== 'horizontal' ? ' selected' : '') + '>vertical</option><option value="horizontal"' + (x.posicao === 'horizontal' ? ' selected' : '') + '>horizontal</option></select></label>'
+    + cn('Diâmetro (mm)', 'mdDiam', x.diametro_mm) + cn('Comprimento do costado (mm)', 'mdCost', x.costado_comprimento_mm) + '</div>'
+    + '<div class="linha" style="align-items:flex-end"><label class="f" style="flex:1;min-width:150px">Tampo superior / direito<select class="t" id="mdTb">' + tipos(x.tampo_b_tipo) + '</select></label>' + cn('Altura dele (mm)', 'mdHb', x.tampo_b_altura_mm, '(em branco: calculada)')
+    + '<label class="f" style="flex:1;min-width:150px">Tampo inferior / esquerdo<select class="t" id="mdTa">' + tipos(x.tampo_a_tipo) + '</select></label>' + cn('Altura dele (mm)', 'mdHa', x.tampo_a_altura_mm, '(em branco: calculada)') + '</div>'
+    + '<div class="linha" style="align-items:flex-end">' + cn('Semiângulo do cone (graus)', 'mdAlfa', x.alfa_graus, '(só com cone)') + cn('Saída do cone, Ø (mm)', 'mdSaida', x.cone_saida_mm, '(só com cone)')
+    + '<label class="f" style="flex:1;min-width:150px">Cor<select class="t" id="mdCor"><option value="">—</option>' + Object.keys(Mapa3D.COR_NOME).map(k => '<option value="' + k + '"' + (x.cor_mapa === k ? ' selected' : '') + '>' + Mapa3D.COR_NOME[k] + '</option>').join('') + '</select></label></div>'
+    + '<div class="linha" style="margin-top:10px;gap:18px"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="mdPes"' + (x.pes ? ' checked' : '') + '> Pés de apoio</label>'
+    + '<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="mdJv"' + (x.janela ? ' checked' : '') + '> Janela de visita no costado frontal</label></div>'
+    + '<label class="f">Observação <small>(de onde vieram as medidas)</small><textarea class="t" id="mdObs" rows="2">' + esc(x.observacao || '') + '</textarea></label>'
+    + (x.id ? '<p class="muted" style="margin-top:8px">' + (x.vasos || 0) + ' vaso(s) usam este modelo. Corrigir aqui muda o desenho deles nas próximas revisões; laudo já emitido não muda.</p>' : ''),
+    [{ rotulo:'Cancelar' }, { rotulo:'Gravar o modelo', classe:'pri', acao:async () => {
+      const nn = id => num($(id).value), p = { id: x.id || null, nome: $('mdNome').value, posicao: $('mdPos').value, diametro_mm: nn('mdDiam'), costado_comprimento_mm: nn('mdCost'),
+        tampo_b_tipo: $('mdTb').value, tampo_b_altura_mm: nn('mdHb'), tampo_a_tipo: $('mdTa').value, tampo_a_altura_mm: nn('mdHa'), alfa_graus: nn('mdAlfa'), cone_saida_mm: nn('mdSaida'),
+        cor_mapa: $('mdCor').value || null, pes: $('mdPes').checked, janela: $('mdJv').checked, observacao: $('mdObs').value };
+      if (Object.values(p).some(v => typeof v === 'number' && isNaN(v))){ U.toast('Há um número que não entendi. Use só algarismos e vírgula.', 'err'); return false; }
+      try{ await rpc('tf_vaso_modelo_gravar', { p_dados: p }); U.toast('Modelo gravado.', 'ok'); if (depois) await depois(); }catch(e){ erro(e); return false; } } }]);
+}
+const TIPO_TAMPO_ROT = { eliptico:'elíptico 2:1', torisferico:'torisférico', hemisferico:'hemisférico', conico:'cônico', plano:'plano' };
+/** S152 · decisão 10: o quadro "Desenho do mapa dos pontos" na ficha do vaso (a cor, o modelo e o comprimento do costado ficam no cadastro do vaso). */
+async function cartaoMapaVaso(vid){
+  const cx = $('vsMapa'); if (!cx) return;
+  let C; try{ await libMapa(false); C = await rpc('tf_vaso_mapa_cadastro', { p_equip: vid }); }catch(e){ cx.innerHTML = ''; return; }   // banco sem a 429: o quadro não aparece
+  if ($('vsMapa') !== cx) return;
+  const MODS = C.modelos || [], outras = Array.isArray(C.medidas_outras) ? C.medidas_outras : [];
+  cx.innerHTML = '<div class="card"><h3 style="margin:0">Desenho do mapa dos pontos <span class="muted" style="font-weight:400">· cadastro do vaso</span></h3>'
+    + '<p class="muted" style="margin:4px 0 8px">Ficam guardados no vaso e já vêm prontos na próxima inspeção. O desenho em 3D é feito na revisão.</p>'
+    + '<div class="linha" style="gap:14px;align-items:flex-end">'
+    + '<label class="f" style="margin:0;width:300px">Modelo de vaso <small>(vasos iguais, como os silos)</small><select class="t" id="vmModelo"><option value="">nenhum (medidas do próprio vaso)</option>'
+      + MODS.map(x => '<option value="' + esc(x.id) + '"' + (C.modelo_id === x.id ? ' selected' : '') + '>' + esc(x.nome) + '</option>').join('') + '</select></label>'
+    + '<label class="f" style="margin:0;width:140px">Cor do vaso<select class="t" id="vmCor"><option value="">—</option>' + Object.keys(Mapa3D.COR_NOME).map(k => '<option value="' + k + '"' + (C.cor_mapa === k ? ' selected' : '') + '>' + esc(Mapa3D.COR_NOME[k]) + '</option>').join('') + '</select></label>'
+    + '<label class="f" style="margin:0;width:190px">Comprimento do costado (mm)<input class="t" id="vmCostado" inputmode="decimal" value="' + esc(fmt(C.costado_comprimento_mm, 1)) + '" placeholder="entre as soldas"></label>'
+    + '<label class="f" style="margin:0;width:170px">Saída do cone, Ø (mm)<input class="t" id="vmSaida" inputmode="decimal" value="' + esc(fmt(C.cone_saida_mm, 1)) + '" placeholder="só com cone"></label>'
+    + '<label style="display:flex;gap:6px;align-items:center;padding-bottom:9px"><input type="checkbox" id="vmPes"' + (C.pes ? ' checked' : '') + '> Pés de apoio (silo)</label></div>'
+    + (outras.length ? '<p style="margin:10px 0 0"><b>Outras medidas (do campo):</b> ' + outras.map(x => esc(x.nome) + ' ' + esc(fmt(x.mm, 1)) + ' mm').join(' · ') + '</p>' : '')
+    + '<div class="linha" style="margin-top:10px"><button class="btn mini pri" id="vmGravar">Gravar o desenho do vaso</button>'
+    + (C.pode_modelo ? '<button class="btn mini" id="vmModEditar"' + (C.modelo_id ? '' : ' hidden') + '>Corrigir o modelo</button><button class="btn mini" id="vmModNovo">Novo modelo</button>' : '') + '</div></div>';
+  const bg = $('vmGravar'); bg.addEventListener('click', () => U.semDuploEnvio(bg, async () => {
+    const co = num($('vmCostado').value), sa = num($('vmSaida').value);
+    if ((co !== null && isNaN(co)) || (sa !== null && isNaN(sa))){ U.toast('Há um número que não entendi. Use só algarismos e vírgula.', 'err'); return; }
+    try{ await rpc('tf_insp_vaso_gravar', { p_equip: vid, p_dados: { modelo_id: $('vmModelo').value || null, cor_mapa: $('vmCor').value || null, costado_comprimento_mm: co, cone_saida_mm: sa, pes: $('vmPes').checked } });
+      U.toast('Desenho do vaso gravado.', 'ok'); await cartaoMapaVaso(vid); }catch(e){ erro(e); }
+  }));
+  const be = $('vmModEditar'), sm = $('vmModelo');
+  if (be){ be.addEventListener('click', () => { const x = MODS.find(y => y.id === sm.value); if (x) janelaModelo(x, () => cartaoMapaVaso(vid)); }); sm.addEventListener('change', () => { be.hidden = !sm.value; }); }
+  const bn = $('vmModNovo'); if (bn) bn.addEventListener('click', () => janelaModelo(null, () => cartaoMapaVaso(vid)));
 }
 function revMapaHtml(){
   return REV.M ? '<div class="card" id="revMapa"><h3 style="margin:0">Mapa dos pontos de medição</h3><p class="muted">Carregando o desenho…</p></div>' : '';
@@ -1779,26 +1835,35 @@ async function ligarMapa(){
   const M = REV.M, id = REV.id; if (!M || !$('revMapa')) return;
   try{ await libMapa(false); }catch(e){ if ($('revMapa')) $('revMapa').innerHTML = '<h3 style="margin:0">Mapa dos pontos de medição</h3><p class="alerta falta">' + esc(e.message) + '</p>'; return; }
   const cx = $('revMapa'); if (!cx || !REV || REV.id !== id) return;
-  const leit = (REV.v.inspecao && REV.v.inspecao.leituras) || [], V = M.vaso, vt = V.posicao === 'vertical';
-  const dados = f => mapaDados(V, M.componentes, M.camaras, leit, f);
-  const O0 = Mapa3D.calcular(dados()), modo = (M.mapa || {}).modo || 'auto', pode = !!M.pode, des = pode ? '' : ' disabled';
+  const leit = (REV.v.inspecao && REV.v.inspecao.leituras) || [], V = M.vaso, MODS = M.modelos || [];
+  // S152 · decisão 12: com o que está digitado, o modelo é o escolhido na lista; sem nada digitado, o gravado
+  const dados = f => mapaDados(V, M.componentes, M.camaras, leit, f, f && 'modelo_id' in f ? MODS.find(x => x.id === f.modelo_id) : M.modelo);
+  const O0 = Mapa3D.calcular(dados()), modo = (M.mapa || {}).modo || 'auto', pode = !!M.pode, des = pode ? '' : ' disabled', vt = O0.vertical, MD = M.modelo || {};
   const temCone = O0.tampos.some(t => t.tipo === 'conico');
   let h = '<h3 style="margin:0">Mapa dos pontos de medição <span class="muted" style="font-weight:400">· a figura da seção 7.3 do laudo</span></h3>'
     + '<p class="muted" style="margin:4px 0 8px">O sistema desenha o vaso em 3D com as medidas abaixo. O desenho não precisa ser exato, só proporcional e parecido: o que importa é o mapa dos pontos.</p>'
+    + ('modelos' in M ? '<div class="linha" style="gap:8px;align-items:flex-end;margin-bottom:10px"><label class="f" style="margin:0;width:330px">Modelo de vaso <small>(medidas padrão de vasos iguais, como os silos)</small>'
+        + '<select class="t" id="mpModelo"' + des + '><option value="">nenhum (medidas do próprio vaso)</option>' + MODS.map(x => '<option value="' + esc(x.id) + '"' + (V.modelo_id === x.id ? ' selected' : '') + '>' + esc(x.nome) + '</option>').join('') + '</select></label>'
+        + (M.pode_modelo ? '<button class="btn mini" id="mpModEditar"' + (V.modelo_id ? '' : ' hidden') + '>Corrigir o modelo</button><button class="btn mini" id="mpModNovo">Novo modelo</button>' : '') + '</div>' : '')
     + '<div class="linha" style="gap:14px;align-items:flex-end">'
-    + '<label class="f" style="margin:0;width:150px">Diâmetro (mm)<input class="t" id="mpDiam" value="' + (O0.D ? esc(fmt(O0.D, 1)) : '') + '" disabled title="Vem da circunferência medida"></label>'
-    + '<label class="f" style="margin:0;width:190px">Comprimento do costado (mm)<input class="t" id="mpCostado" inputmode="decimal" value="' + esc(fmt(V.costado_comprimento_mm, 1)) + '" placeholder="entre as soldas"' + des + '></label>'
-    + '<label class="f" style="margin:0;width:140px">Cor do vaso<select class="t" id="mpCor"' + des + '><option value="">(cinza)</option>'
+    + '<label class="f" style="margin:0;width:150px">Diâmetro (mm)<input class="t" id="mpDiam" value="' + (O0.D ? esc(fmt(O0.D, 1)) : '') + '" disabled title="Vem da circunferência medida (ou do modelo)"></label>'
+    + '<label class="f" style="margin:0;width:190px">Comprimento do costado (mm)<input class="t" id="mpCostado" inputmode="decimal" value="' + esc(fmt(V.costado_comprimento_mm, 1)) + '" placeholder="' + (MD.costado_comprimento_mm ? 'modelo: ' + esc(fmt(MD.costado_comprimento_mm, 1)) : 'entre as soldas') + '"' + des + '></label>'
+    + '<label class="f" style="margin:0;width:140px">Cor do vaso<select class="t" id="mpCor"' + des + '><option value="">' + (MD.cor_mapa ? '(do modelo)' : '(cinza)') + '</option>'
       + Object.keys(Mapa3D.COR_NOME).map(k => '<option value="' + k + '"' + (V.cor_mapa === k ? ' selected' : '') + '>' + esc(Mapa3D.COR_NOME[k]) + '</option>').join('') + '</select></label>'
     + (temCone ? '<label class="f" style="margin:0;width:170px">Saída do cone, Ø (mm)<input class="t" id="mpSaida" inputmode="decimal" value="' + esc(fmt(V.cone_saida_mm, 1)) + '"' + des + '></label>' : '')
     + (vt ? '<label style="display:flex;gap:6px;align-items:center;padding-bottom:9px"><input type="checkbox" id="mpPes"' + (V.pes ? ' checked' : '') + des + '> Pés de apoio (silo)</label>' : '')
     + '</div>';
   // decisão 9: medida × calculada, por tampo
   if (O0.tampos.length) h += '<table style="margin-top:12px" id="mpQuadro"><tr><th>Altura do tampo</th><th>Tipo</th><th>Calculada (mm)</th><th>Medida (mm)</th><th>Diferença</th><th>No desenho (mm)</th></tr>'
-    + O0.tampos.slice().reverse().map(t => '<tr data-mptampo="' + esc(t.id) + '"><td><b>' + esc(t.rotulo) + '</b> (' + t.sigla + ')</td><td>' + esc(t.tipo_nome) + '</td><td data-mpcalc></td>'
+    + O0.tampos.slice().reverse().map(t => t.do_modelo   // S152: tampo que só existe no modelo (o vaso não tem o componente): não se edita aqui
+      ? '<tr data-mptampo="' + esc(t.id) + '"><td><b>' + esc(t.rotulo) + '</b> (' + t.sigla + ')</td><td>' + esc(t.tipo_nome) + ' <span class="muted">(do modelo)</span></td><td data-mpcalc></td><td>—</td><td data-mpdif></td><td>' + esc(fmt(t.h_uso, 1)) + '</td></tr>'
+      : '<tr data-mptampo="' + esc(t.id) + '"><td><b>' + esc(t.rotulo) + '</b> (' + t.sigla + ')</td><td>' + esc(t.tipo_nome) + '</td><td data-mpcalc></td>'
       + '<td><input class="t" style="width:110px;margin:0" inputmode="decimal" data-mpmed="' + esc(t.id) + '" value="' + esc(fmt(t.h_med, 1)) + '"' + des + '></td><td data-mpdif></td>'
       + '<td><input class="t" style="width:110px;margin:0" inputmode="decimal" data-mpdes="' + esc(t.id) + '" value="' + esc(fmt(t.h_cor, 1)) + '" title="Só preencha para corrigir o valor que o desenho usa"' + des + '></td></tr>').join('')
     + '</table><p class="muted" style="margin:4px 0 0">O desenho usa a altura medida; sem ela, a calculada pelo tipo do tampo. Preencha "No desenho" só para corrigir.</p><div id="mpObs"></div>';
+  // S152 · decisão 8: as outras medidas que o inspetor anotou (só para consultar)
+  const outras = Array.isArray(V.medidas_outras) ? V.medidas_outras : [];
+  if (outras.length) h += '<p style="margin:10px 0 0" id="mpOutras"><b>Outras medidas (do campo):</b> ' + outras.map(x => esc(x.nome) + ' ' + esc(fmt(x.mm, 1)) + ' mm').join(' · ') + '</p>';
   h += '<div class="linha" style="margin-top:10px">' + (pode ? '<button class="btn pri mini" id="mpGravar">Gravar as medidas</button>' : '');
   if (M.pode_imagem) h += (modo !== 'auto' ? '<button class="btn mini" id="mpAuto">Voltar ao desenho 3D</button>' : '')
     + '<button class="btn mini" id="mpProprio">' + (modo === 'proprio' ? 'Trocar o desenho próprio' : 'Usar um desenho próprio') + '</button>'
@@ -1810,6 +1875,7 @@ async function ligarMapa(){
   const form = () => {
     const f = { tampos:{} }, T = k => (f.tampos[k] = f.tampos[k] || {});
     f.costado = num($('mpCostado').value); f.cor = $('mpCor').value || null;
+    if ($('mpModelo')) f.modelo_id = $('mpModelo').value || null;
     if ($('mpPes')) f.pes = $('mpPes').checked;
     if ($('mpSaida')) f.saida = num($('mpSaida').value);
     cx.querySelectorAll('[data-mpmed]').forEach(el => { T(el.dataset.mpmed).altura_medida_mm = num(el.value); });
@@ -1864,6 +1930,11 @@ async function ligarMapa(){
     if (O.pode){ try{ await libMapa(true); canvas = Mapa3D.desenhar(O); }catch(e){ erro3d = e.message; } }
     if (vivo() && minha === vez) figura({ O, canvas, erro3d }, true);
   }, 450); };
+  // S152 · decisão 12: criar e corrigir o modelo (só o PLH); corrigir o modelo corrige o desenho de todos os vasos dele que ainda estão em revisão
+  const recarregarMapa = async () => { REV.M = await rpc('tf_insp_mapa_ver', { p_id: id }); await ligarMapa(); };
+  const be = $('mpModEditar'); if (be) be.addEventListener('click', () => { const x = MODS.find(y => y.id === ($('mpModelo').value || V.modelo_id)); if (x) janelaModelo(x, recarregarMapa); });
+  const bn = $('mpModNovo'); if (bn) bn.addEventListener('click', () => janelaModelo(null, recarregarMapa));
+  const sm = $('mpModelo'); if (sm && be) sm.addEventListener('change', () => { be.hidden = !sm.value; });
   if (pode) cx.querySelectorAll('input.t, select.t, #mpPes').forEach(el => { if (!el.disabled) el.addEventListener(el.tagName === 'SELECT' || el.type === 'checkbox' ? 'change' : 'input', previa); });
   const bg = $('mpGravar'); if (bg) bg.addEventListener('click', () => U.semDuploEnvio(bg, async () => {
     const f = form(), ruim = [f.costado, f.saida].concat(Object.values(f.tampos).map(t => [t.altura_medida_mm, t.altura_desenho_mm]).flat()).some(x => x !== null && x !== undefined && isNaN(x));
@@ -1871,6 +1942,7 @@ async function ligarMapa(){
     const p = { costado_comprimento_mm: f.costado, cor_mapa: f.cor, tampos: Object.keys(f.tampos).map(k => Object.assign({ id:k }, f.tampos[k])) };
     if ('pes' in f) p.pes = f.pes;
     if ('saida' in f) p.cone_saida_mm = f.saida;
+    if ('modelo_id' in f) p.modelo_id = f.modelo_id;
     try{ clearTimeout(relogio); vez++; aviso('Gravando…');
       REV.M = await rpc('tf_insp_mapa_medidas', { p_id: id, p_dados: p });
       U.toast(REV.M.mudou ? 'Medidas gravadas. O desenho foi refeito.' : 'Nada mudou nas medidas.', 'ok'); await ligarMapa(); }

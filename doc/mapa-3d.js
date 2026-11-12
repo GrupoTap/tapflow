@@ -9,12 +9,13 @@
  *   · desenhar(calc, THREE) — monta o vaso com o three.js e devolve um <canvas>
  *     com a folha (2200 × 1720). Só a tela de revisão carrega o three.js.
  * A folha do horizontal é a de hoje (6 vistas, 3 cotas); a do vertical e do silo
- * tem 5 colunas. A perspectiva é sempre isométrica. O desenho não precisa ser
+ * tem 5 colunas. A perspectiva é sempre isométrica. comModelo(dados, modelo) completa o que falta ao vaso com as
+ * medidas padrão do modelo dele (silos iguais, decisão 12). O desenho não precisa ser
  * exato, só proporcional e parecido (regra do Bruno): o que importa é o mapa.
  * ========================================================================== */
 (function (raiz) {
 'use strict';
-const VERSAO = 'M1-S151';
+const VERSAO = 'M2-S152';   // M2 (S152): o modelo de vaso (as medidas padrão dos silos iguais, decisão 12) · M1 (S151): a primeira versão
 const W = 2200, H = 1720;
 const CORES = { vermelho: '#b3121a', preto: '#1e1e1e', bege: '#cfc9a6', azul: '#1f4f9a', cinza: '#8a8f96', branco: '#e8e8e8' };
 const COR_NOME = { vermelho: 'Vermelho', preto: 'Preto', bege: 'Bege', azul: 'Azul', cinza: 'Cinza', branco: 'Branco' };
@@ -53,7 +54,7 @@ function tampo(c, D, saida, lado) {
   const dif = med != null && calc ? Math.abs(med - calc) / calc * 100 : null;
   const t = { id: c.id || null, lado, tipo: c.tipo, tipo_nome: TIPO_NOME[c.tipo] || c.tipo, nome: c.nome || null,
     h_calc: calc != null ? arred(calc, 1) : null, h_med: med, h_cor: cor, h_uso: arred(uso, 1),
-    origem: cor != null ? 'corrigida' : med != null ? 'medida' : calc != null ? 'calculada' : 'estimada',
+    do_modelo: !!c.do_modelo, origem: c.do_modelo ? 'modelo' : cor != null ? 'corrigida' : med != null ? 'medida' : calc != null ? 'calculada' : 'estimada',
     dif_pct: dif != null ? arred(dif, 1) : null, alerta: dif != null && dif > ALERTA_PCT };
   if (c.tipo === 'conico') {
     t.r_saida = Math.min(saida > 0 ? saida / 2 : 0, D / 2 * 0.9);
@@ -90,6 +91,42 @@ function pontosDeitado(D, L, A, B) {
   return out;
 }
 
+/** Os dois tampos da lista: A = esquerdo (horizontal) ou inferior (vertical); B = direito ou superior. Sem posição, o 1º é o B. */
+function doisTampos(comps) {
+  const tps = comps.filter(c => TIPOS_TAMPO.indexOf(c.tipo) >= 0);
+  const ladoDe = c => { const p = posDe(c); return p === 'direito' || p === 'superior' ? 'B' : p === 'esquerdo' || p === 'inferior' ? 'A' : null; };
+  let cA = tps.find(c => ladoDe(c) === 'A'), cB = tps.find(c => ladoDe(c) === 'B');
+  const soltos = tps.filter(c => c !== cA && c !== cB && !ladoDe(c));
+  if (!cB && soltos.length) cB = soltos.shift();
+  if (!cA && soltos.length) cA = soltos.shift();
+  return { tps, cA, cB };
+}
+
+/**
+ * comModelo(dados, modelo) → os dados do vaso completados com as medidas padrão do modelo (decisão 12).
+ * O que o vaso tem de seu vale; o modelo só entra onde falta. O semiângulo do cone do modelo vale para o desenho.
+ */
+function comModelo(dados, m) {
+  if (!m) return dados;
+  const o = Object.assign({}, dados);
+  if (o.posicao !== 'horizontal' && o.posicao !== 'vertical') o.posicao = m.posicao;
+  if (!(n(o.circunferencia_mm) > 0) && n(m.diametro_mm) > 0) o.circunferencia_mm = n(m.diametro_mm) * Math.PI;
+  if (!(n(o.costado_mm) > 0)) o.costado_mm = m.costado_comprimento_mm;
+  if (!CORES[o.cor]) o.cor = m.cor_mapa;
+  o.pes = !!o.pes || !!m.pes;
+  if (!(n(o.cone_saida_mm) > 0)) o.cone_saida_mm = m.cone_saida_mm;
+  const vt = o.posicao === 'vertical';
+  const comps = (o.componentes || []).filter(c => c && c.ativo !== false).map(c => c.tipo === 'conico' && n(m.alfa_graus) > 0 ? Object.assign({}, c, { alfa_graus: m.alfa_graus }) : c);
+  const t = doisTampos(comps);
+  const novo = (L, tipo, alt) => ({ id: 'modelo:' + L, do_modelo: true, tipo, nome: 'Tampo ' + (vt ? (L === 'B' ? 'superior' : 'inferior') : (L === 'B' ? 'direito' : 'esquerdo')),
+    posicao: vt ? (L === 'B' ? 'superior' : 'inferior') : (L === 'B' ? 'direito' : 'esquerdo'), altura_desenho_mm: alt, alfa_graus: m.alfa_graus });
+  if (!t.cB && m.tampo_b_tipo) comps.push(novo('B', m.tampo_b_tipo, m.tampo_b_altura_mm));
+  if (!t.cA && m.tampo_a_tipo) comps.push(novo('A', m.tampo_a_tipo, m.tampo_a_altura_mm));
+  if (m.janela && vt && !comps.some(c => c.tipo === 'janela')) comps.push({ id: 'modelo:JV', do_modelo: true, tipo: 'janela', nome: 'Janela de visita' });
+  o.componentes = comps; o.modelo_nome = m.nome || null;
+  return o;
+}
+
 /**
  * calcular(dados) → tudo o que o desenho e a revisão precisam, em números.
  * dados = { posicao, circunferencia_mm, costado_mm, cor, pes, cone_saida_mm, camaras (quantas ativas),
@@ -103,14 +140,9 @@ function calcular(dados) {
   const comps = (dados.componentes || []).filter(c => c && c.ativo !== false);
   const cor = CORES[dados.cor] ? dados.cor : 'cinza';
   const saida = n(dados.cone_saida_mm) > 0 ? n(dados.cone_saida_mm) : 0;
-  const R0 = { versao: VERSAO, pode: false, motivo: null, vertical, D, L, cor, cor_hex: CORES[cor], clara: CLARAS.indexOf(cor) >= 0, tampos: [], cotas: [], marcas: [], avisos: [] };
+  const R0 = { versao: VERSAO, modelo_nome: dados.modelo_nome || null, pode: false, motivo: null, vertical, D, L, cor, cor_hex: CORES[cor], clara: CLARAS.indexOf(cor) >= 0, tampos: [], cotas: [], marcas: [], avisos: [] };
   // os dois tampos: A = esquerdo (horizontal) ou inferior (vertical); B = direito ou superior
-  const tps = comps.filter(c => TIPOS_TAMPO.indexOf(c.tipo) >= 0);
-  const ladoDe = c => { const p = posDe(c); return p === 'direito' || p === 'superior' ? 'B' : p === 'esquerdo' || p === 'inferior' ? 'A' : null; };
-  let cA = tps.find(c => ladoDe(c) === 'A'), cB = tps.find(c => ladoDe(c) === 'B');
-  const soltos = tps.filter(c => c !== cA && c !== cB && !ladoDe(c));
-  if (!cB && soltos.length) cB = soltos.shift();
-  if (!cA && soltos.length) cA = soltos.shift();
+  const { tps, cA, cB } = doisTampos(comps);
   if (D && cA) R0.tampos.push(tampo(cA, D, saida, 'A'));
   if (D && cB) R0.tampos.push(tampo(cB, D, saida, 'B'));
   R0.tampos.forEach(t => { t.sigla = vertical ? (t.lado === 'A' ? 'TI' : 'TS') : (t.lado === 'A' ? 'TE' : 'TD');
@@ -319,6 +351,6 @@ function desenhar(O, THREE) {
   return folha;
 }
 
-const Mapa3D = { calcular, desenhar, alturaCalculada, CORES, COR_NOME, ALERTA_PCT, LARGURA: W, ALTURA: H, versao: VERSAO };
+const Mapa3D = { calcular, comModelo, doisTampos, desenhar, alturaCalculada, CORES, COR_NOME, ALERTA_PCT, LARGURA: W, ALTURA: H, versao: VERSAO };
 if (typeof module !== 'undefined' && module.exports) module.exports = Mapa3D; else raiz.Mapa3D = Mapa3D;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -181,7 +181,8 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 22';   // S150 · item 81 (427): a aferição em 2 etapas (a 1ª reprovada encerra: NÃO CONFORME, sem leituras); manômetro pela ASME B40.100 Grau D; o teste da válvula pelas regras V1–V5 (abertura encontrada, aviso na hora acima da PMTA e abaixo da operação); "Danificado" vira a aferição reprovada na etapa 1; motor R00.6
+const VERSAO = 'TapDoc 23';   // S152 · issue 7, Parte 2 (429): a seção "Medidas do vaso" em Componentes — circunferência, comprimento do costado entre as soldas, altura de cada tampo e outras medidas (nome + valor), para o desenho do mapa dos pontos
+// const VERSAO = 'TapDoc 22';   // S150 · item 81 (427): a aferição em 2 etapas (a 1ª reprovada encerra: NÃO CONFORME, sem leituras); manômetro pela ASME B40.100 Grau D; o teste da válvula pelas regras V1–V5 (abertura encontrada, aviso na hora acima da PMTA e abaixo da operação); "Danificado" vira a aferição reprovada na etapa 1; motor R00.6
 // const VERSAO = 'TapDoc 21';   // S149 · itens 82, 83, 84, 88 e 92 (426): placa de TAG e placa de categoria; as 3 fotos da aferição; a boroscopia de volta (obrigatória para enviar); as recomendações prontas; a foto pergunta onde vai no laudo
 // const VERSAO = 'TapDoc 20';   // S148 · itens 85 e 91 (425): os componentes na ordem do medidor (CF, CT, CS/CLD, CI/CLE, tampos); a placa de identificação com três respostas
 // const VERSAO = 'TapDoc 19';   // S146 · item 79 (422): os textos prontos do laudo — o caso escolhido no acessório não aferido (manômetro, válvula, quebra-vácuo), o disco de ruptura, a boroscopia não feita, o prazo menor (P1), as recomendações prontas (R1, R2) e o equipamento sem pressão (fora da NR-13)
@@ -408,7 +409,7 @@ function gravarCamara(v, c){
 function gravarComp(v, c){
   enfileirar(v, 'comp-' + c.id, 'componente ' + c.nome, { funcao:'tf_insp_componente_gravar',
     payload:{ p_equip:v.id, p_dados:pegar(c, ['id','tipo','nome','posicao','camara_id','nao_medir','ordem','ativo',
-      'r_mm','l_mm','d_mm','alfa_graus','fator_c','aparafusada','eficiencia_junta','material_id']) } });
+      'r_mm','l_mm','d_mm','alfa_graus','fator_c','aparafusada','eficiencia_junta','material_id','altura_medida_mm']) } });   // S152: a altura medida do tampo (429)
 }
 function gravarVaso(v){
   enfileirar(v, 'vaso', 'dados do vaso', { funcao:'tf_insp_vaso_gravar', payload:{ p_equip:v.id, p_dados:Object.assign({}, v._pv) } });
@@ -1348,11 +1349,43 @@ function cartoesComp(v){
   comps.filter(c => !camIdDe(v, c)).forEach(c => out.push({ chave:c.id, cam:null, c, regs:c.tipo === 'costado' ? [c] : null }));
   return out;
 }
+// S152 · issue 7 (decisão 8): "Medidas do vaso" — tudo o que o inspetor mede com a trena, num lugar só. Nada aqui é obrigatório
+// para enviar: sem o comprimento do costado, o laudo sai com o desenho 2D (decisão 5).
+const outrasCompletas = l => (l || []).filter(x => String(x.nome || '').trim() && x.mm > 0).map(x => ({ nome:String(x.nome).trim().slice(0, 80), mm:x.mm }));
+function medidasVasoHtml(v, pode){
+  const tps = compsAtivos(v).filter(c => tampo(c.tipo)), outras = Array.isArray(v.medidas_outras) ? v.medidas_outras : [];
+  let h = '<div class="card" id="mvCard"><b>Medidas do vaso</b><p class="muted" style="margin:2px 0 0">Com a trena, por fora. São elas que fazem o desenho do mapa dos pontos no laudo.</p>';
+  h += campoNum('Circunferência do costado (mm)', 'mvCirc', v.circunferencia_mm, 'Dá o diâmetro. É a mesma de "Operação e câmaras".');
+  h += campoNum('Comprimento do costado (mm)', 'mvCostado', v.costado_comprimento_mm, 'Entre as soldas dos dois tampos.');
+  tps.forEach(c => { h += campoNum('Altura do ' + esc(String(c.nome || 'tampo').toLowerCase()) + ' (mm)', 'mvAlt_' + esc(c.id), c.altura_medida_mm, 'Opcional. Da solda até a ponta do tampo.'); });
+  h += '<p style="margin:14px 0 0;font-weight:700;font-size:13px;color:var(--ink-2)">Outras medidas <span class="muted" style="font-weight:400">(opcional: parte reta do tampo, distância de um bocal…)</span></p>';
+  outras.forEach((x, i) => {
+    h += '<div class="lin" data-mvlin="' + i + '"><label class="f">Nome da medida<input class="t" data-mvn="' + i + '" value="' + esc(x.nome || '') + '" maxlength="80"' + SEM_AUTO + '></label>'
+      + '<label class="f">Valor (mm)<input class="t" inputmode="decimal" data-mvv="' + i + '" value="' + esc(x.mm == null ? '' : fmt(x.mm)) + '"' + SEM_AUTO + '></label></div>'
+      + (pode ? '<button class="btn peq perigo" style="margin-top:4px" data-mvrm="' + i + '">Tirar esta medida</button>' : '');
+  });
+  if (pode && outras.length < 20) h += '<button class="btn peq sec" id="mvMais" style="margin-top:8px">+ outra medida</button>';
+  return h + '</div>';
+}
+function ligarMedidasVaso(v){
+  ligar('mvCirc', el => { const x = numOuAviso(el, 1, 100000, 'Circunferência'); if (x !== undefined) mudouVaso(v, 'circunferencia_mm', x); });
+  ligar('mvCostado', el => { const x = numOuAviso(el, 50, 100000, 'Comprimento do costado'); if (x !== undefined) mudouVaso(v, 'costado_comprimento_mm', x); });
+  compsAtivos(v).filter(c => tampo(c.tipo)).forEach(c => ligar('mvAlt_' + c.id, el => { const x = numOuAviso(el, 1, 50000, 'Altura do tampo'); if (x !== undefined) mudouComp(v, c, 'altura_medida_mm', x); }));
+  // as outras medidas: a lista inteira fica no aparelho; para o escritório vão as linhas completas (nome + valor)
+  const guardar = lista => { v.medidas_outras = lista; v._pv.medidas_outras = outrasCompletas(lista); salvar(); adiar('vaso:' + v.id, 'vaso', v); };
+  const lista = () => (Array.isArray(v.medidas_outras) ? v.medidas_outras : []).map(x => Object.assign({}, x));
+  $('tela').querySelectorAll('[data-mvn]').forEach(el => el.addEventListener('change', () => { const l = lista(); l[Number(el.dataset.mvn)].nome = el.value.trim(); guardar(l); }));
+  $('tela').querySelectorAll('[data-mvv]').forEach(el => el.addEventListener('change', () => {
+    const x = numOuAviso(el, 0.1, 100000, 'Medida'); if (x === undefined) return;
+    const l = lista(); l[Number(el.dataset.mvv)].mm = x; guardar(l); }));
+  $('tela').querySelectorAll('[data-mvrm]').forEach(b => b.addEventListener('click', () => { const l = lista(); l.splice(Number(b.dataset.mvrm), 1); guardar(l); pintar(); }));
+  ligar('mvMais', () => { const l = lista(); l.push({ nome:'', mm:null }); v.medidas_outras = l; salvar(); pintar(); }, 'click');
+}
 function telaComponentes(v){
   titulo('Componentes', v.tag);
   const cs = ativas(v), pode = ed(v), multi = cs.length > 1, cards = cartoesComp(v);
   if (v._compAberto && !cards.some(x => x.chave === v._compAberto)) v._compAberto = null;
-  let h = '';
+  let h = medidasVasoHtml(v, pode);   // S152 · issue 7 (decisão 8)
   if (!cards.length) h += '<div class="card"><p class="muted">Nenhum componente.</p></div>';
   cards.forEach(x => {
     const c = x.c, aberto = v._compAberto === x.chave, sl = semLeitura(v);
@@ -1395,7 +1428,8 @@ function telaComponentes(v){
   h += '<p class="muted">O raio é calculado pela circunferência (Operação e câmaras) e a eficiência da junta é definida no escritório: nenhum dos dois é digitado em campo.</p>';
   $('tela').innerHTML = h;
   $('tela').querySelectorAll('[data-abre]').forEach(b => b.addEventListener('click', () => { v._compAberto = v._compAberto === b.dataset.abre ? null : b.dataset.abre; salvar(); pintar(); }));
-  if (!pode){ $('tela').querySelectorAll('.cardc-corpo select, .cardc-corpo input').forEach(el => { el.disabled = true; }); return; }
+  if (!pode){ $('tela').querySelectorAll('.cardc-corpo select, .cardc-corpo input, #mvCard input').forEach(el => { el.disabled = true; }); return; }
+  ligarMedidasVaso(v);
   const doCartao = k => cards.find(x => x.chave === k);
   $('tela').querySelectorAll('[data-cp]').forEach(el => el.addEventListener('change', () => {
     const c = v.componentes.find(x => x.id === el.dataset.cp); if (!c) return;

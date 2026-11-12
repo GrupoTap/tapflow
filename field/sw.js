@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S57-T32';   // S150: TapDoc 22 e o motor R00.6 (item 81: a aferição em 2 etapas, Grau D, válvula V1–V5; 427)
+const VERSAO = 'S57-T33';   // S152: TapDoc 23 (issue 7: a seção "Medidas do vaso" em Componentes; 429)
+// const VERSAO = 'S57-T32';   // S150: TapDoc 22 e o motor R00.6 (item 81: a aferição em 2 etapas, Grau D, válvula V1–V5; 427)
 // const VERSAO = 'S57-T31';   // S149: TapDoc 21 (itens 82, 83, 84, 88 e 92; 426)
 // const VERSAO = 'S57-T30';   // S148: TapDoc 20 (itens 85 e 91: a ordem do medidor e a placa com três respostas; 425)
 // const VERSAO = 'S57-T29';   // S146: TapDoc 19 (item 79: os textos prontos do laudo; 422)
