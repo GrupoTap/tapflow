@@ -121,6 +121,7 @@ details.op summary{font-weight:700;font-size:13.5px;cursor:pointer;color:var(--a
   table.tv td{border:0;padding:0}
   table.tv td.h-ins{grid-column:1/-1;margin-top:6px}
   table.tv td.acoes{grid-column:1/-1;text-align:left !important;margin-top:6px}
+  #plTab tr{grid-template-columns:auto 1fr}   /* E28: o quadro das placas não tem a caixinha da 1ª coluna */
   table.vs th:nth-child(4),table.vs td:nth-child(4){display:none}
 }
 .faixa{background:#FBF3DB;border:1px solid #EAD9A6;border-radius:8px;padding:8px 10px;font-size:13px;line-height:1.5;margin-top:6px;color:#3D3416}
@@ -164,7 +165,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E27';   // E27 (S154 · 430): issue 9 — o lugar de foto "Medição de espessura" na revisão (vem da lista do banco) e o laudo com a foto no 7.3 (laudo-pdf.js S154)
+const VERSAO = 'TapDoc E28';   // E28 (S155 · 431): issue 8 — o quadro "Placas de identificação" na tela da OS: a arte da placa de cada vaso com o resultado liberado, em PDF de 12 × 10 cm para a gráfica (letras em curvas, CMYK, sem margem; placa-pdf.js P1), com o QR code do link do TapWeb gravado no vaso
+// const VERSAO = 'TapDoc E27';   // E27 (S154 · 430): issue 9 — o lugar de foto "Medição de espessura" na revisão (vem da lista do banco) e o laudo com a foto no 7.3 (laudo-pdf.js S154)
 // const VERSAO = 'TapDoc E26';   // E26 (S153 · sem SQL): issue 6 — a aparência do laudo (laudo-pdf.js S153: texto 12 preto, cabeçalho e quadros em letra 10, rodapé com o carimbo legível, capa, legendas, fórmulas em bloco, PMTA em caixa); nesta página só muda a versão do gerador que ela carrega
 // const VERSAO = 'TapDoc E25';   // E25 (S152 · 429): issue 7, Parte 2 — o modelo de vaso (as medidas padrão dos silos iguais) e as outras medidas do campo no quadro do mapa; o quadro "Desenho do mapa" na ficha do vaso (cor, modelo, comprimento do costado); mapa-3d.js M2
 // const VERSAO = 'TapDoc E24';   // E24 (S151 · 428): issue 7 — o mapa dos pontos de medição em 3D na revisão (mapa-3d.js + vendor/three.min.js), medida × calculada da altura dos tampos, cor, desenho próprio; a imagem guardada no laudo (laudo-pdf.js S151)
@@ -711,7 +713,10 @@ async function telaOS(os){
   h += fora.length ? tabelaVasos(fora, false) : '<p class="vazio">' + (P.vasos.length ? 'Todos os vasos do cliente estão na OS.'
         : 'O cliente não tem vasos cadastrados. Importe a planilha do TapWeb pela ficha do cliente (Cadastros), ou cadastre abaixo.') + '</p>';
   h += '<div style="padding:8px"><button class="btn sec" id="novo">+ Vaso não cadastrado</button></div></div>';
+  // E28 (S155 · issue 8): a arte das placas de identificação, para a gráfica
+  if (marc.some(v => v.inspecao && v.inspecao.situacao !== 'em_preparo')) h += '<h2>Placas de identificação (arte para a gráfica)</h2><div class="card" id="cxPlacas"><p class="muted">Carregando as placas…</p></div>';
   $('tela').innerHTML = h;
+  if ($('cxPlacas')) quadroPlacas(os);
   const btC = $('concluir');
   if (btC) btC.addEventListener('click', () => N.util.semDuploEnvio(btC, async () => {
     try{ await rpc('tf_concluir_tarefa', { p_os_id: os, p_tarefa_id: 'T05' }); U.toast('Preparação concluída. A visita está liberada.', 'ok'); pintar(); }
@@ -807,6 +812,74 @@ function novoVaso(os, cliente){
         U.toast(r.existente ? 'Essa TAG já existia: o vaso foi marcado na OS.' : 'Vaso cadastrado e marcado.', 'ok'); pintar();
       }catch(e){ erro(e); return false; }
     } }]);
+}
+
+// ── 2b · E28 (S155 · issue 8): as placas de identificação da OS ─────────────
+// A arte sai em PDF de 12 × 10 cm, do jeito que a gráfica pediu: letras em curvas, cores em CMYK e sem margem de corte.
+// Quem monta o PDF é o placa-pdf.js (puro); os dados vêm de tf_placa_dados (só a inspeção liberada traz os dados da placa).
+let LIBS_PLACA = null;
+function libsPlaca(){
+  if (!LIBS_PLACA) LIBS_PLACA = (async () => {
+    if (!window.PlacaLetras) await carregarScript('vendor/placa-letras.js?v=1');
+    if (!window.qrcode) await carregarScript('vendor/qrcode.js?v=2.0.4');
+    if (!window.PlacaPDF) await carregarScript('placa-pdf.js?v=P1');
+    return true;
+  })().catch(e => { LIBS_PLACA = null; throw e; });
+  return LIBS_PLACA;
+}
+function baixarBytes(nome, blob){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+async function quadroPlacas(os){
+  const cx = $('cxPlacas'); if (!cx) return;
+  let D;
+  try{ D = await rpc('tf_placa_dados', { p_os: os }); await libsPlaca(); }
+  catch(e){ cx.innerHTML = '<p class="muted" style="color:var(--crit)">Não deu para carregar as placas: ' + esc(e && e.message ? e.message : String(e)) + '</p>'; return; }
+  if (!$('cxPlacas')) return;                              // a tela mudou enquanto carregava
+  const ctx = { emissora: D.emissora || {}, cliente: D.cliente || '' };
+  const linhas = (D.vasos || []).map(v => {
+    const falt = v.liberada ? PlacaPDF.faltas(v) : [], pronta = v.liberada && !falt.length;
+    return { v, falt, pronta, avisos: pronta ? PlacaPDF.campos(v, ctx).avisos : [] };
+  });
+  const prontas = linhas.filter(l => l.pronta);
+  let h = '<div class="linha" style="justify-content:space-between;margin-bottom:8px"><div><b>' + prontas.length + ' de ' + linhas.length + '</b> placa(s) pronta(s) para a gráfica'
+    + '<div class="muted">PDF de 12 × 10 cm, com as letras em curvas, as cores em CMYK e sem margem de corte. A placa sai quando o resultado do vaso é liberado.</div></div>'
+    + '<button class="btn pri" id="plTodas"' + (prontas.length ? '' : ' disabled') + '>' + (prontas.length > 1 ? 'Baixar as ' + prontas.length + ' placas (.zip)' : 'Baixar a placa') + '</button></div>';
+  h += '<table class="tv" id="plTab"><tr><th>Vaso</th><th>Placa</th><th>Link da ficha no TapWeb (o QR code)</th><th></th></tr>' + linhas.map(l => {
+    const v = l.v;
+    return '<tr data-pl="' + esc(v.equipamento_id) + '"><td><b>' + esc(v.tag) + '</b>' + (v.numero_tap ? '<div class="muted">Nº TAP ' + esc(v.numero_tap) + '</div>' : '') + '</td>'
+      + '<td>' + (!v.liberada ? '<span class="chip s-fora">espera o resultado liberado</span>'
+          : l.pronta ? '<span class="chip s-pronto">pronta</span>' + (PlacaPDF.modelo(v).modelo === '2pmta' ? ' <span class="muted">modelo de 2 PMTA</span>' : '')
+          : '<span class="chip s-grave">falta</span>')
+        + (l.falt.length ? '<div class="muted" style="color:var(--crit)">' + l.falt.map(esc).join('<br>') + '</div>' : '')
+        + (l.avisos.length ? '<div class="muted" style="color:var(--warn)">' + l.avisos.map(esc).join('<br>') + '</div>' : '') + '</td>'
+      + '<td class="h-ins"><div class="linha" style="flex-wrap:nowrap"><input class="t" data-pllink="' + esc(v.equipamento_id) + '" style="margin:0;min-width:180px" placeholder="https://…" value="' + esc(v.tapweb_link || '') + '">'
+        + '<button class="btn mini sec" data-plgrava="' + esc(v.equipamento_id) + '">Gravar</button></div></td>'
+      + '<td class="acoes" style="text-align:right;white-space:nowrap">' + (l.pronta ? '<button class="btn mini" data-plbaixa="' + esc(v.equipamento_id) + '">Baixar a placa</button>' : '') + '</td></tr>';
+  }).join('') + '</table>';
+  cx.innerHTML = h;
+  const gerar = (l) => { const r = PlacaPDF.gerar(l.v, ctx); return { nome: r.nome, bytes: r.bytes }; };
+  cx.querySelectorAll('[data-plgrava]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
+    const link = (cx.querySelector('[data-pllink="' + b.dataset.plgrava + '"]').value || '').trim();
+    if (link && !/^https:\/\/\S+$/i.test(link)){ U.toast('O link precisa começar com https:// e não pode ter espaço.', 'err'); return; }
+    try{ await rpc('tf_placa_link_gravar', { p_equip: b.dataset.plgrava, p_link: link });
+      U.toast(link ? (/tapweb/i.test(link) ? 'Link gravado.' : 'Link gravado. Confira: ele não parece ser do TapWeb.') : 'Link apagado.', 'ok'); await quadroPlacas(os); }
+    catch(e){ erro(e); }
+  })));
+  cx.querySelectorAll('[data-plbaixa]').forEach(b => b.addEventListener('click', () => {
+    try{ const a = gerar(linhas.find(l => l.v.equipamento_id === b.dataset.plbaixa)); baixarBytes(a.nome, new Blob([a.bytes], { type:'application/pdf' })); }
+    catch(e){ erro(e); }
+  }));
+  $('plTodas').addEventListener('click', () => {
+    try{
+      const arqs = prontas.map(gerar), nomes = {};
+      arqs.forEach(a => { if (nomes[a.nome]){ nomes[a.nome]++; a.nome = a.nome.replace(/\.pdf$/, ' (' + nomes[a.nome] + ').pdf'); } else nomes[a.nome] = 1; });   // duas inspeções do mesmo vaso na OS
+      if (arqs.length === 1) baixarBytes(arqs[0].nome, new Blob([arqs[0].bytes], { type:'application/pdf' }));
+      else baixarBytes('Placas ' + String(D.os && D.os.numero || 'OS').replace(/[\\/:*?"<>|]+/g, '-') + '.zip', zipar(arqs));
+      U.toast(arqs.length + ' placa(s) baixada(s).', 'ok');
+    }catch(e){ erro(e); }
+  });
 }
 
 // ── 3 · um vaso: o laudo anterior ──────────────────────────────────────────
