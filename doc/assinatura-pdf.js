@@ -12,7 +12,7 @@
  *      PLH que aprovou.
  * Não confere a cadeia até a raiz ICP-Brasil (para isso: verificador do ITI).
  * S158: lê também o CMS com tamanho indefinido (BER), que é como o assinador do
- *   gov.br grava; o banco recusa o certificado do gov.br fora do modo de teste.
+ *   gov.br grava (reserva do token: o banco aceita e grava como assinatura avançada).
  * Puro: sem DOM; roda no navegador e no node (testes). Usa crypto.subtle.
  * ========================================================================== */
 (function (raiz) {
