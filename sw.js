@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S156';   // S156: issue 1 (passo 2) — o Manager vira o TapFlow puro (manager/ S156: sem o código parado de Cadastros, das Configurações que saíram e de Fornecedores; o nome nas telas é "TapFlow"); TapDoc E29, Pessoas e acessos A10 e TapRH RH14 (só as frases que diziam "Manager")
+const VERSAO = 'H16-S157';   // S157: issue 10 — núcleo N9 (o acesso vencido, "exp" claim, renovado antes de enviar a fila e no envio das fotos) e Field S58
+// const VERSAO = 'H16-S156';   // S156: issue 1 (passo 2) — o Manager vira o TapFlow puro (manager/ S156: sem o código parado de Cadastros, das Configurações que saíram e de Fornecedores; o nome nas telas é "TapFlow"); TapDoc E29, Pessoas e acessos A10 e TapRH RH14 (só as frases que diziam "Manager")
 // const VERSAO = 'H16-S155';   // S155: issue 8 — TapDoc E28 (a arte da placa de identificação para a gráfica: doc/placa-pdf.js P1, doc/vendor/placa-letras.js e doc/vendor/qrcode.js) (431)
 // const VERSAO = 'H16-S154';   // S154: issue 9 — TapDoc E27 (laudo-pdf.js S154: a foto da medição de espessura no 7.3) e celular 24 (a foto no Ultrassom) (430)
 // const VERSAO = 'H16-S153';   // S153: issue 6 — TapDoc E26 (a aparência do laudo: laudo-pdf.js S153)
@@ -65,9 +66,9 @@ const ESSENCIAIS = [
   // O núcleo comum. O endereço tem que ser IDÊNTICO ao do <script>, com o ?v=
   // (o cache compara a consulta inteira). Trocou o ?v= nas páginas? Troque aqui também.
   // S76: hub, Manager, Field e fin/ pedem todos ?v=N2 — saíram as linhas ?v=N1. S123: todos pedem ?v=N3 (Passkey 1). S124: ?v=N4. S131: ?v=N5 (IndexedDB do iPhone).
-  './nucleo/nucleo.js?v=N8',
-  './nucleo/nucleo.css?v=N8',
-  './nucleo/config.js?v=N8',
+  './nucleo/nucleo.js?v=N9',
+  './nucleo/nucleo.css?v=N9',
+  './nucleo/config.js?v=N9',
   // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo" (mesmo ?v= das páginas)
   './nucleo/modulos.js?v=M4',
   // S110 · o gerador de documentos (o Manager o pede com ?v=D1; o jszip e o pdfmake vêm sob demanda)

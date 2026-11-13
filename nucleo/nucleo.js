@@ -6,8 +6,8 @@
  * aqui (fica no módulo e nas funções tf_*). Sem framework, sem build.
  *
  * COMO UM MÓDULO USA (duas linhas no <head> e uma no boot):
- *   <script src="../nucleo/config.js?v=N8"></script>
- *   <script src="../nucleo/nucleo.js?v=N8"></script>
+ *   <script src="../nucleo/config.js?v=N9"></script>
+ *   <script src="../nucleo/nucleo.js?v=N9"></script>
  *   ...
  *   const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
  *   if (g === 'hub') { irParaHub(Nucleo.recado); return; }     // ANTES do iniciar()
@@ -40,7 +40,8 @@
   'use strict';
   if (window.Nucleo && window.Nucleo.versao) return;
 
-  var VERSAO = 'N8';   // N8 (S142): no Relatar, o print colado com Ctrl+V (item 37 da lista)
+  var VERSAO = 'N9';   // N9 (S157): issue 10 — o acesso vencido ("exp" claim) é renovado antes de enviar a fila e no envio das fotos
+  // var VERSAO = 'N8';   // N8 (S142): no Relatar, o print colado com Ctrl+V (item 37 da lista)
   // var VERSAO = 'N7';   // N7 (S136): o celular da empresa (210; desenho processos/aparelho-empresa-desenho.md, A1–A12)
   // var VERSAO = 'N6';   // N6 (S132): "Relatar problema ou sugerir" em todos os módulos (209; item #1 da lista) e os últimos erros do app para irem junto
   // var VERSAO = 'N5';   // N5 (S131): o IndexedDB reabre quando o iPhone fecha a ligação
@@ -1496,8 +1497,25 @@
   function ehTimeout(e) {
     return !!e && (e.name === 'TimeoutError' || e.name === 'AbortError' || /timed out|timeout|aborted/i.test(String(e.message || '')));
   }
+  // N9 (issue 10): o armazenamento de fotos responde ao acesso vencido com HTTP 400 e
+  // '"exp" claim timestamp check failed' (sem as palavras "jwt" ou "token"): também é acesso vencido.
+  var RX_ACESSO_VENCIDO = /jwt|token.*expired|not authenticated|"?exp"? claim|claim timestamp/i;
   function tokenVencido(e) {
-    return e && (e.status === 401 || /jwt expired|invalid jwt|token.*expired|not authenticated/i.test(e.message || ''));
+    return e && (e.status === 401 || RX_ACESSO_VENCIDO.test(e.message || ''));
+  }
+  /** N9 (issue 10): quanto falta para o acesso vencer (ms), lendo o "exp" do próprio token; null se não der para ler. */
+  function restaDoToken(t) {
+    try { var p = String(t || '').split('.')[1]; var exp = JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/'))).exp;
+      return typeof exp === 'number' ? exp * 1000 - Date.now() : null; } catch (e) { return null; }
+  }
+  /** N9 (issue 10): antes de enviar a fila, renova o acesso que venceu ou vence nos próximos 2 minutos.
+   *  Sem sinal ou sem como renovar, segue: o envio renova sozinho se o servidor recusar. */
+  function garantirAcesso() {
+    var s = sessao();
+    if (!s.token || !s.refresh) return Promise.resolve(false);
+    var resta = restaDoToken(s.token);
+    if (resta === null || resta > 120000) return Promise.resolve(false);
+    return renovar().catch(function () { return false; });
   }
   function sessaoExpirou() {
     if (typeof api_.aoExpirar === 'function') { try { api_.aoExpirar(); } catch (e) {} return; }
@@ -1704,15 +1722,21 @@
         return r.json().catch(function () { return {}; }).then(function (j) {
           var m = String(j.message || j.error || j.statusCode || '');
           if (r.status === 409 || /exist|duplicate/i.test(m)) return 'ja_existia';
-          if ((r.status === 401 || r.status === 403 || /jwt|token/i.test(m)) && autor) {
+          var vencido = r.status === 401 || r.status === 403 || /token/i.test(m) || RX_ACESSO_VENCIDO.test(m);   // N9 (issue 10)
+          if (vencido && autor) {
             if (_jaRenovou || !s.refresh) throw autorFora(autor);
             return renovarEmp(autor).then(function (ok) { if (ok) return storageEnviar(bucket, caminho, blob, true, autor); throw autorFora(autor); });
           }
-          if ((r.status === 401 || r.status === 403 || /jwt|token/i.test(m)) && !_jaRenovou && s.refresh) {
+          if (vencido && !_jaRenovou && s.refresh) {
             return renovar().then(function (ok) {
               if (ok) return storageEnviar(bucket, caminho, blob, true);
               throw Object.assign(new Error('Sua sessão expirou. Entre de novo — nada se perdeu.'), { sessaoMorta: true, status: 401 });
             });
+          }
+          if (vencido && RX_ACESSO_VENCIDO.test(m)) {
+            // N9 (issue 10): o acesso continuou recusado mesmo renovado (ou não havia como renovar): mensagem simples
+            throw Object.assign(new Error('O servidor recusou o acesso deste aparelho. Toque em "Tentar de novo"; se repetir, saia e entre de novo — nada se perdeu.'),
+              { status: r.status, negocio: true });
           }
           throw Object.assign(new Error('O armazenamento recusou a foto (HTTP ' + r.status + ')' + (m ? ': ' + m : '') + '.'),
             { status: r.status, negocio: r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429, rede: r.status >= 500 });
@@ -1813,7 +1837,7 @@
           throw err;   // sem rede: para aqui, a ordem fica
         });
       }
-      return proxima().catch(function () {}).then(function () { enviando = false; limparSoEnvio(); contarFila(); },
+      return garantirAcesso().then(proxima).catch(function () {}).then(function () { enviando = false; limparSoEnvio(); contarFila(); },   // N9 (issue 10): renova antes
                                                   function () { enviando = false; });
     };
     try {
