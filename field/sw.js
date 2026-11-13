@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S58-T37';   // S162: TapDoc 25 (issues 15, 19 e 23: o que falta leva até a parte; "substituir" × aferição conforme; leitura suspeita em vermelho)
+const VERSAO = 'S58-T38';   // S163: TapDoc 26 (issues 12, 20 e 21: as recomendações do laudo no Fechamento e a justificativa do prazo numa lista; recomendacoes.js RC1; 433)
+// const VERSAO = 'S58-T37';   // S162: TapDoc 25 (issues 15, 19 e 23: o que falta leva até a parte; "substituir" × aferição conforme; leitura suspeita em vermelho)
 // const VERSAO = 'S58-T36';   // S160: núcleo N10 (confirmarPessoa só com a digital, para aprovar o laudo; issue 29)
 // const VERSAO = 'S58-T35';   // S157: issue 10 — Field S58 e núcleo N9 (o acesso vencido renovado antes de enviar a fila e no envio das fotos)
 // const VERSAO = 'S57-T34';   // S154: TapDoc 24 (issue 9: a foto da medição de espessura no Ultrassom; 430)
@@ -69,6 +70,7 @@ const ESSENCIAIS = [
   './doc/',
   // S80 · TapDoc 4: o motor de cálculo para a prévia sem sinal. Mesmo ?v= do <script> de doc/index.html.
   './doc/motor-calculo-nr13.js?v=R00.6',
+  './doc/recomendacoes.js?v=RC1',   // S163 · issues 12 e 21: a lista das recomendações e do prazo (a mesma da revisão e do laudo)
   // S39 · a medição gera o PDF no campo, sem sinal: o pdfmake do TapDoc (mesmo endereço do <script> que a tela carrega)
   '../doc/vendor/pdfmake.min.js',
   '../doc/vendor/vfs_fonts.js'

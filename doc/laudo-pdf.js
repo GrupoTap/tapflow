@@ -925,6 +925,19 @@ function montar(d, opc) {
   par(M.recomendacoes_intro);
   const recs = d.recomendacoes || [];
   const comPrazo = r => r.texto.replace(/[;.\s]*$/, '') + ';' + (r.prazo ? ' ' + txt(M.rec_prazo, { prazo: dataBR(r.prazo) }) : '');
+  // S163 · issues 12, 18 e 20: a lista única (recomendacoes.js RC1), com o que o campo e a revisão tiraram ou editaram.
+  // A fotografia de antes da 433 não tem rec_ajustes: o laudo emitido antes continua como era.
+  if (I.rec_ajustes !== undefined) {
+    const RC = raiz.RecsNR13;
+    if (!RC) throw new Error('Falta o recomendacoes.js para montar as recomendações do laudo.');
+    const L = RC.montar({ B: M, ambiente: I.ambiente, categoria: R.categoria, placa, rec_casos: I.rec_casos, ajustes: I.rec_ajustes || {}, linhas: recs,
+      acessorios: acs.map(a => ({ id: a.id, tipo: a.tipo, situacao: a.situacao, resultado: a.afericao && a.afericao.resultado, grave: a.afericao && a.afericao.grave, caso_campos: a.caso_campos })) })
+      .filter(x => x.marcada);
+    sub('11.1', T.rec_seguranca || 'Recomendações de segurança');
+    lista(L.filter(x => x.tipo !== 'conservacao').map(comPrazo), true);
+    sub('11.2', T.rec_conservacao || 'Recomendações de conservação');
+    lista(L.filter(x => x.tipo === 'conservacao').map(comPrazo), true);
+  } else {
   sub('11.1', T.rec_seguranca || 'Recomendações de segurança');
   lista([].concat(recs.filter(r => r.tipo === 'seguranca').map(comPrazo), recs.filter(r => r.tipo === 'geral').map(comPrazo), M.rec_seguranca_gerais || [],
     [I.ambiente && (M.rec_instalacao || {})[I.ambiente]], ['I', 'II'].indexOf(R.categoria) >= 0 ? [txt(M.rec_manual_cat12, { categoria: R.categoria })] : [],
@@ -933,6 +946,7 @@ function montar(d, opc) {
   sub('11.2', T.rec_conservacao || 'Recomendações de conservação');
   lista([].concat(recs.filter(r => r.tipo === 'conservacao').map(comPrazo), M.rec_conservacao_gerais || [],
     (I.rec_casos || []).filter(k => PR[k] && PR[k].tipo === 'conservacao').map(k => PR[k].texto)), true);   // S149 · item 88
+  }
 
   // ── 12 · conclusão (S143 · item 76: "Conforme a seção 7.x, …", montado pelos resultados) ──
   sec('12', T.conclusao || 'CONCLUSÃO');
@@ -954,7 +968,11 @@ function montar(d, opc) {
   // S144 · item 70: o prazo reduzido em campo ou na revisão (o PLH aprovou com as datas desse prazo)
   const RED = I.prazo_red && R.datas_pelo_plh && R.justificativa_datas === I.prazo_red.just ? I.prazo_red : null;
   const anosTxt = n => n + (Number(n) === 1 ? ' ano' : ' anos');
-  if (RED && RED.caso && PR[RED.caso]) par(PR[RED.caso].texto);   // S146 · item 79 (P1)
+  // S163 · issue 21: a justificativa da lista (A1, A2, B, Outros), montada e fechada pela frase fixa do modelo
+  const pRED = RED && raiz.RecsNR13 && M.prazo_just ? raiz.RecsNR13.partes(RED.caso) : null;
+  const tRED = pRED ? raiz.RecsNR13.prazoTexto(RED.caso, pRED.indexOf('O') >= 0 ? RED.just : null, M.prazo_just) : null;
+  if (tRED) par(tRED);
+  else if (RED && RED.caso && PR[RED.caso]) par(PR[RED.caso].texto);   // S146 · item 79 (P1)
   else if (RED) par(txt(M.proximas_reduzido || 'Os prazos foram reduzidos para {{prazos}}, a critério do PLH, em razão de: {{justificativa}}.',
     { prazos: [RED.externo != null ? anosTxt(RED.externo) + ' (exame externo)' : null, RED.interno != null ? anosTxt(RED.interno) + ' (exame interno)' : null].filter(Boolean).join(' e '),
       justificativa: String(RED.just || '').replace(/[.\s]+$/, '').replace(/^./, x => x.toLowerCase()) }));
@@ -1064,6 +1082,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, versao: 'R06a-S161-2026-11-13' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, versao: 'R06a-S163-2026-11-13' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
