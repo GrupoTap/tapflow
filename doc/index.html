@@ -11,6 +11,7 @@
 <script src="../nucleo/nucleo.js?v=N10"></script>
 <script src="../nucleo/modulos.js?v=M4"></script>
 <script src="motor-calculo-nr13.js?v=R00.6"></script>
+<script src="recomendacoes.js?v=RC1"></script>
 <!--
   TapDoc (escritório) · R02b1 — preparar a inspeção
   ─────────────────────────────────────────────────
@@ -191,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E33';   // E33 (S162): issues 13, 14, 15, 19 e 23 — a conferência se fecha ao marcar; as fotos dos acessórios com o nome do acessório; o aviso que bloqueia leva até a parte com problema e a marca em vermelho; "substituir" × aferição conforme; o aviso ao PLH quando a incerteza (U) de um ponto passa da tolerância
+const VERSAO = 'TapDoc E34';   // E34 (S163 · 433): issues 12, 18, 20 e 21 — as recomendações numa lista só (recomendacoes.js RC1: a mesma do celular e do laudo; o revisor tira e edita qualquer uma), todas com "Que…", a limpeza uma vez só; a justificativa do prazo menor numa lista (A1, A2, B, Outros); laudo-pdf.js S163
+// const VERSAO = 'TapDoc E33';   // E33 (S162): issues 13, 14, 15, 19 e 23 — a conferência se fecha ao marcar; as fotos dos acessórios com o nome do acessório; o aviso que bloqueia leva até a parte com problema e a marca em vermelho; "substituir" × aferição conforme; o aviso ao PLH quando a incerteza (U) de um ponto passa da tolerância
 // const VERSAO = 'TapDoc E32';   // E32 (S161): issues 16, 17, 22, 24, 25 e 26 — a aparência do laudo e do certificado (laudo-pdf.js S161: a foto no 7.4, a figura 1 + 2 alinhada, o quadro da seção 13 sem "(reduzido)", "Indicado (média)" na aferição do manômetro, a capa sem o "Exame externo", os rodapés do modelo antigo); nesta página só muda a versão do gerador
 // const VERSAO = 'TapDoc E31';   // E31 (S160): issues 28, 29, 31 e 27 — o mapa carregado antes de aprovar ("Mapa3D is not defined"); aprovar o laudo só com a digital (sem o PIN; sem digital, avisa antes); a aba Laudos cabe no celular; o andamento em % ao aprovar e ao gerar o rascunho
 // const VERSAO = 'TapDoc E30';   // E30 (S158 · 432): a conferência do PDF assinado lê a assinatura do gov.br (assinatura-pdf.js S158, CMS com tamanho indefinido); o gov.br vale como reserva do token (o banco grava "assinatura avançada")
@@ -323,7 +325,7 @@ function marcarProblema(els, msg){
   L.forEach(el => { el.classList.add('problema'); const tira = () => el.classList.remove('problema');
     el.addEventListener('change', tira, { once:true }); el.addEventListener('input', tira, { once:true }); });
   L.forEach(el => { const cd = el.closest('.card.fechado'); if (cd) cd.classList.remove('fechado'); });   // a parte dentro de um quadro fechado (issue 13) abre
-  if (L[0]) L[0].scrollIntoView({ behavior:'smooth', block:'center' });
+  if (L[0]) L[0].scrollIntoView({ behavior:'smooth', block:L[0].getBoundingClientRect().height > window.innerHeight * 0.7 ? 'start' : 'center' });   // E34: o quadro alto mostra o começo
   if (msg) U.toast(msg, 'err');
 }
 
@@ -1375,7 +1377,7 @@ const REV_CAMPOS_AC = [['tag','TAG'], ['marca','Marca'], ['conexao','Conexão'],
 const FUNCOES_VASO = ['Reservatório de ar comprimido', 'Pulmão de ar comprimido', 'Secador de ar comprimido', 'Filtro', 'Separador de condensado', 'Acumulador hidráulico',
   'Autoclave', 'Trocador de calor', 'Reservatório de gás', 'Tanque de pressão'];
 // ── S146 · item 79 (422): os textos prontos do laudo ───────────────────────
-let REV_PRONTOS = null;
+let REV_PRONTOS = null, REV_TEXTOS = null;   // E34 · S163: REV_TEXTOS = tf_laudo_textos_prontos inteiro (os prontos, os textos das recomendações e da lista do prazo)
 const GRUPO_AC = { manometro:'manometro', manovacuometro:'manometro', valvula_seguranca:'valvula', valvula_alivio:'valvula', quebra_vacuo:'quebra_vacuo' };
 const NOME_AC = { manometro:'Manômetro', manovacuometro:'Manovacuômetro', valvula_seguranca:'Válvula de segurança', valvula_alivio:'Válvula de alívio', quebra_vacuo:'Quebra-vácuo', disco_ruptura:'Disco de ruptura' };
 const ordemCaso = (a, b) => a[0].charAt(0) === b[0].charAt(0) ? Number(a[0].slice(1)) - Number(b[0].slice(1)) : a[0] < b[0] ? -1 : 1;
@@ -1472,15 +1474,16 @@ function revTextosHtml(pode){
     + (recs ? '<h3 style="margin:12px 0 4px">Recomendações prontas (seção 11)</h3>' + recs : '') + '</div>';
 }
 
-const PRAZO_MOTIVOS = ['Atmosfera agressiva (corrosão acelerada)', 'Perda de espessura acima do esperado', 'Vida remanescente menor que o prazo da norma', 'Histórico de anomalias no vaso', 'Condições de operação severas'];
+// E34 · decisão 9: a lista antiga de motivos saiu da tela (a justificativa é a lista do modelo: przJustHtml)
 const TIPO_REC = { seguranca:'Segurança', conservacao:'Conservação', geral:'Geral' };
 // sugestões fixas até a biblioteca (R05b)
 function sugestaoRec(item, anomalia){
   const a = (anomalia || '').toLowerCase();
-  if (/corros/.test(a)) return 'Tratar a corrosão (' + (anomalia || '') + ') e refazer a pintura de proteção do item "' + item + '".';
-  if (/vazament/.test(a)) return 'Eliminar o vazamento no item "' + item + '" antes da próxima operação.';
-  if (/aterr/.test(item.toLowerCase())) return 'Instalar ou reparar o aterramento do vaso e medir a continuidade.';   // S144 · item 66
-  return 'Corrigir no item "' + item + '": ' + (anomalia || 'anomalia registrada em campo') + '.';
+  // E34 · issue 20: toda recomendação começa com "Que…"
+  if (/corros/.test(a)) return 'Que a corrosão do item "' + item + '" (' + (anomalia || '') + ') seja tratada e a pintura de proteção refeita;';
+  if (/vazament/.test(a)) return 'Que o vazamento no item "' + item + '" seja eliminado antes da próxima operação;';
+  if (/aterr/.test(item.toLowerCase())) return 'Que seja instalado ou reparado o aterramento do vaso, com a medição da continuidade;';   // S144 · item 66
+  return 'Que seja corrigido o item "' + item + '": ' + (anomalia || 'anomalia registrada em campo') + ';';
 }
 const quandoBR = t => t ? new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
 const diasDesde = t => t ? Math.max(0, Math.floor((Date.now() - new Date(t).getTime()) / 864e5)) : null;
@@ -1518,7 +1521,7 @@ async function telaRevisao(id, manter){
   REV = { id, R, P, v, prev, volume:null, pmta:{}, abertos:(REV && REV.id === id && REV.abertos) || {} };   // E33 · issue 13: o quadro aberto à mão continua aberto ao gravar
   try{ REV.afs = ((await rpc('tf_insp_afericoes_lista', { p_inspecao:id })) || []).filter(x => !x.cancelada_em); }catch(e){ REV.afs = []; }   // E33 · issue 23: o cálculo de cada aferição (U e tolerância por ponto)
   try{ REV.M = await rpc('tf_insp_mapa_ver', { p_id:id }); }catch(e){ REV.M = null; }   // S151 · issue 7 (428): as medidas e a imagem do mapa
-  try{ REV_PRONTOS = ((await rpc('tf_laudo_textos_prontos')) || {}).prontos || null; }catch(e){ REV_PRONTOS = null; }   // S146 · item 79
+  try{ REV_TEXTOS = (await rpc('tf_laudo_textos_prontos')) || {}; REV_PRONTOS = REV_TEXTOS.prontos || null; }catch(e){ REV_TEXTOS = {}; REV_PRONTOS = null; }   // S146 · item 79 · E34
   pintarRevisao();
 }
 // S148 · item 89: depois de gravar, a revisão volta ao MESMO quadro (não a um número de pixels) e realça a linha mexida
@@ -1696,14 +1699,16 @@ function pintarRevisao(){
   const anom = (R.visual || []).filter(x => x.conforme === false).map(x => ({ ref:'visual:' + x.item, titulo:x.item, texto:x.anomalia, sug:sugestaoRec(x.item, x.anomalia) }))
     .concat((R.acessorios || []).filter(a => a.situacao === 'substituir' || (a.afericao && (a.afericao.grave || a.afericao.resultado === 'reprovado')))
       .map(a => ({ ref:'acessorio:' + a.id, titulo:(a.tag || ROT_ACESS[a.tipo] || a.tipo), texto:a.situacao === 'substituir' ? 'a substituir' : 'aferição ' + (a.afericao.resultado || ''),
-                   sug:(/valvula|quebra/.test(a.tipo) ? 'Substituir ou reajustar a ' + (ROT_ACESS[a.tipo] || 'válvula').toLowerCase() + ' ' : 'Substituir o ' + (ROT_ACESS[a.tipo] || '').toLowerCase() + ' ') + (a.tag || '') + '.' })));
+                   sug:/valvula|quebra/.test(a.tipo) ? 'Que a ' + (ROT_ACESS[a.tipo] || 'válvula').toLowerCase() + (a.tag ? ' ' + a.tag : '') + ' seja substituída ou reajustada;'   // E34 · issue 20
+                     : 'Que o ' + (ROT_ACESS[a.tipo] || '').toLowerCase() + (a.tag ? ' ' + a.tag : '') + ' seja substituído;' })));
   h += cardConf('recomendacoes') + cab('recomendacoes', '2 · Anomalias e recomendações')
     + (anom.length ? '<table><tr><th>Anomalia</th><th>Recomendação</th><th></th></tr>' + anom.map(x => {
-        const rr = recs.filter(r => r.ref === x.ref);
-        return '<tr><td><b>' + esc(x.titulo) + '</b><div class="muted">' + esc(x.texto || '') + '</div></td><td>' + (rr.length ? rr.map(r => '<div>' + esc(r.texto) + ' <span class="muted">(' + TIPO_REC[r.tipo] + (r.prazo ? ', até ' + dataBR(r.prazo) : '') + ')</span></div>').join('')
+        const rr = recs.filter(r => r.ref === x.ref).concat(revRecLista().filter(y => y.chave === x.ref && y.marcada).map(y => ({ texto:y.texto, tipo:y.tipo, auto:true })));   // E34 · issue 12
+        return '<tr><td><b>' + esc(x.titulo) + '</b><div class="muted">' + esc(x.texto || '') + '</div></td><td>' + (rr.length ? rr.map(r => '<div>' + esc(r.texto) + ' <span class="muted">(' + TIPO_REC[r.tipo] + (r.prazo ? ', até ' + dataBR(r.prazo) : '') + (r.auto ? ', da resposta' : '') + ')</span></div>').join('')
           : '<span style="color:var(--crit);font-weight:600">sem recomendação</span>') + '</td><td>' + (eu.pode ? '<button class="btn mini" data-novarec="' + esc(x.ref) + '" data-sug="' + esc(x.sug) + '">' + (rr.length ? '+ outra' : 'Recomendar') + '</button>' : '') + '</td></tr>';
       }).join('') + '</table>' : '<p class="muted">Nenhuma anomalia no visual e nenhum acessório reprovado.</p>')
-    + '<h3 style="margin-top:14px">Todas as recomendações (' + recs.length + ')</h3>' + (recs.length ? '<table>' + recs.map(r => '<tr><td>' + esc(r.texto) + '</td><td class="muted">' + TIPO_REC[r.tipo]
+    + revRecListaHtml(eu.pode)   // E34 · issue 12: a lista que vai no laudo (a mesma do celular)
+    + '<h3 style="margin-top:14px">Escritas na revisão (' + recs.length + ')</h3>' + (recs.length ? '<table>' + recs.map(r => '<tr><td>' + esc(r.texto) + '</td><td class="muted">' + TIPO_REC[r.tipo]
         + (r.prazo ? ' · até ' + dataBR(r.prazo) : '') + (r.ref ? '' : ' · livre') + '</td><td>' + (eu.pode ? '<button class="btn mini" data-edrec="' + esc(r.id) + '">Editar</button> <button class="btn mini perigo" data-rmrec="' + esc(r.id) + '">Tirar</button>' : '') + '</td></tr>').join('') + '</table>' : '<p class="muted">Nenhuma.</p>')
     + (eu.pode ? '<button class="btn mini" data-novarec="" data-sug="" style="margin-top:8px">+ recomendação livre</button>' : '')
     + revPlacaAlerta(recs) + revSugestoesHtml(recs, eu.pode) + '</div>';   // S148 · item 91
@@ -1800,17 +1805,37 @@ function revDatasHtml(prz){
     + '<label class="f">Próxima interna<input class="t" type="date" id="revInt" value="' + esc(D.int || '') + '"' + (nInt ? ' max="' + nInt + '"' : '') + '></label>'
     + '<label class="f">Motivo<input class="t" id="revJust" value="' + esc(D.just || '') + '" placeholder="ex.: vaso horizontal em atmosfera agressiva"></label></div></div></div>';
 }
+// ── E34 · S163 · issue 12: a lista das recomendações do laudo (a mesma regra do celular e do laudo: recomendacoes.js) ──
+function revRecLista(){
+  const { R, prev, v } = REV, T = REV_TEXTOS || {};
+  return RecsNR13.montar({ B:Object.assign({}, T.rec || {}, { prontos:REV_PRONTOS || {} }), ambiente:R.inspecao.ambiente || (v && v.inspecao && v.inspecao.ambiente) || null,
+    categoria:prev && prev.vaso && !prev.vaso.erro ? prev.vaso.categoria : null, placa:placaDe(R.vaso || {}), rec_casos:R.inspecao.rec_casos || [],
+    ajustes:R.inspecao.rec_ajustes || {}, linhas:R.recomendacoes || [],
+    acessorios:(R.acessorios || []).map(a => ({ id:a.id, tipo:a.tipo, situacao:a.situacao, resultado:a.afericao && a.afericao.resultado, grave:a.afericao && a.afericao.grave, caso_campos:a.caso_campos })) });
+}
+const ORIG_REC = { fixa:'da norma', regra:'da resposta', pronta:'pronta', livre:'escrita aqui' };
+function revRecListaHtml(pode){
+  const L = revRecLista(), n = L.filter(x => x.marcada).length;
+  return '<h3 style="margin-top:14px">O que vai no laudo · seção 11 (' + n + ')</h3><p class="muted" style="margin:0 0 4px">Desmarque o que não vale para este vaso. "Editar" muda o texto só neste laudo. '
+    + 'As prontas se marcam em "Textos prontos"; as escritas aqui, na lista de baixo. Toda recomendação começa com "Que…".</p><table id="revRecLista">'
+    + L.map(x => '<tr data-rc="' + esc(x.chave) + '"' + (x.marcada ? '' : ' style="opacity:.6"') + '><td style="width:30px">'
+      + (x.origem === 'fixa' || x.origem === 'regra' ? '<input type="checkbox" data-rcfora="' + esc(x.chave) + '"' + (x.marcada ? ' checked' : '') + (pode ? '' : ' disabled') + ' title="vai no laudo">' : '✓')
+      + '</td><td>' + (x.marcada ? esc(x.texto) : '<s>' + esc(x.texto) + '</s>') + (x.editada ? ' <span class="chip s-em_conferencia">editada</span>' : '') + '</td><td class="muted">' + (TIPO_REC[x.tipo] || x.tipo) + ' · ' + ORIG_REC[x.origem]
+      + (x.prazo ? ' · até ' + dataBR(x.prazo) : '') + '</td><td>' + (pode && x.origem !== 'livre' ? '<button class="btn mini" data-rced="' + esc(x.chave) + '">Editar</button>' : '') + '</td></tr>').join('') + '</table>';
+}
+// E34 · issue 20: toda recomendação começa com "Que…"
+const comecaComQue = t => /^Que\s/.test(String(t || '').trim());
 // ── S144 · item 78: recomendações sugeridas pelas condições do vaso (o revisor escolhe; nada é marcado sozinho) ──
 function revSugestoes(){
   const { R, v } = REV, out = [];
   const fluidos = CALC.ativas(v).map(k => String(k.fluido || '').toLowerCase()).join(' ');
   const amb = R.inspecao.ambiente || (v.inspecao && v.inspecao.ambiente) || v.ambiente;
   const vis = R.visual || [];
-  out.push({ tipo:'conservacao', texto:'Que se faça a limpeza periódica do vaso e dos acessórios.' });
+  // E34 · issue 18: a limpeza periódica já está no laudo (texto do modelo): não se sugere de novo
   if (/ar comprimido/.test(fluidos)) out.push({ tipo:'conservacao', texto:'Que se faça a drenagem (purga) periódica do condensado ou se instale purga automática, para evitar acúmulo de umidade no interior do vaso.' });
   if (amb === 'aberto') out.push({ tipo:'conservacao', texto:'Que seja providenciada uma cobertura, para evitar que o vaso fique exposto às intempéries.' });
   if (vis.some(x => x.conforme === false && /corros|pintur|ferrugem|oxida/i.test((x.anomalia || '') + ' ' + x.item))) out.push({ tipo:'conservacao', texto:'Que se providencie a pintura do vaso, para desacelerar a corrosão.' });
-  if (vis.some(x => /aterr/i.test(x.item) && x.conforme === false)) out.push({ tipo:'seguranca', texto:'Instalar ou reparar o aterramento do vaso e medir a continuidade.' });
+  if (vis.some(x => /aterr/i.test(x.item) && x.conforme === false)) out.push({ tipo:'seguranca', texto:'Que seja instalado ou reparado o aterramento do vaso, com a medição da continuidade;' });
   // S148 · item 91: placa ilegível ou não indelével → substituir; sem placa → providenciar (NR-13, 13.5.1.3; o PLH confere a citação)
   const pl = placaDe(R.vaso || {});
   if (pl === 'ilegivel') out.push({ tipo:'seguranca', texto:PLACA_REC.ilegivel });
@@ -1824,12 +1849,14 @@ const PLACA_REC = { ilegivel:'Que a placa de identificação do vaso seja substi
 const placaDe = V => V.placa_situacao || (V.sem_placa ? 'sem' : 'indelevel');
 function revPlacaAlerta(recs){
   const pl = placaDe(REV.R.vaso || {});
-  if (pl === 'indelevel' || recs.some(r => /placa/i.test(r.texto || '')) || (REV.R.inspecao.rec_casos || []).some(k => k === 'R10' || k === 'R11')) return '';
+  if (pl === 'indelevel' || recs.some(r => /placa/i.test(r.texto || '')) || (REV.R.inspecao.rec_casos || []).some(k => k === 'R10' || k === 'R11')
+      || revRecLista().some(x => x.chave === 'regra:placa' && x.marcada)) return '';   // E34 · issue 12
   return '<p class="alerta crit" style="margin:8px 0 0">Vaso ' + esc(PLACA_ROT[pl]) + ': o laudo cita a recomendação da placa na seção 11. Use a sugestão abaixo (Recomendar).</p>';
 }
 function revSugestoesHtml(recs, pode){
   const norm = x => String(x || '').toLowerCase().replace(/[^a-zà-ú]/g, '').slice(0, 40);
-  const L = revSugestoes().filter(x => !recs.some(r => norm(r.texto) === norm(x.texto)));
+  const RL = revRecLista().filter(y => y.marcada);   // E34: nem o que a lista do laudo já tem
+  const L = revSugestoes().filter(x => !recs.some(r => norm(r.texto) === norm(x.texto)) && !RL.some(y => norm(y.texto) === norm(x.texto)) && !(/limpeza/i.test(x.texto) && RL.some(y => /limpeza/i.test(y.texto))));
   if (!L.length) return '';
   return '<h3 style="margin-top:14px">Sugestões pelas condições do vaso</h3><p class="muted" style="margin:0 0 4px">O sistema não marca nenhuma: escolha as que valem para este vaso.</p><table>'
     + L.map(x => '<tr><td>' + esc(x.texto) + '</td><td class="muted">' + TIPO_REC[x.tipo] + '</td><td>' + (pode ? '<button class="btn mini" data-sugrec="' + esc(x.tipo) + '" data-sug="' + esc(x.texto) + '">Recomendar</button>' : '') + '</td></tr>').join('') + '</table>';
@@ -1850,10 +1877,29 @@ function revPrazoHtml(prev, pode){
   if (sug != null) h += '<p class="alerta falta" style="margin:0 0 8px">Sugestão: a vida remanescente do ' + esc(menor.nome) + ' (' + esc(menor.vidaTxt) + ') é menor que o prazo da norma. Avalie reduzir o prazo do exame interno para ' + sug + ' ano(s).</p>';
   if (pode) h += '<div class="g3"><label class="f">Externo (anos)<input class="t" id="przExt" inputmode="numeric" value="' + esc(PR && PR.externo != null ? PR.externo : '') + '" placeholder="' + (prz ? 'norma: ' + prz.externo : '') + '"></label>'
     + '<label class="f">Interno (anos)<input class="t" id="przInt" inputmode="numeric" value="' + esc(PR && PR.interno != null ? PR.interno : (sug != null && !PR ? sug : '')) + '" placeholder="' + (prz && prz.interno != null ? 'norma: ' + prz.interno : '') + '"></label>'
-    + '<label class="f">Justificativa<input class="t" id="przJust" list="przMotivos" value="' + esc(PR ? PR.just || '' : '') + '" placeholder="escolha ou escreva"><datalist id="przMotivos">' + PRAZO_MOTIVOS.map(m => '<option value="' + esc(m) + '">').join('') + '</datalist></label></div>'
-    + (REV_PRONTOS && REV_PRONTOS.P1 && REV.v && REV.v.posicao === 'horizontal' ? '<div class="linha" style="margin:4px 0"><button class="btn mini sec" id="przP1">Usar o texto pronto: ' + esc(REV_PRONTOS.P1.rotulo) + '</button></div>' : '')   // S146 · P1
+    + '</div>' + przJustHtml(PR)   // E34 · issue 21: a justificativa numa lista (A1, A2, B, Outros)
     + '<div class="linha"><button class="btn mini" id="przGravar">Gravar o prazo reduzido</button>' + (PR ? '<button class="btn mini" id="przTirar">Voltar ao prazo da norma</button>' : '') + '</div>';
   return h + '</div>';
+}
+// ── E34 · S163 · issue 21: a justificativa do prazo menor numa lista (os textos do modelo, aprovados pelo PLH) ──
+const przJ = () => (REV_TEXTOS && REV_TEXTOS.rec && REV_TEXTOS.rec.prazo_just) || null;
+function przJustHtml(PR){
+  const J = przJ(), pp = PR ? RecsNR13.partes(PR.caso) : null;
+  const marc = k => !!(pp && pp.indexOf(k) >= 0);
+  // o motivo antigo (texto livre, lista antiga ou o P1) vira "Outros"
+  const oOn = !!PR && (pp ? marc('O') : !!PR.just), oTx = PR ? (pp ? (marc('O') ? PR.just || '' : '') : PR.just || '') : '';
+  const chk = (k, rot, on) => '<div class="chk"><input type="checkbox" id="przJ_' + k + '" data-przj="' + k + '"' + (on ? ' checked' : '') + '><label for="przJ_' + k + '">' + esc(rot) + '</label></div>';
+  return '<div id="przJ" style="margin-top:6px"><b>Justificativa</b> <span class="muted">(marque uma ou mais)</span>'
+    + (J ? ['A1', 'A2', 'B'].filter(k => J[k]).map(k => chk(k, k + ' · ' + J[k].rotulo, marc(k))).join('') : '<p class="muted" style="margin:2px 0">A lista (A1 compressor de pistão, A2 atmosfera agressiva, B sem código de construção) espera o PLH aprovar os textos na aba "Textos do laudo". Até lá, escreva em "Outros".</p>')
+    + chk('O', 'Outros (escrever)', oOn)
+    + '<label class="f" id="przOL"' + (oOn ? '' : ' hidden') + '>Outros<textarea class="t" id="przOutro" rows="2">' + esc(oTx) + '</textarea></label>'
+    + '<p class="alerta" id="przAvB" style="margin:6px 0" hidden>' + esc((J && J.aviso_b) || '') + '</p>'
+    + (J ? '<p class="muted" id="przPrev" style="margin:6px 0"></p>' : '') + '</div>';
+}
+function przJustLer(){
+  const J = przJ(), marcas = ['A1', 'A2', 'B', 'O'].filter(k => $('przJ_' + k) && $('przJ_' + k).checked), outros = (($('przOutro') || {}).value || '').trim();
+  return { J, marcas, outros, caso:J ? RecsNR13.casoDe(marcas) : null,
+           just:marcas.indexOf('O') >= 0 || !J ? outros : RecsNR13.prazoResumo(marcas, outros, J) };
 }
 // ── S144 · item 77: os anexos do laudo, com a miniatura de cada página ──
 // ════════════════════════════════════════════════════════════════════════════
@@ -2396,11 +2442,30 @@ function ligarRevisao(){
     janela(r.id ? 'Editar a recomendação' : 'Nova recomendação', '<label class="f">Tipo<select class="t" id="rTipo">' + Object.entries(TIPO_REC).map(([k, t]) => '<option value="' + k + '"' + (r.tipo === k ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></label>'
       + '<label class="f">Recomendação<textarea class="t" id="rTxt" rows="3">' + esc(r.texto || '') + '</textarea></label><label class="f">Prazo (opcional)<input class="t" id="rPrazo" type="date" value="' + esc(r.prazo || '') + '"></label>',
       [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
+        if (!r.id && !comecaComQue($('rTxt').value)){ U.toast('A recomendação começa com "Que…" (ex.: "Que o manômetro seja substituído;").', 'err'); return false; }   // E34 · issue 20
         rpc('tf_insp_recomendacao_gravar', { p_id:id, p_rec:{ id:r.id || null, tipo:$('rTipo').value, texto:$('rTxt').value, prazo:$('rPrazo').value || null, ref:r.ref } })
           .then(() => { N.janela.fechar(); recarregar(); }, erro);
         return false; } }]);
   };
   T.querySelectorAll('[data-novarec]').forEach(b => b.addEventListener('click', () => formRec(null, b.dataset.novarec || null, b.dataset.sug)));
+  // E34 · issue 12: tirar, voltar e editar as recomendações da lista (só neste laudo; inspecoes.rec_ajustes)
+  const ajAtual = () => { const a = R.inspecao.rec_ajustes || {}; return { fora:(a.fora || []).slice(), textos:Object.assign({}, a.textos || {}) }; };
+  const gravarAj = a => rpc('tf_insp_rec_ajustes_gravar', { p_id:id, p_ajustes:a }).then(() => recarregar(), erro);
+  T.querySelectorAll('[data-rcfora]').forEach(c => c.addEventListener('change', () => {
+    const a = ajAtual(), k = c.dataset.rcfora; a.fora = a.fora.filter(x => x !== k).concat(c.checked ? [] : [k]); gravarAj(a);
+  }));
+  T.querySelectorAll('[data-rced]').forEach(b => b.addEventListener('click', () => {
+    const x = revRecLista().find(y => y.chave === b.dataset.rced); if (!x) return;
+    janela('Editar a recomendação', '<p class="muted" style="margin:0 0 6px">O texto muda só neste laudo. Texto de origem: ' + esc(x.original) + '</p>'
+      + '<label class="f">Recomendação<textarea class="t" id="rcTx" rows="4">' + esc(x.texto) + '</textarea></label>',
+      [{ rotulo:'Cancelar' }].concat(x.editada ? [{ rotulo:'Voltar ao texto de origem', acao:() => { const a = ajAtual(); delete a.textos[x.chave]; N.janela.fechar(); gravarAj(a); return false; } }] : [])
+      .concat([{ rotulo:'Gravar', classe:'pri', acao:() => {
+        const t = ($('rcTx').value || '').trim();
+        if (t.length < 5){ U.toast('Escreva a recomendação.', 'err'); return false; }
+        if (!comecaComQue(t)){ U.toast('A recomendação começa com "Que…" (ex.: "Que o manômetro seja substituído;").', 'err'); return false; }
+        const a = ajAtual(); if (t === x.original) delete a.textos[x.chave]; else a.textos[x.chave] = t;
+        N.janela.fechar(); gravarAj(a); return false; } }]));
+  }));
   // S144 · item 78: a sugestão abre o formulário já preenchido (o revisor confere e grava)
   T.querySelectorAll('[data-sugrec]').forEach(b => b.addEventListener('click', () => formRec({ tipo:b.dataset.sugrec, texto:b.dataset.sug, prazo:null, ref:null })));
   // S144 · item 77: as páginas de cada anexo
@@ -2425,9 +2490,25 @@ function ligarRevisao(){
   T.querySelectorAll('[data-tpdsc]').forEach(el => el.addEventListener('change', () =>
     caso({ alvo:'acessorio', id:el.dataset.tpdsc, caso:null, campos:el.checked ? { sem_certificado:true } : null, motivo:null })));
   // S144 · item 70: gravar ou tirar o prazo reduzido
-  const p1t = REV_PRONTOS && REV_PRONTOS.P1 ? REV_PRONTOS.P1.texto : null;   // S146 · item 79: o texto pronto do prazo (P1)
-  const bp1 = $('przP1'); if (bp1) bp1.addEventListener('click', () => { $('przJust').value = p1t; });
-  const prz = (ext, int, just) => rpc('tf_insp_prazo_reduzir', { p_id:id, p_dados:{ externo:ext, interno:int, justificativa:just, caso:just && p1t && just === p1t ? 'P1' : null } })
+  // E34 · issue 21: a lista da justificativa (B sugere 1 e 3 anos; avisa o código adotado; o parágrafo do laudo aparece embaixo)
+  const przVer = () => {
+    const x = przJustLer(), ol = $('przOL'); if (!ol) return;
+    ol.hidden = x.marcas.indexOf('O') < 0;
+    const ab = $('przAvB'); if (ab) ab.hidden = !(x.marcas.indexOf('B') >= 0 && RecsNR13.codigoAdotado((REV.R.vaso || {}).codigo_construcao || (REV.v || {}).codigo_construcao));
+    const pv = $('przPrev'); if (pv) pv.textContent = x.caso ? 'No laudo: ' + (RecsNR13.prazoTexto(x.caso, x.outros, x.J) || '—') : '';
+  };
+  T.querySelectorAll('[data-przj]').forEach(c => c.addEventListener('change', () => {
+    const J = przJ();
+    if (c.dataset.przj === 'B' && c.checked && J && J.B){   // o 13.5.1.6.1: 1 ano (externo) e 3 anos (interno), editáveis
+      const e = $('przExt'), i = $('przInt');
+      if (e && (!e.value || Number(e.value) > J.B.externo)) e.value = J.B.externo;
+      if (i && (!i.value || Number(i.value) > J.B.interno)) i.value = J.B.interno;
+    }
+    przVer();
+  }));
+  const po = $('przOutro'); if (po) po.addEventListener('input', przVer);
+  przVer();
+  const prz = (ext, int, just, caso) => rpc('tf_insp_prazo_reduzir', { p_id:id, p_dados:{ externo:ext, interno:int, justificativa:just, caso:caso || null } })
     .then(r => { U.toast(r && r.mudou ? 'Prazo gravado.' : 'Nada mudou.', 'ok'); REV.datas = null; recarregar(); }, erro);
   const bpg = $('przGravar'); if (bpg) bpg.addEventListener('click', () => U.semDuploEnvio(bpg, async () => {
     const n = id => { const x = ($(id).value || '').trim(); if (!x) return null; const y = Number(x); if (!Number.isInteger(y) || y < 1) throw new Error('Prazo em anos inteiros (1 ou mais).'); return y; };
@@ -2436,9 +2517,12 @@ function ligarRevisao(){
     if (pz && ext != null && ext > pz.externo){ U.toast('O externo não pode passar de ' + pz.externo + ' ano(s) (NR-13).', 'err'); return; }
     if (pz && int != null && pz.interno != null && int > pz.interno){ U.toast('O interno não pode passar de ' + pz.interno + ' anos (NR-13).', 'err'); return; }
     if (ext == null && int == null){ U.toast('Informe o prazo reduzido (externo, interno ou os dois).', 'err'); return; }
-    await prz(ext, int, ($('przJust').value || '').trim());
+    const x = przJustLer();   // E34 · issue 21
+    if (!x.marcas.length){ marcarProblema($('przJ'), 'Marque a justificativa do prazo menor (Prazo das próximas inspeções).'); return; }
+    if (x.marcas.indexOf('O') >= 0 && x.outros.length < 5){ marcarProblema($('przOL'), 'Escreva o motivo em "Outros" (Prazo das próximas inspeções).'); return; }
+    await prz(ext, int, x.just, x.caso);
   }));
-  const bpt = $('przTirar'); if (bpt) bpt.addEventListener('click', () => prz(null, null, null));
+  const bpt = $('przTirar'); if (bpt) bpt.addEventListener('click', () => prz(null, null, null, null));
   T.querySelectorAll('[data-edrec]').forEach(b => b.addEventListener('click', () => formRec(R.recomendacoes.find(x => x.id === b.dataset.edrec))));
   T.querySelectorAll('[data-rmrec]').forEach(b => b.addEventListener('click', async () => {
     if (!await N.janela.confirmar('Tirar a recomendação?', '<p>' + esc((R.recomendacoes.find(x => x.id === b.dataset.rmrec) || {}).texto || '') + '</p>', 'Tirar', true)) return;
@@ -2664,7 +2748,7 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S161');
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S163');
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S158');
     return true;
   })().catch(e => { LIBS = null; throw e; });

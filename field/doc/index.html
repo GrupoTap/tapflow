@@ -11,6 +11,7 @@
 <script src="../../nucleo/nucleo.js?v=N10"></script>
 <script src="../../nucleo/modulos.js?v=M4"></script>
 <script src="motor-calculo-nr13.js?v=R00.6"></script>
+<script src="recomendacoes.js?v=RC1"></script>
 <!--
   TapDoc 4 · a coleta da inspeção no celular (R02a, R02b1, R03a e R03b)
   ─────────────────────────────────────────────────────────────────
@@ -187,7 +188,8 @@ input.t.suspeita{border-color:var(--crit);background:var(--crit-soft);color:var(
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 25';   // S162 · issues 15, 19 e 23: o que falta para enviar leva até a parte com problema (marcada em vermelho, com o nome da tela); "substituir" × aferição conforme; a leitura suspeita da aferição em vermelho
+const VERSAO = 'TapDoc 26';   // S163 · issues 12, 20 e 21 (433): todas as recomendações do laudo no Fechamento (as da norma, as das respostas — que dá para desmarcar — e as a mais; recomendacoes.js RC1); a justificativa do prazo menor numa lista (A1, A2, B, Outros)
+// const VERSAO = 'TapDoc 25';   // S162 · issues 15, 19 e 23: o que falta para enviar leva até a parte com problema (marcada em vermelho, com o nome da tela); "substituir" × aferição conforme; a leitura suspeita da aferição em vermelho
 // const VERSAO = 'TapDoc 24';   // S154 · issue 9 (430): a foto da medição de espessura na tela Ultrassom (uma por vaso; a foto ou o motivo, obrigatória para enviar)
 // const VERSAO = 'TapDoc 23';   // S152 · issue 7, Parte 2 (429): a seção "Medidas do vaso" em Componentes — circunferência, comprimento do costado entre as soldas, altura de cada tampo e outras medidas (nome + valor), para o desenho do mapa dos pontos
 // const VERSAO = 'TapDoc 22';   // S150 · item 81 (427): a aferição em 2 etapas (a 1ª reprovada encerra: NÃO CONFORME, sem leituras); manômetro pela ASME B40.100 Grau D; o teste da válvula pelas regras V1–V5 (abertura encontrada, aviso na hora acima da PMTA e abaixo da operação); "Danificado" vira a aferição reprovada na etapa 1; motor R00.6
@@ -1674,6 +1676,8 @@ const MOTIVOS_NAO_INSP = ['O vaso está desligado ou fora de operação.', 'Não
 // O modelo em uso vem do servidor (tf_laudo_textos_prontos) e fica guardado no aparelho para usar sem sinal.
 // Sem ele (a versão com os textos ainda não aprovada pelo PLH), o celular pede o motivo escrito, como antes.
 const PRONTOS = () => { const t = LS.get('tfdoc_prontos', null); return t && t.prontos && typeof t.prontos === 'object' ? t.prontos : null; };
+// S163: os textos das recomendações e da lista do prazo (vêm junto, em .rec)
+const TEXTOS_REC = () => { const t = LS.get('tfdoc_prontos', null); return (t && t.rec && typeof t.rec === 'object') ? t.rec : {}; };
 async function baixarProntos(){ try{ const t = await N.api.rpc('tf_laudo_textos_prontos'); LS.set('tfdoc_prontos', t || null); }catch(e){} }
 const GRUPO_AC = { manometro:'manometro', manovacuometro:'manometro', valvula_seguranca:'valvula', valvula_alivio:'valvula', quebra_vacuo:'quebra_vacuo' };
 const ordemCaso = (a, b) => a[0].charAt(0) === b[0].charAt(0) ? Number(a[0].slice(1)) - Number(b[0].slice(1)) : a[0] < b[0] ? -1 : 1;
@@ -2565,8 +2569,21 @@ function ligarReabrir(v){
 
 // ── fechamento e envio ─────────────────────────────────────────────────────
 // ── S144 · item 70: prazo menor que o da norma (externo e interno separados), com a justificativa ──
-const p1De = v => (v.posicao === 'horizontal' && PRONTOS() && PRONTOS().P1) || null;   // S146 · item 79 (T6): só vaso horizontal
-const PRAZO_MOTIVOS = ['Atmosfera agressiva (corrosão acelerada)', 'Perda de espessura acima do esperado', 'Histórico de anomalias no vaso', 'Condições de operação severas'];
+// S163 · issue 12: a lista das recomendações do laudo, pela mesma regra da revisão e do laudo (recomendacoes.js)
+function recListaCampo(v){
+  const i = v.inspecao;
+  let cat = null; try{ const r = previa(v); cat = r.vaso && !r.vaso.erro ? r.vaso.categoria : null; }catch(e){}
+  return RecsNR13.montar({ B:Object.assign({}, TEXTOS_REC(), { prontos:PRONTOS() || {} }), ambiente:i.ambiente || null, categoria:cat,
+    placa:v.placa_situacao || (v.sem_placa ? 'sem' : 'indelevel'), rec_casos:i.rec_casos || [], ajustes:i.rec_ajustes || {}, linhas:[],
+    acessorios:acessDe(v).map(a => { const af = afDe(v, a), r = af ? resultadoAf(v, a, af) : null;
+      return { id:a.id, tipo:a.tipo, situacao:a.situacao, resultado:r && r.resultado, grave:r && r.grave, caso_campos:a.caso_campos }; }) });
+}
+// S163 · issue 21: a justificativa do prazo menor numa lista (A1, A2, B do modelo, aprovados pelo PLH; e Outros)
+const przJ = () => TEXTOS_REC().prazo_just || null;
+function przJustLer(){
+  const J = przJ(), marcas = ['A1', 'A2', 'B', 'O'].filter(k => $('przJ_' + k) && $('przJ_' + k).checked), outros = (($('przOutro') || {}).value || '').trim();
+  return { J, marcas, outros, caso:J ? RecsNR13.casoDe(marcas) : null, just:marcas.indexOf('O') >= 0 || !J ? outros : RecsNR13.prazoResumo(marcas, outros, J) };
+}
 function cartaoPrazo(v){
   const i = v.inspecao, PR = i.prazo_red || null;
   let pz = null; try{ const r = previa(v); pz = r.vaso && !r.vaso.erro ? r.vaso.prazos : null; }catch(e){}
@@ -2577,31 +2594,53 @@ function cartaoPrazo(v){
     + 'Só menor, nunca maior. O escritório e o PLH veem antes de aprovar.</p>'
     + '<div class="lin"><label class="f">Exame externo<select class="t" id="przExt">' + opc(pz && pz.externo, PR && PR.externo) + '</select></label>'
     + '<label class="f">Exame interno<select class="t" id="przInt">' + opc(pz && pz.interno != null ? pz.interno : 10, PR && PR.interno) + '</select></label></div>'
-    + '<label class="f">Por quê<select class="t" id="przMot"><option value="">—</option>' + (p1De(v) ? '<option value="P1"' + (PR && PR.caso === 'P1' ? ' selected' : '') + '>' + esc(p1De(v).rotulo) + ' (texto pronto)</option>' : '') + PRAZO_MOTIVOS.map(m => '<option' + (PR && PR.just === m ? ' selected' : '') + '>' + esc(m) + '</option>').join('')
-    + '<option value="+"' + (PR && PR.just && !PR.caso && PRAZO_MOTIVOS.indexOf(PR.just) < 0 ? ' selected' : '') + '>Outro (escrever)</option></select></label>'
-    + '<label class="f" id="przOutroL"' + (PR && PR.just && !PR.caso && PRAZO_MOTIVOS.indexOf(PR.just) < 0 ? '' : ' hidden') + '>Motivo<textarea class="t" id="przOutro">' + esc(PR && !PR.caso && PRAZO_MOTIVOS.indexOf(PR.just) < 0 ? PR.just || '' : '') + '</textarea></label></div></div>';
+    + przJustCampo(v, PR) + '</div></div>';
+}
+function przJustCampo(v, PR){
+  const J = przJ(), pp = PR ? RecsNR13.partes(PR.caso) : null, marc = k => !!(pp && pp.indexOf(k) >= 0);
+  const oOn = !!PR && (pp ? marc('O') : !!PR.just), oTx = PR ? (pp ? (marc('O') ? PR.just || '' : '') : PR.just || '') : '';   // o motivo antigo (lista antiga ou P1) vira "Outros"
+  const chk = (k, rot, on) => '<div class="chk"><input type="checkbox" id="przJ_' + k + '" data-przj="' + k + '"' + (on ? ' checked' : '') + '><label for="przJ_' + k + '">' + esc(rot) + '</label></div>';
+  return '<div id="przJ"><p style="margin:10px 0 0;font-size:13px;font-weight:600;color:var(--ink-2)">Por quê (marque uma ou mais)</p>'
+    + (J ? ['A1', 'A2', 'B'].filter(k => J[k]).map(k => chk(k, J[k].rotulo, marc(k))).join('') : '')
+    + chk('O', 'Outros (escrever)', oOn)
+    + '<label class="f" id="przOutroL"' + (oOn ? '' : ' hidden') + '>Outros<textarea class="t" id="przOutro">' + esc(oTx) + '</textarea></label>'
+    + '<p class="alerta" id="przAvB" hidden>' + esc((J && J.aviso_b) || '') + '</p></div>';
 }
 function ligarPrazo(v){
   const i = v.inspecao;
+  // S163 · issue 21: grava quando o prazo e a justificativa estão ditos (a lista: A1, A2, B, Outros)
   const gravar = () => {
-    const on = $('przOn').checked, ext = on ? Number($('przExt').value) || null : null, int = on ? Number($('przInt').value) || null : null;
-    const caso = $('przMot').value === 'P1' && p1De(v) ? 'P1' : null;
-    const just = caso ? p1De(v).texto : $('przMot').value === '+' ? ($('przOutro').value || '').trim() : $('przMot').value;
-    if (on && (ext || int) && just.length < 5) return;   // grava quando o motivo estiver dito
+    const on = $('przOn').checked, ext = on ? Number($('przExt').value) || null : null, int = on ? Number($('przInt').value) || null : null, x = przJustLer();
+    if (on && (ext || int) && (!x.marcas.length || (x.marcas.indexOf('O') >= 0 && x.outros.length < 5) || x.just.length < 2)) return;
+    const caso = on ? x.caso : null, just = on ? x.just : null;
     i.prazo_red = on && (ext || int) ? { externo:ext, interno:int, just, origem:'campo', caso } : null; salvar();
-    enfileirar(v, 'prazo', 'prazo das próximas inspeções', { funcao:'tf_insp_prazo_reduzir', payload:{ p_id:i.id, p_dados:{ externo:ext, interno:int, justificativa:on ? just : null, caso:on ? caso : null } } });
+    enfileirar(v, 'prazo', 'prazo das próximas inspeções', { funcao:'tf_insp_prazo_reduzir', payload:{ p_id:i.id, p_dados:{ externo:ext, interno:int, justificativa:on && (ext || int) ? just : null, caso:on && (ext || int) ? caso : null } } });
+  };
+  const ver = () => {
+    const x = przJustLer(); $('przOutroL').hidden = x.marcas.indexOf('O') < 0;
+    $('przAvB').hidden = !(x.marcas.indexOf('B') >= 0 && RecsNR13.codigoAdotado(v.codigo_construcao));   // o 13.5.1.6.1 com código adotado: confirme
   };
   ligar('przOn', el => { $('przCx').hidden = !el.checked; if (!el.checked && i.prazo_red) gravar(); });
   ligar('przExt', gravar); ligar('przInt', gravar);
-  ligar('przMot', el => { $('przOutroL').hidden = el.value !== '+'; if (el.value !== '+') gravar(); });
-  ligar('przOutro', gravar);
+  $('tela').querySelectorAll('[data-przj]').forEach(c => c.addEventListener('change', () => {
+    const J = przJ();
+    if (c.dataset.przj === 'B' && c.checked && J && J.B){   // B sugere 1 ano (externo) e 3 anos (interno), se o seletor tiver
+      const e = $('przExt'), n = $('przInt');
+      if (e && e.querySelector('option[value="' + J.B.externo + '"]') && (!e.value || Number(e.value) > J.B.externo)) e.value = String(J.B.externo);
+      if (n && n.querySelector('option[value="' + J.B.interno + '"]') && (!n.value || Number(n.value) > J.B.interno)) n.value = String(J.B.interno);
+    }
+    ver(); gravar();
+  }));
+  ligar('przOutro', gravar, 'input');
+  ver();
 }
 function avisoPrazo(v){
-  const i = v.inspecao, on = $('przOn') && $('przOn').checked;
+  const on = $('przOn') && $('przOn').checked;
   if (!on) return null;
-  const ext = Number($('przExt').value) || null, int = Number($('przInt').value) || null, just = $('przMot').value === 'P1' ? 'P1 texto pronto' : $('przMot').value === '+' ? ($('przOutro').value || '').trim() : $('przMot').value;
+  const ext = Number($('przExt').value) || null, int = Number($('przInt').value) || null, x = przJustLer();
   if (!ext && !int) return 'Prazo menor: escolha o prazo do exame externo, do interno ou dos dois (ou desmarque).';
-  if (just.length < 5) return 'Prazo menor: diga por quê.';
+  if (!x.marcas.length) return 'Prazo menor: marque por quê.';
+  if (x.marcas.indexOf('O') >= 0 && x.outros.length < 5) return 'Prazo menor: escreva o motivo em "Outros".';
   return null;
 }
 function telaFechamento(v){
@@ -2625,8 +2664,13 @@ function telaFechamento(v){
   h += cartaoPrazo(v);   // S144 · item 70
   const PR7 = PRONTOS(), rc = i.rec_casos || [];   // S146 · item 79 (T7): recomendações que o inspetor marca
   const RKS = PR7 ? Object.keys(PR7).filter(k => /^R\d+$/.test(k) && PR7[k] && PR7[k].grupo === 'recomendacao').sort((a, b) => Number(a.slice(1)) - Number(b.slice(1))) : [];   // S149 · item 88
-  if (RKS.length) h += '<div class="card"><b>Recomendações a mais</b><p class="muted" style="margin:2px 0 0">Marcou, entra na seção 11 do laudo.</p>'
-    + RKS.map(k => '<div class="chk"><input type="checkbox" id="frc_' + k + '" data-frc="' + k + '"' + (rc.indexOf(k) >= 0 ? ' checked' : '') + '><label for="frc_' + k + '">' + esc(PR7[k].rotulo) + '</label></div>').join('') + '</div>';
+  // S163 · issue 12: todas as recomendações do laudo (a mesma lista da revisão e do laudo); as das respostas dá para desmarcar
+  const RL = recListaCampo(v).filter(x => x.origem === 'fixa' || x.origem === 'regra');
+  if (RL.length || RKS.length) h += '<div class="card" id="fRecs"><b>Recomendações do laudo</b><p class="muted" style="margin:2px 0 0">As da norma saem sempre. As que vieram das suas respostas já vêm marcadas: desmarque se não valem para este vaso. O escritório confere e pode mudar o texto.</p>'
+    + RL.map((x, k) => '<div class="chk"><input type="checkbox" id="frf_' + k + '" data-frfora="' + esc(x.chave) + '"' + (x.marcada ? ' checked' : '') + (x.fixa ? ' disabled' : '') + '><label for="frf_' + k + '">'
+        + esc(x.texto) + ' <span class="muted">(' + (x.fixa ? 'da norma' : 'da sua resposta') + ')</span></label></div>').join('')
+    + (RKS.length ? '<p style="margin:12px 0 0;font-weight:600">A mais</p><p class="muted" style="margin:0">Marcou, entra na seção 11 do laudo.</p>'
+      + RKS.map(k => '<div class="chk"><input type="checkbox" id="frc_' + k + '" data-frc="' + k + '"' + (rc.indexOf(k) >= 0 ? ' checked' : '') + '><label for="frc_' + k + '">' + esc(PR7[k].rotulo) + '</label></div>').join('') : '') + '</div>';
   h += '<button class="btn pri' + (f.length ? ' bloq' : '') + '" id="fEnviar">Enviar a inspeção deste vaso</button>';   // S162 · issue 15: com falta, o toque leva até a lista
   h += '<p class="muted" style="text-align:center;margin-top:6px">Depois de enviar, você ainda pode reabrir para corrigir, até o escritório começar a revisão. Sem sinal, vai quando o sinal voltar.</p>'
      + '<p class="muted" style="text-align:center;margin-top:2px">Depois do envio, cada um da equipe confirma a participação no próprio celular, com a digital (aba Eu): o laudo traz o nome de quem participou.</p>';
@@ -2635,6 +2679,11 @@ function telaFechamento(v){
   ligarFotos(v, 'capa', () => 'Capa');
   ligar('fObs', el => { i.observacao = el.value.trim() || null; salvar(); adiar2('fech:' + v.id, 'fech', v); }, 'input');
   ligarPrazo(v);
+  $('tela').querySelectorAll('[data-frfora]').forEach(el => el.addEventListener('change', () => {   // S163 · issue 12
+    const k = el.dataset.frfora, a = i.rec_ajustes || {}, fora = (a.fora || []).filter(y => y !== k).concat(el.checked ? [] : [k]);
+    i.rec_ajustes = { fora, textos:a.textos || {} }; salvar();
+    enfileirar(v, 'recaj', 'recomendações', { funcao:'tf_insp_rec_ajustes_gravar', payload:{ p_id:i.id, p_ajustes:{ fora } } });
+  }));
   $('tela').querySelectorAll('[data-frc]').forEach(el => el.addEventListener('change', () => {
     const k = el.dataset.frc, x = (i.rec_casos || []).filter(y => y !== k);
     i.rec_casos = el.checked ? x.concat([k]).sort() : x; salvar();
