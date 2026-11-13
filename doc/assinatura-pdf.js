@@ -1,5 +1,5 @@
 /* ============================================================================
- * assinatura-pdf.js · TapDoc · S145 (rodada E, decisão A5 do desenho da assinatura)
+ * assinatura-pdf.js · TapDoc · S158 (antes S145: rodada E, decisão A5 do desenho da assinatura)
  * ----------------------------------------------------------------------------
  * Confere o PDF que o PLH devolve assinado com o token (Assinador SERPRO, PAdES):
  *   1. o começo do arquivo é EXATAMENTE o PDF aprovado (a assinatura PAdES é
@@ -11,6 +11,8 @@
  *   4. devolve o nome (CN) e a série do certificado, para o banco comparar com o
  *      PLH que aprovou.
  * Não confere a cadeia até a raiz ICP-Brasil (para isso: verificador do ITI).
+ * S158: lê também o CMS com tamanho indefinido (BER), que é como o assinador do
+ *   gov.br grava (reserva do token: o banco aceita e grava como assinatura avançada).
  * Puro: sem DOM; roda no navegador e no node (testes). Usa crypto.subtle.
  * ========================================================================== */
 (function (raiz) {
@@ -20,14 +22,21 @@ const hex = buf => Array.from(new Uint8Array(buf)).map(x => x.toString(16).padSt
 async function sha(alg, bytes) { return hex(await subtle().digest(alg, bytes)); }
 
 // ── DER ──────────────────────────────────────────────────────────────────
-function der(b, i) {   // lê um TLV em i: { tag, ini (do conteúdo), fim, cab (início do TLV) }
+function der(b, i) {   // lê um TLV em i: { tag, ini (do conteúdo), fim (do conteúdo), prox (depois do TLV), cab (início do TLV) }
   const cab = i, tag = b[i++];
+  if (i >= b.length) throw new Error('DER: fora do arquivo');
   let len = b[i++];
+  if (len === 0x80) {   // S158: tamanho indefinido (BER), como o assinador do gov.br grava: os filhos vão até o 00 00
+    if (!(tag & 0x20)) throw new Error('DER: tamanho');
+    let k = i;
+    while (!(b[k] === 0 && b[k + 1] === 0)) { if (k + 1 >= b.length) throw new Error('DER: fora do arquivo'); k = der(b, k).prox; }
+    return { tag, ini: i, fim: k, prox: k + 2, cab };
+  }
   if (len & 0x80) { const n = len & 0x7f; if (n < 1 || n > 4) throw new Error('DER: tamanho'); len = 0; for (let k = 0; k < n; k++) len = len * 256 + b[i++]; }
   if (i + len > b.length) throw new Error('DER: fora do arquivo');
-  return { tag, ini: i, fim: i + len, cab };
+  return { tag, ini: i, fim: i + len, prox: i + len, cab };
 }
-function filhos(b, n) { const r = []; let i = n.ini; while (i < n.fim) { const c = der(b, i); r.push(c); i = c.fim; } return r; }
+function filhos(b, n) { const r = []; let i = n.ini; while (i < n.fim) { const c = der(b, i); r.push(c); i = c.prox; } return r; }
 function oid(b, n) {
   const v = b.subarray(n.ini, n.fim), r = [Math.floor(v[0] / 40), v[0] % 40]; let x = 0;
   for (let i = 1; i < v.length; i++) { x = x * 128 + (v[i] & 0x7f); if (!(v[i] & 0x80)) { r.push(x); x = 0; } }
@@ -116,7 +125,7 @@ async function prefixos(b) {
 async function conferir(bytes, esperado) {
   const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   const lista = [].concat(esperado || []).filter(Boolean);
-  const r = { versao: 'S145', original_sha256: null, assinatura_ok: false, resumo_ok: false, cobre_tudo: false, certificado: null,
+  const r = { versao: 'S158', original_sha256: null, assinatura_ok: false, resumo_ok: false, cobre_tudo: false, certificado: null,
               serie: null, emissor: null, validade: null, assinaturas: 0, assinado_sha256: await sha('SHA-256', b), erro: null };
   try {
     if (!(b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46)) throw new Error('O arquivo não é um PDF.');
@@ -161,6 +170,6 @@ async function conferir(bytes, esperado) {
   return r;
 }
 
-const AssinaturaPDF = { conferir, prefixos, assinaturas, versao: 'S145-2026-11-10' };
+const AssinaturaPDF = { conferir, prefixos, assinaturas, versao: 'S158-2026-11-13' };
 if (typeof module !== 'undefined' && module.exports) module.exports = AssinaturaPDF; else raiz.AssinaturaPDF = AssinaturaPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
