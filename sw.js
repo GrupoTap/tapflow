@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S160';   // S160: issues 28, 29, 31 e 27 — TapDoc E31 (aprovar o laudo: o mapa carregado antes, só a digital, o andamento em %; a aba Laudos no celular) e núcleo N10 (confirmarPessoa só com a digital)
+const VERSAO = 'H16-S161';   // S161: issues 16, 17, 22, 24, 25 e 26 — TapDoc E32 (a aparência do laudo e do certificado: laudo-pdf.js S161)
+// const VERSAO = 'H16-S160';   // S160: issues 28, 29, 31 e 27 — TapDoc E31 (aprovar o laudo: o mapa carregado antes, só a digital, o andamento em %; a aba Laudos no celular) e núcleo N10 (confirmarPessoa só com a digital)
 // const VERSAO = 'H16-S158';   // S158: TapDoc E30 (assinatura-pdf.js S158: lê a assinatura do gov.br, reserva do token) e o modo de teste das revisões (432)
 // const VERSAO = 'H16-S157';   // S157: issue 10 — núcleo N9 (o acesso vencido, "exp" claim, renovado antes de enviar a fila e no envio das fotos) e Field S58
 // const VERSAO = 'H16-S156';   // S156: issue 1 (passo 2) — o Manager vira o TapFlow puro (manager/ S156: sem o código parado de Cadastros, das Configurações que saíram e de Fornecedores; o nome nas telas é "TapFlow"); TapDoc E29, Pessoas e acessos A10 e TapRH RH14 (só as frases que diziam "Manager")
