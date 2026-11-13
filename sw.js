@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S161';   // S161: issues 16, 17, 22, 24, 25 e 26 — TapDoc E32 (a aparência do laudo e do certificado: laudo-pdf.js S161)
+const VERSAO = 'H16-S162';   // S162: TapDoc E33 (issues 13, 14, 15, 19 e 23: revisão e campo)
+// const VERSAO = 'H16-S161';   // S161: issues 16, 17, 22, 24, 25 e 26 — TapDoc E32 (a aparência do laudo e do certificado: laudo-pdf.js S161)
 // const VERSAO = 'H16-S160';   // S160: issues 28, 29, 31 e 27 — TapDoc E31 (aprovar o laudo: o mapa carregado antes, só a digital, o andamento em %; a aba Laudos no celular) e núcleo N10 (confirmarPessoa só com a digital)
 // const VERSAO = 'H16-S158';   // S158: TapDoc E30 (assinatura-pdf.js S158: lê a assinatura do gov.br, reserva do token) e o modo de teste das revisões (432)
 // const VERSAO = 'H16-S157';   // S157: issue 10 — núcleo N9 (o acesso vencido, "exp" claim, renovado antes de enviar a fila e no envio das fotos) e Field S58

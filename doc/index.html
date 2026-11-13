@@ -150,6 +150,13 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 /* S148 · item 89: o realce curto na linha que acabou de mudar */
 @keyframes realce{ from{ background:var(--warn-soft, #fcefd8); } to{ background:transparent; } }
 .realce{ animation:realce 1.2s ease-out; }
+/* E33 · issue 13: a conferência marcada fica fechada (só o título); um clique no título abre */
+.card.fechado > :not(.cfcab){display:none}
+.card.fechado .cfcab{cursor:pointer}
+.card.fechado .cfcab h3::before{content:'▸ ';color:var(--ink-3)}
+/* E33 · issue 15: a parte com problema, marcada em vermelho pelo aviso que bloqueia (some quando a parte é corrigida) */
+.problema{outline:2px solid var(--crit) !important;outline-offset:2px;background:var(--crit-soft) !important;border-radius:4px}
+.btn.bloq{opacity:.55}
 /* E31 · issue 31: no celular, os quadros da aba Laudos e da tela do laudo viram uma lista de cartões (nada mais largo que a tela) */
 @media (max-width:700px){
   table.cartoes,table.cartoes tbody{display:block}
@@ -184,7 +191,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E32';   // E32 (S161): issues 16, 17, 22, 24, 25 e 26 — a aparência do laudo e do certificado (laudo-pdf.js S161: a foto no 7.4, a figura 1 + 2 alinhada, o quadro da seção 13 sem "(reduzido)", "Indicado (média)" na aferição do manômetro, a capa sem o "Exame externo", os rodapés do modelo antigo); nesta página só muda a versão do gerador
+const VERSAO = 'TapDoc E33';   // E33 (S162): issues 13, 14, 15, 19 e 23 — a conferência se fecha ao marcar; as fotos dos acessórios com o nome do acessório; o aviso que bloqueia leva até a parte com problema e a marca em vermelho; "substituir" × aferição conforme; o aviso ao PLH quando a incerteza (U) de um ponto passa da tolerância
+// const VERSAO = 'TapDoc E32';   // E32 (S161): issues 16, 17, 22, 24, 25 e 26 — a aparência do laudo e do certificado (laudo-pdf.js S161: a foto no 7.4, a figura 1 + 2 alinhada, o quadro da seção 13 sem "(reduzido)", "Indicado (média)" na aferição do manômetro, a capa sem o "Exame externo", os rodapés do modelo antigo); nesta página só muda a versão do gerador
 // const VERSAO = 'TapDoc E31';   // E31 (S160): issues 28, 29, 31 e 27 — o mapa carregado antes de aprovar ("Mapa3D is not defined"); aprovar o laudo só com a digital (sem o PIN; sem digital, avisa antes); a aba Laudos cabe no celular; o andamento em % ao aprovar e ao gerar o rascunho
 // const VERSAO = 'TapDoc E30';   // E30 (S158 · 432): a conferência do PDF assinado lê a assinatura do gov.br (assinatura-pdf.js S158, CMS com tamanho indefinido); o gov.br vale como reserva do token (o banco grava "assinatura avançada")
 // const VERSAO = 'TapDoc E29';   // E29 (S156): issue 1 (passo 2) — as frases da T05 dizem "TapFlow" no lugar de "Manager"
@@ -307,6 +315,17 @@ function janela(tit, html, bts){
     onClick:async () => { const r = b.acao ? await b.acao() : undefined; if (r !== false) N.janela.fechar(); } })));
 }
 function erro(e){ U.toast(e && e.message ? e.message : String(e), 'err'); }
+// E33 · issue 15: o aviso que bloqueia leva até a parte com problema e a marca em vermelho. A marca some quando a parte muda
+// (o "change"/"input" de dentro dela) ou quando a tela é pintada de novo com a parte corrigida.
+function marcarProblema(els, msg){
+  const L = (Array.isArray(els) ? els : [els]).filter(Boolean);
+  document.querySelectorAll('.problema').forEach(x => x.classList.remove('problema'));
+  L.forEach(el => { el.classList.add('problema'); const tira = () => el.classList.remove('problema');
+    el.addEventListener('change', tira, { once:true }); el.addEventListener('input', tira, { once:true }); });
+  L.forEach(el => { const cd = el.closest('.card.fechado'); if (cd) cd.classList.remove('fechado'); });   // a parte dentro de um quadro fechado (issue 13) abre
+  if (L[0]) L[0].scrollIntoView({ behavior:'smooth', block:'center' });
+  if (msg) U.toast(msg, 'err');
+}
 
 // ── rotas: #os=<id>&v=<vaso>&aba=<a> ───────────────────────────────────────
 function rota(){ const h = new URLSearchParams(location.hash.replace(/^#/, '')); return { os:h.get('os'), v:h.get('v'), rev:h.get('rev'), laudo:h.get('laudo'), aba:h.get('aba') || 'os' }; }
@@ -1496,7 +1515,8 @@ async function telaRevisao(id, manter){
   if (!v) throw new Error('O vaso desta inspeção não veio no pacote da OS.');
   CALC.usar(P);
   let prev; try{ prev = CALC.previa(v); }catch(e){ prev = { camaras:[], vaso:{ erro:e.message }, avisos:[e.message], detalhes:[] }; }
-  REV = { id, R, P, v, prev, volume:null, pmta:{} };
+  REV = { id, R, P, v, prev, volume:null, pmta:{}, abertos:(REV && REV.id === id && REV.abertos) || {} };   // E33 · issue 13: o quadro aberto à mão continua aberto ao gravar
+  try{ REV.afs = ((await rpc('tf_insp_afericoes_lista', { p_inspecao:id })) || []).filter(x => !x.cancelada_em); }catch(e){ REV.afs = []; }   // E33 · issue 23: o cálculo de cada aferição (U e tolerância por ponto)
   try{ REV.M = await rpc('tf_insp_mapa_ver', { p_id:id }); }catch(e){ REV.M = null; }   // S151 · issue 7 (428): as medidas e a imagem do mapa
   try{ REV_PRONTOS = ((await rpc('tf_laudo_textos_prontos')) || {}).prontos || null; }catch(e){ REV_PRONTOS = null; }   // S146 · item 79
   pintarRevisao();
@@ -1542,6 +1562,29 @@ async function manterLugar(fazer){
   setTimeout(() => ['wheel','touchmove','keydown','mousedown'].forEach(ev => window.removeEventListener(ev, parar)), 1600);
   const r = acharEl(alvo); if (r){ r.classList.remove('realce'); void r.offsetWidth; r.classList.add('realce'); setTimeout(() => r.classList.remove('realce'), 1300); }
 }
+// E33 · issue 14: o nome de cada acessório na revisão ("Manômetro", ou "Manômetro 1" e "Manômetro 2" quando há dois do mesmo tipo)
+function nomesAcess(lista){
+  const n = {}, seq = {}, out = {};
+  (lista || []).forEach(a => { n[a.tipo] = (n[a.tipo] || 0) + 1; });
+  (lista || []).forEach(a => { seq[a.tipo] = (seq[a.tipo] || 0) + 1; out[a.id] = (ROT_ACESS[a.tipo] || a.tipo) + (n[a.tipo] > 1 ? ' ' + seq[a.tipo] : ''); });
+  return out;
+}
+// E33 · issue 19: a situação marcada no campo e o resultado da aferição dizem coisas contrárias (o sistema não escolhe: alguém decide)
+function contradicaoAc(a, nome){
+  const r = a.afericao && a.afericao.resultado;
+  if (a.situacao === 'substituir' && r === 'aprovado') return nome + ': a situação diz "substituir" e a aferição deu CONFORME. Decida qual vale: corrija a situação ou reveja a aferição.';
+  if (a.situacao === 'ok' && r === 'reprovado') return nome + ': a situação diz "ok" e a aferição deu NÃO CONFORME. Decida qual vale: corrija a situação ou reveja a aferição.';
+  return null;
+}
+// E33 · issue 23: o ponto da aferição do manômetro com a incerteza (U) maior que a tolerância (a aprovação continua pela média; o PLH decide)
+function pontosEspalhados(){
+  const out = [];
+  (REV.afs || []).filter(x => x.tipo === 'manometro' && x.calculo && Array.isArray(x.calculo.pontos)).forEach(x => {
+    x.calculo.pontos.filter(p => p.U != null && p.tol != null && Number(p.U) > Number(p.tol) + 1e-9).forEach(p => out.push({ af:x, p }));
+  });
+  return out;
+}
+const CONF_ROT = { dados:'1 · Dados contra as fotos', recomendacoes:'2 · Anomalias e recomendações', pmta:'3 · PMTA', espessuras:'4 · Espessuras contra o laudo anterior' };   // E33 · issue 15: o nome da tela, nunca o de sistema
 function revOk(item){ const e = REV.R.inspecao.etapa; return ((REV.R.oks || {})[e] || []).indexOf(item) >= 0; }
 function pintarRevisao(){
   const { R, v, prev } = REV, I = R.inspecao, eu = R.eu, e = I.etapa;
@@ -1598,6 +1641,13 @@ function pintarRevisao(){
   });
   if (prev.vaso && prev.vaso.erro) conf.push({ chave:'vaso', nivel:/[Vv]olume/.test(prev.vaso.erro) ? 'amarelo' : 'vermelho', texto:'Categoria e prazos', detalhe:prev.vaso.erro });
   (REV.vidas || []).filter(x => x.cor && !x.resumo).forEach(x => conf.push({ chave:'vida', nivel:'amarelo', texto:x.nome + ': vida remanescente ' + (x.cor === 'vermelho' ? 'menor que o prazo até a próxima inspeção' : 'menor que 2× o prazo'), detalhe:'O PLH decide (reduzir o prazo ou a PMTA, ou recomendar reparo).' }));
+  // E33 · issue 19: "substituir" × aferição conforme (ou o contrário)
+  const NAC = nomesAcess(R.acessorios);
+  (R.acessorios || []).forEach(a => { const t = contradicaoAc(a, NAC[a.id]); if (t) conf.push({ chave:'acess_contradicao', nivel:'amarelo', texto:t, detalhe:'Veja o quadro Acessórios (1 · Dados contra as fotos): os dois lugares estão marcados.' }); });
+  // E33 · issue 23: leituras muito espalhadas num ponto da aferição (não reprova sozinho; a aprovação continua pela média)
+  pontosEspalhados().forEach(({ af, p }) => conf.push({ chave:'afer_u', nivel:'amarelo',
+    texto:(af.acessorio ? af.acessorio + ' · ' : '') + 'ponto ' + fmt(p.nominal, 2) + ': leituras muito espalhadas (incerteza maior que a tolerância). Confira ou refaça as leituras deste ponto.',
+    detalhe:'U = ' + fmt(p.U, 3) + ' e tolerância ±' + fmt(p.tol, 3) + (af.unidade ? ' ' + af.unidade : '') + (af.codigo ? ' (aferição ' + af.codigo + ')' : '') + '. O sistema não reprova sozinho: a aprovação continua pela média de cada ponto. O PLH decide.' }));
   const ico = n => n === 'ok' ? '<span class="cf ok">✓</span>' : n === 'amarelo' ? '<span class="cf am">!</span>' : '<span class="cf vm">✗</span>';
   const nV = conf.filter(x => x.nivel === 'vermelho').length;
   h += '<h2>1 · O que o sistema confere</h2><div class="card"><table class="conf">' + conf.sort((a, b) => ({ vermelho:0, amarelo:1, ok:2 }[a.nivel] - { vermelho:0, amarelo:1, ok:2 }[b.nivel]))
@@ -1606,14 +1656,17 @@ function pintarRevisao(){
 
   // Parte 2 · as 4 conferências humanas
   h += '<h2>2 · As 4 conferências' + (podeMarcar ? ' <span class="muted" style="text-transform:none;letter-spacing:0">· marque cada uma depois de olhar</span>' : '') + '</h2>';
-  const cab = (k, t) => '<div class="linha" style="justify-content:space-between"><h3 style="margin:0">' + t + '</h3>'
+  const cardConf = k => '<div class="card' + (e && e < 3 && revOk(k) && !REV.abertos[k] ? ' fechado' : '') + '" data-cf="' + k + '">';   // E33 · issue 13
+  const cab = (k, t) => '<div class="linha cfcab" data-cfcab="' + k + '" style="justify-content:space-between"><h3 style="margin:0">' + t + '</h3>'
     + (e && e < 3 ? '<label class="okrev"><input type="checkbox" data-ok="' + k + '"' + (revOk(k) ? ' checked' : '') + (podeMarcar ? '' : ' disabled') + '> conferido</label>' : '') + '</div>';
   // 1 · dados × fotos
   const fotos = (R.fotos || []), LUG = lugaresRev(R), semAc = R.inspecao.fotos_sem_acesso || {};
   const rotFoto = f => { const l = /^lugar:/.test(f.item || '') ? LUG.find(x => 'lugar:' + x.lugar === f.item) : null;
-    return (l ? l.rotulo : (ROT_SECAO[f.secao] || f.secao || 'foto') + (f.item && !/^lugar:/.test(f.item) && f.secao === 'visual' ? ' · ' + f.item : ''))
+    const ac = f.secao === 'acessorios' && f.item ? String(f.item).replace(/^afer:/, '').split(':') : null;   // E33 · issue 14: o nome do acessório
+    const acTxt = ac && NAC[ac[0]] ? ' · ' + NAC[ac[0]] + (/^afer:/.test(f.item) ? ' · aferição' + (ac[1] ? ' (' + ({ bancada:'bancada', padrao:'padrão', instrumento:'em teste' }[ac[1]] || ac[1]) + ')' : '') : '') : '';
+    return (l ? l.rotulo : (ROT_SECAO[f.secao] || f.secao || 'foto') + acTxt + (f.item && !/^lugar:/.test(f.item) && f.secao === 'visual' ? ' · ' + f.item : ''))
       + (f.origem === 'galeria' ? ' · galeria' + (f.tirada_em ? ', tirada em ' + dataBR(dataSP(f.tirada_em)).slice(0, 5) : '') : ''); };
-  h += '<div class="card">' + cab('dados', '1 · Dados contra as fotos')
+  h += cardConf('dados') + cab('dados', '1 · Dados contra as fotos')
     + '<div class="g2rev"><div><table><tr><th>Plaqueta</th><th></th><th></th></tr>'
     + [['fabricante','Fabricante']].concat(REV_CAMPOS_VASO).map(([k, r]) => '<tr><td class="muted">' + r + '</td><td><b>' + esc(k === 'placa_situacao' ? PLACA_ROT[placaDe(R.vaso)] : R.vaso[k] == null ? '—' : String(R.vaso[k])) + '</b></td><td>'
         + (eu.pode && k !== 'fabricante' ? '<button class="btn mini" data-corv="' + k + '">Corrigir</button>' : '') + '</td></tr>').join('') + '</table>'
@@ -1629,11 +1682,14 @@ function pintarRevisao(){
         ? '<p class="alerta" style="margin:6px 0 0">Sem foto e sem motivo: ' + LUG.filter(l => !semAc[l.lugar] && !fotos.some(f => f.item === 'lugar:' + l.lugar) && !(l.lugar === 'placa_fabricacao' && fotos.some(f => f.secao === 'plaqueta' && !f.item))).map(l => esc(l.rotulo)).join(', ') + '. Ponha uma foto no lugar (clique na foto › Lugar no laudo).</p>' : '')
     + '<div id="revVisor" class="visorrev"><p class="muted">Clique numa foto para ver.</p></div></div></div>'
     + '<h3 style="margin-top:14px">Acessórios</h3>' + ((R.acessorios || []).length ? '<table><tr><th>Acessório</th><th>Marca · conexão</th><th>Lacre</th><th>Ajuste</th><th>Aferição</th><th></th></tr>'
-      + R.acessorios.map(a => '<tr><td><b>' + esc(a.tag || ROT_ACESS[a.tipo] || a.tipo) + '</b><div class="muted">' + esc(a.tag ? (ROT_ACESS[a.tipo] || a.tipo) : '') + (a.situacao ? (a.tag ? ' · ' : '') + esc(ROT_SIT_AC[a.situacao] || a.situacao) : '') + '</div></td><td>'
+      + R.acessorios.map(a => { const ct = contradicaoAc(a, NAC[a.id]), pe = pontosEspalhados().some(x => x.af.acessorio_id === a.id);   // E33 · issues 19 e 23
+        return '<tr data-acrev="' + esc(a.id) + '"><td><b>' + esc(a.tag || NAC[a.id] || a.tipo) + '</b><div class="muted">' + esc(a.tag ? (NAC[a.id] || a.tipo) : '') + (a.situacao ? (a.tag ? ' · ' : '') + '<span' + (ct ? ' class="problema"' : '') + '>' + esc(ROT_SIT_AC[a.situacao] || a.situacao) + '</span>' : '') + '</div></td><td>'
         + esc([semNaoHa(a.marca), a.conexao].filter(Boolean).join(' · ') || '—')
         + '</td><td>' + esc((a.afericao && a.afericao.lacre) || a.lacre_num || '—') + (a.afericao && a.afericao.lacre ? '<div class="muted">na aferição</div>' : '') + '</td><td>' + (a.pressao_ajuste_mpa != null ? pr(a.pressao_ajuste_mpa) : '—') + '</td><td>'
-        + (a.afericao ? esc(a.afericao.codigo || 'sem número') + ' · ' + (a.afericao.resultado === 'aprovado' ? 'aprovado' : '<b style="color:var(--crit)">' + esc(a.afericao.resultado || '') + '</b>') + (a.afericao.grave ? ' <span class="chip s-grave">grave</span>' : '') : '<span class="muted">—</span>')
-        + '</td><td>' + (eu.pode ? '<button class="btn mini" data-cora="' + esc(a.id) + '">Corrigir</button>' : '') + '</td></tr>').join('') + '</table>' : '<p class="vazio">Nenhum acessório.</p>')
+        + (a.afericao ? '<span' + (ct || pe ? ' class="problema"' : '') + '>' + esc(a.afericao.codigo || 'sem número') + ' · ' + (a.afericao.resultado === 'aprovado' ? 'aprovado' : '<b style="color:var(--crit)">' + esc(a.afericao.resultado || '') + '</b>') + '</span>' + (a.afericao.grave ? ' <span class="chip s-grave">grave</span>' : '') : '<span class="muted">—</span>')
+        + (pe ? '<div class="muted" style="color:var(--crit)">leituras espalhadas: confira</div>' : '')
+        + '</td><td>' + (eu.pode ? '<button class="btn mini" data-cora="' + esc(a.id) + '">Corrigir</button>' : '') + '</td></tr>'
+        + (ct ? '<tr><td colspan="6"><p class="alerta crit" style="margin:0">' + esc(ct) + '</p></td></tr>' : ''); }).join('') + '</table>' : '<p class="vazio">Nenhum acessório.</p>')
     + '</div>';
   // 2 · anomalias e recomendações
   const recs = R.recomendacoes || [];
@@ -1641,7 +1697,7 @@ function pintarRevisao(){
     .concat((R.acessorios || []).filter(a => a.situacao === 'substituir' || (a.afericao && (a.afericao.grave || a.afericao.resultado === 'reprovado')))
       .map(a => ({ ref:'acessorio:' + a.id, titulo:(a.tag || ROT_ACESS[a.tipo] || a.tipo), texto:a.situacao === 'substituir' ? 'a substituir' : 'aferição ' + (a.afericao.resultado || ''),
                    sug:(/valvula|quebra/.test(a.tipo) ? 'Substituir ou reajustar a ' + (ROT_ACESS[a.tipo] || 'válvula').toLowerCase() + ' ' : 'Substituir o ' + (ROT_ACESS[a.tipo] || '').toLowerCase() + ' ') + (a.tag || '') + '.' })));
-  h += '<div class="card">' + cab('recomendacoes', '2 · Anomalias e recomendações')
+  h += cardConf('recomendacoes') + cab('recomendacoes', '2 · Anomalias e recomendações')
     + (anom.length ? '<table><tr><th>Anomalia</th><th>Recomendação</th><th></th></tr>' + anom.map(x => {
         const rr = recs.filter(r => r.ref === x.ref);
         return '<tr><td><b>' + esc(x.titulo) + '</b><div class="muted">' + esc(x.texto || '') + '</div></td><td>' + (rr.length ? rr.map(r => '<div>' + esc(r.texto) + ' <span class="muted">(' + TIPO_REC[r.tipo] + (r.prazo ? ', até ' + dataBR(r.prazo) : '') + ')</span></div>').join('')
@@ -1659,7 +1715,7 @@ function pintarRevisao(){
   h += revAnexosHtml();
   // 3 · PMTA
   const plhAprova = e === 3 && eu.pode;
-  h += '<div class="card">' + cab('pmta', '3 · PMTA') + '<table><tr><th>Câmara</th><th>Operação</th><th>Calculada</th><th>Anterior</th><th>Plaqueta</th><th>Adotada</th></tr>'
+  h += cardConf('pmta') + cab('pmta', '3 · PMTA') + '<table><tr><th>Câmara</th><th>Operação</th><th>Calculada</th><th>Anterior</th><th>Plaqueta</th><th>Adotada</th></tr>'
     + prev.camaras.map(ck => {
         const k = ck.cam, calc = ck.governante ? ck.governante.pmta : null, ant = k.pmta_vigente_mpa, sug = revRegra(ck);
         const guard = (R.inspecao.rev_pmta || {})[k.id];
@@ -1687,7 +1743,7 @@ function pintarRevisao(){
     + (prev.detalhes.length ? '<ul class="muted" style="margin:8px 0 0;padding-left:18px">' + prev.detalhes.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '') + '</div>';
   // 4 · espessuras × anterior
   REV.vidas = revVidas();
-  h += '<div class="card">' + cab('espessuras', '4 · Espessuras contra o laudo anterior')
+  h += cardConf('espessuras') + cab('espessuras', '4 · Espessuras contra o laudo anterior')
     + (REV.vidas.length ? '<table><tr><th>Componente</th><th>Anterior</th><th>Atual</th><th>Requerida</th><th>Perda</th><th>Taxa</th><th>Vida remanescente</th></tr>'
       + REV.vidas.map(x => '<tr' + (x.cor === 'vermelho' ? ' style="background:var(--crit-soft)"' : x.cor === 'amarelo' ? ' style="background:var(--warn-soft)"' : '') + '><td>'
         + (x.sub ? '<span class="muted" style="padding-left:14px">↳ ' + esc(x.nome) + '</span>' : '<b>' + esc(x.nome) + '</b>') + '</td><td>'
@@ -1719,7 +1775,7 @@ function pintarRevisao(){
   // ações
   h += '<div class="card linha acoesrev">';
   if (eu.pode && (e === 1 || e === 2)) h += '<button class="btn pri" id="revConcluir">Concluir a ' + (e === 1 ? 'Revisão 1' : 'Revisão 2') + '</button>';
-  if (eu.pode && e === 3) h += '<button class="btn pri" id="revAprovar"' + (nV ? ' disabled title="Há pendência em vermelho"' : '') + '>Aprovar e liberar para o laudo</button>';
+  if (eu.pode && e === 3) h += '<button class="btn pri' + (nV ? ' bloq' : '') + '" id="revAprovar"' + (nV ? ' title="Há pendência em vermelho"' : '') + '>Aprovar e liberar para o laudo</button>';   // E33 · issue 15: o clique leva até a pendência
   if (eu.pode && (e === 2 || e === 3)) h += '<button class="btn" id="revDevolver">Devolver à ' + (e === 2 ? 'Revisão 1' : 'Revisão 2') + '</button>';
   if (eu.pode && ['enviada','em_revisao'].indexOf(I.situacao) >= 0) h += '<button class="btn sec" id="revReabrirCampo">Reabrir para o campo</button>';
   h += '<span class="muted">' + (e === 3 ? 'Aprovar grava o cálculo oficial e libera a inspeção para o laudo (R06).' : 'Para corrigir o que veio do campo, reabra a inspeção para a equipe (vaso › Reabrir).') + '</span></div>';
@@ -2241,8 +2297,15 @@ function ligarRevisao(){
   });
   ligarEsp(recarregar);   // E10
   T.querySelectorAll('[data-ok]').forEach(c => c.addEventListener('change', async () => {
-    try{ await rpc('tf_insp_revisao_ok', { p_id:id, p_item:c.dataset.ok, p_ok:c.checked }); const e = R.inspecao.etapa; R.oks = R.oks || {}; R.oks[e] = (R.oks[e] || []).filter(x => x !== c.dataset.ok).concat(c.checked ? [c.dataset.ok] : []); }
+    try{ await rpc('tf_insp_revisao_ok', { p_id:id, p_item:c.dataset.ok, p_ok:c.checked }); const e = R.inspecao.etapa; R.oks = R.oks || {}; R.oks[e] = (R.oks[e] || []).filter(x => x !== c.dataset.ok).concat(c.checked ? [c.dataset.ok] : []);
+      // E33 · issue 13: marcou, o quadro se fecha (só o título com o "conferido"); desmarcou, fica aberto
+      const cd = c.closest('[data-cf]'); if (cd){ cd.classList.toggle('fechado', c.checked); cd.classList.remove('problema'); REV.abertos[c.dataset.ok] = !c.checked; } }
     catch(e){ c.checked = !c.checked; erro(e); }
+  }));
+  // E33 · issue 13: um clique no título do quadro fechado abre de novo
+  T.querySelectorAll('[data-cfcab]').forEach(t => t.addEventListener('click', ev => {
+    const cd = t.closest('[data-cf]'); if (!cd || !cd.classList.contains('fechado') || ev.target.closest('label')) return;
+    cd.classList.remove('fechado'); REV.abertos[t.dataset.cfcab] = true;
   }));
   // S140 · item 49 (416): o escritório põe a foto noutro lugar do laudo (ou tira do lugar), enquanto a inspeção está em revisão
   T.querySelectorAll('[data-foto]').forEach(b => b.addEventListener('click', async () => {
@@ -2402,7 +2465,10 @@ function ligarRevisao(){
   [['revExt', 'ext'], ['revInt', 'int'], ['revJust', 'just']].forEach(([id, k]) => { const el = $(id); if (el) el.addEventListener('input', () => { REV.datas[k] = el.value || null; }); });
   // ações
   const bc = $('revConcluir'); if (bc) bc.addEventListener('click', () => U.semDuploEnvio(bc, async () => {
-    try{ await rpc('tf_insp_revisao_concluir', { p_id:id }); U.toast('Revisão concluída.', 'ok'); location.hash = 'aba=rev'; }catch(e){ erro(e); }
+    // E33 · issue 15: antes de pedir ao banco, leva até a conferência que falta (com o nome da tela)
+    const falt = ['dados','recomendacoes','pmta','espessuras'].filter(k => !revOk(k));
+    if (falt.length){ marcarProblema(falt.map(k => T.querySelector('[data-cf="' + k + '"]')), 'Falta conferir: ' + falt.map(k => CONF_ROT[k]).join(', ') + '.'); return; }
+    try{ await rpc('tf_insp_revisao_concluir', { p_id:id }); U.toast('Revisão concluída.', 'ok'); location.hash = 'aba=rev'; }catch(e){ problemaRev(e); }
   }));
   const bd = $('revDevolver'); if (bd) bd.addEventListener('click', () => {
     janela('Devolver', '<label class="f">O que precisa ser revisto<textarea class="t" id="dvTxt" rows="3"></textarea></label>', [{ rotulo:'Cancelar' }, { rotulo:'Devolver', classe:'pri', acao:() => {
@@ -2410,11 +2476,26 @@ function ligarRevisao(){
       return false; } }]);
   });
   const ba = $('revAprovar'); if (ba) ba.addEventListener('click', () => U.semDuploEnvio(ba, async () => {
-    let r; try{ r = revMontarResultado(); }catch(e){ erro(e); return; }
+    const verm = Array.from(T.querySelectorAll('table.conf tr.n-vermelho'));   // E33 · issue 15: a pendência em vermelho, marcada
+    if (verm.length){ marcarProblema(verm, 'Falta resolver: 1 · O que o sistema confere (' + verm.length + ' em vermelho).'); return; }
+    let r; try{ r = revMontarResultado(); }catch(e){ problemaRev(e); return; }
     if (!await N.janela.confirmar('Aprovar e liberar', '<p>Grava o cálculo oficial (categoria ' + esc(r.categoria) + ', próxima externa em ' + dataBR(r.proxima_externa)
       + (r.datas_pelo_plh ? ', datas definidas pelo PLH' : '') + ') e libera a inspeção para o laudo.</p>', 'Aprovar')) return;
-    try{ await rpc('tf_insp_revisao_aprovar', { p_id:id, p_r:r }); U.toast('Aprovada e liberada.', 'ok'); location.hash = 'aba=rev'; }catch(e){ erro(e); }
+    try{ await rpc('tf_insp_revisao_aprovar', { p_id:id, p_r:r }); U.toast('Aprovada e liberada.', 'ok'); location.hash = 'aba=rev'; }catch(e){ problemaRev(e); }
   }));
+}
+// E33 · issue 15: o erro que trava a revisão (do banco ou da conta) leva até a parte com problema, com o nome da tela no lugar do nome de sistema
+function problemaRev(e){
+  const T = $('tela'), m = e && e.message ? e.message : String(e), q = s => T.querySelector(s);
+  const fm = m.match(/faltam: ([a-z_, ]+)\)/);
+  if (fm){ const ks = fm[1].split(/,\s*/).filter(k => CONF_ROT[k]); return marcarProblema(ks.map(k => q('[data-cf="' + k + '"]')), 'Falta conferir: ' + ks.map(k => CONF_ROT[k]).join(', ') + '.'); }
+  if (/espessuras do medidor/.test(m)) return marcarProblema(q('#espFalta') || q('[data-cf="espessuras"]'), m.replace(/\.?$/, '.') + ' (Espessuras do medidor)');
+  if (/pendência que trava/.test(m)) return marcarProblema(Array.from(T.querySelectorAll('table.conf tr.n-vermelho')), m);
+  if (/próxima inspeção|reduz o prazo|motivo das datas|critério do PLH: informe a data/.test(m)) { const cx = q('#revDatasCx'); return marcarProblema(cx && !cx.hidden ? cx : (q('#revDatas') && q('#revDatas').closest('label')), m + ' (3 · PMTA › Próximas inspeções)'); }
+  if (/volume/i.test(m)) return marcarProblema(q('#revVol') || q('[data-cf="pmta"]'), m + ' (3 · PMTA)');
+  if (/PMTA/.test(m)) return marcarProblema(q('[data-cf="pmta"]'), m + ' (3 · PMTA)');
+  if (/espessura|leitura/.test(m)) return marcarProblema(q('#espFalta') || q('[data-cf="espessuras"]'), m + ' (Espessuras)');
+  erro(e);
 }
 // ════════════════════════════════════════════════════════════════════════════
 // E10 (S107 · 412) · AS ESPESSURAS DO MEDIDOR NO ESCRITÓRIO
@@ -2456,7 +2537,7 @@ function espHtml(){
                              : '<button class="btn mini" data-espsem="' + esc(c.id) + '">Não deu para medir</button>') : '') + '</td></tr>';
   });
   h += '</table>';
-  h += falta.length ? '<p class="alerta crit" style="margin:10px 0 0">Faltam as espessuras de: <b>' + esc(falta.map(c => c.nome).join(', ')) + '</b>. Sem elas a revisão não conclui e o PLH não aprova.</p>'
+  h += falta.length ? '<p class="alerta crit" id="espFalta" style="margin:10px 0 0">Faltam as espessuras de: <b>' + esc(falta.map(c => c.nome).join(', ')) + '</b>. Sem elas a revisão não conclui e o PLH não aprova.</p>'
                     : '<p class="muted" style="margin:8px 0 0">Vale a menor leitura de cada componente. Em vermelho: abaixo da espessura requerida.</p>';
   if (!pode) h += '<p class="muted" style="margin:6px 0 0">' + (REV.R.inspecao.etapa === 3 ? 'Na aprovação, só o PLH mexe nas espessuras.' : 'Só dá para anexar com a inspeção enviada ou em revisão.') + '</p>';
   return h + '</div>';
@@ -2928,7 +3009,7 @@ function pintarLaudo(){
     + '<span class="chip ' + (I.situacao === 'assinada' ? 's-pronto' : 's-em_conferencia') + '">' + esc(I.situacao) + '</span></div></div>';
   if (!cfg.oficial) h += '<div class="alerta falta"><b>Piloto:</b> o TapHub ainda não emite o laudo oficial. Gere o rascunho e compare com o PDF do TapDoc antigo. Quem liga a emissão é o admin (aba Laudos › Configurar).</div>';
   if (fal.length){
-    h += '<div class="alerta crit"><b>Antes de emitir:</b><ul>' + fal.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul>';
+    h += '<div class="alerta crit" id="ldFaltas"><b>Antes de emitir:</b><ul>' + fal.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul>';
     if (!I.ambiente && I.situacao === 'liberada') h += '<div class="linha" style="margin-top:6px">O vaso fica em <select id="ldAmb" class="t" style="width:auto;margin:0"><option value="">—</option><option value="fechado">local fechado</option><option value="aberto">céu aberto</option></select>'
       + '<button class="btn mini" id="ldAmbGravar">Gravar</button><span class="muted">(confirmado com a equipe que esteve no local)</span></div>';
     h += '</div>';
@@ -2937,7 +3018,7 @@ function pintarLaudo(){
   h += '<div class="card linha acoesrev" id="ldAcoes"><button class="btn" id="ldRascunho"' + (d.resultado ? '' : ' disabled') + '>Gerar o rascunho (PDF)</button>';
   if (eu.plh && cfg.oficial){
     if (atual && atual.situacao === 'emitindo') h += '<button class="btn pri" id="ldRefazer">Gerar e gravar o PDF do ' + esc(atual.numero) + (atual.revisao ? ' Rev. ' + atual.revisao : '') + '</button>';
-    else if (I.situacao === 'liberada' && (!atual || reaberta)) h += '<button class="btn pri" id="ldEmitir"' + (fal.length ? ' disabled title="Resolva as pendências"' : '') + '>' + (atual ? 'Aprovar e emitir a revisão (Rev. ' + (atual.revisao + 1) + ')' : 'Aprovar e emitir') + ' · digital</button>';
+    else if (I.situacao === 'liberada' && (!atual || reaberta)) h += '<button class="btn pri' + (fal.length ? ' bloq' : '') + '" id="ldEmitir"' + (fal.length ? ' title="Resolva as pendências"' : '') + '>' + (atual ? 'Aprovar e emitir a revisão (Rev. ' + (atual.revisao + 1) + ')' : 'Aprovar e emitir') + ' · digital</button>';
     if (atual && atual.situacao === 'emitido' && !reaberta && I.situacao === 'liberada') h += '<button class="btn pri" id="ldAssinado">Devolver o PDF assinado com o token</button><input type="file" id="ldArqAss" accept="application/pdf" hidden>';
   }
   if (['liberada','assinada'].indexOf(I.situacao) >= 0 && (eu.plh || !atual)) h += '<button class="btn" id="ldReabrir">Reabrir a inspeção</button>';
@@ -2999,6 +3080,7 @@ function ligarLaudo(){
     mostrarPdf(g.bytes, nomeLaudo(dd, L.numero + (L.revisao ? ' Rev ' + L.revisao : '')));
   };
   const be = $('ldEmitir'); if (be) be.addEventListener('click', () => U.semDuploEnvio(be, async () => {
+    if ((d.faltas || []).length){ marcarProblema($('ldFaltas'), 'Falta para emitir: ' + d.faltas.length + ' item(ns) em "Antes de emitir" (Laudo).'); return; }   // E33 · issue 15
     const atual = laudoAtual(d);
     // E31 · issue 29: sem digital neste aparelho, avisa ANTES (sem abrir o PIN, que depois seria recusado)
     if (!await temDigitalAqui()){ avisoSemDigital(); return; }
