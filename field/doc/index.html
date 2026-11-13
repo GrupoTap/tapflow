@@ -162,6 +162,12 @@ textarea.t{min-height:72px;resize:vertical}
 #salvo.on{opacity:.92}
 #desfazer{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));max-width:560px;margin:0 auto;background:var(--ink);color:#fff;border-radius:6px;padding:10px 12px;display:flex;gap:10px;align-items:center;z-index:70;font-size:14px}
 #desfazer span{flex:1}#desfazer button{background:none;border:0;color:#9FD3FF;font-weight:700;font-size:14px}
+/* S162 · issue 15: a parte com problema (o "Falta para enviar" leva até ela) · issue 23: a leitura suspeita da aferição */
+.problema{outline:2px solid var(--crit) !important;outline-offset:2px;background:var(--crit-soft) !important;border-radius:5px}
+.alerta.crit{background:var(--crit-soft);color:var(--crit)}
+.alerta button.ir{background:none;border:0;padding:0 0 0 4px;color:var(--crit);font:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
+input.t.suspeita{border-color:var(--crit);background:var(--crit-soft);color:var(--crit);font-weight:700}
+.btn.bloq{opacity:.55}
 </style>
 </head>
 <body>
@@ -181,7 +187,8 @@ textarea.t{min-height:72px;resize:vertical}
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 24';   // S154 · issue 9 (430): a foto da medição de espessura na tela Ultrassom (uma por vaso; a foto ou o motivo, obrigatória para enviar)
+const VERSAO = 'TapDoc 25';   // S162 · issues 15, 19 e 23: o que falta para enviar leva até a parte com problema (marcada em vermelho, com o nome da tela); "substituir" × aferição conforme; a leitura suspeita da aferição em vermelho
+// const VERSAO = 'TapDoc 24';   // S154 · issue 9 (430): a foto da medição de espessura na tela Ultrassom (uma por vaso; a foto ou o motivo, obrigatória para enviar)
 // const VERSAO = 'TapDoc 23';   // S152 · issue 7, Parte 2 (429): a seção "Medidas do vaso" em Componentes — circunferência, comprimento do costado entre as soldas, altura de cada tampo e outras medidas (nome + valor), para o desenho do mapa dos pontos
 // const VERSAO = 'TapDoc 22';   // S150 · item 81 (427): a aferição em 2 etapas (a 1ª reprovada encerra: NÃO CONFORME, sem leituras); manômetro pela ASME B40.100 Grau D; o teste da válvula pelas regras V1–V5 (abertura encontrada, aviso na hora acima da PMTA e abaixo da operação); "Danificado" vira a aferição reprovada na etapa 1; motor R00.6
 // const VERSAO = 'TapDoc 21';   // S149 · itens 82, 83, 84, 88 e 92 (426): placa de TAG e placa de categoria; as 3 fotos da aferição; a boroscopia de volta (obrigatória para enviar); as recomendações prontas; a foto pergunta onde vai no laudo
@@ -528,7 +535,7 @@ function pintar(){
   const f = { plaqueta:telaPlaqueta, operacao:telaOperacao, componentes:telaComponentes, localizacao:telaLocal, laudo:telaLaudo,
              visual:telaVisual, acessorios:telaAcessorios, ultrassom:telaUltrassom, boroscopia:telaBoroscopia, teste:telaTeste,
              fechamento:telaFechamento, previa:telaPrevia, afericao:telaAfericao }[telaAtual.nome];
-  if (f) return f(v);
+  if (f){ const r = f(v); aplicarMarca(v); return r; }   // S162 · issue 15
 }
 
 // ── estado das seções ──────────────────────────────────────────────────────
@@ -565,7 +572,7 @@ const MESMA_FOTO = 'Mesma foto da placa de TAG (as duas placas aparecem nela).';
 const itemDoLugar = l => l.item || 'lugar:' + l.lugar;
 function blocoLugar(v, l){
   const mot = String(semAcessoDe(v)[l.lugar] || '').trim(), item = itemDoLugar(l), tem = fotosDe(v, l.secao, item).length;
-  let h = '<div class="lugar"><div class="lt"><b>' + esc(l.rotulo) + '</b>' + (lugarOk(v, l) ? '<span class="chip ok">ok</span>' : '<span class="chip inc">falta</span>') + '</div>';
+  let h = '<div class="lugar" data-lugar="' + esc(l.lugar) + '"><div class="lt"><b>' + esc(l.rotulo) + '</b>' + (lugarOk(v, l) ? '<span class="chip ok">ok</span>' : '<span class="chip inc">falta</span>') + '</div>';
   if (mot === MESMA_FOTO) h += '<p class="muted" style="margin:4px 0 0">Na mesma foto da placa de TAG.</p><button class="btn peq" data-lsdesf="' + l.lugar + '">Tirar uma foto só desta placa</button>';
   else if (mot) h += '<p class="muted" style="margin:4px 0 0">Sem foto: ' + esc(mot) + '</p><button class="btn peq" data-lsdesf="' + l.lugar + '">Tirar a foto em vez disso</button>';
   else h += gradeFotos(v, l.secao, 1, null, item) + (tem ? '' : '<button class="btn peq" data-lsem="' + l.lugar + '">' + (l.lugar === 'medicao_espessura' ? 'Sem foto (dizer o motivo)' : 'Sem acesso / não há') + '</button>'
@@ -1817,10 +1824,53 @@ function faltasEnvio(v){
   if (!fotosDe(v, 'capa').length) f.push('Falta a foto de capa.');
   return f;
 }
+// S162 · issue 15: cada falta do envio leva até a tela e a parte com problema (o texto continua o mesmo do servidor)
+const ROT_TELA = { plaqueta:'Plaqueta', operacao:'Operação e câmaras', componentes:'Componentes', localizacao:'Localização', visual:'Exame visual', acessorios:'Acessórios',
+                   ultrassom:'Ultrassom', boroscopia:'Inspeção interna (boroscopia)', teste:'Teste de pressão', fechamento:'Fechamento e envio' };
+function alvoFalta(v, t){
+  const acPor = (nome, fn) => acessDe(v).find(a => fn(a) === nome);
+  let m = t.match(/^Foto "(.+?)"/);
+  if (m){ const l = lugaresDe(v).find(x => x.rotulo === m[1]);
+    return l ? { tela:{ plaqueta:'plaqueta', geral:'visual', componentes:'ultrassom' }[l.secao] || 'fechamento', sel:'[data-lugar="' + l.lugar + '"]' } : { tela:'plaqueta' }; }
+  if (/^Exame visual/.test(t)){ m = t.match(/"(.+?)"/); const k = m ? (v.inspecao.visual || []).findIndex(x => x.item === m[1]) : -1;
+    return { tela:'visual', sel:k >= 0 ? '[data-vis="' + k + '"]' : null }; }
+  if (/^Acessórios:/.test(t)) return { tela:'acessorios', sel:'#acConf' };
+  m = t.match(/^Acessório "(.+?)" sem a situação/);
+  if (m){ const a = acPor(m[1], a => a.tag || a.marca || TIPOS_ACESS[a.tipo] || a.tipo); return { tela:'acessorios', sel:a ? '[data-ac="' + a.id + '"] .seg.sit' : null }; }
+  m = t.match(/^Acessório "(.+?)": (afira|aferição incompleta)/);
+  if (m){ const a = acPor(m[1], nomeAc); return { tela:'acessorios', sel:a ? '[data-ac="' + a.id + '"] .afBloco' : null }; }
+  m = t.match(/^Acessório "(.+?)": foto da aferição/);
+  if (m){ const a = acPor(m[1], a => a.tag || a.marca || 'sem TAG'); return { tela:'acessorios', sel:a ? '[data-ac="' + a.id + '"] .afBloco' : null }; }
+  if (/^Ultrassom/.test(t)) return { tela:'ultrassom', sel:'#usMed' };
+  if (/boroscopia/.test(t)) return { tela:'boroscopia', sel:'#bR' };
+  if (/^Teste de pressão/.test(t)) return { tela:'teste', sel:'#tR' };
+  if (/^Localização/.test(t)) return { tela:'localizacao', sel:'#lAmb' };
+  if (/foto de capa/.test(t)) return { tela:'fechamento', sel:'#fCapa' };
+  return { tela:'fechamento', sel:null };
+}
+let MARCA = null;   // { vaso, tela, sel, texto, rolar }
+function irFalta(v, t){
+  const a = alvoFalta(v, t);
+  MARCA = { vaso:v.id, tela:a.tela, sel:a.sel, texto:t, rolar:true };
+  if (telaAtual.nome === a.tela && telaAtual.vaso === v.id) pintar(); else ir({ nome:a.tela, vaso:v.id });
+}
+function aplicarMarca(v){
+  if (!MARCA || MARCA.vaso !== v.id || telaAtual.nome !== MARCA.tela) return;
+  if (faltasEnvio(v).indexOf(MARCA.texto) < 0){ MARCA = null; return; }   // a parte foi corrigida: a marca some
+  const T = $('tela'), el = (MARCA.sel && T.querySelector(MARCA.sel)) || T.querySelector('.chip.inc');
+  T.insertAdjacentHTML('afterbegin', '<div class="alerta crit" id="marcaMsg"><b>Falta para enviar</b>' + esc(MARCA.texto) + '</div>');
+  if (!el) return;
+  const alvo = el.matches('input,select') ? (el.closest('label.f, .chk') || el) : el;
+  alvo.classList.add('problema');
+  if (MARCA.rolar){ MARCA.rolar = false; setTimeout(() => alvo.scrollIntoView({ behavior:'smooth', block:'center' }), 60); }
+}
 function avisosEnvio(v){
   const a = alertas(v).slice();
   try{ previa(v).avisos.forEach(x => a.push(x)); }catch(e){ a.push('Prévia do cálculo: ' + e.message); }
   avisosAcess(v).forEach(x => a.push(x));
+  // S162 · issue 23: a leitura suspeita da aferição ainda não conferida (não trava: o inspetor corrige ou confirma)
+  acessDe(v).forEach(ac => { const af = afDe(v, ac); if (af && af.tipo === 'manometro'){ const n = suspeitasAbertas(af).length;
+    if (n) a.push('Aferição do ' + nomeAc(ac) + ': ' + n + ' leitura(s) muito longe das outras. Confira (corrija ou toque em "Está certa").'); } });
   return a;
 }
 
@@ -1919,8 +1969,17 @@ function operCam(v, camId){
 const DEFEITOS_E1 = { manometro:['Visor quebrado', 'Ponteiro solto', 'Travado', 'Escala ilegível', 'Não volta ao zero', 'Outro'],
                       valvula:['Danificada', 'Travada', 'Vazamento na sede', 'Avaria ou particulados', 'Sem ajuste possível', 'Outro'] };
 const e1Reprovada = af => !!(af && af.leituras && af.leituras.etapa1 && af.leituras.etapa1.ok === false);
+// S162 · issue 19: a situação e o resultado da aferição dizem coisas contrárias (o sistema não escolhe: alguém decide)
+function contradicaoAc(v, a){
+  const af = afDe(v, a); if (!af) return null;
+  const r = resultadoAf(v, a, af).resultado, nome = TIPOS_ACESS[a.tipo] || a.tipo;
+  if (a.situacao === 'substituir' && r === 'aprovado') return nome + ': a situação está "substituir" e a aferição deu CONFORME. Decida qual vale: troque a situação ou reveja a aferição.';
+  if (a.situacao === 'ok' && r === 'reprovado') return nome + ': a situação está "ok" e a aferição deu NÃO CONFORME. Decida qual vale: troque a situação ou reveja a aferição.';
+  return null;
+}
 function avisosAcess(v){
   const a = [], l = acessDe(v).filter(x => x.situacao !== 'retirado');
+  l.forEach(x => { const t = contradicaoAc(v, x); if (t) a.push(t); });   // S162 · issue 19
   l.filter(x => VALVULAS.includes(x.tipo) && x.pressao_ajuste_mpa != null).forEach(x => {
     const p = pmtaVigenteCam(v, x.camara_id);
     if (p && x.pressao_ajuste_mpa > p + 1e-9) a.push((TIPOS_ACESS[x.tipo]) + (x.lacre_num ? ' lacre ' + x.lacre_num : '') + ': ajuste ' + fmt(x.pressao_ajuste_mpa, 3) +
@@ -1984,6 +2043,44 @@ function resultadoAf(v, a, af){
   r.completo = !r.faltas.length;
   r.resultado = !r.completo ? 'incompleto' : r.aprovadaOk ? 'aprovado' : 'reprovado';
   return r;
+}
+// S162 · issue 23: a leitura a mais de uma divisão das outras do mesmo ponto, ou o padrão longe do ponto, fica em vermelho.
+// Uma divisão = 2 × a resolução (a resolução é a meia divisão); sem a resolução, 5% da escala. Compara-se o erro (indicado − padrão).
+// O inspetor corrige ou confirma ("Está certa": fica em leituras.conferidas, que o servidor guarda e não usa na conta).
+function leiturasSuspeitas(af){
+  const L = af.leituras || {}, pts = L.pontos || [], res = Number(af.resolucao);
+  const div = res > 0 ? 2 * res : (af.faixa_fim != null && af.faixa_ini != null ? 0.05 * (af.faixa_fim - af.faixa_ini) : null);
+  if (!(div > 0)) return [];
+  const out = [], med = xs => { const s = xs.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  pts.forEach((p, k) => {
+    const nom = Number(p.nominal), ls = p.leituras || [], err = l => l.indicado - (l.padrao != null ? l.padrao : nom);
+    ls.forEach((l, n) => {
+      if (!l) return;
+      const nome = 'Ponto ' + fmt(nom) + ' · ' + (n < 3 ? 'carga ' + (n + 1) : 'descarga ' + (n - 2));
+      if (l.padrao != null && Math.abs(l.padrao - nom) > div + 1e-9) out.push({ k, n, c:'padrao', chave:k + ':' + n + ':p', texto:nome + ': padrão ' + fmt(l.padrao) + ', diferente do ponto (' + fmt(nom) + '). Confira.' });
+      if (l.indicado == null) return;
+      const outras = ls.filter((x, j) => j !== n && x && x.indicado != null).map(err);
+      if (outras.length >= 2 && Math.abs(err(l) - med(outras)) > div + 1e-9) out.push({ k, n, c:'indicado', chave:k + ':' + n, texto:nome + ': ' + fmt(l.indicado) + ', muito longe das outras. Confira.' });
+    });
+  });
+  return out;
+}
+const suspeitasAbertas = af => { const c = (af.leituras && af.leituras.conferidas) || []; return leiturasSuspeitas(af).filter(x => c.indexOf(x.chave) < 0); };
+function pintarSuspeitas(af, gravar){
+  const cx = $('afSusp'); if (!cx) return;
+  const S = leiturasSuspeitas(af), conf = af.leituras.conferidas || [];
+  $('tela').querySelectorAll('input.suspeita').forEach(el => el.classList.remove('suspeita'));
+  S.filter(x => conf.indexOf(x.chave) < 0).forEach(x => { const el = $('tela').querySelector('[data-pp="' + x.k + '"][data-n="' + x.n + '"][data-c="' + x.c + '"]'); if (el) el.classList.add('suspeita'); });
+  cx.hidden = !S.length;
+  cx.innerHTML = S.length ? '<b>Leituras para conferir</b><p class="muted" style="margin:2px 0 6px">Corrija a leitura ou, se ela está certa, toque em "Está certa".</p>'
+    + S.map(x => { const ok = conf.indexOf(x.chave) >= 0;
+        return '<div style="display:flex;gap:8px;align-items:center;margin:4px 0;' + (ok ? '' : 'color:var(--crit);font-weight:600') + '"><span style="flex:1">' + (ok ? '✓ conferida · ' : '') + esc(x.texto) + '</span>'
+          + '<button class="btn peq' + (ok ? '' : ' sec') + '" data-afok="' + esc(x.chave) + '">' + (ok ? 'Desfazer' : 'Está certa') + '</button></div>'; }).join('') : '';
+  cx.querySelectorAll('[data-afok]').forEach(b => b.addEventListener('click', () => {
+    const c = (af.leituras.conferidas || []).filter(y => y !== b.dataset.afok);
+    af.leituras.conferidas = conf.indexOf(b.dataset.afok) >= 0 ? c : c.concat([b.dataset.afok]);
+    gravar(); pintarSuspeitas(af, gravar);
+  }));
 }
 function chipAf(res){ return res === 'aprovado' ? '<span class="chip ok">' + 'aprovado' + '</span>' : res === 'reprovado' ? '<span class="chip pend">reprovado</span>' : '<span class="chip inc">incompleta</span>'; }
 // S149 · item 83: os lugares das fotos da aferição (o motivo de não ter fica em fotos_sem_acesso, com a mesma chave)
@@ -2153,6 +2250,7 @@ function telaAfericao(v){
       h += '<div class="card"><b>Ciclo ' + (ci + 1) + ' · carga (subindo)</b><table class="comp" style="width:100%"><tr><th>Ponto</th><th>Padrão</th><th>Indicado</th></tr>' + ordem.map(k => linha(k, ci)).join('') + '</table></div>';
       h += '<div class="card"><b>Ciclo ' + (ci + 1) + ' · descarga (descendo)</b><table class="comp" style="width:100%"><tr><th>Ponto</th><th>Padrão</th><th>Indicado</th></tr>' + ordem.slice().reverse().map(k => linha(k, 3 + ci)).join('') + '</table></div>';
     }
+    h += '<div class="card" id="afSusp" hidden></div>';   // S162 · issue 23
     h += '<div class="card" id="afPorPonto"' + (pts.length && (r.pontos || []).length ? '' : ' hidden') + '>' + htmlPorPonto(r, pts, un, af) + '</div>';
   }
   // S140 · item 56: sem a validade (não sai no relatório; o prazo é lembrete interno, mudado no escritório)
@@ -2166,6 +2264,7 @@ function telaAfericao(v){
     $('afChip').innerHTML = chipAf(rr.resultado); $('afResultado').innerHTML = htmlResAf(rr, vv);
     const cA = $('afCxAc'), cB = $('afCxAb'); if (cA) cA.hidden = !rr.acimaPMTA && !(af.leituras.motivo_acima || '').trim(); if (cB) cB.hidden = !rr.abaixoOperacao && !(af.leituras.motivo_abaixo || '').trim();   // S150 · V4
     const pp = $('afPorPonto'); if (pp){ const t = htmlPorPonto(rr, (af.leituras && af.leituras.pontos) || [], af.unidade || 'bar', af); pp.innerHTML = t; pp.hidden = !t; }
+    if (!vv) pintarSuspeitas(af, () => { salvar(); adiarAf('af:' + af.id, v, a, af); });   // S162 · issue 23
   };
   const mudou = (repinta) => {
     salvar(); adiarAf('af:' + af.id, v, a, af);
@@ -2221,11 +2320,14 @@ function telaAfericao(v){
       pts(lista);
     }, 'click');
     // itens 55 e 59: gravar sem redesenhar — o campo em que se digita não some nem muda de lugar
+    pintarSuspeitas(af, () => { salvar(); adiarAf('af:' + af.id, v, a, af); });   // S162 · issue 23: ao abrir a tela
     $('tela').querySelectorAll('[data-pp]').forEach(el => el.addEventListener('input', () => {
       const p = af.leituras.pontos[Number(el.dataset.pp)], k = Number(el.dataset.n);
       p.leituras = p.leituras || [];
       for (let j = 0; j < 6; j++) if (!p.leituras[j]) p.leituras[j] = { sentido:j < 3 ? 'carga' : 'descarga', padrao:Number(p.nominal), indicado:null };
       p.leituras[k][el.dataset.c] = n(el.value);
+      // S162 · issue 23: mudou a leitura, a confirmação dela não vale mais
+      if (af.leituras.conferidas) af.leituras.conferidas = af.leituras.conferidas.filter(y => y !== el.dataset.pp + ':' + k && y !== el.dataset.pp + ':' + k + ':p');
       mudou(false);
     }));
   }
@@ -2254,7 +2356,8 @@ function telaAcessorios(v){
       (a.origem_id ? ' <span class="chip">da anterior</span>' : '') + '</b>' +
       (pode && !a.origem_id ? '<button class="btn peq perigo" data-acrm="' + esc(a.id) + '">Tirar</button>' : '') + '</div>';
     h += '<label class="f">Tipo<select class="t" data-k="tipo">' + Object.keys(TIPOS_ACESS).map(t => '<option value="' + t + '"' + (t === a.tipo ? ' selected' : '') + '>' + TIPOS_ACESS[t] + '</option>').join('') + '</select></label>';
-    h += '<label class="f">Situação<div class="seg sit" data-sit>' + Object.keys(SIT_ACESS).map(s => '<button data-s="' + s + '" class="' + (a.situacao === s ? 'on' : '') + '">' + SIT_ACESS[s] + '</button>').join('') + '</div></label>';
+    const ctr = contradicaoAc(v, a);   // S162 · issue 19: marca os dois lugares
+    h += '<label class="f">Situação<div class="seg sit' + (ctr ? ' problema' : '') + '" data-sit>' + Object.keys(SIT_ACESS).map(s => '<button data-s="' + s + '" class="' + (a.situacao === s ? 'on' : '') + '">' + SIT_ACESS[s] + '</button>').join('') + '</div></label>';
     if (a.situacao === 'ausente' && casosDe(v, a, true).length){   // S146 · item 79: o texto do laudo para o que falta
       const cP = a.afericao_caso && PRONTOS()[a.afericao_caso];
       h += '<div class="afBloco" style="margin-top:10px;padding:8px 10px;border:1px solid var(--rule-2);border-radius:6px"><b>Texto do laudo' + (cP ? ' · ' + esc(cP.rotulo) : '') + '</b>'
@@ -2277,7 +2380,8 @@ function telaAcessorios(v){
       if (MEDIDORES.includes(a.tipo)) h += campoTexto('Escala', 'ac_esc_' + a.id, a.escala, 'data-k="escala" placeholder="Ex.: 0 a 16 bar"');
       if (cs.length > 1) h += '<label class="f">Câmara<select class="t" data-k="camara_id"><option value="">—</option>' +
         cs.map(c => '<option value="' + esc(c.id) + '"' + (c.id === a.camara_id ? ' selected' : '') + '>' + esc(c.nome) + '</option>').join('') + '</select></label>';
-      if (AFERIVEIS.includes(a.tipo)) h += blocoAfericao(v, a, pode);
+      if (ctr) h += '<p class="alerta crit" style="margin:8px 0 0">' + esc(ctr) + '</p>';
+      if (AFERIVEIS.includes(a.tipo)) h += ctr ? blocoAfericao(v, a, pode).replace('class="afBloco"', 'class="afBloco problema"') : blocoAfericao(v, a, pode);
       h += '<p style="margin:12px 0 0;font-size:13px;font-weight:600;color:var(--ink-2)">' + (a.tipo === 'disco_ruptura' ? 'Foto do certificado ou da etiqueta' : 'Foto do item') + '</p>' + gradeFotos(v, 'acessorios', 3, null, a.id);
     }
     h += '</div>';
@@ -2513,17 +2617,17 @@ function telaFechamento(v){
   }
   const f = faltasEnvio(v), a = avisosEnvio(v);
   let h = '';
-  h += f.length ? '<div class="alerta" style="background:var(--crit-soft);color:var(--crit)"><b>Falta para enviar</b><ul>' + f.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>'
+  h += f.length ? '<div class="alerta crit" id="fFaltas"><b>Falta para enviar</b><ul>' + f.map((x, k) => '<li>' + esc(x) + ' <button class="ir" data-falta="' + k + '">ir para ' + esc(ROT_TELA[alvoFalta(v, x).tela] || 'a tela') + ' ›</button></li>').join('') + '</ul></div>'
                : '<div class="alerta" style="background:var(--ok-soft);color:var(--ok)"><b>Pronto para enviar</b>Tudo o que é obrigatório foi preenchido.</div>';
   if (a.length) h += '<div class="alerta"><b>Avisos</b><ul>' + a.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
   h += '<div class="card"><label class="f">Observações do vaso<small>O que o escritório precisa saber e não coube nas seções.</small><textarea class="t" id="fObs">' + esc(i.observacao || '') + '</textarea></label></div>';
-  h += '<div class="card"><b>Foto de capa</b><p class="muted" style="margin:2px 0 0">O vaso inteiro, de frente: vai na capa do laudo.</p>' + gradeFotos(v, 'capa', 1) + '</div>';
+  h += '<div class="card" id="fCapa"><b>Foto de capa</b><p class="muted" style="margin:2px 0 0">O vaso inteiro, de frente: vai na capa do laudo.</p>' + gradeFotos(v, 'capa', 1) + '</div>';
   h += cartaoPrazo(v);   // S144 · item 70
   const PR7 = PRONTOS(), rc = i.rec_casos || [];   // S146 · item 79 (T7): recomendações que o inspetor marca
   const RKS = PR7 ? Object.keys(PR7).filter(k => /^R\d+$/.test(k) && PR7[k] && PR7[k].grupo === 'recomendacao').sort((a, b) => Number(a.slice(1)) - Number(b.slice(1))) : [];   // S149 · item 88
   if (RKS.length) h += '<div class="card"><b>Recomendações a mais</b><p class="muted" style="margin:2px 0 0">Marcou, entra na seção 11 do laudo.</p>'
     + RKS.map(k => '<div class="chk"><input type="checkbox" id="frc_' + k + '" data-frc="' + k + '"' + (rc.indexOf(k) >= 0 ? ' checked' : '') + '><label for="frc_' + k + '">' + esc(PR7[k].rotulo) + '</label></div>').join('') + '</div>';
-  h += '<button class="btn pri" id="fEnviar"' + (f.length ? ' disabled' : '') + '>Enviar a inspeção deste vaso</button>';
+  h += '<button class="btn pri' + (f.length ? ' bloq' : '') + '" id="fEnviar">Enviar a inspeção deste vaso</button>';   // S162 · issue 15: com falta, o toque leva até a lista
   h += '<p class="muted" style="text-align:center;margin-top:6px">Depois de enviar, você ainda pode reabrir para corrigir, até o escritório começar a revisão. Sem sinal, vai quando o sinal voltar.</p>'
      + '<p class="muted" style="text-align:center;margin-top:2px">Depois do envio, cada um da equipe confirma a participação no próprio celular, com a digital (aba Eu): o laudo traz o nome de quem participou.</p>';
   h += '<button class="btn perigo" id="fNao">Não foi possível inspecionar este vaso</button>';
@@ -2539,8 +2643,12 @@ function telaFechamento(v){
   const fechar = (situ, motivo) => {
     i.situacao = 'enviada'; i.pode_editar = false; if (motivo) i.nao_inspecionado_motivo = motivo; salvar();
   };
+  $('tela').querySelectorAll('[data-falta]').forEach(b => b.addEventListener('click', () => irFalta(v, f[Number(b.dataset.falta)])));   // S162 · issue 15
   ligar('fEnviar', () => {
-    const ap = avisoPrazo(v); if (ap){ U.toast(ap, 'err'); return; }
+    const fx = faltasEnvio(v);
+    if (fx.length){ const cx = $('fFaltas'); if (cx){ cx.classList.add('problema'); cx.scrollIntoView({ behavior:'smooth', block:'center' }); }
+      U.toast('Falta para enviar: ' + fx.length + ' item(ns). Toque em "ir para…" para chegar ao que falta.', 'err'); return; }
+    const ap = avisoPrazo(v); if (ap){ const cp = $('przOn'); if (cp){ const c = cp.closest('.card') || cp; c.classList.add('problema'); c.scrollIntoView({ behavior:'smooth', block:'center' }); } U.toast(ap + ' (Fechamento › Prazo)', 'err'); return; }
     N.janela.confirmar('Enviar a inspeção do ' + v.tag + '?', '<p>Depois de enviar, você ainda pode reabrir para corrigir, até o escritório começar a revisão.</p>', 'Enviar').then(s => {
       if (!s) return;
       if (i.observacao !== undefined) enfileirar(v, 'fech', 'observações', { funcao:'tf_insp_fechamento_gravar', payload:{ p_id:i.id, p_dados:{ observacao:i.observacao || null } } });

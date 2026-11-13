@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S58-T36';   // S160: núcleo N10 (confirmarPessoa só com a digital, para aprovar o laudo; issue 29)
+const VERSAO = 'S58-T37';   // S162: TapDoc 25 (issues 15, 19 e 23: o que falta leva até a parte; "substituir" × aferição conforme; leitura suspeita em vermelho)
+// const VERSAO = 'S58-T36';   // S160: núcleo N10 (confirmarPessoa só com a digital, para aprovar o laudo; issue 29)
 // const VERSAO = 'S58-T35';   // S157: issue 10 — Field S58 e núcleo N9 (o acesso vencido renovado antes de enviar a fila e no envio das fotos)
 // const VERSAO = 'S57-T34';   // S154: TapDoc 24 (issue 9: a foto da medição de espessura no Ultrassom; 430)
 // const VERSAO = 'S57-T33';   // S152: TapDoc 23 (issue 7: a seção "Medidas do vaso" em Componentes; 429)
