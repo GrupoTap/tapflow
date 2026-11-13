@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapField · S56</title>
+<title>TapField · S58</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -617,9 +617,9 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 #filaTxt{cursor:pointer}
 </style>
 <!-- S33 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N8">
-<script src="../nucleo/config.js?v=N8"></script>
-<script src="../nucleo/nucleo.js?v=N8"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N9">
+<script src="../nucleo/config.js?v=N9"></script>
+<script src="../nucleo/nucleo.js?v=N9"></script>
 <script src="../nucleo/modulos.js?v=M4"></script>
 </head>
 <body>
@@ -681,7 +681,8 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S57';   // S57 (S145): rodada E (A8): a confirmação da participação nas inspeções, com a digital, na aba Eu · TapDoc 18
+const APP_VERSION = 'S58';   // S58 (S157): issue 10 — o acesso vencido ("exp" claim) renovado no envio das fotos (núcleo N9 e o canhoto do cartão)
+// const APP_VERSION = 'S57';   // S57 (S145): rodada E (A8): a confirmação da participação nas inspeções, com a digital, na aba Eu · TapDoc 18
 // const APP_VERSION = 'S56';   // S56 (S144): item 74: "aferição" no lugar de "calibração" nos textos do celular (a calibração é do laboratório) · TapDoc 17
 // const APP_VERSION = 'S55';   // S55 (S142): item 40: a inspeção só abre para quem está na T06 (aviso com quem está para os outros) · item 38: o aviso do atestado (5 anos, junto da ausência) · núcleo N8
 // const APP_VERSION = 'S54';   // S54 (S139): item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
@@ -774,8 +775,9 @@ async function renovarToken(){
   return renovando;
 }
 
+// S58 (issue 10): o armazenamento responde ao acesso vencido com HTTP 400 e '"exp" claim timestamp check failed'
 const tokenVencido = e =>
-  e && (e.status === 401 || /jwt expired|invalid jwt|token.*expired|not authenticated/i.test(e.message||''));
+  e && (e.status === 401 || /jwt|token.*expired|not authenticated|"?exp"? claim|claim timestamp/i.test(e.message||''));
 
 // Sem renovação possível: volta para o login. O RASCUNHO E A FILA FICAM —
 // nunca se apaga o que o inspetor lançou porque a sessão venceu.
@@ -7702,10 +7704,15 @@ function canFlush(){
         const vai = () => fetch(url, { method: 'POST', body: blob, headers: Object.assign({ apikey: SUPABASE_ANON_KEY, 'Content-Type': 'image/jpeg' },
           sessao.token ? { Authorization: 'Bearer ' + sessao.token } : {}) });
         let r = await vai();
-        if ((r.status === 401 || r.status === 403) && sessao.refresh && await renovarToken()) r = await vai();
+        // S58 (issue 10): o acesso vencido pode vir como HTTP 400 ('"exp" claim timestamp check failed'): renova e tenta de novo
+        const acessoVencido = async x => x.status === 401 || x.status === 403 ||
+          (x.status === 400 && tokenVencido({ message: String(((await x.clone().json().catch(() => ({}))) || {}).message || '') }));
+        if (sessao.refresh && await acessoVencido(r) && await renovarToken()) r = await vai();
         // 400/409 "já existe": é o reenvio de uma foto que subiu antes da queda — segue
         if (!r.ok){
           const j = await r.json().catch(() => ({}));
+          // S58 (issue 10): acesso ainda recusado = o canhoto ESPERA (não é descartado); volta no próximo envio
+          if (tokenVencido({ status: r.status, message: String(j.message || j.error || '') })) throw Object.assign(new Error('O acesso venceu: o canhoto fica guardado e sobe no próximo envio.'), { rede: true });
           if (!(r.status === 409 || /exist|duplicate/i.test(String(j.message || j.error || '')))) throw Object.assign(new Error('O armazenamento recusou a foto (HTTP ' + r.status + ').'), { rede: r.status >= 500 });
         }
         await rpc('tf_cartao_comprovante_enviar', { p_id: it.id, p_valor: it.valor, p_frase: it.frase || null, p_data: it.data,
