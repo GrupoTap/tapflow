@@ -6,9 +6,9 @@
 <meta name="theme-color" content="#1B6FA9">
 <title>TapDoc · Escritório</title>
 <link rel="icon" href="../field/icons/favicon-32.png">
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N9">
-<script src="../nucleo/config.js?v=N9"></script>
-<script src="../nucleo/nucleo.js?v=N9"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N10">
+<script src="../nucleo/config.js?v=N10"></script>
+<script src="../nucleo/nucleo.js?v=N10"></script>
 <script src="../nucleo/modulos.js?v=M4"></script>
 <script src="motor-calculo-nr13.js?v=R00.6"></script>
 <!--
@@ -150,6 +150,25 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 /* S148 · item 89: o realce curto na linha que acabou de mudar */
 @keyframes realce{ from{ background:var(--warn-soft, #fcefd8); } to{ background:transparent; } }
 .realce{ animation:realce 1.2s ease-out; }
+/* E31 · issue 31: no celular, os quadros da aba Laudos e da tela do laudo viram uma lista de cartões (nada mais largo que a tela) */
+@media (max-width:700px){
+  table.cartoes,table.cartoes tbody{display:block}
+  table.cartoes tr:first-child{display:none}
+  table.cartoes tr{display:block;padding:10px 2px;border-bottom:1px solid var(--rule-2)}
+  table.cartoes td{display:block;border:0;padding:2px 0}
+  table.cartoes td.linha{display:flex;margin-top:6px}
+  table.cartoes td[data-r]::before{content:attr(data-r) ": ";color:var(--ink-3);font-size:12px;font-weight:600}
+  table.cartoes .chip{white-space:normal}
+  .acoesrev .btn{flex:1 1 auto}
+}
+/* E31 · issue 27: o andamento de "Aprovar e emitir" e "Gerar o rascunho (PDF)" */
+.acoesrev.rodando>.btn{display:none}
+.andamento{flex:1 1 100%;min-width:0}
+.andamento .barra{height:10px;border-radius:5px;background:var(--rule-2);overflow:hidden}
+.andamento .barra i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+.andamento .txt{font-size:13.5px;font-weight:600;color:var(--accent-ink);margin-top:6px;overflow-wrap:anywhere}
+.andamento.travou .barra i{background:var(--warn)}
+.andamento.travou .txt{color:var(--warn)}
 </style>
 </head>
 <body>
@@ -165,7 +184,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E30';   // E30 (S158 · 432): a conferência do PDF assinado lê a assinatura do gov.br (assinatura-pdf.js S158, CMS com tamanho indefinido); o gov.br vale como reserva do token (o banco grava "assinatura avançada")
+const VERSAO = 'TapDoc E31';   // E31 (S160): issues 28, 29, 31 e 27 — o mapa carregado antes de aprovar ("Mapa3D is not defined"); aprovar o laudo só com a digital (sem o PIN; sem digital, avisa antes); a aba Laudos cabe no celular; o andamento em % ao aprovar e ao gerar o rascunho
+// const VERSAO = 'TapDoc E30';   // E30 (S158 · 432): a conferência do PDF assinado lê a assinatura do gov.br (assinatura-pdf.js S158, CMS com tamanho indefinido); o gov.br vale como reserva do token (o banco grava "assinatura avançada")
 // const VERSAO = 'TapDoc E29';   // E29 (S156): issue 1 (passo 2) — as frases da T05 dizem "TapFlow" no lugar de "Manager"
 // const VERSAO = 'TapDoc E28';   // E28 (S155 · 431): issue 8 — o quadro "Placas de identificação" na tela da OS: a arte da placa de cada vaso com o resultado liberado, em PDF de 12 × 10 cm para a gráfica (letras em curvas, CMYK, sem margem; placa-pdf.js P1), com o QR code do link do TapWeb gravado no vaso
 // const VERSAO = 'TapDoc E27';   // E27 (S154 · 430): issue 9 — o lugar de foto "Medição de espessura" na revisão (vem da lista do banco) e o laudo com a foto no 7.3 (laudo-pdf.js S154)
@@ -1845,7 +1865,8 @@ async function mapaLaudo(d, aviso, exigir){
   if (!('cor_mapa' in V) || ['enviada', 'em_revisao', 'liberada'].indexOf(I.situacao) < 0) return;
   let r;
   try{
-    aviso('Conferindo o desenho do mapa…');
+    aviso('Conferindo o desenho do mapa…', 'mapa', 0);
+    await libMapa(false);   // E31 · issue 28: o mapaDados usa o Mapa3D: carregar ANTES (sem a revisão aberta antes, dava "Mapa3D is not defined")
     r = await mapaGarantir(I.id, I.mapa, mapaDados(V, V.componentes, (V.camaras || []).filter(k => k.ativo !== false).length, d.leituras, null, V.modelo_mapa), true);
   }catch(e){ if (exigir) throw new Error('Não consegui conferir o desenho do mapa dos pontos: ' + (e.message || e)); return; }
   if (r.velha && exigir) throw new Error('O desenho do mapa dos pontos guardado não bate com as medidas e não consegui refazer (' + (r.erro3d || 'sem detalhe')
@@ -2601,13 +2622,13 @@ const hexDe = buf => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2
 async function gerarLaudo(d, opc, aviso){
   aviso = aviso || (() => {});
   await libsLaudo();
-  aviso('Baixando as fotos…');
-  const imagens = {}, semFoto = [];
-  for (const p of LaudoPDF.fotosDoLaudo(d)){ try{ imagens[p] = dataURLDe(await baixar(p)); }catch(e){ semFoto.push(p); } }
-  aviso('Montando o PDF…');
+  aviso('Baixando as fotos…', 'fotos', 0);
+  const imagens = {}, semFoto = [], FT = LaudoPDF.fotosDoLaudo(d);   // E31 · issue 27: o andamento foto a foto
+  for (let i = 0; i < FT.length; i++){ const p = FT[i]; aviso('foto ' + (i + 1) + ' de ' + FT.length, 'fotos', i / FT.length); try{ imagens[p] = dataURLDe(await baixar(p)); }catch(e){ semFoto.push(p); } }
+  aviso('', 'montar', 0);
   const def = LaudoPDF.montar(d, Object.assign({ imagens }, opc));
   const base = await new Promise((ok, falha) => { try{ pdfMake.createPdf(def).getBuffer(b => ok(b)); }catch(e){ falha(e); } });
-  aviso('Juntando os anexos…');
+  aviso('juntando os documentos', 'anexos', 0);
   const out = await PDFLib.PDFDocument.load(base);
   // S150 · item 81: o documento de cada aferição (relatório do manômetro, certificado da válvula), separado, logo depois do laudo e antes dos anexos
   for (const dc of LaudoPDF.documentosAfericao(d, opc)){
@@ -2618,8 +2639,9 @@ async function gerarLaudo(d, opc, aviso){
   const anexos = [['o certificado do medidor', d.medidor && d.medidor.certificado_path]]
     .concat((d.padroes || []).map(p => ['o certificado do manômetro padrão' + (p.descricao ? ' ' + p.descricao : ''), p.certificado_path]))
     .concat([['a ART', d.art && d.art.path]]);
-  const semAnexo = [];
+  const semAnexo = []; let nA = 0;
   for (const [nome, path] of anexos){
+    aviso('anexo ' + (++nA) + ' de ' + anexos.length, 'anexos', nA / (anexos.length + 1));
     if (!path){ semAnexo.push(nome); continue; }
     let b; try{ b = await baixar(path); }catch(e){ if (opc.exigirAnexos) throw new Error('Não abriu ' + nome + ': ' + e.message); semAnexo.push(nome); continue; }
     if (ehPdf(b)){ const src = await PDFLib.PDFDocument.load(b, { ignoreEncryption:true }); (await out.copyPages(src, src.getPageIndices())).forEach(pg => out.addPage(pg)); }
@@ -2671,10 +2693,10 @@ async function abaLaudos(h){
     + ' Numeração de ' + String(cfg.mes).padStart(2, '0') + '/' + cfg.ano + ': ' + (cfg.proximo_codigo ? 'próximo <b>' + esc(cfg.proximo_codigo) + '</b>' : 'não informada') + '.</div></div>'
     + (cfg.admin ? '<button class="btn" id="ldCfg">Configurar</button>' : '') + '</div></div>';
   h += cartaoDesenho(DES) + cartaoPacote(PAC);
-  h += '<div class="card"><h3>Inspeções liberadas e laudos</h3>' + (L.length ? '<table class="vs"><tr><th>Vaso</th><th>Cliente</th><th>OS</th><th>Laudo</th><th>Antes de emitir</th></tr>'
-    + L.map(x => '<tr class="lin" data-ld="' + esc(x.id) + '"><td><b>' + esc(x.tag) + '</b><div class="muted">' + esc(x.situacao) + '</div></td><td>' + esc(x.cliente || '') + '</td><td>' + esc(x.os || '—') + '</td><td>'
+  h += '<div class="card"><h3>Inspeções liberadas e laudos</h3>' + (L.length ? '<table class="cartoes"><tr><th>Vaso</th><th>Cliente</th><th>OS</th><th>Laudo</th><th>Antes de emitir</th></tr>'   // E31 · issue 31: no celular, cartões
+    + L.map(x => '<tr class="lin" data-ld="' + esc(x.id) + '"><td><b>' + esc(x.tag) + '</b><div class="muted">' + esc(x.situacao) + '</div></td><td data-r="Cliente">' + esc(x.cliente || '') + '</td><td data-r="OS">' + esc(x.os || '—') + '</td><td data-r="Laudo">'
       + (x.laudo ? '<b>' + esc(x.laudo.numero) + (x.laudo.revisao ? ' Rev. ' + x.laudo.revisao : '') + '</b><div><span class="chip ' + (SIT_LAUDO[x.laudo.situacao] || ['', ''])[1] + '">' + esc((SIT_LAUDO[x.laudo.situacao] || [x.laudo.situacao])[0]) + '</span></div>'
-         : '<span class="muted">não emitido</span>') + '</td><td>'
+         : '<span class="muted">não emitido</span>') + '</td><td data-r="Antes de emitir">'
       + (x.faltas ? '<span class="chip s-precisa_laudo">' + x.faltas + ' pendência(s)</span>' : '<span class="chip s-pronto">ok</span>') + '</td></tr>').join('') + '</table>'
     : '<p class="vazio">Nenhuma inspeção liberada ainda. A inspeção chega aqui depois da aprovação do PLH (aba A revisar).</p>') + '</div>';
   $('tela').innerHTML = h;
@@ -2734,7 +2756,7 @@ function cartaoDesenho(D){
   return '<div class="card"><h3>Assinatura do PLH (desenho no laudo)</h3>'
     + '<p class="muted">O desenho sai em todas as páginas do laudo aprovado, com "Aprovado eletronicamente por …". Envia o próprio PLH ou o admin; '
     + 'só vale depois que o PLH confere e aceita com a digital dele. Imagem PNG ou JPG, fundo branco ou transparente. Ninguém mais vê a imagem.</p>'
-    + '<table><tr><th>PLH</th><th>Desenho</th><th></th></tr>' + D.map(x => '<tr><td><b>' + esc(x.nome) + '</b></td><td>'
+    + '<table class="cartoes"><tr><th>PLH</th><th>Desenho</th><th></th></tr>' + D.map(x => '<tr><td><b>' + esc(x.nome) + '</b></td><td>'
       + (!x.enviado_em ? '<span class="chip s-precisa_laudo">não enviado</span>'
         : x.confirmado_em ? '<span class="chip s-pronto">aceito em ' + quandoBR(x.confirmado_em) + '</span>'
         : '<span class="chip s-em_conferencia">enviado por ' + esc(x.enviado_por || '') + ' em ' + quandoBR(x.enviado_em) + ', falta o PLH aceitar</span>')
@@ -2788,8 +2810,8 @@ function cartaoPacote(P){
   return '<div class="card"><h3>Para assinar com o token (' + P.length + ')</h3>'
     + '<p class="muted">1) Baixe o pacote; 2) assine todos de uma vez no Assinador SERPRO, com o token (PAdES), sem abrir nem salvar os PDFs em outro programa; '
     + '3) devolva os assinados aqui (pode escolher vários). O TapDoc confere cada um: tem de ser o PDF aprovado, assinado com o seu certificado.</p>'
-    + '<table><tr><th>Laudo</th><th>Vaso</th><th>Cliente</th><th>Aprovado</th></tr>' + P.map(x => '<tr><td><b>' + esc(x.numero) + (x.revisao ? ' Rev. ' + x.revisao : '') + '</b></td><td>'
-      + esc(x.tag || '') + '</td><td>' + esc(x.cliente || '') + '</td><td>' + quandoBR(x.emitido_em) + '</td></tr>').join('') + '</table>'
+    + '<table class="cartoes"><tr><th>Laudo</th><th>Vaso</th><th>Cliente</th><th>Aprovado</th></tr>' + P.map(x => '<tr><td><b>' + esc(x.numero) + (x.revisao ? ' Rev. ' + x.revisao : '') + '</b></td><td data-r="Vaso">'
+      + esc(x.tag || '') + '</td><td data-r="Cliente">' + esc(x.cliente || '') + '</td><td data-r="Aprovado">' + quandoBR(x.emitido_em) + '</td></tr>').join('') + '</table>'
     + '<div class="linha" style="margin-top:8px"><button class="btn" id="pacBaixar">Baixar o pacote (.zip)</button><button class="btn pri" id="pacDevolver">Devolver os assinados</button>'
     + '<input type="file" id="pacArqs" accept="application/pdf" multiple hidden><span class="muted" id="pacAviso"></span></div><div id="pacRes"></div></div>';
 }
@@ -2828,6 +2850,65 @@ function ligarPacote(P){
   });
 }
 
+// ── E31 · issue 27: o andamento em % no lugar dos botões ────────────────────
+// Cada passo: { rot, de, ate (em %), ch: { fase: [início, fim] dentro do passo }, espera (a pessoa age: não conta para "travou") }.
+// As fases vêm de quem trabalha: aviso(texto, fase, fração) — gerarLaudo ('fotos', 'montar', 'anexos'), mapaLaudo ('mapa').
+const PASSOS_RASCUNHO = [
+  { rot:'carregando o gerador', de:0, ate:8, ch:{ gerador:[0, 1] } },
+  { rot:'conferindo o desenho do mapa', de:8, ate:15, ch:{ mapa:[0, 1] } },
+  { rot:'montando o PDF', de:15, ate:100, ch:{ fotos:[0, 0.7], montar:[0.7, 0.85], anexos:[0.85, 1] } }];
+const PASSOS_EMITIR = [
+  { rot:'carregando o gerador', de:0, ate:5, ch:{ gerador:[0, 1] } },
+  { rot:'conferindo o desenho do mapa', de:5, ate:10, ch:{ mapa:[0, 1] } },
+  { rot:'aguardando a sua digital', de:10, ate:15, ch:{ digital:[0, 1] }, espera:true },
+  { rot:'montando o PDF', de:15, ate:80, ch:{ fotos:[0, 0.7], montar:[0.7, 0.85], anexos:[0.85, 1] } },
+  { rot:'enviando', de:80, ate:100, ch:{ enviar:[0, 1] } }];
+let VEZ_LD = 0;   // cada andamento ganha um número; "Tentar de novo" pula para o seguinte
+const TRAVOU_MS = 120000;   // 2 minutos sem andar = "Parece que travou" (o teste encurta por window.TF_TRAVOU_MS)
+/** Liga o andamento no quadro das ações. Devolve A(texto, fase, fração) e A.fim(). Um "Tentar de novo" invalida a rodada antiga (A lança { refeito }). */
+function andamento(passos, refazer){
+  const card = $('ldAcoes'), box = $('ldAnd'), vez = ++VEZ_LD;
+  let ult = Date.now(), parado = false, pct = 0, travou = false;
+  const pintarA = txt => { box.innerHTML = '<div class="barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><i style="width:' + pct + '%"></i></div><div class="txt" id="ldAndTxt">' + esc(txt) + '</div>'; };
+  if (card){ card.classList.add('rodando'); box.hidden = false; box.classList.remove('travou'); pintarA('Começando… · 0%'); }
+  const relogio = setInterval(() => {
+    if (VEZ_LD !== vez || !box || !document.body.contains(box)){ clearInterval(relogio); return; }
+    if (parado || travou || Date.now() - ult <= (window.TF_TRAVOU_MS || TRAVOU_MS)) return;
+    travou = true; box.classList.add('travou');
+    box.innerHTML = '<div class="barra"><i style="width:' + pct + '%"></i></div><div class="txt" id="ldAndTxt">Parece que travou. Tente de novo.</div>'
+      + '<button class="btn pri" id="ldDeNovo" style="margin-top:8px">Tentar de novo</button>';
+    $('ldDeNovo').addEventListener('click', () => { VEZ_LD++; clearInterval(relogio); refazer(); });
+  }, 1000);
+  const A = (t, fase, frac) => {
+    if (VEZ_LD !== vez) throw Object.assign(new Error('Refeito.'), { refeito:true });   // a rodada que travou não continua
+    if (!fase || !card) return;
+    const i = passos.findIndex(x => x.ch[fase]); if (i < 0) return;
+    const P = passos[i], [a, b] = P.ch[fase], f = Math.max(0, Math.min(1, Number(frac) || 0));
+    pct = Math.max(pct, Math.min(100, Math.round(P.de + (P.ate - P.de) * (a + (b - a) * f))));
+    parado = !!P.espera; ult = Date.now();
+    if (travou){ travou = false; box.classList.remove('travou'); }
+    pintarA('Passo ' + (i + 1) + ' de ' + passos.length + ' · ' + P.rot + (t ? ' · ' + t : '') + ' · ' + pct + '%');
+  };
+  A.fim = () => { clearInterval(relogio); if (VEZ_LD === vez && card){ card.classList.remove('rodando'); box.hidden = true; box.innerHTML = ''; } };
+  return A;
+}
+/** "Tentar de novo": pinta a tela de novo (o que está no banco agora) e aperta o botão que existir (emitir retoma o mesmo número). */
+async function refazerLaudo(...ids){
+  try{ await telaLaudo(LD.id); }catch(e){ erro(e); return; }
+  const b = ids.map(x => $(x)).find(Boolean); if (b && !b.disabled) b.click();
+}
+// ── E31 · issue 29: aprovar o laudo é só com a digital ──────────────────────
+async function temDigitalAqui(){
+  try{ return N.temDigital ? await N.temDigital() : true; }catch(e){ return false; }   // núcleo antigo (sem temDigital): segue como antes
+}
+function avisoSemDigital(){
+  const cel = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '') || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  janela('Aprovar o laudo', '<p id="ldSemDig">' + (cel
+      ? 'Este celular não tem digital cadastrada. Cadastre a digital deste celular na aba Eu, ou aprove por outro aparelho que tenha a sua digital.'
+      : 'Este computador não tem digital cadastrada. Aprove pelo celular, ou cadastre a digital deste computador (Windows Hello) na aba Eu.') + '</p>'
+    + '<p class="muted">A aprovação do laudo é só com a digital (o PIN não vale).</p>', [{ rotulo:'Entendi', classe:'pri' }]);
+}
+
 // ── a tela do laudo de uma inspeção ────────────────────────────────────────
 async function telaLaudo(id){
   titulo('Laudo', 'carregando…');
@@ -2852,14 +2933,14 @@ function pintarLaudo(){
     h += '</div>';
   }
   // as ações
-  h += '<div class="card linha acoesrev"><button class="btn" id="ldRascunho"' + (d.resultado ? '' : ' disabled') + '>Gerar o rascunho (PDF)</button>';
+  h += '<div class="card linha acoesrev" id="ldAcoes"><button class="btn" id="ldRascunho"' + (d.resultado ? '' : ' disabled') + '>Gerar o rascunho (PDF)</button>';
   if (eu.plh && cfg.oficial){
     if (atual && atual.situacao === 'emitindo') h += '<button class="btn pri" id="ldRefazer">Gerar e gravar o PDF do ' + esc(atual.numero) + (atual.revisao ? ' Rev. ' + atual.revisao : '') + '</button>';
     else if (I.situacao === 'liberada' && (!atual || reaberta)) h += '<button class="btn pri" id="ldEmitir"' + (fal.length ? ' disabled title="Resolva as pendências"' : '') + '>' + (atual ? 'Aprovar e emitir a revisão (Rev. ' + (atual.revisao + 1) + ')' : 'Aprovar e emitir') + ' · digital</button>';
     if (atual && atual.situacao === 'emitido' && !reaberta && I.situacao === 'liberada') h += '<button class="btn pri" id="ldAssinado">Devolver o PDF assinado com o token</button><input type="file" id="ldArqAss" accept="application/pdf" hidden>';
   }
   if (['liberada','assinada'].indexOf(I.situacao) >= 0 && (eu.plh || !atual)) h += '<button class="btn" id="ldReabrir">Reabrir a inspeção</button>';
-  h += '<span class="muted" id="ldAviso"></span></div>';
+  h += '<div class="andamento" id="ldAnd" hidden></div><span class="muted" id="ldAviso"></span></div>';   // E31 · issue 27
   // como o PLH assina
   // S145 · A8: a confirmação da participação de cada técnico (não trava a emissão; o laudo mostra quem confirmou)
   const eqT = (d.equipe || []).filter(q => q.papel === 'inspetor' || q.papel === 'auxiliar');
@@ -2870,10 +2951,10 @@ function pintarLaudo(){
   if (eu.plh) h += '<div class="card"><b>Você assina como:</b> ' + (d.plh ? esc(d.plh.nome) + (d.plh.titulo ? ' — ' + esc(d.plh.titulo) : '') + ' · ' + esc(d.plh.registro) : '<span style="color:var(--crit)">não cadastrado (nome e registro no CREA)</span>')
     + ' <button class="btn mini" id="ldPlh">' + (d.plh ? 'Editar' : 'Cadastrar') + '</button></div>';
   // os laudos desta inspeção
-  if ((d.laudos || []).length) h += '<h2>Laudos desta inspeção</h2><div class="card"><table><tr><th>Número</th><th>Situação</th><th>Emitido</th><th>PDF</th><th>Assinado</th></tr>'
-    + d.laudos.map(l => '<tr><td><b>' + esc(l.numero) + (l.revisao ? ' Rev. ' + l.revisao : '') + '</b>' + (l.motivo_rev ? '<div class="muted">' + esc(l.motivo_rev) + '</div>' : '') + '</td><td><span class="chip ' + (SIT_LAUDO[l.situacao] || ['', ''])[1] + '">'
-      + esc((SIT_LAUDO[l.situacao] || [l.situacao])[0]) + '</span></td><td>' + esc(l.emitido_por_nome || '') + '<div class="muted">' + quandoBR(l.emitido_em) + '</div></td><td>'
-      + (l.pdf_path ? '<button class="btn mini" data-ldpdf="' + esc(l.pdf_path) + '" data-ldnome="' + esc(nomeLaudo(d, l.numero + (l.revisao ? ' Rev ' + l.revisao : ''))) + '">Abrir</button><div class="muted">' + l.paginas + ' pág.</div>' : '—') + '</td><td>'
+  if ((d.laudos || []).length) h += '<h2>Laudos desta inspeção</h2><div class="card"><table class="cartoes"><tr><th>Número</th><th>Situação</th><th>Emitido</th><th>PDF</th><th>Assinado</th></tr>'
+    + d.laudos.map(l => '<tr><td><b>' + esc(l.numero) + (l.revisao ? ' Rev. ' + l.revisao : '') + '</b>' + (l.motivo_rev ? '<div class="muted">' + esc(l.motivo_rev) + '</div>' : '') + '</td><td data-r="Situação"><span class="chip ' + (SIT_LAUDO[l.situacao] || ['', ''])[1] + '">'
+      + esc((SIT_LAUDO[l.situacao] || [l.situacao])[0]) + '</span></td><td data-r="Emitido">' + esc(l.emitido_por_nome || '') + '<div class="muted">' + quandoBR(l.emitido_em) + '</div></td><td data-r="PDF">'
+      + (l.pdf_path ? '<button class="btn mini" data-ldpdf="' + esc(l.pdf_path) + '" data-ldnome="' + esc(nomeLaudo(d, l.numero + (l.revisao ? ' Rev ' + l.revisao : ''))) + '">Abrir</button><div class="muted">' + l.paginas + ' pág.</div>' : '—') + '</td><td data-r="Assinado">'
       + (l.assinado_path ? '<button class="btn mini" data-ldpdf="' + esc(l.assinado_path) + '" data-ldnome="' + esc(nomeLaudo(d, l.numero + ' assinado')) + '">Abrir</button><div class="muted">' + esc(l.assinado_por_nome || '') + ' · ' + quandoBR(l.assinado_em) + '</div>' : '—')
       + '</td></tr>').join('') + '</table></div>';
   h += '<div id="ldVisor"></div>';
@@ -2887,51 +2968,67 @@ function ligarLaudo(){
     if (!$('ldAmb').value){ U.toast('Escolha o ambiente.', 'err'); return; }
     try{ await rpc('tf_insp_ambiente_gravar', { p_id: LD.id, p_ambiente: $('ldAmb').value }); U.toast('Ambiente gravado.', 'ok'); recarregar(); }catch(e){ erro(e); }
   }));
+  // E31 · issue 27: "Gerar o rascunho (PDF)" com o andamento (3 passos)
   const br = $('ldRascunho'); if (br) br.addEventListener('click', () => U.semDuploEnvio(br, async () => {
+    const A = andamento(PASSOS_RASCUNHO, () => refazerLaudo('ldRascunho'));
     try{
       const oficial = (d.config || {}).oficial;
-      await mapaLaudo(d, aviso, false);   // S151 · issue 7: a imagem do mapa (sem 3D, o rascunho sai com o 2D)
-      const g = await gerarLaudo(d, { marca: oficial ? 'MINUTA — NÃO VALE COMO LAUDO' : 'PILOTO — NÃO VALE COMO LAUDO' }, aviso);
+      A('', 'gerador', 0); await libsLaudo(); A('', 'gerador', 1);
+      await mapaLaudo(d, A, false);   // S151 · issue 7: a imagem do mapa (sem 3D, o rascunho sai com o 2D)
+      const g = await gerarLaudo(d, { marca: oficial ? 'MINUTA — NÃO VALE COMO LAUDO' : 'PILOTO — NÃO VALE COMO LAUDO' }, A);
+      A('', 'anexos', 1); A.fim();
       aviso(g.semFoto.length || g.semAnexo.length ? 'Rascunho pronto. ' + [g.semFoto.length ? g.semFoto.length + ' foto(s) não abriram' : '', g.semAnexo.length ? 'sem ' + g.semAnexo.join(' e ') : ''].filter(Boolean).join('; ') + '.' : 'Rascunho pronto (' + g.paginas + ' páginas).');
       mostrarPdf(g.bytes, nomeLaudo(d, oficial ? 'rascunho' : 'piloto'));
-    }catch(e){ aviso(''); erro(e); }
+    }catch(e){ if (e && e.refeito) return; A.fim(); aviso(''); erro(e); }
   }));
   // emitir: reserva o número (ou retoma) e grava o PDF feito da fotografia
-  const gravarPdf = async (laudoId) => {
+  const gravarPdf = async (laudoId, A) => {
+    A('', 'fotos', 0);
     const L = await rpc('tf_laudo_ver', { p_laudo: laudoId }), dd = L.dados;
     const carimbo = await rpc('tf_laudo_carimbo', { p_laudo: laudoId });   // S145 · A2/A7.3: só o PLH que aprovou, com a digital
-    const g = await gerarLaudo(dd, { numero: L.numero, revisao: L.revisao, emitidoEm: dd.emitido_em, motivoRev: L.motivo_rev, plh: dd.plh, exigirAnexos: true, carimbo }, aviso);
-    aviso('Gravando o PDF…');
+    const g = await gerarLaudo(dd, { numero: L.numero, revisao: L.revisao, emitidoEm: dd.emitido_em, motivoRev: L.motivo_rev, plh: dd.plh, exigirAnexos: true, carimbo }, A);
+    A('', 'enviar', 0.1);
     const caminho = L.inspecao_id + '/laudo-' + L.numero + (L.revisao ? '-rev' + L.revisao : '') + '-' + uid().slice(0, 8) + '.pdf';
     await enviarArq(caminho, new Blob([g.bytes], { type:'application/pdf' }), 'O laudo');
+    A('', 'enviar', 0.8);
     await rpc('tf_laudo_pdf_gravar', { p_laudo: laudoId, p_path: caminho, p_sha: g.sha, p_paginas: g.paginas });
-    aviso('');
+    A('', 'enviar', 1); A.fim(); aviso('');
     U.toast('Laudo ' + L.numero + (L.revisao ? ' Rev. ' + L.revisao : '') + ' aprovado e gravado (' + g.paginas + ' páginas). Assine com o token (aba Laudos › Para assinar).', 'ok');
     await recarregar();
     mostrarPdf(g.bytes, nomeLaudo(dd, L.numero + (L.revisao ? ' Rev ' + L.revisao : '')));
   };
   const be = $('ldEmitir'); if (be) be.addEventListener('click', () => U.semDuploEnvio(be, async () => {
     const atual = laudoAtual(d);
+    // E31 · issue 29: sem digital neste aparelho, avisa ANTES (sem abrir o PIN, que depois seria recusado)
+    if (!await temDigitalAqui()){ avisoSemDigital(); return; }
     if (!await N.janela.confirmar(atual ? 'Aprovar e emitir a revisão' : 'Aprovar e emitir o laudo', '<p>' + (atual ? 'Sai a <b>Rev. ' + (atual.revisao + 1) + '</b> do ' + esc(atual.numero) + ', com o motivo da reabertura. O anterior fica como substituído.'
         : 'Reserva o próximo número do mês e grava o PDF.') + '</p><p>Você aprova com a <b>sua digital</b> (o PIN não vale). Cada página sai com o desenho da sua assinatura e "Aprovado eletronicamente por …".</p>'
         + '<p class="muted">Depois de aprovado, o laudo não muda: para corrigir, só reabrindo a inspeção (sai uma revisão). Depois, assine o PDF com o token.</p>', 'Aprovar com a digital')) return;
-    try{ aviso('Carregando o gerador…'); await libsLaudo(); await mapaLaudo(d, aviso, true);   // S151 · issue 7: a imagem entra na fotografia do laudo
-      const r = await emitirComDigital(); if (r) await gravarPdf(r.id); else aviso(''); }
-    catch(e){ aviso(''); erro(e); recarregar(); }
+    const A = andamento(PASSOS_EMITIR, () => refazerLaudo('ldRefazer', 'ldEmitir'));
+    try{ A('', 'gerador', 0); await libsLaudo(); A('', 'gerador', 1); await mapaLaudo(d, A, true);   // S151 · issue 7: a imagem entra na fotografia do laudo
+      const r = await emitirComDigital(A); if (r) await gravarPdf(r.id, A); else { A.fim(); aviso(''); } }
+    catch(e){ if (e && e.refeito) return; A.fim(); aviso(''); erro(e); recarregar(); }
   }));
   // S145 · A7.1: a aprovação é a digital do PLH (finalidade laudo_aprovar); retomar o PDF que falhou não pede de novo
-  const emitirComDigital = async () => {
-    const c = await N.confirmarPessoa({ modo:'servidor', finalidade:'laudo_aprovar', referencia:'laudo ' + LD.id, titulo:'Aprovar o laudo', sub:(d.vaso.tag || '') + ' · com a sua digital' });
+  // E31 · issue 29: soDigital — a tela não mostra o PIN; sem digital, o aviso no lugar do teclado
+  const emitirComDigital = async (A) => {
+    A('', 'digital', 0);
+    const c = await N.confirmarPessoa({ modo:'servidor', finalidade:'laudo_aprovar', referencia:'laudo ' + LD.id, titulo:'Aprovar o laudo', sub:(d.vaso.tag || '') + ' · com a sua digital', soDigital:true });
+    if (c && c.semDigital){ avisoSemDigital(); return null; }
     if (!c || !c.ok){ if (c && c.semSinal) U.toast('Sem sinal: a aprovação precisa de internet.', 'err'); return null; }
     if (c.metodo !== 'digital'){ U.toast('A aprovação do laudo é só com a digital (o PIN não vale). Cadastre a digital neste aparelho ou aprove pelo celular.', 'err'); return null; }
+    A('', 'digital', 1);
     return rpc('tf_laudo_emitir', { p_id: LD.id, p_confirmacao: c.confirmacao });
   };
   const bf = $('ldRefazer'); if (bf) bf.addEventListener('click', () => U.semDuploEnvio(bf, async () => {
-    try{ aviso('Carregando o gerador…'); await libsLaudo(); await mapaLaudo(d, aviso, true);
+    const A = andamento(PASSOS_EMITIR, () => refazerLaudo('ldRefazer', 'ldEmitir'));
+    try{ A('', 'gerador', 0); await libsLaudo(); A('', 'gerador', 1); await mapaLaudo(d, A, true);
       let r; try{ r = await rpc('tf_laudo_emitir', { p_id: LD.id }); }
-      catch(e){ if (!/digital/i.test(e.message || '')) throw e; r = await emitirComDigital(); }
-      if (r) await gravarPdf(r.id); else aviso(''); }
-    catch(e){ aviso(''); erro(e); }
+      catch(e){ if (!/digital/i.test(e.message || '')) throw e;
+        if (!await temDigitalAqui()){ A.fim(); aviso(''); avisoSemDigital(); return; }
+        r = await emitirComDigital(A); }
+      if (r) await gravarPdf(r.id, A); else { A.fim(); aviso(''); } }
+    catch(e){ if (e && e.refeito) return; A.fim(); aviso(''); erro(e); }
   }));
   // o PDF assinado com o token
   const bs = $('ldAssinado'); if (bs) bs.addEventListener('click', () => { $('ldArqAss').value = ''; $('ldArqAss').click(); });

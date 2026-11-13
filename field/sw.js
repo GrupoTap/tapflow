@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S58-T35';   // S157: issue 10 — Field S58 e núcleo N9 (o acesso vencido renovado antes de enviar a fila e no envio das fotos)
+const VERSAO = 'S58-T36';   // S160: núcleo N10 (confirmarPessoa só com a digital, para aprovar o laudo; issue 29)
+// const VERSAO = 'S58-T35';   // S157: issue 10 — Field S58 e núcleo N9 (o acesso vencido renovado antes de enviar a fila e no envio das fotos)
 // const VERSAO = 'S57-T34';   // S154: TapDoc 24 (issue 9: a foto da medição de espessura no Ultrassom; 430)
 // const VERSAO = 'S57-T33';   // S152: TapDoc 23 (issue 7: a seção "Medidas do vaso" em Componentes; 429)
 // const VERSAO = 'S57-T32';   // S150: TapDoc 22 e o motor R00.6 (item 81: a aferição em 2 etapas, Grau D, válvula V1–V5; 427)
@@ -58,9 +59,9 @@ const ESSENCIAIS = [
   // IDÊNTICO ao do <script> do index.html, com o ?v= (c.match compara a consulta inteira).
   // Sem isto o Field sem sinal abriria sem o núcleo. Trocou o ?v= no index.html? Troque aqui também.
   // S34: N2 (fila de envios e utilitários)
-  '../nucleo/nucleo.js?v=N9',
-  '../nucleo/nucleo.css?v=N9',
-  '../nucleo/config.js?v=N9',
+  '../nucleo/nucleo.js?v=N10',
+  '../nucleo/nucleo.css?v=N10',
+  '../nucleo/config.js?v=N10',
   // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo"
   '../nucleo/modulos.js?v=M4',
   // S35 · TapDoc 1: a coleta da inspeção (página própria, abre sem sinal)

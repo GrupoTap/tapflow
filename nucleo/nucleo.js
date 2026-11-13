@@ -6,8 +6,8 @@
  * aqui (fica no módulo e nas funções tf_*). Sem framework, sem build.
  *
  * COMO UM MÓDULO USA (duas linhas no <head> e uma no boot):
- *   <script src="../nucleo/config.js?v=N9"></script>
- *   <script src="../nucleo/nucleo.js?v=N9"></script>
+ *   <script src="../nucleo/config.js?v=N10"></script>
+ *   <script src="../nucleo/nucleo.js?v=N10"></script>
  *   ...
  *   const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
  *   if (g === 'hub') { irParaHub(Nucleo.recado); return; }     // ANTES do iniciar()
@@ -40,7 +40,8 @@
   'use strict';
   if (window.Nucleo && window.Nucleo.versao) return;
 
-  var VERSAO = 'N9';   // N9 (S157): issue 10 — o acesso vencido ("exp" claim) é renovado antes de enviar a fila e no envio das fotos
+  var VERSAO = 'N10';   // N10 (S160): issue 29 — confirmarPessoa({ soDigital:true }): sem o teclado do PIN (aprovar o laudo); Nucleo.temDigital()
+  // var VERSAO = 'N9';   // N9 (S157): issue 10 — o acesso vencido ("exp" claim) é renovado antes de enviar a fila e no envio das fotos
   // var VERSAO = 'N8';   // N8 (S142): no Relatar, o print colado com Ctrl+V (item 37 da lista)
   // var VERSAO = 'N7';   // N7 (S136): o celular da empresa (210; desenho processos/aparelho-empresa-desenho.md, A1–A12)
   // var VERSAO = 'N6';   // N6 (S132): "Relatar problema ou sugerir" em todos os módulos (209; item #1 da lista) e os últimos erros do app para irem junto
@@ -646,7 +647,8 @@
    * Abre a tela que confirma a pessoa: digital (se este aparelho tem) com
    * "Usar PIN" sempre à vista, ou o teclado do PIN.
    * o: { titulo, sub, dig (cfg.dig ou null), digital(t) → Promise<{ok,msg?,sair?,recado?}>,
-   *      pin(pin,t) → Promise<{ok,msg?,sair?,recado?}>, links: [{txt, fn}] }
+   *      pin(pin,t) → Promise<{ok,msg?,sair?,recado?}>, links: [{txt, fn}],
+   *      semPin (N10): só a digital; sem "Usar PIN" e sem o teclado (exige o.dig) }
    * Resolve true quando confirmou; false quando cancelou.
    */
   function telaConfirmar(o) {
@@ -662,7 +664,7 @@
         bloco = document.createElement('div');
         bloco.className = 'tf-dig-bloco';
         bloco.innerHTML = '<button type="button" class="tf-bt pri tf-dig" id="tfDigBt">' + ICONE_DIGITAL + '<span>Usar digital</span></button>' +
-          '<button type="button" class="tf-bt tf-usar-pin" id="tfUsarPin">Usar PIN</button>';
+          (o.semPin ? '' : '<button type="button" class="tf-bt tf-usar-pin" id="tfUsarPin">Usar PIN</button>');
         tec.parentNode.insertBefore(bloco, tec);
         var alt = document.createElement('button');
         alt.type = 'button'; alt.className = 'tf-link tf-voltar-dig'; alt.id = 'tfVoltarDig'; alt.textContent = 'Usar digital';
@@ -672,7 +674,7 @@
         if (!bloco) return;
         var dig = m === 'digital';
         bloco.hidden = !dig; tec.hidden = dig; pts.hidden = dig;
-        el.querySelector('#tfVoltarDig').hidden = dig;
+        el.querySelector('#tfVoltarDig').hidden = dig || !!o.semPin;
         try { (dig ? el.querySelector('#tfDigBt') : el.querySelector('.tf-k')).focus(); } catch (e) {}
       }
       var tentando = false;
@@ -684,16 +686,17 @@
           if (r.ok) return acabou(true);
           t.msg(r.msg || '', !!r.msg);
           if (r.sair) setTimeout(function () { sairParaLogin(r.recado); }, 900);
-          if (r.semDigital) { bloco.hidden = true; bloco = null; tec.hidden = false; pts.hidden = false; el.querySelector('#tfVoltarDig').hidden = true; }
-        }, function () { tentando = false; t.msg('Não reconheceu. Tente de novo ou use o PIN.', true); });
+          if (r.semDigital && !o.semPin) { bloco.hidden = true; bloco = null; tec.hidden = false; pts.hidden = false; el.querySelector('#tfVoltarDig').hidden = true; }
+        }, function () { tentando = false; t.msg(o.semPin ? 'Não reconheceu. Toque em "Usar digital" e tente de novo.' : 'Não reconheceu. Tente de novo ou use o PIN.', true); });
       }
       if (bloco) {
         el.querySelector('#tfDigBt').addEventListener('click', tentarDigital);   // o clique é o "gesto" que o iPhone exige
-        el.querySelector('#tfUsarPin').addEventListener('click', function () { t.msg(''); modo('pin'); });
+        if (!o.semPin) el.querySelector('#tfUsarPin').addEventListener('click', function () { t.msg(''); modo('pin'); });
         el.querySelector('#tfVoltarDig').addEventListener('click', function () { t.msg(''); modo('digital'); });
         modo('digital');
         if (o.autoDigital) setTimeout(tentarDigital, 250);                       // Android e computador abrem sozinhos
       }
+      if (o.semPin && bloco) return;                                             // N10: só a digital, o teclado nunca aparece
       (function laco() {
         t.pin().then(function (pin) {
           if (pin === null || feito) return;
@@ -1012,7 +1015,14 @@
    * Resolve: { ok:true, metodo:'digital'|'pin', aparelho, em, offline?, confirmacao? (servidor) }
    *       ou { ok:false, cancelado:true } · { ok:false, semSinal:true } (servidor sem sinal: fica pendente)
    * A digital só vale num aparelho cadastrado em nome da pessoa (decisão 6).
+   * N10 · soDigital:true (aprovar o laudo, issue 29): o PIN não aparece. Sem digital neste aparelho,
+   *       não abre tela nenhuma e resolve { ok:false, semDigital:true } (quem chamou avisa).
    */
+  function temDigital() {
+    if (empresa()) return Promise.resolve(false);
+    var c = cfgDe(sessao().email);
+    return suporteDigital().then(function (sup) { return !!(sup && c && c.dig); });
+  }
   function confirmarPessoa(o) {
     o = o || {};
     var modoS = o.modo === 'servidor', s = sessao(), c = cfgDe(s.email);
@@ -1021,12 +1031,21 @@
     // N7 · A4: no celular da empresa não se bate ponto nem se assina (o banco também recusa)
     if (empresa()) { toast(MSG_EMPRESA, 'err'); return Promise.resolve({ ok: false, cancelado: true, empresa: true, msg: MSG_EMPRESA }); }
     if (modoS && navigator.onLine === false) return Promise.resolve({ ok: false, semSinal: true });
-    var res = null;
+    var res = null, so = !!o.soDigital;
+    var semPinTxt = function (r) {   // N10: sem PIN, as mensagens não mandam usar o PIN
+      if (so && r && r.msg) r.msg = String(r.msg).replace(/ ?Tente de novo ou use o PIN\./, ' Toque em "Usar digital" e tente de novo.').replace(/ ?Use o PIN\./, ' Tente de novo.');
+      return r;
+    };
     return suporteDigital().then(function (sup) {
       var dig = sup && c && c.dig ? c.dig : null;
+      if (so && !dig) { res = { ok: false, semDigital: true }; return false; }
       return telaConfirmar({
-        titulo: o.titulo || 'Confirme que é você', sub: o.sub || '', dig: dig, autoDigital: false,
-        digital: function () {
+        titulo: o.titulo || 'Confirme que é você', sub: o.sub || '', dig: dig, autoDigital: so && !ehIOS(), semPin: so,
+        digital: function () { return digitalDe().then(semPinTxt); },
+        pin: function (pin) { return pinDe(pin); },
+        links: [{ txt: 'Cancelar', cancela: true }]
+      });
+      function digitalDe() {
           if (!modoS) {
             var d = crypto.getRandomValues(new Uint8Array(32));
             return pedirAoAparelho(dig, d).then(function (a) {
@@ -1051,8 +1070,8 @@
                 }, function () { return { ok: false, msg: 'Sem sinal. A assinatura fica pendente até ter sinal.' }; });
             }, function () { return { ok: false, msg: 'Não reconheceu. Tente de novo ou use o PIN.' }; });
           }, function (e) { return { ok: false, msg: e.rede ? 'Sem sinal. A assinatura fica pendente até ter sinal.' : limpaMsg(e.message) }; });
-        },
-        pin: function (pin) {
+      }
+      function pinDe(pin) {
           if (!modoS) return conferir(pin, c, s).then(function (r) {
             if (r.ok) res = { ok: true, metodo: 'pin', aparelho: c && c.ap || null, em: new Date().toISOString(), offline: !!r.local };
             return r;
@@ -1065,10 +1084,8 @@
             if (j && j.status === 'pin_vencido') return { ok: false, msg: MSG_PIN_VENCIDO };
             return { ok: false, msg: 'Crie o seu PIN no início do TapHub.' };
           }, function (e) { return { ok: false, msg: e.rede ? 'Sem sinal. A assinatura fica pendente até ter sinal.' : limpaMsg(e.message) }; });
-        },
-        links: [{ txt: 'Cancelar', cancela: true }]
-      });
-    }).then(function (ok) { return ok && res ? res : { ok: false, cancelado: true }; });
+      }
+    }).then(function (ok) { return ok && res ? res : (res && res.semDigital ? res : { ok: false, cancelado: true }); });
   }
 
   /* ── fluxo de entrada (hub): criar PIN e lembrar o aparelho ────────────── */
@@ -1338,6 +1355,7 @@
     pedirDestrave: pedirDestrave,
     // N3 · Passkey 1
     confirmarPessoa: confirmarPessoa,
+    temDigital: temDigital,                            // N10 · issue 29: este aparelho tem a digital da pessoa (antes de pedir)
     meusAparelhos: meusAparelhos,
     relatar: relatar,                                  // N6 · "Relatar problema ou sugerir" (209)
     errosRecentes: function () { return ERROS.slice(); },
