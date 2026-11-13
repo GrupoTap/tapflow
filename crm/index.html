@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapCRM 5 · Comercial</title>
+<title>TapCRM 6 · Comercial</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2395,7 +2395,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'CRM5';   // TapCRM 5 (S139): item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
+const APP_VERSION = 'CRM6';   // TapCRM 6 (S159): issue 11 — com proposta aprovada esperando OS, a aba Ações não abre OS (manda para a aba Proposta); o banco (701) também recusa
+// const APP_VERSION = 'CRM5';   // TapCRM 5 (S139): item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
 // const APP_VERSION = 'CRM4';   // TapCRM 4 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const APP_VERSION = 'CRM3';   // TapCRM 3 (S134): os Cadastros abrem no TapHub (cadastros/) e "Configurações" do comercial (Planos e Serviços do negócio, só admin), vindas do Manager (K3/K6)
 // const APP_VERSION = 'CRM2';   // TapCRM 2 (S132): o sistema se chama TapHub nas telas (item #10 da lista) e "Relatar problema ou sugerir" no menu (núcleo N6, modulos M2)
@@ -4917,6 +4918,22 @@ async function definirClienteDoNegocio(n, clienteId, motivo){
 async function negAcoes(n, b){
   const perdido = !!n.perdido_em;
 
+  // S159 · issue 11: com proposta aprovada esperando OS, a OS só nasce pela aba
+  // Proposta (traz os itens e o número da proposta). Em 13/11 o "Abrir OS" daqui
+  // abriu uma OS solta, sem itens, e a proposta abriu a segunda. O banco (701)
+  // também recusa; aqui só não oferece o botão.
+  let propEsperando = null;
+  if (!DEMO && !perdido){
+    try{
+      const ps = await get('v_propostas_negocio?select=numero,versao,numero_exibicao,itens'
+        + '&negocio_id=eq.' + n.id + '&status=in.(aprovada,aprovada_parcial)&os_id=is.null'
+        + '&order=versao.desc&limit=1');
+      propEsperando = (ps && ps[0]) || null;
+    }catch(e){}
+  }
+  // um pedido por abertura da aba: dois cliques no mesmo botão viram a mesma OS
+  const uidOS = 'neg-' + n.id + '-' + Date.now();
+
   b.innerHTML =
       (perdido
         ? '<div class="aviso"><b>Este negócio está marcado como perdido</b> desde '
@@ -4932,9 +4949,16 @@ async function negAcoes(n, b){
           + '<p class="nota">Abre a OS já ligada a este negócio. Se ainda é lead, o cliente é '
           + 'criado agora — é quando ele deixa de ser “alguém que ligou”.</p>'
           + (n.oss ? '<p class="nota"><b>' + n.oss + ' OS</b> já aberta(s) neste negócio.</p>' : '')
-          + '<div class="campo"><label for="ngTipo">Tipo de serviço</label>'
-          + '<select id="ngTipo"></select></div>'
-          + '<button class="btn pri" id="ngOS" style="width:100%;margin-bottom:18px">Abrir OS</button>'
+          + (propEsperando
+            ? '<div class="aviso ok" id="ngPropEsperando"><b>A proposta '
+              + esc(propEsperando.numero_exibicao || rotuloProposta(propEsperando.numero, propEsperando.versao))
+              + ' foi aprovada e ainda não virou OS.</b> Abra a OS pela aba Proposta: ela já traz os '
+              + esc(String(propEsperando.itens || 0)) + ' item(ns) aprovados e o número da proposta. '
+              + 'Abrir por aqui criaria uma segunda OS, vazia.</div>'
+              + '<button class="btn pri" id="ngIrProp" style="width:100%;margin-bottom:18px">Ir para a aba Proposta</button>'
+            : '<div class="campo"><label for="ngTipo">Tipo de serviço</label>'
+              + '<select id="ngTipo"></select></div>'
+              + '<button class="btn pri" id="ngOS" style="width:100%;margin-bottom:18px">Abrir OS</button>')
           + '<div class="secTit">Marcar como perdido</div>'
           + '<div class="campo"><label for="ngM">Motivo</label><select id="ngM"></select></div>'
           + '<div class="campo"><label for="ngMO">Observação (opcional)</label>'
@@ -5017,12 +5041,15 @@ async function negAcoes(n, b){
       o.value = t.id; o.textContent = t.nome; selT.appendChild(o); });
   }
 
+  const bIP = document.getElementById('ngIrProp');
+  if (bIP) bIP.addEventListener('click', () => { abaNeg = 'proposta'; abrirNegocio(negAberto); });
+
   const bO = document.getElementById('ngOS');
   if (bO) bO.addEventListener('click', () => _semDuploEnvio_(bO, async () => {
     try{
       const r = DEMO ? {numero:'OS-DEMO'} : await rpc('tf_negocio_abrir_os',
         { p_negocio_id:n.id, p_tipo_os_id: (selT && selT.value) || 'FORNECIMENTO',
-          p_client_uid: 'neg-' + n.id + '-' + Date.now() });
+          p_client_uid: uidOS });
       toast('OS ' + (r.numero||'') + ' aberta.','ok');
       fecharDrawer(); carregar();
     }catch(e){ toast(e.message,'err'); }
