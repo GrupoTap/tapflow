@@ -83,6 +83,7 @@ const ESSENCIAIS = [
   // S77 · TapDoc do escritório (R02b1) e o motor de cálculo que ele usa
   './doc/',
   './doc/motor-calculo-nr13.js?v=R00.6',
+  './doc/recomendacoes.js?v=RC1',   // S163: a lista das recomendações e do prazo (a revisão sem sinal precisa dela)
   // S88 · Acessos P1: a tela do admin
   './acessos/',
   // S116 · TapSeg 1: a Segurança do Trabalho
