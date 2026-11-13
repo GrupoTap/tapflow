@@ -11,6 +11,9 @@
  * A conta da espessura mínima e da PMTA é a do motor (motor-calculo-nr13.js);
  * aqui ela só é ESCRITA com os números (a memória de cálculo do laudo).
  *
+ * S161 · issues 16, 17, 22, 24, 25 e 26 (13/11/2026): a foto no 7.4 (do teste; sem teste, o estado geral do vaso); a figura 1 + 2
+ *   com a de cima na largura das duas de baixo; o quadro da seção 13 sem "(reduzido)"; "Indicado (média)" no relatório de aferição
+ *   do manômetro; a capa sem o "Exame externo"; os rodapés do modelo antigo (linha fina; capa só com o texto da Engetap).
  * S154 · issue 9 (12/11/2026): a foto da medição de espessura tem lugar próprio (430, "lugar:medicao_espessura", seção
  *   componentes): sai no 7.3, grande e no meio; sem ela, o motivo. Os detalhes do 7.1 são só os lugares da seção "geral".
  * S153 · issue 6 (11/11/2026): a APARÊNCIA do laudo conforme as escolhas do Bruno (texto 12 preto; cabeçalho e
@@ -221,8 +224,8 @@ function documentosAfericao(d, opc) {
     // etapa 2
     if (!e1 && !vv) {
       C.push({ text: 'Etapa 2 · comparação com o padrão', style: 'h2' });
-      const corpo = [['Ponto', 'Padrão (média)', 'Erro médio', 'Tolerância', 'Incerteza (U, k = 2)', 'Dentro da tolerância?'].map(t => ({ text: t, style: 'th' }))]
-        .concat((cal.pontos || []).map(p => [fmt(p.nominal, 2), fmt(p.ref_padrao, 2), (p.erro_medio > 0 ? '+' : '') + fmt(p.erro_medio, 2), '±' + fmt(p.tol, 2), fmt(p.U, 2),
+      const corpo = [['Ponto', 'Indicado (média)', 'Erro médio', 'Tolerância', 'Incerteza (U, k = 2)', 'Dentro da tolerância?'].map(t => ({ text: t, style: 'th' }))]
+        .concat((cal.pontos || []).map(p => [fmt(p.nominal, 2), fmt(indicadoMedio(p), 2), (p.erro_medio > 0 ? '+' : '') + fmt(p.erro_medio, 2), '±' + fmt(p.tol, 2), fmt(p.U, 2),
           { text: p.ok ? 'Sim' : 'NÃO', bold: !p.ok, color: p.ok ? VERDE : VERM }].map(x => typeof x === 'object' ? Object.assign({ style: 'td', alignment: 'center' }, x) : { text: x, style: 'td', alignment: 'center' })));
       C.push({ table: { headerRows: 1, widths: ['*', '*', '*', '*', '*', '*'], body: corpo }, layout: 'lightHorizontalLines', margin: [0, 2, 0, 4] },
              { text: 'Valores em ' + un + '. Incerteza pela EA-4/02: raiz da soma dos quadrados da repetição, da resolução e do padrão, vezes k = 2.', style: 'nota' });
@@ -258,6 +261,52 @@ function documentosAfericao(d, opc) {
   });
   return out;
 }
+/** S161 · issue 24: o que o manômetro do vaso marcou, em média (o banco guarda a média do padrão e o erro médio = indicado − padrão). */
+function indicadoMedio(p) {
+  return p.ref_padrao == null || p.erro_medio == null ? null : Number(p.ref_padrao) + Number(p.erro_medio);
+}
+
+/** S161 · issue 17: largura e altura de uma imagem em data URL (JPEG ou PNG), lidas do cabeçalho; null se não der. */
+function dimsImg(url) {
+  try {
+    const m = /^data:image\/(png|jpe?g);base64,/i.exec(url || ''); if (!m) return null;
+    const b64 = url.slice(m[0].length, m[0].length + 160000).replace(/[^A-Za-z0-9+/]/g, '');
+    const cru = b64.slice(0, b64.length - (b64.length % 4));
+    const bin = typeof atob === 'function' ? atob(cru) : globalThis.Buffer.from(cru, 'base64').toString('binary');   // no teste em node, o Buffer
+    const u8 = k => bin.charCodeAt(k) & 255, u16 = k => (u8(k) << 8) | u8(k + 1);
+    if (/png/i.test(m[1])) return bin.length >= 24 ? { w: (u16(16) << 16) | u16(18), h: (u16(20) << 16) | u16(22) } : null;
+    let k = 2;
+    while (k + 9 < bin.length) {
+      if (u8(k) !== 0xFF) { k++; continue; }
+      const mk = u8(k + 1);
+      if (mk === 0xD8 || mk === 0x01 || (mk >= 0xD0 && mk <= 0xD7) || mk === 0xFF) { k += mk === 0xFF ? 1 : 2; continue; }
+      if (mk >= 0xC0 && mk <= 0xCF && mk !== 0xC4 && mk !== 0xC8 && mk !== 0xCC) { const w = u16(k + 7), h = u16(k + 5); return w && h ? { w, h } : null; }
+      k += 2 + u16(k + 2);
+    }
+  } catch (e) { /* sem as medidas: quem chama usa 4:3 */ }
+  return null;
+}
+
+/** S161 · issue 17: figura "1 em cima + 2 embaixo" — a de cima com a largura das duas de baixo somadas, bordas alinhadas, sem cortar
+ *  nenhuma foto (as de baixo com a mesma altura). Bloco de ~2/3 da página; se ficar alto demais, encolhe tudo junto. */
+function grade1mais2(cima, baixo, larg, altMax, gap) {
+  larg = larg || 330; altMax = altMax || 540; gap = gap == null ? 10 : gap;
+  const raz = u => { const d = dimsImg(u); return d && d.w > 0 && d.h > 0 ? d.w / d.h : 4 / 3; };
+  const r0 = raz(cima), rb = baixo.map(raz), soma = rb.reduce((a, b) => a + b, 0);
+  const vaos = gap * Math.max(0, baixo.length - 1);
+  const altura = W => W / r0 + (soma ? (W - vaos) / soma : 0);
+  let W = larg;
+  if (altura(W) > altMax) W = (altMax + (soma ? vaos / soma : 0)) / (1 / r0 + (soma ? 1 / soma : 0));
+  const hb = soma ? (W - vaos) / soma : 0, r = x => Math.round(x * 100) / 100;
+  const st = [{ image: cima, width: r(W), height: r(W / r0), alignment: 'center', margin: [0, 2, 0, baixo.length ? gap : 2] }];
+  // as de baixo: colunas de largura fixa, com o vão como coluna vazia e uma coluna vazia de cada lado (centraliza)
+  const cols = [{ width: '*', text: '' }];
+  baixo.forEach((u, k) => { if (k) cols.push({ width: gap, text: '' }); cols.push({ width: r(rb[k] * hb), image: u, height: r(hb) }); });
+  cols.push({ width: '*', text: '' });
+  if (baixo.length) st.push({ columns: cols, columnGap: 0, margin: [0, 0, 0, 2] });
+  return { stack: st, largura: r(W) };
+}
+
 function nomeComp(c) {
   if (!c) return '';
   const sg = siglaComp(c);
@@ -381,8 +430,8 @@ function montar(d, opc) {
     tabela(null, corpo, ['auto', '*', 'auto', '*'], titulo);
   };
   // S143 · item 65: as figuras numeradas na ordem em que aparecem; uma figura pode ter várias fotos lado a lado
-  const figura = (imgs, legenda, alvo) => {
-    const n = ++fig, fit = imgs.length >= 3 ? [160, 150] : imgs.length === 1 ? FOTO_SO : [235, 175];   // S153 · item 9
+  const figura = (imgs, legenda, alvo, fitSo) => {
+    const n = ++fig, fit = imgs.length >= 3 ? [160, 150] : imgs.length === 1 ? (fitSo || FOTO_SO) : [235, 175];   // S153 · item 9; S161 · issue 16: o tamanho da foto sozinha
     const linhas = [];
     for (let k = 0; k < imgs.length; k += (imgs.length >= 3 ? 3 : 2)) linhas.push(imgs.slice(k, k + (imgs.length >= 3 ? 3 : 2)));
     const bloco = { stack: linhas.map(l => l.length === 1 ? { image: l[0], fit, alignment: 'center', margin: [0, 2, 0, 2] }
@@ -427,13 +476,12 @@ function montar(d, opc) {
 
   // ── capa ────────────────────────────────────────────────────────────────
   const capaFoto = (d.fotos || []).find(f => f.secao === 'capa' && img[f.path]);
-  const exames = I.exame_externo && I.exame_interno ? 'ambos' : I.exame_interno ? 'interno' : 'externo';
   const capa = [
     { image: LOGO_ENGETAP, width: 280, alignment: 'center', margin: [0, -36, 0, 20] },   // S153 · item 6: a capa não tem cabeçalho; o logo sobe
     { text: emp.razao_social || '', style: 'capaEmp' },
     { text: emp.cnpj ? 'CNPJ: ' + emp.cnpj : '', style: 'capaCnpj' },
     { text: (M.capa_tipo || {})[I.tipo] || 'INSPEÇÃO', style: 'capaTipo' },
-    { text: (M.capa_exames || {})[exames] || '', style: 'capaSub' },
+    // S161 · issue 25: a capa só com o tipo (PERIÓDICA ou EXTRAORDINÁRIA), sem o "Exame externo", como no modelo antigo
     capaFoto ? { image: img[capaFoto.path], fit: [470, 320], alignment: 'center', margin: [0, 14, 0, 14] } : { text: '', margin: [0, 120, 0, 0] },
     { text: V.tag || '', style: 'capaTag' },
     // S143 · item 63: o Número TAP no lugar da OS (a OS não aparece no laudo)
@@ -641,7 +689,18 @@ function montar(d, opc) {
     const ano = Number(V.ano_fabricacao) || null;
     par(!ano ? M.th_ano_desconhecido : ano < 2014 ? M.th_antes_2014 : M.th_depois_2014);
   }
-  fotos('teste');
+  // S161 · issue 16: a foto no 7.4, no meio, com cerca de metade da largura da página. Teste feito: a foto do teste ("Teste hidrostático",
+  // o tipo usado). Não feito: a foto da seção do teste, se o inspetor tirou; sem ela, a da capa, como "Estado geral do vaso de pressão"
+  const FOTO_74 = [250, 330];
+  const fTeste = (d.fotos || []).filter(f => f.secao === 'teste' && img[f.path]);
+  if (TE.realizado && fTeste.length) {
+    const leg = 'Teste ' + (TIPOS_TESTE[TE.tipo] || 'de pressão');
+    if (fTeste.length === 1) figura([img[fTeste[0].path]], leg, null, FOTO_74);
+    else pares(fTeste.map(f => ({ stack: [{ image: img[f.path], fit: [235, 175], alignment: 'center' }, { text: 'Figura ' + (++fig) + ' – ' + presos(leg) + '.', style: 'legenda' }] })));
+  } else if (!TE.realizado) {
+    const fGeral = fTeste[0] || (d.fotos || []).find(f => f.secao === 'capa' && img[f.path]);
+    if (fGeral) figura([img[fGeral.path]], T.fig_estado_geral || 'Estado geral do vaso de pressão', null, FOTO_74);
+  }
   // 7.5 e 7.6 aferições (S143 · itens 69, 74 e 75: "aferição", nunca "calibração", para o que a Engetap faz)
   const presentes = a => ['ausente', 'retirado'].indexOf(a.situacao) < 0;
   const unidadeTxt = (v, un) => v == null ? '—' : fmt(v, 2) + ' ' + String(un || 'bar').replace('kgf/cm2', 'kgf/cm²');
@@ -660,8 +719,9 @@ function montar(d, opc) {
     const soltas = (d.fotos || []).filter(f => f.secao === 'acessorios' && f.item === 'afer:' + a.id && img[f.path]);   // as de antes do S149
     if (!ban && !baixo.length) { if (soltas.length) figura(soltas.map(f => img[f.path]), legenda); return; }
     const n = ++fig, st = [];
-    if (ban) st.push({ image: img[ban.path], fit: [480, 230], alignment: 'center', margin: [0, 2, 0, 4] });
-    if (baixo.length) st.push({ columns: baixo.map(f => ({ image: img[f.path], fit: [235, 175], alignment: 'center' })), columnGap: 10, margin: [0, 2, 0, 2] });
+    // S161 · issue 17: a de cima com a largura das duas de baixo somadas, bordas alinhadas, o bloco no meio (~2/3 da página)
+    if (ban) st.push(...grade1mais2(img[ban.path], baixo.map(f => img[f.path])).stack);
+    else st.push({ columns: baixo.map(f => ({ image: img[f.path], fit: [235, 175], alignment: 'center' })), columnGap: 10, margin: [0, 2, 0, 2] });
     st.push({ text: 'Figura ' + n + ' – ' + presos(legenda) + '.', style: 'legenda' });
     C.push({ stack: st, margin: [0, 4, 0, 10], unbreakable: true });
   };
@@ -902,7 +962,7 @@ function montar(d, opc) {
   else if (V.sem_codigo_construcao) par(M.proximas_sem_codigo);
   else if (V.abaixo_zero_sem_deterioracao) par(M.proximas_abaixo_zero);
   else par(txt(M.proximas_tabela, { categoria: R.categoria || '—' }));
-  const prazoTxt = (n, plh, red) => red != null ? anosTxt(red) + ' (reduzido)' : plh ? 'definido pelo PLH' : n == null ? 'a critério do PLH' : anosTxt(n);
+  const prazoTxt = (n, plh, red) => red != null ? anosTxt(red) : plh ? 'definido pelo PLH' : n == null ? 'a critério do PLH' : anosTxt(n);
   tabela(['Exame', 'Prazo', 'Data limite'], [
     ['Externo', prazoTxt(R.prazo_externo_anos, R.datas_pelo_plh, RED && RED.externo != null && RED.externo < R.prazo_externo_anos ? RED.externo : null), { text: dataBR(R.proxima_externa), style: 'td', bold: true }],
     ['Interno', prazoTxt(R.prazo_interno_anos, R.datas_pelo_plh, RED && RED.interno != null && (R.prazo_interno_anos == null || RED.interno < R.prazo_interno_anos) ? RED.interno : null),
@@ -956,13 +1016,21 @@ function montar(d, opc) {
           layout: { hLineColor: '#C9D2D8', vLineColor: '#C9D2D8', paddingTop: () => 1, paddingBottom: () => 1 } }]] },
       layout: { hLineColor: '#C9D2D8', vLineColor: '#C9D2D8' }
     },
-    // S153 · issue 6, item 5: o carimbo com cerca de 4 cm, a linha da aprovação em letra 8 na largura toda, o logo maior; a capa (item 6) sem o logo
-    footer: (pag) => ({ margin: [50, 8, 45, 0], stack: [{ columns: [
-      pag === 1 ? { width: 105, text: '' } : { image: LOGO_ENGETAP, width: 105 },
-      { stack: [{ text: empresaM.nome || '', style: 'rodBold' }, { text: empresaM.contato || '', style: 'rod' }, { text: empresaM.site || '', style: 'rod' }], alignment: 'center', margin: [0, 4, 0, 0] },
-      CAR ? { width: 120, image: CAR.imagem, fit: [114, 46], alignment: 'right' }
-          : { text: plh ? plh.nome + '\n' + (plh.registro || '') : '', style: 'rodCar', alignment: 'right', width: 150, margin: [0, 8, 0, 0] }] }]
-      .concat(CAR ? [{ text: CAR.texto, style: 'rodCar', alignment: 'right', margin: [0, 3, 0, 0] }] : []) }),
+    // S153 · issue 6, item 5: o carimbo com cerca de 4 cm, a linha da aprovação em letra 8 na largura toda, o logo maior.
+    // S161 · issue 26 (o rodapé do modelo antigo): linha fina em cima em todas as páginas; a capa só com o texto da Engetap no meio
+    // (sem o logo e sem o nome do PLH); nas outras, o logo à esquerda, o texto no meio e, à direita, a assinatura com o carimbo no
+    // laudo aprovado (na minuta e no rascunho, o nome do PLH em texto: a imagem da assinatura só entra no laudo com número)
+    footer: (pag) => {
+      const linha = { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 595.28 - 95, y2: 0, lineWidth: 0.5, lineColor: '#9AA5AE' }], margin: [0, 0, 0, 6] };
+      const texto = { stack: [{ text: empresaM.nome || '', style: 'rodBold' }, { text: empresaM.contato || '', style: 'rod' }, { text: empresaM.site || '', style: 'rod' }], alignment: 'center', margin: [0, 4, 0, 0] };
+      if (pag === 1) return { margin: [50, 8, 45, 0], stack: [linha, texto] };
+      return { margin: [50, 8, 45, 0], stack: [linha, { columns: [
+        { image: LOGO_ENGETAP, width: 105 },
+        texto,
+        CAR ? { width: 120, image: CAR.imagem, fit: [114, 46], alignment: 'right' }
+            : { text: plh ? plh.nome + '\n' + (plh.registro || '') : '', style: 'rodCar', alignment: 'right', width: 150, margin: [0, 8, 0, 0] }] }]
+        .concat(CAR ? [{ text: CAR.texto, style: 'rodCar', alignment: 'right', margin: [0, 3, 0, 0] }] : []) };
+    },
     content: C,
     // título não fica sozinho no pé da página. S153: o pdfmake conta como "seguintes" também os nós do cabeçalho e do rodapé
     // da página; aqui só vale o que vem ABAIXO do título, dentro da área do texto, e que não seja outro título
@@ -996,6 +1064,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, versao: 'R06a-S154-2026-11-12' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, versao: 'R06a-S161-2026-11-13' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
