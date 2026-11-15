@@ -11,6 +11,8 @@
  * A conta da espessura mínima e da PMTA é a do motor (motor-calculo-nr13.js);
  * aqui ela só é ESCRITA com os números (a memória de cálculo do laudo).
  *
+ * S164 · issue 30, Parte 1 (13/11/2026): o logo da Engetap e a grafia da cidade exportados (logoEngetap, cidadeLaudo) para o documentos-pdf.js (o Resumo); o relatório
+ *   não muda aqui: quem deixa de juntar os certificados é a página (doc/index.html, gerarLaudo).
  * S161 · issues 16, 17, 22, 24, 25 e 26 (13/11/2026): a foto no 7.4 (do teste; sem teste, o estado geral do vaso); a figura 1 + 2
  *   com a de cima na largura das duas de baixo; o quadro da seção 13 sem "(reduzido)"; "Indicado (média)" no relatório de aferição
  *   do manômetro; a capa sem o "Exame externo"; os rodapés do modelo antigo (linha fina; capa só com o texto da Engetap).
@@ -1082,6 +1084,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, versao: 'R06a-S163-2026-11-13' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, versao: 'R06a-S164-2026-11-13' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -192,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E34';   // E34 (S163 · 433): issues 12, 18, 20 e 21 — as recomendações numa lista só (recomendacoes.js RC1: a mesma do celular e do laudo; o revisor tira e edita qualquer uma), todas com "Que…", a limpeza uma vez só; a justificativa do prazo menor numa lista (A1, A2, B, Outros); laudo-pdf.js S163
+const VERSAO = 'TapDoc E35';   // E35 (S164 · 434): issue 30, Parte 1 — os documentos da inspeção em arquivos próprios: o relatório só com o laudo e a ART no fim; o Resumo (documentos-pdf.js D1) e os certificados de manômetro e de válvula, cada um num PDF, aprovados junto com o relatório e assinados com o token; os nomes padrão dos arquivos; o quadro "Documentos da inspeção" na tela da OS, a lista na tela do laudo e o "Baixar tudo" do vaso e da OS (.zip); laudo-pdf.js S164
+// const VERSAO = 'TapDoc E34';   // E34 (S163 · 433): issues 12, 18, 20 e 21 — as recomendações numa lista só (recomendacoes.js RC1: a mesma do celular e do laudo; o revisor tira e edita qualquer uma), todas com "Que…", a limpeza uma vez só; a justificativa do prazo menor numa lista (A1, A2, B, Outros); laudo-pdf.js S163
 // const VERSAO = 'TapDoc E33';   // E33 (S162): issues 13, 14, 15, 19 e 23 — a conferência se fecha ao marcar; as fotos dos acessórios com o nome do acessório; o aviso que bloqueia leva até a parte com problema e a marca em vermelho; "substituir" × aferição conforme; o aviso ao PLH quando a incerteza (U) de um ponto passa da tolerância
 // const VERSAO = 'TapDoc E32';   // E32 (S161): issues 16, 17, 22, 24, 25 e 26 — a aparência do laudo e do certificado (laudo-pdf.js S161: a foto no 7.4, a figura 1 + 2 alinhada, o quadro da seção 13 sem "(reduzido)", "Indicado (média)" na aferição do manômetro, a capa sem o "Exame externo", os rodapés do modelo antigo); nesta página só muda a versão do gerador
 // const VERSAO = 'TapDoc E31';   // E31 (S160): issues 28, 29, 31 e 27 — o mapa carregado antes de aprovar ("Mapa3D is not defined"); aprovar o laudo só com a digital (sem o PIN; sem digital, avisa antes); a aba Laudos cabe no celular; o andamento em % ao aprovar e ao gerar o rascunho
@@ -759,8 +760,11 @@ async function telaOS(os){
   h += '<div style="padding:8px"><button class="btn sec" id="novo">+ Vaso não cadastrado</button></div></div>';
   // E28 (S155 · issue 8): a arte das placas de identificação, para a gráfica
   if (marc.some(v => v.inspecao && v.inspecao.situacao !== 'em_preparo')) h += '<h2>Placas de identificação (arte para a gráfica)</h2><div class="card" id="cxPlacas"><p class="muted">Carregando as placas…</p></div>';
+  // E35 (S164 · issue 30): os documentos da inspeção, quando algum vaso já foi liberado
+  if (marc.some(v => v.inspecao && ['liberada','assinada'].indexOf(v.inspecao.situacao) >= 0)) h += '<h2>Documentos da inspeção</h2><div class="card" id="cxDocs"><p class="muted">Carregando os documentos…</p></div>';
   $('tela').innerHTML = h;
   if ($('cxPlacas')) quadroPlacas(os);
+  if ($('cxDocs')) quadroDocumentos(os);
   const btC = $('concluir');
   if (btC) btC.addEventListener('click', () => N.util.semDuploEnvio(btC, async () => {
     try{ await rpc('tf_concluir_tarefa', { p_os_id: os, p_tarefa_id: 'T05' }); U.toast('Preparação concluída. A visita está liberada.', 'ok'); pintar(); }
@@ -924,6 +928,119 @@ async function quadroPlacas(os){
       U.toast(arqs.length + ' placa(s) baixada(s).', 'ok');
     }catch(e){ erro(e); }
   });
+}
+
+// ── 2c · E35 (S164 · issue 30, Parte 1): os documentos da inspeção (desenho: processos/documentos-inspecao-desenho.md) ──
+// Cada documento num arquivo (DP2, DP6, DP7), com o nome padrão (DP5); o quadro na tela da OS e a lista na tela do laudo (DP14);
+// o "Baixar tudo" do vaso e da OS num .zip montado aqui (DP15). Sai sempre o assinado; o que falta assinar vai com "(para assinar)".
+const SIT_DOC = { aprovado:['falta assinar', 's-pegar_cliente'], assinado:['assinado', 's-pronto'] };
+const ORDEM_DOC = { relatorio:0, resumo:1, registro:2, cert_manometro:3, cert_valvula:4, prontuario:5 };
+/** Os arquivos de um vaso (o laudo em vigor): o relatório e os documentos dele, na ordem do desenho. */
+function arquivosVaso(D, v){
+  const L = v && v.laudo; if (!L || L.situacao === 'emitindo' || !L.pdf_path) return [];
+  const dup = (D.vasos || []).filter(w => w.tag === v.tag).length > 1;
+  const base = { tag:v.tag, tap:v.numero_tap, duplicada:dup, cliente:D.cliente, revisao:L.revisao };
+  const out = [{ tipo:'relatorio', rot:'Relatório de Inspeção' + (L.docs_juntos ? ' (com os certificados dentro: emitido antes da separação)' : ' (com a ART no fim)'),
+    numero:L.numero + (L.revisao ? ' Rev. ' + L.revisao : ''), situacao:L.assinado_path ? 'assinado' : 'aprovado', path:L.assinado_path || L.pdf_path,
+    nome:nomeArq('relatorio', Object.assign({}, base, { paraAssinar:!L.assinado_path })) }];
+  const docs = (L.docs || []).slice().sort((a, b) => (ORDEM_DOC[a.tipo] - ORDEM_DOC[b.tipo]) || (a.ordem - b.ordem));
+  const total = {}; docs.forEach(x => { total[x.tipo] = (total[x.tipo] || 0) + 1; });
+  docs.forEach(x => out.push({ tipo:x.tipo, rot:(window.DocumentosPDF ? DocumentosPDF.ROTULO[x.tipo] : x.tipo) + (total[x.tipo] > 1 ? ' ' + x.ordem : ''), numero:x.numero || '—',
+    situacao:x.situacao, path:x.assinado_path || x.pdf_path, nome:nomeArq(x.tipo, Object.assign({}, base, { ordem:x.ordem, total:total[x.tipo], paraAssinar:x.situacao !== 'assinado' })) }));
+  return out;
+}
+const artArquivo = D => D.art && D.art.path ? { tipo:'art', rot:'ART (da OS)', numero:D.art.numero || '—', path:D.art.path, nome:nomeArq('art', { cliente:D.cliente, os:(D.os || {}).numero }) } : null;
+/** Os certificados dos instrumentos (o PDF do laboratório como veio). ids: só esses (os usados num vaso). */
+function instrumentosArquivos(D, ids){
+  return (D.instrumentos || []).filter(z => z.certificado_path && (!ids || ids.indexOf(z.id) >= 0))
+    .map(z => ({ tipo:'instrumento', rot:(z.tipo === 'medidor_espessura' ? 'Medidor de espessura ' : z.tipo === 'manometro_padrao' ? 'Manômetro padrão ' : 'Instrumento ') + (z.descricao || z.numero_serie || ''),
+      numero:z.certificado_num || '—', path:z.certificado_path, nome:nomeArq('instrumento', { instrumento:z }) }));
+}
+const nomeVasoZip = (D, v) => (window.DocumentosPDF ? DocumentosPDF.tagNome(v.tag, v.numero_tap, (D.vasos || []).filter(w => w.tag === v.tag).length > 1) : v.tag);
+/** Baixa os arquivos, monta o .zip (sem compressão) e entrega. Arquivo que não abre fica de fora e é avisado. */
+async function baixarZip(nomeZip, itens, aviso){
+  aviso = aviso || (() => {});
+  const arqs = [], falhou = [];
+  for (let k = 0; k < itens.length; k++){
+    aviso('Baixando ' + (k + 1) + ' de ' + itens.length + '…');
+    try{ arqs.push({ nome: itens[k].nome, bytes: await baixar(itens[k].path) }); }catch(e){ falhou.push(itens[k].nome.split('/').pop()); }
+  }
+  aviso('');
+  if (!arqs.length) throw new Error('Nenhum arquivo abriu.');
+  baixarBytes(String(nomeZip).replace(/[\\/:*?"<>|]+/g, '-'), zipar(semRepetir(arqs)));
+  if (falhou.length) U.toast('Não abriu: ' + falhou.join(', ') + '. O .zip saiu sem ele(s).', 'err');
+  else U.toast(arqs.length + ' arquivo(s) no .zip.', 'ok');
+}
+/** DP15 · o .zip do vaso: os documentos dele + a ART + os certificados dos instrumentos usados nele. */
+function itensZipVaso(D, v){
+  return arquivosVaso(D, v).concat([artArquivo(D)].filter(Boolean), instrumentosArquivos(D, v.instrumentos || []));
+}
+/** DP15 · o .zip da OS: a ART na raiz, a pasta "Instrumentos" e uma pasta por vaso. */
+function itensZipOS(D){
+  const pasta = (p, xs) => xs.map(x => Object.assign({}, x, { nome: p + '/' + x.nome }));
+  let it = [artArquivo(D)].filter(Boolean).concat(pasta('Instrumentos', instrumentosArquivos(D)));
+  (D.vasos || []).forEach(v => { it = it.concat(pasta(nomeVasoZip(D, v), arquivosVaso(D, v))); });
+  return it;
+}
+function chipDoc(sit){ const s = SIT_DOC[sit]; return s ? '<span class="chip ' + s[1] + '">' + s[0] + '</span>' : ''; }
+const btDl = x => '<button class="btn mini sec" data-dl="' + esc(x.path) + '" data-dlnome="' + esc(x.nome) + '">baixar</button>';
+/** Liga os botões "baixar" e os .zip de um pedaço da tela. */
+function ligarDownloads(cx, D, aviso){
+  cx.querySelectorAll('[data-dl]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
+    try{ baixarBytes(b.dataset.dlnome, new Blob([await baixar(b.dataset.dl)], { type:'application/pdf' })); }catch(e){ erro(e); }
+  })));
+  cx.querySelectorAll('[data-zipv]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
+    const v = (D.vasos || []).find(w => w.inspecao_id === b.dataset.zipv); if (!v) return;
+    try{ await baixarZip(nomeVasoZip(D, v) + ' - ' + (D.cliente || '') + '.zip', itensZipVaso(D, v), aviso); }catch(e){ erro(e); }
+  })));
+  cx.querySelectorAll('[data-zipos]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
+    try{ await baixarZip((window.DocumentosPDF ? DocumentosPDF.osRot((D.os || {}).numero) : 'OS ' + ((D.os || {}).numero || '')) + ' - ' + (D.cliente || '') + '.zip', itensZipOS(D), aviso); }catch(e){ erro(e); }
+  })));
+}
+/** O quadro "Documentos da inspeção" na tela da OS (DP14 a). */
+async function quadroDocumentos(os){
+  const cx = $('cxDocs'); if (!cx) return;
+  let D, P = [];
+  try{
+    await libDocs(); D = await rpc('tf_insp_documentos', { p_os: os });
+    if (PLH) P = await pacoteParaAssinar((D.vasos || []).map(v => v.inspecao_id));
+  }catch(e){ cx.innerHTML = '<p class="muted" style="color:var(--crit)">Não deu para carregar os documentos: ' + esc(e && e.message ? e.message : String(e)) + '</p>'; return; }
+  if (!$('cxDocs')) return;                               // a tela mudou enquanto carregava
+  const comLaudo = (D.vasos || []).filter(v => arquivosVaso(D, v).length);
+  const cel = (xs, juntos) => juntos ? '<span class="muted">dentro do relatório</span>' : !xs.length ? '<span class="muted">—</span>'
+    : xs.map(x => chipDoc(x.situacao) + (x.numero && x.numero !== '—' ? '<div>' + esc(x.numero) + '</div>' : '') + '<div>' + btDl(x) + '</div>').join('<div style="height:6px"></div>');
+  let h = '<div class="linha" style="justify-content:space-between;margin-bottom:8px"><div><div class="muted">Cada documento num arquivo. Sai depois do "Aprovar e emitir" de cada vaso; o oficial é o assinado com o token.</div></div>'
+    + '<button class="btn pri" data-zipos="1"' + (comLaudo.length ? '' : ' disabled') + '>Baixar tudo da OS (.zip)</button></div>';
+  h += '<table class="tv cartoes" id="docsTab"><tr><th>Vaso</th><th>Relatório (+ ART no fim)</th><th>Resumo</th><th>Cert. manômetro</th><th>Cert. válvula</th><th></th></tr>' + (D.vasos || []).map(v => {
+    const A = arquivosVaso(D, v), L = v.laudo, so = t => A.filter(x => x.tipo === t), juntos = !!(L && L.docs_juntos);
+    return '<tr data-docv="' + esc(v.inspecao_id) + '"><td><b>' + esc(v.tag) + '</b>' + (v.numero_tap ? '<div class="muted">Nº TAP ' + esc(v.numero_tap) + '</div>' : '') + '</td>'
+      + (A.length ? '<td data-r="Relatório">' + cel(so('relatorio')) + '</td><td data-r="Resumo">' + cel(so('resumo'), juntos) + '</td><td data-r="Cert. manômetro">' + cel(so('cert_manometro'), juntos)
+          + '</td><td data-r="Cert. válvula">' + cel(so('cert_valvula'), juntos) + '</td><td class="acoes" style="text-align:right"><button class="btn mini" data-zipv="' + esc(v.inspecao_id) + '" style="white-space:nowrap">Baixar tudo do vaso</button></td>'
+        : '<td colspan="5" class="muted">' + (L && L.situacao === 'emitindo' ? 'número ' + esc(L.numero) + ' reservado, o PDF ainda não foi gravado' : 'sem laudo emitido') + '</td>') + '</tr>';
+  }).join('') + '</table>';
+  const art = artArquivo(D), ins = instrumentosArquivos(D);
+  h += '<div class="g3" style="margin-top:10px"><div class="card" style="margin:0"><b>Da OS</b><div style="margin-top:4px">'
+    + (art ? 'ART nº ' + esc(art.numero) + ' ' + btDl(art) + '<div class="muted">' + esc(art.nome) + ' (o arquivo do CREA, sem mudar nada)</div>' : '<span class="muted">ART sem o PDF</span>') + '</div></div>'
+    + '<div class="card" style="margin:0"><b>Instrumentos usados nesta OS</b><div style="margin-top:4px">' + (ins.length ? ins.map(z => '<div>' + esc(z.rot) + ' ' + btDl(z) + '</div>').join('')
+      + '<div class="muted">O PDF do laboratório como veio (com a assinatura dele).</div>' : '<span class="muted">nenhum certificado anexado</span>') + '</div></div>'
+    + '<div class="muted" style="align-self:center">' + chipDoc('assinado') + ' o PDF assinado pelo PLH (o oficial)<br>' + chipDoc('aprovado') + ' aprovado e numerado (é o que vai para o token)</div></div>'
+    + '<span class="muted" id="docsAviso"></span>' + cartaoPacote(P);
+  cx.innerHTML = h;
+  ligarDownloads(cx, D, t => { const a = $('docsAviso'); if (a) a.textContent = t || ''; });
+  ligarPacote(P);
+}
+/** A lista "Documentos deste vaso" na tela do laudo (DP14 b). */
+function cartaoDocsVaso(D){
+  const v = D && (D.vasos || [])[0]; if (!v) return '';
+  const A = arquivosVaso(D, v);
+  if (!A.length) return '';
+  const linhas = A.concat([artArquivo(D)].filter(Boolean), instrumentosArquivos(D, v.instrumentos || []));
+  return '<h2>Documentos deste vaso</h2><div class="card" id="cxDocsVaso"><div class="linha" style="justify-content:space-between;margin-bottom:6px"><span class="muted" id="docsAviso">'
+    + (v.laudo.docs_juntos ? 'Laudo emitido antes da separação dos documentos: os certificados estão dentro do relatório.' : 'Cada documento num arquivo; o oficial é o assinado com o token.') + '</span>'
+    + '<button class="btn pri" data-zipv="' + esc(v.inspecao_id) + '">Baixar tudo do vaso (.zip)</button></div>'
+    + '<table class="cartoes"><tr><th>Documento</th><th>Número</th><th>Nome do arquivo</th><th>Situação</th><th></th></tr>' + linhas.map(x => '<tr><td>' + esc(x.rot) + '</td><td data-r="Número">' + esc(x.numero || '—')
+      + '</td><td data-r="Arquivo" class="muted">' + esc(x.nome) + '</td><td data-r="Situação">' + (x.tipo === 'art' ? '<span class="muted">arquivo do CREA</span>' : x.tipo === 'instrumento' ? '<span class="muted">do laboratório</span>' : chipDoc(x.situacao))
+      + '</td><td>' + btDl(x) + '</td></tr>').join('') + '</table></div>';
 }
 
 // ── 3 · um vaso: o laudo anterior ──────────────────────────────────────────
@@ -2748,7 +2865,8 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S163');
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S164');
+    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D1');   // E35 · issue 30: o Resumo e os nomes dos arquivos
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S158');
     return true;
   })().catch(e => { LIBS = null; throw e; });
@@ -2784,7 +2902,28 @@ function dataURLDe(b){   // o tipo pelo conteúdo (o Storage pode devolver octet
   return 'data:' + tipo + ';base64,' + btoa(s);
 }
 const hexDe = buf => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
-/** Monta o PDF inteiro (laudo + anexos). opc vai para o LaudoPDF.montar. */
+/** O carimbo do PLH (o desenho e, logo abaixo, o texto da aprovação) no canto de baixo das páginas a partir de `desde`
+ *  (as que o pdfmake não montou: a ART no fim do relatório, os certificados de aferição). S145 · A2. */
+async function carimbarPaginas(out, desde, carimbo){
+  if (!carimbo || !carimbo.imagem) return;
+  const m = /^data:image\/(png|jpe?g);base64,(.*)$/i.exec(carimbo.imagem);
+  if (!m) return;
+  const bin = Uint8Array.from(atob(m[2]), ch => ch.charCodeAt(0));
+  const im = /png/i.test(m[1]) ? await out.embedPng(bin) : await out.embedJpg(bin);
+  const fonte = await out.embedFont(PDFLib.StandardFonts.Helvetica), cinza = PDFLib.rgb(0.35, 0.39, 0.42), tam = 5.5;
+  const texto = String(carimbo.texto || '').replace(/[^\x20-\xff·]/g, ' ');
+  out.getPages().slice(desde).forEach(pg => {
+    const { width: W } = pg.getSize(), k = Math.min(110 / im.width, 24 / im.height, 1), w = im.width * k, h = im.height * k;
+    const tw = fonte.widthOfTextAtSize(texto, tam);
+    pg.drawRectangle({ x: W - 45 - Math.max(w, tw) - 4, y: 8, width: Math.max(w, tw) + 8, height: h + 14, color: PDFLib.rgb(1, 1, 1), opacity: 0.85 });
+    pg.drawImage(im, { x: W - 45 - w, y: 18, width: w, height: h });
+    pg.drawText(texto, { x: W - 45 - tw, y: 11, size: tam, font: fonte, color: cinza });
+  });
+}
+const pdfBytes = def => new Promise((ok, falha) => { try{ pdfMake.createPdf(def).getBuffer(b => ok(b)); }catch(e){ falha(e); } });
+/** O Relatório de Inspeção: o laudo e a ART no fim (E35 · issue 30, DP2). opc vai para o LaudoPDF.montar.
+ *  Os certificados de aferição e o Resumo saem em arquivos próprios (gerarDocumentos); os certificados de laboratório
+ *  (medidor e padrões) são baixados como vieram, sem carimbo (a lista do item 15 continua citando todos). */
 async function gerarLaudo(d, opc, aviso){
   aviso = aviso || (() => {});
   await libsLaudo();
@@ -2793,59 +2932,82 @@ async function gerarLaudo(d, opc, aviso){
   for (let i = 0; i < FT.length; i++){ const p = FT[i]; aviso('foto ' + (i + 1) + ' de ' + FT.length, 'fotos', i / FT.length); try{ imagens[p] = dataURLDe(await baixar(p)); }catch(e){ semFoto.push(p); } }
   aviso('', 'montar', 0);
   const def = LaudoPDF.montar(d, Object.assign({ imagens }, opc));
-  const base = await new Promise((ok, falha) => { try{ pdfMake.createPdf(def).getBuffer(b => ok(b)); }catch(e){ falha(e); } });
-  aviso('juntando os documentos', 'anexos', 0);
-  const out = await PDFLib.PDFDocument.load(base);
-  // S150 · item 81: o documento de cada aferição (relatório do manômetro, certificado da válvula), separado, logo depois do laudo e antes dos anexos
-  for (const dc of LaudoPDF.documentosAfericao(d, opc)){
-    const b = await new Promise((ok, falha) => { try{ pdfMake.createPdf(dc.def).getBuffer(x => ok(x)); }catch(e){ falha(e); } });
-    const src = await PDFLib.PDFDocument.load(b); (await out.copyPages(src, src.getPageIndices())).forEach(pg => out.addPage(pg));
-  }
-  // S148 · item 90: medidor, cada manômetro padrão usado, ART (a mesma ordem da lista do item 15 do laudo)
-  const anexos = [['o certificado do medidor', d.medidor && d.medidor.certificado_path]]
-    .concat((d.padroes || []).map(p => ['o certificado do manômetro padrão' + (p.descricao ? ' ' + p.descricao : ''), p.certificado_path]))
-    .concat([['a ART', d.art && d.art.path]]);
-  const semAnexo = []; let nA = 0;
-  for (const [nome, path] of anexos){
-    aviso('anexo ' + (++nA) + ' de ' + anexos.length, 'anexos', nA / (anexos.length + 1));
-    if (!path){ semAnexo.push(nome); continue; }
-    let b; try{ b = await baixar(path); }catch(e){ if (opc.exigirAnexos) throw new Error('Não abriu ' + nome + ': ' + e.message); semAnexo.push(nome); continue; }
-    if (ehPdf(b)){ const src = await PDFLib.PDFDocument.load(b, { ignoreEncryption:true }); (await out.copyPages(src, src.getPageIndices())).forEach(pg => out.addPage(pg)); }
-    else {
+  const base = await pdfBytes(def);
+  aviso('juntando a ART', 'anexos', 0);
+  const out = await PDFLib.PDFDocument.load(base), nBase = out.getPageCount(), semAnexo = [];
+  const path = d.art && d.art.path;
+  if (!path) semAnexo.push('a ART');
+  else {
+    let b = null; try{ b = await baixar(path); }catch(e){ if (opc.exigirAnexos) throw new Error('Não abriu a ART: ' + e.message); semAnexo.push('a ART'); }
+    if (b && ehPdf(b)){ const src = await PDFLib.PDFDocument.load(b, { ignoreEncryption:true }); (await out.copyPages(src, src.getPageIndices())).forEach(pg => out.addPage(pg)); }
+    else if (b){
       const im = b[0] === 0x89 ? await out.embedPng(b) : await out.embedJpg(b), pg = out.addPage([595.28, 841.89]);
       const k = Math.min(515 / im.width, 760 / im.height, 1);
       pg.drawImage(im, { x:(595.28 - im.width * k) / 2, y:(841.89 - im.height * k) / 2, width:im.width * k, height:im.height * k });
     }
   }
   if (opc.exigirAnexos && semAnexo.length) throw new Error('Falta ' + semAnexo.join(' e ') + ' para emitir.');
-  // S145 · A2: o carimbo também nas páginas dos anexos (o desenho e, logo abaixo, o texto da aprovação)
-  if (opc.numero && opc.carimbo && opc.carimbo.imagem){
-    const m = /^data:image\/(png|jpe?g);base64,(.*)$/i.exec(opc.carimbo.imagem);
-    if (m){
-      const bin = Uint8Array.from(atob(m[2]), ch => ch.charCodeAt(0));
-      const im = /png/i.test(m[1]) ? await out.embedPng(bin) : await out.embedJpg(bin);
-      const fonte = await out.embedFont(PDFLib.StandardFonts.Helvetica), cinza = PDFLib.rgb(0.35, 0.39, 0.42), tam = 5.5;
-      const texto = String(opc.carimbo.texto || '').replace(/[^\x20-\xff·]/g, ' ');
-      const nBase = (await PDFLib.PDFDocument.load(base)).getPageCount();
-      out.getPages().slice(nBase).forEach(pg => {
-        const { width: W } = pg.getSize(), k = Math.min(110 / im.width, 24 / im.height, 1), w = im.width * k, h = im.height * k;
-        const tw = fonte.widthOfTextAtSize(texto, tam);
-        pg.drawRectangle({ x: W - 45 - Math.max(w, tw) - 4, y: 8, width: Math.max(w, tw) + 8, height: h + 14, color: PDFLib.rgb(1, 1, 1), opacity: 0.85 });
-        pg.drawImage(im, { x: W - 45 - w, y: 18, width: w, height: h });
-        pg.drawText(texto, { x: W - 45 - tw, y: 11, size: tam, font: fonte, color: cinza });
-      });
-    }
-  }
+  if (opc.numero) await carimbarPaginas(out, nBase, opc.carimbo);   // o carimbo também nas páginas da ART
   out.setTitle(def.info.title); out.setAuthor(def.info.author); out.setCreator(def.info.creator); out.setProducer(def.info.producer); out.setSubject(def.info.subject);
   const bytes = await out.save();
   return { bytes, paginas: out.getPageCount(), sha: hexDe(await crypto.subtle.digest('SHA-256', bytes)), semFoto, semAnexo };
 }
-const nomeLaudo = (d, num) => 'Relatório de Inspeção ' + (d.vaso.tag || '') + ' ' + (num || 'rascunho') + '.pdf';
+/** E35 · issue 30 (DP6, DP7): os outros documentos do mesmo laudo, cada um num PDF: o Resumo e o certificado de cada aferição
+ *  terminada (o de manômetro e o de válvula, S150), na ordem dos acessórios. Mesmos dados (a fotografia) e o mesmo carimbo do relatório.
+ *  Devolve [{ tipo, ordem, total, numero, acessorio_id, bytes, sha, paginas }]. */
+async function gerarDocumentos(d, opc, aviso){
+  aviso = aviso || (() => {});
+  await libsLaudo();
+  const docs = [], fim = async (x, def, carimbar) => {
+    let bytes = await pdfBytes(def);
+    if (carimbar && opc.numero && opc.carimbo){ const doc = await PDFLib.PDFDocument.load(bytes); await carimbarPaginas(doc, 0, opc.carimbo); bytes = await doc.save(); }
+    docs.push(Object.assign(x, { bytes, sha: hexDe(await crypto.subtle.digest('SHA-256', bytes)), paginas: (await PDFLib.PDFDocument.load(bytes)).getPageCount() }));
+  };
+  aviso('o Resumo', 'documentos', 0);
+  await fim({ tipo:'resumo', ordem:1, total:1, numero:null, acessorio_id:null }, DocumentosPDF.resumo(d, opc), false);
+  // S150 · item 81: o documento de cada aferição (relatório do manômetro, certificado da válvula); a mesma ordem do LaudoPDF
+  const comAf = (d.acessorios || []).filter(a => a.afericao && (a.afericao.resultado === 'aprovado' || a.afericao.resultado === 'reprovado'));
+  const lista = LaudoPDF.documentosAfericao(d, opc), total = {}, vez = {};
+  lista.forEach(dc => { const t = dc.tipo === 'valvula' ? 'cert_valvula' : 'cert_manometro'; total[t] = (total[t] || 0) + 1; });
+  for (let k = 0; k < lista.length; k++){
+    const dc = lista[k], t = dc.tipo === 'valvula' ? 'cert_valvula' : 'cert_manometro';
+    vez[t] = (vez[t] || 0) + 1;
+    aviso('certificado ' + (k + 1) + ' de ' + lista.length, 'documentos', (k + 1) / (lista.length + 1));
+    await fim({ tipo:t, ordem:vez[t], total:total[t], numero:dc.codigo, acessorio_id:(comAf[k] || {}).id || null }, dc.def, true);
+  }
+  aviso('', 'documentos', 1);
+  return docs;
+}
+/** DP5: o nome padrão do arquivo (DocumentosPDF.nome); sem o gerador carregado, o nome simples. */
+function nomeArq(tipo, ctx){
+  if (window.DocumentosPDF) return DocumentosPDF.nome(tipo, ctx);
+  return String((ctx && ctx.tag) || tipo).replace(/[\\/:*?"<>|]+/g, '-') + '.pdf';
+}
+const clienteCurto = d => (d.empresa && (d.empresa.nome_fantasia || d.empresa.razao_social)) || '';
+/** O nome do relatório deste laudo: "Relatório de Inspeção - VP-02 - Cliente[ (Rev 1)][ (para assinar)].pdf"; extra = "rascunho", "piloto". */
+function nomeLaudo(d, o){
+  o = o || {};
+  const n = nomeArq('relatorio', { tag:d.vaso.tag, tap:d.vaso.numero_tap, cliente:clienteCurto(d), revisao:o.revisao, paraAssinar:o.paraAssinar });
+  return o.extra ? n.replace(/\.pdf$/, ' (' + o.extra + ').pdf') : n;
+}
 function mostrarPdf(bytes, nome){
   const cx = $('ldVisor'); if (!cx) return;
   const url = URL.createObjectURL(new Blob([bytes], { type:'application/pdf' }));
   cx.innerHTML = '<div class="linha" style="margin-bottom:6px"><a class="btn sec" id="ldBaixar">Baixar ' + esc(nome) + '</a></div><iframe title="Laudo" style="width:100%;height:78vh;border:1px solid var(--rule);border-radius:6px;background:#fff"></iframe>';
   $('ldBaixar').href = url; $('ldBaixar').download = nome; cx.querySelector('iframe').src = url;
+}
+/** E35 · issue 30: os outros documentos do rascunho, para baixar (a minuta de cada um). */
+function mostrarDocs(docs, d, o){
+  const cx = $('ldVisor'); if (!cx || !docs || !docs.length) return;
+  const div = document.createElement('div'); div.className = 'linha'; div.style.margin = '6px 0'; div.id = 'ldDocsRasc';
+  div.innerHTML = '<span class="muted">Os outros documentos' + (o && o.extra ? ' (' + esc(o.extra) + ')' : '') + ':</span>';
+  docs.forEach(x => {
+    const a = document.createElement('a'); a.className = 'btn mini sec';
+    a.download = nomeArq(x.tipo, { tag:d.vaso.tag, tap:d.vaso.numero_tap, cliente:clienteCurto(d), ordem:x.ordem, total:x.total }).replace(/\.pdf$/, o && o.extra ? ' (' + o.extra + ').pdf' : '.pdf');
+    a.href = URL.createObjectURL(new Blob([x.bytes], { type:'application/pdf' })); a.textContent = a.download.replace(/\.pdf$/, '');
+    div.appendChild(a);
+  });
+  cx.insertBefore(div, cx.querySelector('iframe'));
 }
 
 // ── a aba Laudos ───────────────────────────────────────────────────────────
@@ -2853,7 +3015,7 @@ const SIT_LAUDO = { emitindo:['número reservado, PDF pendente','s-em_conferenci
                     assinado:['assinado','s-pronto'], substituido:['substituído','s-sem_laudo'] };
 async function abaLaudos(h){
   const [L, cfg, DES, PAC] = await Promise.all([rpc('tf_laudo_lista'), rpc('tf_laudo_config_ver'),
-    rpc('tf_laudo_desenho_situacao').catch(() => null), PLH ? rpc('tf_laudo_para_assinar').catch(() => []) : Promise.resolve([])]);
+    rpc('tf_laudo_desenho_situacao').catch(() => null), PLH ? pacoteParaAssinar() : Promise.resolve([])]);   // E35 · issue 30: com os documentos
   h += '<div class="card"><div class="linha" style="justify-content:space-between"><div><b>Emissão oficial: ' + (cfg.oficial ? 'ligada' : 'desligada') + '</b>'
     + '<div class="muted">' + (cfg.oficial ? 'O PLH emite o laudo com número.' : 'Piloto: sai só o rascunho, marcado "PILOTO", sem gastar número. Compare com o PDF do TapDoc antigo.')
     + ' Numeração de ' + String(cfg.mes).padStart(2, '0') + '/' + cfg.ano + ': ' + (cfg.proximo_codigo ? 'próximo <b>' + esc(cfg.proximo_codigo) + '</b>' : 'não informada') + '.</div></div>'
@@ -2971,25 +3133,80 @@ function ligarDesenho(){
   }));
 }
 // A4/A5: o pacote para o token (Assinador SERPRO, em lote) e a devolução dos assinados
+// E35 · issue 30 (DP4): o pacote leva todos os documentos técnicos (o relatório, o Resumo e os certificados), cada um num PDF
+function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D1').then(() => true, () => false); }
+/** O que falta assinar: os relatórios (tf_laudo_para_assinar) e os outros documentos (tf_insp_docs_para_assinar). insps: só dessas inspeções. */
+async function pacoteParaAssinar(insps){
+  const [L, D] = await Promise.all([rpc('tf_laudo_para_assinar').catch(() => []), rpc('tf_insp_docs_para_assinar').catch(() => []), libDocs()]);
+  const P = (L || []).map(x => ({ tipo:'relatorio', laudo:x, id:x.id, inspecao_id:x.inspecao_id, laudo_numero:x.numero, revisao:x.revisao, tag:x.tag, numero_tap:x.numero_tap,
+      cliente:x.cliente, numero:x.numero, ordem:1, total:1, pdf_path:x.pdf_path, pdf_sha256:x.pdf_sha256, emitido_em:x.emitido_em }))
+    .concat((D || []).map(x => ({ tipo:x.tipo, doc:x, id:x.id, inspecao_id:x.inspecao_id, laudo_numero:x.laudo_numero, revisao:x.revisao, tag:x.tag, numero_tap:x.numero_tap,
+      cliente:x.cliente, numero:x.numero, ordem:x.ordem, total:x.total_tipo, pdf_path:x.pdf_path, pdf_sha256:x.pdf_sha256, emitido_em:x.emitido_em })));
+  return insps ? P.filter(x => insps.indexOf(x.inspecao_id) >= 0) : P;
+}
+const rotDoc = x => ((window.DocumentosPDF && DocumentosPDF.ROTULO[x.tipo]) || x.tipo) + (x.total > 1 ? ' ' + x.ordem : '') + (x.numero && x.tipo !== 'relatorio' ? ' ' + x.numero : '');
 function cartaoPacote(P){
   if (!PLH || !P || !P.length) return '';
+  const grupos = []; const por = {};
+  P.forEach(x => { const k = x.inspecao_id + '|' + x.laudo_numero + '|' + x.revisao; if (!por[k]){ por[k] = { x, itens:[] }; grupos.push(por[k]); } por[k].itens.push(x); });
   return '<div class="card"><h3>Para assinar com o token (' + P.length + ')</h3>'
     + '<p class="muted">1) Baixe o pacote; 2) assine todos de uma vez no Assinador SERPRO, com o token (PAdES), sem abrir nem salvar os PDFs em outro programa; '
-    + '3) devolva os assinados aqui (pode escolher vários). O TapDoc confere cada um: tem de ser o PDF aprovado, assinado com o seu certificado.</p>'
-    + '<table class="cartoes"><tr><th>Laudo</th><th>Vaso</th><th>Cliente</th><th>Aprovado</th></tr>' + P.map(x => '<tr><td><b>' + esc(x.numero) + (x.revisao ? ' Rev. ' + x.revisao : '') + '</b></td><td data-r="Vaso">'
-      + esc(x.tag || '') + '</td><td data-r="Cliente">' + esc(x.cliente || '') + '</td><td data-r="Aprovado">' + quandoBR(x.emitido_em) + '</td></tr>').join('') + '</table>'
+    + '3) devolva os assinados aqui (pode escolher vários). O TapDoc confere cada um: tem de ser o PDF aprovado, assinado com o seu certificado. '
+    + 'Cada documento (relatório, resumo, certificados) é um PDF e vai assinado.</p>'
+    + '<table class="cartoes"><tr><th>Laudo</th><th>Vaso</th><th>Cliente</th><th>Documentos</th><th>Aprovado</th></tr>' + grupos.map(g => '<tr><td><b>' + esc(g.x.laudo_numero) + (g.x.revisao ? ' Rev. ' + g.x.revisao : '') + '</b></td><td data-r="Vaso">'
+      + esc(g.x.tag || '') + '</td><td data-r="Cliente">' + esc(g.x.cliente || '') + '</td><td data-r="Documentos">' + g.itens.map(x => esc(rotDoc(x))).join('<br>')
+      + '</td><td data-r="Aprovado">' + quandoBR(g.x.emitido_em) + '</td></tr>').join('') + '</table>'
     + '<div class="linha" style="margin-top:8px"><button class="btn" id="pacBaixar">Baixar o pacote (.zip)</button><button class="btn pri" id="pacDevolver">Devolver os assinados</button>'
     + '<input type="file" id="pacArqs" accept="application/pdf" multiple hidden><span class="muted" id="pacAviso"></span></div><div id="pacRes"></div></div>';
+}
+/** O nome de um item do pacote (DP5), sem o "(para assinar)": o pacote inteiro é para assinar. */
+const nomePacote = x => nomeArq(x.tipo, { tag:x.tag, tap:x.numero_tap, cliente:x.cliente, ordem:x.ordem, total:x.total, revisao:x.revisao });
+/** Nomes repetidos no mesmo .zip (a mesma TAG em clientes diferentes) ganham " (2)". */
+function semRepetir(arqs){
+  const vistos = {};
+  arqs.forEach(a => { const k = a.nome.toLowerCase(); if (vistos[k]){ vistos[k]++; a.nome = a.nome.replace(/(\.\w+)$/, ' (' + vistos[k] + ')$1'); } else vistos[k] = 1; });
+  return arqs;
+}
+/** E35 · issue 30 (DP4): o documento devolvido assinado (as mesmas conferências do relatório). */
+async function devolverDoc(x, b, aviso){
+  aviso = aviso || (() => {});
+  await libsLaudo();
+  const c = await AssinaturaPDF.conferir(b, x.pdf_sha256);
+  if (c.erro) throw new Error(c.erro);
+  let pags; try{ pags = (await PDFLib.PDFDocument.load(b, { ignoreEncryption:true, updateMetadata:false })).getPageCount(); }catch(e){ throw new Error('Não consegui ler o PDF assinado.'); }
+  aviso('Enviando…');
+  const caminho = x.inspecao_id + '/' + x.tipo + '-' + String(x.laudo_numero || '').replace(/[^\w-]+/g, '-') + (x.revisao ? '-rev' + x.revisao : '') + '-' + x.ordem + '-assinado-' + uid().slice(0, 8) + '.pdf';
+  await enviarArq(caminho, new Blob([b], { type:'application/pdf' }), 'O documento assinado');
+  delete c.original_fim;
+  await rpc('tf_insp_doc_assinado', { p_doc: x.id, p_path: caminho, p_paginas: pags, p_conferencia: c });
+  return c;
+}
+/** Confere cada PDF devolvido contra o pacote (pelo SHA do PDF aprovado) e grava. Devolve { ok, linhas }. */
+async function devolverVarios(P, fs, aviso){
+  const res = []; let ok = 0;
+  await libsLaudo();
+  for (const f of fs){
+    aviso('Conferindo ' + f.name + '…');
+    try{
+      const b = new Uint8Array(await f.arrayBuffer());
+      const shas = (await AssinaturaPDF.prefixos(b)).map(p => p.sha);
+      const x = P.find(y => shas.indexOf(y.pdf_sha256) >= 0);
+      if (!x) throw new Error('não é nenhum dos laudos do pacote nem dos documentos dele (ou foi mudado antes de assinar).');
+      if (x.laudo) await devolverAssinado(x.laudo, b); else await devolverDoc(x.doc, b);
+      ok++; res.push('<li>✅ ' + esc(f.name) + ': ' + esc(rotDoc(x) + ' do ' + x.laudo_numero + (x.revisao ? ' Rev. ' + x.revisao : '')) + ' assinado e conferido.</li>');
+    }catch(e){ res.push('<li style="color:var(--crit)">✗ ' + esc(f.name) + ': ' + esc(e.message || String(e)) + '</li>'); }
+  }
+  aviso('');
+  return { ok, linhas: '<ul style="margin:8px 0 0">' + res.join('') + '</ul>' };
 }
 function ligarPacote(P){
   const bb = $('pacBaixar'); if (!bb) return;
   const aviso = t => { $('pacAviso').textContent = t || ''; };
-  const nomeArq = x => ('Laudo ' + x.numero + (x.revisao ? ' Rev' + x.revisao : '') + ' ' + (x.tag || '')).replace(/[\\/:*?"<>|]+/g, '-').trim() + '.pdf';
   bb.addEventListener('click', () => U.semDuploEnvio(bb, async () => {
     try{
       const arqs = [];
-      for (const x of P){ aviso('Baixando ' + (arqs.length + 1) + ' de ' + P.length + '…'); arqs.push({ nome: nomeArq(x), bytes: await baixar(x.pdf_path) }); }
-      const a = document.createElement('a'); a.href = URL.createObjectURL(zipar(arqs)); a.download = 'Laudos para assinar ' + new Date().toLocaleDateString('pt-BR').replace(/\//g, '-') + '.zip';
+      for (const x of P){ aviso('Baixando ' + (arqs.length + 1) + ' de ' + P.length + '…'); arqs.push({ nome: nomePacote(x), bytes: await baixar(x.pdf_path) }); }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(zipar(semRepetir(arqs))); a.download = 'Para assinar ' + new Date().toLocaleDateString('pt-BR').replace(/\//g, '-') + '.zip';
       document.body.appendChild(a); a.click(); a.remove(); aviso('');
     }catch(e){ aviso(''); erro(e); }
   }));
@@ -2997,22 +3214,9 @@ function ligarPacote(P){
   $('pacDevolver').addEventListener('click', () => { ar.value = ''; ar.click(); });
   ar.addEventListener('change', async () => {
     const fs = Array.from(ar.files || []); if (!fs.length) return;
-    const res = []; let ok = 0;
-    try{ await libsLaudo(); }catch(e){ erro(e); return; }
-    for (const f of fs){
-      aviso('Conferindo ' + f.name + '…');
-      try{
-        const b = new Uint8Array(await f.arrayBuffer());
-        const shas = (await AssinaturaPDF.prefixos(b)).map(p => p.sha);
-        const l = P.find(x => shas.indexOf(x.pdf_sha256) >= 0);
-        if (!l) throw new Error('não é nenhum dos laudos do pacote (ou foi mudado antes de assinar).');
-        await devolverAssinado(l, b);
-        ok++; res.push('<li>✅ ' + esc(f.name) + ': ' + esc(l.numero + (l.revisao ? ' Rev. ' + l.revisao : '')) + ' assinado e conferido.</li>');
-      }catch(e){ res.push('<li style="color:var(--crit)">✗ ' + esc(f.name) + ': ' + esc(e.message || String(e)) + '</li>'); }
-    }
-    aviso('');
-    $('pacRes').innerHTML = '<ul style="margin:8px 0 0">' + res.join('') + '</ul>';
-    if (ok){ U.toast(ok + ' laudo(s) assinado(s).', 'ok'); setTimeout(() => { const r = $('pacRes').innerHTML; pintar().then(() => { const x = $('pacRes'); if (x) x.innerHTML = r; else U.toast(ok + ' laudo(s) assinado(s); nada mais para assinar.', 'ok'); }); }, 600); }
+    let r; try{ r = await devolverVarios(P, fs, aviso); }catch(e){ aviso(''); erro(e); return; }
+    $('pacRes').innerHTML = r.linhas;
+    if (r.ok){ U.toast(r.ok + ' documento(s) assinado(s).', 'ok'); setTimeout(() => { const h = $('pacRes').innerHTML; pintar().then(() => { const x = $('pacRes'); if (x) x.innerHTML = h; else U.toast(r.ok + ' documento(s) assinado(s); nada mais para assinar.', 'ok'); }); }, 600); }
   });
 }
 
@@ -3022,12 +3226,12 @@ function ligarPacote(P){
 const PASSOS_RASCUNHO = [
   { rot:'carregando o gerador', de:0, ate:8, ch:{ gerador:[0, 1] } },
   { rot:'conferindo o desenho do mapa', de:8, ate:15, ch:{ mapa:[0, 1] } },
-  { rot:'montando o PDF', de:15, ate:100, ch:{ fotos:[0, 0.7], montar:[0.7, 0.85], anexos:[0.85, 1] } }];
+  { rot:'montando o PDF', de:15, ate:100, ch:{ fotos:[0, 0.6], montar:[0.6, 0.75], anexos:[0.75, 0.82], documentos:[0.82, 1] } }];   // E35: o Resumo e os certificados
 const PASSOS_EMITIR = [
   { rot:'carregando o gerador', de:0, ate:5, ch:{ gerador:[0, 1] } },
   { rot:'conferindo o desenho do mapa', de:5, ate:10, ch:{ mapa:[0, 1] } },
   { rot:'aguardando a sua digital', de:10, ate:15, ch:{ digital:[0, 1] }, espera:true },
-  { rot:'montando o PDF', de:15, ate:80, ch:{ fotos:[0, 0.7], montar:[0.7, 0.85], anexos:[0.85, 1] } },
+  { rot:'montando o PDF', de:15, ate:80, ch:{ fotos:[0, 0.6], montar:[0.6, 0.75], anexos:[0.75, 0.82], documentos:[0.82, 1] } },   // E35: o Resumo e os certificados
   { rot:'enviando', de:80, ate:100, ch:{ enviar:[0, 1] } }];
 let VEZ_LD = 0;   // cada andamento ganha um número; "Tentar de novo" pula para o seguinte
 const TRAVOU_MS = 120000;   // 2 minutos sem andar = "Parece que travou" (o teste encurta por window.TF_TRAVOU_MS)
@@ -3079,7 +3283,10 @@ function avisoSemDigital(){
 async function telaLaudo(id){
   titulo('Laudo', 'carregando…');
   $('tela').innerHTML = '<p class="muted">Carregando…</p>';
-  LD = { id, d: await rpc('tf_laudo_dados', { p_id:id }) };
+  LD = { id, d: await rpc('tf_laudo_dados', { p_id:id }), docs:null, pac:[] };
+  // E35 · issue 30: os documentos deste vaso (DP14 b) e o que falta assinar dele (DP4)
+  try{ await libDocs(); LD.docs = await rpc('tf_insp_documentos', { p_os: null, p_insp: id }); }catch(e){ LD.docs = null; }
+  if ((LD.d.eu || {}).plh) LD.pac = await pacoteParaAssinar([id]).catch(() => []);
   pintarLaudo();
 }
 function laudoAtual(d){ return (d.laudos || []).filter(l => l.situacao !== 'substituido').pop() || null; }
@@ -3103,8 +3310,9 @@ function pintarLaudo(){
   if (eu.plh && cfg.oficial){
     if (atual && atual.situacao === 'emitindo') h += '<button class="btn pri" id="ldRefazer">Gerar e gravar o PDF do ' + esc(atual.numero) + (atual.revisao ? ' Rev. ' + atual.revisao : '') + '</button>';
     else if (I.situacao === 'liberada' && (!atual || reaberta)) h += '<button class="btn pri' + (fal.length ? ' bloq' : '') + '" id="ldEmitir"' + (fal.length ? ' title="Resolva as pendências"' : '') + '>' + (atual ? 'Aprovar e emitir a revisão (Rev. ' + (atual.revisao + 1) + ')' : 'Aprovar e emitir') + ' · digital</button>';
-    if (atual && atual.situacao === 'emitido' && !reaberta && I.situacao === 'liberada') h += '<button class="btn pri" id="ldAssinado">Devolver o PDF assinado com o token</button><input type="file" id="ldArqAss" accept="application/pdf" hidden>';
   }
+  // E35 · issue 30 (DP4): o relatório e os documentos dele voltam juntos (pode escolher vários)
+  if (eu.plh && (LD.pac || []).length && !reaberta) h += '<button class="btn pri" id="ldAssinado">Devolver os PDFs assinados com o token (' + LD.pac.length + ')</button><input type="file" id="ldArqAss" accept="application/pdf" multiple hidden>';
   if (['liberada','assinada'].indexOf(I.situacao) >= 0 && (eu.plh || !atual)) h += '<button class="btn" id="ldReabrir">Reabrir a inspeção</button>';
   h += '<div class="andamento" id="ldAnd" hidden></div><span class="muted" id="ldAviso"></span></div>';   // E31 · issue 27
   // como o PLH assina
@@ -3120,10 +3328,11 @@ function pintarLaudo(){
   if ((d.laudos || []).length) h += '<h2>Laudos desta inspeção</h2><div class="card"><table class="cartoes"><tr><th>Número</th><th>Situação</th><th>Emitido</th><th>PDF</th><th>Assinado</th></tr>'
     + d.laudos.map(l => '<tr><td><b>' + esc(l.numero) + (l.revisao ? ' Rev. ' + l.revisao : '') + '</b>' + (l.motivo_rev ? '<div class="muted">' + esc(l.motivo_rev) + '</div>' : '') + '</td><td data-r="Situação"><span class="chip ' + (SIT_LAUDO[l.situacao] || ['', ''])[1] + '">'
       + esc((SIT_LAUDO[l.situacao] || [l.situacao])[0]) + '</span></td><td data-r="Emitido">' + esc(l.emitido_por_nome || '') + '<div class="muted">' + quandoBR(l.emitido_em) + '</div></td><td data-r="PDF">'
-      + (l.pdf_path ? '<button class="btn mini" data-ldpdf="' + esc(l.pdf_path) + '" data-ldnome="' + esc(nomeLaudo(d, l.numero + (l.revisao ? ' Rev ' + l.revisao : ''))) + '">Abrir</button><div class="muted">' + l.paginas + ' pág.</div>' : '—') + '</td><td data-r="Assinado">'
-      + (l.assinado_path ? '<button class="btn mini" data-ldpdf="' + esc(l.assinado_path) + '" data-ldnome="' + esc(nomeLaudo(d, l.numero + ' assinado')) + '">Abrir</button><div class="muted">' + esc(l.assinado_por_nome || '') + ' · ' + quandoBR(l.assinado_em) + '</div>' : '—')
+      + (l.pdf_path ? '<button class="btn mini" data-ldpdf="' + esc(l.pdf_path) + '" data-ldnome="' + esc(nomeLaudo(d, { revisao: l.revisao, paraAssinar: l.situacao === 'emitido' })) + '">Abrir</button><div class="muted">' + l.paginas + ' pág.</div>' : '—') + '</td><td data-r="Assinado">'
+      + (l.assinado_path ? '<button class="btn mini" data-ldpdf="' + esc(l.assinado_path) + '" data-ldnome="' + esc(nomeLaudo(d, { revisao: l.revisao })) + '">Abrir</button><div class="muted">' + esc(l.assinado_por_nome || '') + ' · ' + quandoBR(l.assinado_em) + '</div>' : '—')
       + '</td></tr>').join('') + '</table></div>';
-  h += '<div id="ldVisor"></div>';
+  h += cartaoDocsVaso(LD.docs);   // E35 · issue 30 (DP14 b)
+  h += '<div id="ldRes"></div><div id="ldVisor"></div>';
   $('tela').innerHTML = h;
   ligarLaudo();
 }
@@ -3141,10 +3350,13 @@ function ligarLaudo(){
       const oficial = (d.config || {}).oficial;
       A('', 'gerador', 0); await libsLaudo(); A('', 'gerador', 1);
       await mapaLaudo(d, A, false);   // S151 · issue 7: a imagem do mapa (sem 3D, o rascunho sai com o 2D)
-      const g = await gerarLaudo(d, { marca: oficial ? 'MINUTA — NÃO VALE COMO LAUDO' : 'PILOTO — NÃO VALE COMO LAUDO' }, A);
-      A('', 'anexos', 1); A.fim();
+      const opcR = { marca: oficial ? 'MINUTA — NÃO VALE COMO LAUDO' : 'PILOTO — NÃO VALE COMO LAUDO' };
+      const g = await gerarLaudo(d, opcR, A);
+      A('', 'anexos', 1);
+      const docs = await gerarDocumentos(d, opcR, A); A.fim();   // E35 · issue 30 (DP3): a minuta de cada documento
       aviso(g.semFoto.length || g.semAnexo.length ? 'Rascunho pronto. ' + [g.semFoto.length ? g.semFoto.length + ' foto(s) não abriram' : '', g.semAnexo.length ? 'sem ' + g.semAnexo.join(' e ') : ''].filter(Boolean).join('; ') + '.' : 'Rascunho pronto (' + g.paginas + ' páginas).');
-      mostrarPdf(g.bytes, nomeLaudo(d, oficial ? 'rascunho' : 'piloto'));
+      mostrarPdf(g.bytes, nomeLaudo(d, { extra: oficial ? 'rascunho' : 'piloto' }));
+      mostrarDocs(docs, d, { extra: oficial ? 'rascunho' : 'piloto' });
     }catch(e){ if (e && e.refeito) return; A.fim(); aviso(''); erro(e); }
   }));
   // emitir: reserva o número (ou retoma) e grava o PDF feito da fotografia
@@ -3152,16 +3364,27 @@ function ligarLaudo(){
     A('', 'fotos', 0);
     const L = await rpc('tf_laudo_ver', { p_laudo: laudoId }), dd = L.dados;
     const carimbo = await rpc('tf_laudo_carimbo', { p_laudo: laudoId });   // S145 · A2/A7.3: só o PLH que aprovou, com a digital
-    const g = await gerarLaudo(dd, { numero: L.numero, revisao: L.revisao, emitidoEm: dd.emitido_em, motivoRev: L.motivo_rev, plh: dd.plh, exigirAnexos: true, carimbo }, A);
-    A('', 'enviar', 0.1);
-    const caminho = L.inspecao_id + '/laudo-' + L.numero + (L.revisao ? '-rev' + L.revisao : '') + '-' + uid().slice(0, 8) + '.pdf';
+    const opcE = { numero: L.numero, revisao: L.revisao, emitidoEm: dd.emitido_em, motivoRev: L.motivo_rev, plh: dd.plh, exigirAnexos: true, carimbo };
+    const g = await gerarLaudo(dd, opcE, A);
+    const docs = await gerarDocumentos(dd, opcE, A);   // E35 · issue 30: o Resumo e os certificados, cada um num PDF (DP2, DP6, DP7)
+    A('', 'enviar', 0.05);
+    const pre = L.inspecao_id + '/', suf = '-' + String(L.numero).replace(/[^\w-]+/g, '-') + (L.revisao ? '-rev' + L.revisao : '');
+    const caminho = pre + 'laudo' + suf + '-' + uid().slice(0, 8) + '.pdf';
     await enviarArq(caminho, new Blob([g.bytes], { type:'application/pdf' }), 'O laudo');
+    const lista = [];
+    for (let k = 0; k < docs.length; k++){
+      const x = docs[k], cam = pre + x.tipo + suf + '-' + x.ordem + '-' + uid().slice(0, 8) + '.pdf';
+      A('documento ' + (k + 1) + ' de ' + docs.length, 'enviar', 0.1 + 0.65 * k / docs.length);
+      await enviarArq(cam, new Blob([x.bytes], { type:'application/pdf' }), 'O documento');
+      lista.push({ tipo: x.tipo, ordem: x.ordem, numero: x.numero, acessorio_id: x.acessorio_id, path: cam, sha: x.sha, paginas: x.paginas });
+    }
     A('', 'enviar', 0.8);
+    await rpc('tf_insp_docs_gravar', { p_laudo: laudoId, p_docs: lista });   // antes do PDF do relatório: o laudo ainda "emitindo"
     await rpc('tf_laudo_pdf_gravar', { p_laudo: laudoId, p_path: caminho, p_sha: g.sha, p_paginas: g.paginas });
     A('', 'enviar', 1); A.fim(); aviso('');
-    U.toast('Laudo ' + L.numero + (L.revisao ? ' Rev. ' + L.revisao : '') + ' aprovado e gravado (' + g.paginas + ' páginas). Assine com o token (aba Laudos › Para assinar).', 'ok');
+    U.toast('Laudo ' + L.numero + (L.revisao ? ' Rev. ' + L.revisao : '') + ' aprovado e gravado: o relatório (' + g.paginas + ' páginas) e mais ' + docs.length + ' documento(s). Assine todos com o token (aba Laudos › Para assinar).', 'ok');
     await recarregar();
-    mostrarPdf(g.bytes, nomeLaudo(dd, L.numero + (L.revisao ? ' Rev ' + L.revisao : '')));
+    mostrarPdf(g.bytes, nomeLaudo(dd, { revisao: L.revisao, paraAssinar: true }));
   };
   const be = $('ldEmitir'); if (be) be.addEventListener('click', () => U.semDuploEnvio(be, async () => {
     if ((d.faltas || []).length){ marcarProblema($('ldFaltas'), 'Falta para emitir: ' + d.faltas.length + ' item(ns) em "Antes de emitir" (Laudo).'); return; }   // E33 · issue 15
@@ -3199,15 +3422,16 @@ function ligarLaudo(){
   }));
   // o PDF assinado com o token
   const bs = $('ldAssinado'); if (bs) bs.addEventListener('click', () => { $('ldArqAss').value = ''; $('ldArqAss').click(); });
+  // E35 · issue 30 (DP4): o relatório e os documentos dele, conferidos um a um contra o que falta assinar deste vaso
   const fa = $('ldArqAss'); if (fa) fa.addEventListener('change', async () => {
-    const f = fa.files && fa.files[0]; if (!f) return;
-    const atual = laudoAtual(d);
+    const fs = Array.from(fa.files || []); if (!fs.length) return;
     try{
-      aviso('Conferindo o PDF…');
-      await devolverAssinado(atual, new Uint8Array(await f.arrayBuffer()), aviso);
-      aviso(''); U.toast('Laudo assinado e conferido. A inspeção está concluída.', 'ok'); recarregar();
+      const r = await devolverVarios(LD.pac || [], fs, aviso);
+      if (r.ok) U.toast(r.ok + ' documento(s) assinado(s) e conferido(s).', 'ok');
+      await recarregar(); const x = $('ldRes'); if (x) x.innerHTML = r.linhas;
     }catch(e){ aviso(''); erro(e); }
   });
+  const cv = $('cxDocsVaso'); if (cv) ligarDownloads(cv, LD.docs, t => { const a = $('docsAviso'); if (a) a.textContent = t || ''; });
   const bp = $('ldPlh'); if (bp) bp.addEventListener('click', () => {
     const p = d.plh || { nome: (d.eu || {}).nome || '' };
     janela('Como você assina o laudo', '<label class="f">Nome no laudo<input class="t" id="plNome" value="' + esc(p.nome || '') + '"></label>'

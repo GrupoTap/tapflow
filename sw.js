@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S163';   // S163: TapDoc E34 (issues 12, 18, 20 e 21: as recomendações numa lista só e a justificativa do prazo; doc/recomendacoes.js RC1; laudo-pdf.js S163; 433)
+const VERSAO = 'H16-S164';   // S164: issue 30, Parte 1 — TapDoc E35 (os documentos da inspeção em arquivos próprios: o relatório só com a ART; o Resumo; os certificados M/V; todos assinados com o token; "Baixar tudo"; doc/documentos-pdf.js D1; laudo-pdf.js S164; 434)
+// const VERSAO = 'H16-S163';   // S163: TapDoc E34 (issues 12, 18, 20 e 21: as recomendações numa lista só e a justificativa do prazo; doc/recomendacoes.js RC1; laudo-pdf.js S163; 433)
 // const VERSAO = 'H16-S162';   // S162: TapDoc E33 (issues 13, 14, 15, 19 e 23: revisão e campo)
 // const VERSAO = 'H16-S161';   // S161: issues 16, 17, 22, 24, 25 e 26 — TapDoc E32 (a aparência do laudo e do certificado: laudo-pdf.js S161)
 // const VERSAO = 'H16-S160';   // S160: issues 28, 29, 31 e 27 — TapDoc E31 (aprovar o laudo: o mapa carregado antes, só a digital, o andamento em %; a aba Laudos no celular) e núcleo N10 (confirmarPessoa só com a digital)
@@ -84,6 +85,7 @@ const ESSENCIAIS = [
   './doc/',
   './doc/motor-calculo-nr13.js?v=R00.6',
   './doc/recomendacoes.js?v=RC1',   // S163: a lista das recomendações e do prazo (a revisão sem sinal precisa dela)
+  './doc/documentos-pdf.js?v=D1',   // S164: os nomes dos arquivos e o Resumo (a tela do laudo mostra os nomes)
   // S88 · Acessos P1: a tela do admin
   './acessos/',
   // S116 · TapSeg 1: a Segurança do Trabalho
