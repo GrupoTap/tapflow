@@ -10,11 +10,15 @@
  *   · DocumentosPDF.ROTULO          — o nome de cada documento nas telas.
  *   · DocumentosPDF.textosDaProposta(mudancas, bloco) — a proposta que espera o PLH vira o bloco de textos da minuta ("registro" ou "prontuario").
  * D3 · S166 · issue 30, Parte 3: o Prontuário (Reconstituído) usa as seções do próprio laudo-pdf.js (LaudoPDF.montar com opc.prontuario; DP1, DP11);
- *   aqui ficam o nome do arquivo dele (ROTULO.prontuario) e os textos da proposta para a minuta. Parte 4 (fichário e lombadas) entra aqui depois.
+ *   aqui ficam o nome do arquivo dele (ROTULO.prontuario) e os textos da proposta para a minuta.
+ * D4 · S167 · issue 30, Parte 4 (DP12, DP13): o fichário e as lombadas, gerados na hora (não são guardados nem assinados):
+ *   · DocumentosPDF.kit(imprime, jaTemPasta) — 'completo', 'insercao' (nenhuma folha nova) ou 'nao_imprime';
+ *   · DocumentosPDF.fichario(d, opc) — a capa, a folha de rosto e as divisórias que existem, num PDF só por vaso;
+ *   · DocumentosPDF.lombadas(itens, opc) — 2 lombadas por folha A4, de 40 ou 60 mm (itens de DocumentosPDF.lombadaDe).
  */
 (function (raiz) {
 'use strict';
-const VERSAO = 'D3-S166-2026-11-15';
+const VERSAO = 'D4-S167-2026-11-15';
 const AZUL = '#1B6FA9', CINZA = '#515252', FAIXA = '#5B6770', VERDE = '#1E6B3A', VERM = '#A62D18';
 
 // ── o nome dos arquivos (DP5) ────────────────────────────────────────────────
@@ -369,6 +373,190 @@ function textosDaProposta(mudancas, bloco) {
   return Object.keys(out).length ? out : null;
 }
 
-const DocumentosPDF = { resumo, registro, fatosRegistro, textosDaProposta, dataExtenso, nome, limpo, tagNome, osRot, ROTULO, versao: VERSAO };
+// ── o fichário e as lombadas (D4 · S167 · issue 30, Parte 4: DP12 e DP13) ───────
+// Não são documentos técnicos: não levam carimbo, número nem assinatura, e não são guardados (a página gera na hora, da
+// fotografia do laudo emitido, como a placa: DP3, DP4). Só para cliente com "Imprime a pasta" = sim (cadastro do cliente).
+const MM = 72 / 25.4, A4W = 595.28, A4H = 841.89;
+const xml = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const ehImg = x => typeof x === 'string' && /^data:image\/(png|jpe?g);base64,/i.test(x);
+const n1 = v => (Math.round(v * 100) / 100).toString();
+/** O que sai do fichário para o vaso (DP12): cliente que não imprime a pasta = nada; já tem a pasta = kit de inserção
+ *  (nenhuma folha nova); não tem = kit completo (capa, folha de rosto e divisórias). Quem diz "já tem" é a caixa da regra 45. */
+function kit(imprime, jaTemPasta) { return imprime === false ? 'nao_imprime' : jaTemPasta ? 'insercao' : 'completo'; }
+/** O logo oficial da Engetap, com o ®, em vetor (os contornos de vendor/placa-letras.js, o mesmo da placa): o texto de um SVG.
+ *  Sem os contornos, null (quem chama usa o logo em imagem, que não tem o ®). */
+function logoSvg(letras) {
+  const G = (letras || raiz.PlacaLetras || {}).logo;
+  if (!G || !G.formas || !G.w || !G.h) return null;
+  let defs = '', corpo = '';
+  G.formas.forEach((f, i) => {
+    if (f.g) {   // o degradê do símbolo (na placa, em CMYK; aqui, as cores do logo de tela)
+      defs += '<linearGradient id="lg' + i + '" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1" y2="0" gradientTransform="matrix(' + f.g.join(' ') + ')">'
+        + '<stop offset="0" stop-color="#1A4E96"/><stop offset="1" stop-color="#0089D0"/></linearGradient>';
+      corpo += '<path d="' + f.d + '" fill="url(#lg' + i + ')"/>';
+    } else corpo += '<path d="' + f.d + '" fill="' + (f.c === 'nome' ? '#535454' : '#0089D0') + '"/>';
+  });
+  // os contornos estão com o y para cima (como no PDF da placa): o grupo vira
+  return { w: G.w, h: G.h, corpo: (defs ? '<defs>' + defs + '</defs>' : '') + '<g transform="matrix(1 0 0 -1 0 ' + G.h + ')">' + corpo + '</g>' };
+}
+const svgDoLogo = g => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + g.w + ' ' + g.h + '" width="' + g.w + '" height="' + g.h + '">' + g.corpo + '</svg>';
+
+// as divisórias, na ordem do fichário (DP12); "linhas" = como o título quebra na folha
+const DIVISORIAS = [
+  { k: 'prontuario', nome: 'PRONTUÁRIO', linhas: ['PRONTUÁRIO'] },
+  { k: 'relatorio', nome: 'RELATÓRIO DE INSPEÇÃO', linhas: ['RELATÓRIO DE', 'INSPEÇÃO'] },
+  { k: 'certificados', nome: 'CERTIFICADOS VÁLVULA E MANÔMETRO', linhas: ['CERTIFICADOS', 'VÁLVULA E', 'MANÔMETRO'] },
+  { k: 'anexos', nome: 'ANEXOS', linhas: ['ANEXOS'] },
+  { k: 'registro', nome: 'REGISTRO DE SEGURANÇA', linhas: ['REGISTRO DE', 'SEGURANÇA'] }];
+/** As divisórias que existem neste vaso: sem certificado, sem a divisória deles; sem o Prontuário emitido, sem a dele (regra 46).
+ *  opc.prontuario = o vaso tem o Prontuário (Reconstituído) emitido; opc.certificados = tem certificado M/V (sem dizer, olha as aferições da fotografia). */
+function divisorias(d, opc) {
+  opc = opc || {};
+  const temCert = opc.certificados != null ? !!opc.certificados
+    : ((d && d.acessorios) || []).some(a => a.afericao && (a.afericao.resultado === 'aprovado' || a.afericao.resultado === 'reprovado'));
+  return DIVISORIAS.filter(x => x.k === 'prontuario' ? !!opc.prontuario : x.k === 'certificados' ? temCert : true);
+}
+const fotoCapa = (d, opc) => ehImg(opc.foto) ? opc.foto : (() => { const img = opc.imagens || {}, f = ((d && d.fotos) || []).find(x => x.secao === 'capa' && ehImg(img[x.path])); return f ? img[f.path] : null; })();
+
+/**
+ * O fichário do vaso, kit completo (DP12): a capa, a folha de rosto e as divisórias que existem, num PDF só.
+ *  · capa: a capa do relatório sem o tipo da inspeção e sem a cidade e a data (serve para todas as inspeções do vaso);
+ *  · folha de rosto: a função do vaso, a TAG, o Nº TAP e a lista das divisórias;
+ *  · divisórias: Prontuário · Relatório de Inspeção · Certificados Válvula e Manômetro · Anexos · Registro de Segurança.
+ * A folha de rosto e as divisórias deixam 30 mm na margem esquerda para os furos do fichário.
+ * opc: { foto | imagens, prontuario, certificados, letras, logoEngetap }.
+ */
+function fichario(d, opc) {
+  opc = opc || {};
+  const emp = d.empresa || {}, V = d.vaso || {};
+  const g = logoSvg(opc.letras), logoPng = opc.logoEngetap || (raiz.LaudoPDF && raiz.LaudoPDF.logoEngetap) || null;
+  const logo = (larg, extra) => Object.assign(g ? { svg: svgDoLogo(g), width: larg } : logoPng ? { image: logoPng, width: larg } : { text: 'ENGETAP®', bold: true, color: AZUL, fontSize: larg / 6 }, extra || {});
+  const FX = 30 * MM, FD = 13 * MM, FY = 13 * MM, PAD = 26;          // a moldura: 30 mm à esquerda (os furos), 13 mm nos outros lados
+  const ML = FX + PAD, MR = FD + PAD, MT = FY + PAD, altura = A4H - 2 * MT;
+  const divs = divisorias(d, opc), foto = fotoCapa(d, opc);
+  const funcao = vazio(V.funcao) ? (vazio(V.nome) ? 'Vaso de pressão' : V.nome) : V.funcao;
+  const C = [];
+  // 1 · a capa (sem os furos: vai na frente do fichário), centrada na folha
+  C.push({ margin: [-(ML - MR), 0, 0, 0], stack: [
+    logo(280, { alignment: 'center', margin: [0, 0, 0, 26] }),
+    { text: emp.razao_social || emp.nome_fantasia || '', style: 'capaEmp' },
+    { text: emp.cnpj ? 'CNPJ: ' + emp.cnpj : '', style: 'capaCnpj' },
+    foto ? { image: foto, fit: [440, 330], alignment: 'center', margin: [0, 26, 0, 22] } : { text: '', margin: [0, 190, 0, 0] },
+    { text: V.tag || '', style: 'capaTag' },
+    { text: [funcao, V.numero_tap ? 'Número TAP: ' + V.numero_tap : null].filter(Boolean).join(' · '), style: 'capaSub' }] });
+  // 2 · a folha de rosto: a função, a TAG, o Nº TAP e a lista das divisórias (no pé da moldura)
+  C.push(logo(150, { pageBreak: 'before' }));
+  C.push({ stack: [{ text: String(funcao).toUpperCase(), style: 'rostoTit' }, { text: V.tag || '', style: 'rostoTit', margin: [0, 10, 0, 0] },
+    V.numero_tap ? { text: 'Número TAP: ' + V.numero_tap, style: 'rostoSub', margin: [0, 14, 0, 0] } : { text: '' }], margin: [0, 170, 0, 0] });
+  C.push({ absolutePosition: { x: ML + 24, y: A4H - MT - 34 - divs.length * 24 }, stack: divs.map((x, i) => ({ text: (i + 1) + '. ' + x.nome, style: 'rostoLista' })) });
+  // 3 · uma folha por divisória, com o título no meio
+  divs.forEach(x => {
+    C.push(logo(150, { pageBreak: 'before' }));
+    C.push({ text: x.linhas.join('\n'), style: 'divTit', margin: [0, Math.max(40, (altura - 60 - x.linhas.length * 48) / 2 - 30), 0, 0] });
+  });
+  return {
+    pageSize: 'A4', pageMargins: [ML, MT, MR, MT],
+    info: { title: 'Fichário · ' + (V.tag || ''), author: 'Engetap', creator: 'TapFlow · TapDoc', producer: 'TapFlow · TapDoc (pdfmake)', subject: 'NR-13 · Fichário · ' + (V.tag || '') },
+    background: (pag) => pag === 1 ? null : { canvas: [{ type: 'rect', x: FX, y: FY, w: A4W - FX - FD, h: A4H - 2 * FY, lineWidth: 1.1, lineColor: '#1F2A33' }] },
+    content: C,
+    styles: {
+      capaEmp: { fontSize: 15, bold: true, alignment: 'center' }, capaCnpj: { fontSize: 11, alignment: 'center', margin: [0, 2, 0, 0] },
+      capaTag: { fontSize: 22, bold: true, alignment: 'center' }, capaSub: { fontSize: 12, alignment: 'center', margin: [0, 4, 0, 0] },
+      rostoTit: { fontSize: 28, alignment: 'center', lineHeight: 1.15 }, rostoSub: { fontSize: 15, alignment: 'center' },
+      rostoLista: { fontSize: 12, margin: [0, 0, 0, 9] }, divTit: { fontSize: 36, alignment: 'center', lineHeight: 1.25 }
+    },
+    defaultStyle: { font: 'Roboto', fontSize: 11, color: '#1F2A33' }
+  };
+}
+
+// ── as lombadas (DP13) ───────────────────────────────────────────────────────
+const TIPO_EQUIP = { vaso: 'Vaso de Pressão', caldeira: 'Caldeira', tubulacao: 'Tubulação', tanque: 'Tanque' };
+const LARGURAS = [40, 60], LOMB_ALT = 265;                            // mm: 40 (padrão) ou 60 (o fichário maior); a altura da tira
+/** A lombada de um vaso, da fotografia do laudo: extra = { link (o do TapWeb, o mesmo da placa), foto | imagens, largura }. */
+function lombadaDe(d, extra) {
+  extra = extra || {};
+  const emp = (d && d.empresa) || {}, V = (d && d.vaso) || {}, cams = V.camaras || [];
+  return { tag: V.tag || '', tipo: TIPO_EQUIP[V.nr13_tipo] || TIPO_EQUIP.vaso, fluido: [...new Set(cams.map(k => k.fluido).filter(Boolean))].join(' / ') || V.fluido || null,
+    local: vazio(V.localizacao) ? null : String(V.localizacao).trim(), link: vazio(extra.link) ? null : String(extra.link).trim(),
+    foto: fotoCapa(d, extra), logoCliente: ehImg(emp.logo) ? emp.logo : null, largura: LARGURAS.indexOf(Number(extra.largura)) >= 0 ? Number(extra.largura) : 40 };
+}
+/** O que a lombada não tem e sai sem (a tela avisa): o QR code sem o link do TapWeb, a foto, a logomarca do cliente. */
+function avisosLombada(x) {
+  const a = [];
+  if (!x.link) a.push('sem o link do TapWeb: sai sem o QR code');
+  if (!x.foto) a.push('sem a foto do vaso');
+  if (!x.logoCliente) a.push('sem a logomarca do cliente');
+  return a;
+}
+function qrModulos(qrcode, texto) {
+  const q = qrcode(0, 'M'); q.addData(String(texto)); q.make();
+  const n = q.getModuleCount(), linhas = [];
+  for (let r = 0; r < n; r++) { const l = []; for (let c = 0; c < n; c++) l.push(q.isDark(r, c)); linhas.push(l); }
+  return { n, linhas };
+}
+/**
+ * As lombadas da OS (DP13): 2 por folha A4, cada uma com a largura escolhida para o vaso (40 ou 60 mm) e 265 mm de altura.
+ * De cima para baixo: a logomarca do cliente; "TAG – Vaso de Pressão – Fluido" e "Local: …" em pé; o QR code do link do
+ * TapWeb (o mesmo da placa); a foto do vaso; o logo da Engetap com o ®. Sem a logo antiga da Proper.
+ * itens: os de lombadaDe(); opc: { qrcode (a biblioteca vendor/qrcode.js), letras, logoEngetap, os, cliente }. Sem itens, null.
+ */
+function lombadas(itens, opc) {
+  opc = opc || {}; itens = (itens || []).filter(Boolean);
+  if (!itens.length) return null;
+  const Q = opc.qrcode || raiz.qrcode, g = logoSvg(opc.letras), logoPng = opc.logoEngetap || (raiz.LaudoPDF && raiz.LaudoPDF.logoEngetap) || null;
+  const dims = raiz.LaudoPDF && raiz.LaudoPDF.dimsImg ? raiz.LaudoPDF.dimsImg : () => null;
+  const y0 = (297 - LOMB_ALT) / 2 * MM, H = LOMB_ALT * MM, x0 = 15 * MM, VAO = 10 * MM, PAD = 3 * MM, ESP = 4 * MM;
+  const C = [];
+  /** a imagem centrada na caixa (com as medidas da imagem); sem as medidas, encaixada no canto */
+  const imagem = (url, x, y, w, h) => { const z = dims(url), k = z && z.w && z.h ? Math.min(w / z.w, h / z.h) : null;
+    return k ? { image: url, width: z.w * k, height: z.h * k, absolutePosition: { x: x + (w - z.w * k) / 2, y: y + (h - z.h * k) / 2 } } : { image: url, fit: [w, h], absolutePosition: { x, y } }; };
+  for (let p = 0; p * 2 < itens.length; p++) {
+    let svg = '', x = x0; const imgs = [];
+    itens.slice(p * 2, p * 2 + 2).forEach(it => {
+      const W = it.largura * MM, util = W - 2 * PAD, cx = x + W / 2;
+      svg += '<rect x="' + n1(x) + '" y="' + n1(y0) + '" width="' + n1(W) + '" height="' + n1(H) + '" fill="none" stroke="#1F2A33" stroke-width="0.6"/>';
+      svg += '<text x="' + n1(x) + '" y="' + n1(y0 - 5) + '" font-family="Roboto" font-size="7" fill="#5B6770">' + xml(String(it.tag || 'sem TAG').slice(0, it.largura >= 60 ? 22 : 12) + ' · ' + it.largura + ' mm') + '</text>';
+      // em cima: a logomarca do cliente
+      const hLogo = 0.42 * W, yLogo = y0 + ESP;
+      if (it.logoCliente) imgs.push(imagem(it.logoCliente, x + PAD, yLogo, util, hLogo));
+      // embaixo, de baixo para cima: o logo da Engetap, a foto do vaso e o QR code
+      let yb = y0 + H - ESP;
+      const hEng = g ? util * g.h / g.w : util * 0.34; yb -= hEng;
+      if (g) svg += '<g transform="translate(' + n1(x + PAD) + ' ' + n1(yb) + ') scale(' + (util / g.w).toFixed(5) + ')">' + g.corpo + '</g>';
+      else if (logoPng) imgs.push(imagem(logoPng, x + PAD, yb, util, hEng));
+      else svg += '<text x="' + n1(cx) + '" y="' + n1(yb + hEng * 0.7) + '" text-anchor="middle" font-family="Roboto" font-weight="bold" font-size="' + n1(util / 6) + '" fill="' + AZUL + '">ENGETAP®</text>';
+      if (it.foto) { const hF = 0.6 * W; yb -= ESP + hF; imgs.push(imagem(it.foto, x + PAD, yb, util, hF)); }
+      if (it.link && typeof Q === 'function') {
+        const lado = 0.6 * W, qr = qrModulos(Q, it.link), mod = lado / (qr.n + 4), qx = cx - lado / 2; yb -= ESP + lado;
+        svg += '<rect x="' + n1(qx) + '" y="' + n1(yb) + '" width="' + n1(lado) + '" height="' + n1(lado) + '" fill="#FFFFFF"/>';
+        let dd = '';
+        qr.linhas.forEach((l, r) => { let c = 0; while (c < qr.n) { if (!l[c]) { c++; continue; } let f = c; while (f < qr.n && l[f]) f++;
+          dd += 'M' + n1(qx + (c + 2) * mod) + ' ' + n1(yb + (r + 2) * mod) + 'h' + n1((f - c) * mod) + 'v' + n1(mod + 0.03) + 'h-' + n1((f - c) * mod) + 'z'; c = f; } });
+        svg += '<path d="' + dd + '" fill="#000000"/>';
+      }
+      // no meio, em pé (lê-se de baixo para cima): "TAG – Vaso de Pressão – Fluido" e, na linha de baixo, "Local: …"
+      const topo = yLogo + (it.logoCliente ? hLogo : 0) + ESP, cabe = yb - ESP - topo, cy = topo + cabe / 2;
+      const l1 = [it.tag || 'sem TAG', it.tipo, it.fluido].filter(Boolean).join(' – '), l2 = it.local ? 'Local: ' + it.local : null;
+      const tam = (t, base, fator) => Math.max(7, Math.min(base, cabe / (Math.max(1, t.length) * fator)));
+      const f1 = tam(l1, it.largura >= 60 ? 22 : 17, 0.58), f2 = l2 ? tam(l2, it.largura >= 60 ? 16 : 12.5, 0.54) : 0;
+      const aperta = (t, f, fator) => t.length * f * fator > cabe ? ' textLength="' + n1(cabe) + '" lengthAdjust="spacingAndGlyphs"' : '';
+      const entre = l2 ? Math.max(5, f1 * 0.45) : 0, larg = 0.72 * f1 + (l2 ? entre + 0.72 * f2 : 0), yl1 = -larg / 2 + 0.72 * f1;
+      svg += '<g transform="translate(' + n1(cx) + ' ' + n1(cy) + ') rotate(-90)">'
+        + '<text x="0" y="' + n1(yl1) + '" text-anchor="middle" font-family="Roboto" font-weight="bold" font-size="' + n1(f1) + '" fill="#1F2A33"' + aperta(l1, f1, 0.58) + '>' + xml(l1) + '</text>'
+        + (l2 ? '<text x="0" y="' + n1(yl1 + entre + 0.72 * f2) + '" text-anchor="middle" font-family="Roboto" font-size="' + n1(f2) + '" fill="#1F2A33"' + aperta(l2, f2, 0.54) + '>' + xml(l2) + '</text>' : '') + '</g>';
+      x += W + VAO;
+    });
+    C.push(Object.assign({ svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + A4W + ' ' + A4H + '" width="' + A4W + '" height="' + A4H + '">' + svg + '</svg>',
+      width: A4W, absolutePosition: { x: 0, y: 0 } }, p ? { pageBreak: 'before' } : {}));
+    imgs.forEach(i => C.push(i));
+  }
+  const tit = 'Lombadas · ' + [opc.cliente, opc.os ? osRot(opc.os) : null].filter(Boolean).join(' · ');
+  return { pageSize: 'A4', pageMargins: [0, 0, 0, 0],
+    info: { title: tit, author: 'Engetap', creator: 'TapFlow · TapDoc', producer: 'TapFlow · TapDoc (pdfmake)', subject: 'NR-13 · Lombadas do fichário' },
+    content: C, defaultStyle: { font: 'Roboto', fontSize: 10, color: '#1F2A33' } };
+}
+
+const DocumentosPDF = { resumo, registro, fatosRegistro, textosDaProposta, dataExtenso, nome, limpo, tagNome, osRot, ROTULO,
+  kit, divisorias, fichario, lombadaDe, lombadas, avisosLombada, logoSvg, DIVISORIAS, LARGURAS, versao: VERSAO };
 if (typeof module !== 'undefined' && module.exports) module.exports = DocumentosPDF; else raiz.DocumentosPDF = DocumentosPDF;
 })(typeof window !== 'undefined' ? window : globalThis);

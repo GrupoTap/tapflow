@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S166';   // S166: issue 30, Parte 3 — TapDoc E37 (o Prontuário (Reconstituído), com número P; a caixa "Reconstituir o prontuário"; doc/laudo-pdf.js S166; doc/documentos-pdf.js D3; 436)
+const VERSAO = 'H16-S167';   // S167: issue 30, Parte 4 — TapDoc E38 (o fichário: capa, folha de rosto e divisórias; as lombadas de 40 ou 60 mm; doc/documentos-pdf.js D4) e Cadastros CAD5 ("Imprime a pasta" no cliente) (212, 437)
+// const VERSAO = 'H16-S166';   // S166: issue 30, Parte 3 — TapDoc E37 (o Prontuário (Reconstituído), com número P; a caixa "Reconstituir o prontuário"; doc/laudo-pdf.js S166; doc/documentos-pdf.js D3; 436)
 // const VERSAO = 'H16-S165';   // S165: issue 30, Parte 2 — TapDoc E36 (o Registro de Segurança, livro completo ou só a anotação; a caixa "já tem a pasta"; doc/documentos-pdf.js D2; 435)
 // S164: issue 30, Parte 1 — TapDoc E35 (os documentos da inspeção em arquivos próprios: o relatório só com a ART; o Resumo; os certificados M/V; todos assinados com o token; "Baixar tudo"; doc/documentos-pdf.js D1; laudo-pdf.js S164; 434)
 // const VERSAO = 'H16-S163';   // S163: TapDoc E34 (issues 12, 18, 20 e 21: as recomendações numa lista só e a justificativa do prazo; doc/recomendacoes.js RC1; laudo-pdf.js S163; 433)
@@ -87,7 +88,7 @@ const ESSENCIAIS = [
   './doc/',
   './doc/motor-calculo-nr13.js?v=R00.6',
   './doc/recomendacoes.js?v=RC1',   // S163: a lista das recomendações e do prazo (a revisão sem sinal precisa dela)
-  './doc/documentos-pdf.js?v=D3',   // S164: os nomes dos arquivos e o Resumo; S165: o Registro de Segurança; S166: os textos do Prontuário na minuta
+  './doc/documentos-pdf.js?v=D4',   // S164: os nomes dos arquivos e o Resumo; S165: o Registro de Segurança; S166: os textos do Prontuário na minuta
   // S88 · Acessos P1: a tela do admin
   './acessos/',
   // S116 · TapSeg 1: a Segurança do Trabalho
