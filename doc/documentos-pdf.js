@@ -8,11 +8,13 @@
  *   · DocumentosPDF.registro(d, opc) — o Registro de Segurança (D2 · S165 · issue 30, Parte 2: DP8 e DP9), "livro" ou "anotacao";
  *   · DocumentosPDF.nome(tipo, ctx) — o nome padrão do arquivo (DP5);
  *   · DocumentosPDF.ROTULO          — o nome de cada documento nas telas.
- * Partes 3 e 4 (Prontuário, fichário e lombadas) entram aqui depois.
+ *   · DocumentosPDF.textosDaProposta(mudancas, bloco) — a proposta que espera o PLH vira o bloco de textos da minuta ("registro" ou "prontuario").
+ * D3 · S166 · issue 30, Parte 3: o Prontuário (Reconstituído) usa as seções do próprio laudo-pdf.js (LaudoPDF.montar com opc.prontuario; DP1, DP11);
+ *   aqui ficam o nome do arquivo dele (ROTULO.prontuario) e os textos da proposta para a minuta. Parte 4 (fichário e lombadas) entra aqui depois.
  */
 (function (raiz) {
 'use strict';
-const VERSAO = 'D2-S165-2026-11-14';
+const VERSAO = 'D3-S166-2026-11-15';
 const AZUL = '#1B6FA9', CINZA = '#515252', FAIXA = '#5B6770', VERDE = '#1E6B3A', VERM = '#A62D18';
 
 // ── o nome dos arquivos (DP5) ────────────────────────────────────────────────
@@ -360,10 +362,10 @@ function registro(d, opc) {
     defaultStyle: { font: 'Roboto', fontSize: 10.5, color: '#000000' }
   };
 }
-/** A proposta de textos ainda não aprovada vira o bloco do Registro (para a minuta): [{ chave:'registro.x', depois }] → { x: … }. */
-function textosDaProposta(mudancas) {
-  const out = {};
-  (mudancas || []).forEach(m => { const k = String(m.chave || ''); if (/^registro\.\w+$/.test(k) && typeof m.depois === 'string') out[k.slice(9)] = m.depois; });
+/** A proposta de textos ainda não aprovada vira o bloco do Registro ou do Prontuário (para a minuta): [{ chave:'registro.x', depois }] → { x: … }. */
+function textosDaProposta(mudancas, bloco) {
+  const out = {}, pre = (bloco || 'registro') + '.';   // D3: também "prontuario"
+  (mudancas || []).forEach(m => { const k = String(m.chave || ''); if (k.indexOf(pre) === 0 && /^\w+$/.test(k.slice(pre.length)) && typeof m.depois === 'string') out[k.slice(pre.length)] = m.depois; });
   return Object.keys(out).length ? out : null;
 }
 

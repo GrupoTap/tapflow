@@ -11,6 +11,8 @@
  * A conta da espessura mínima e da PMTA é a do motor (motor-calculo-nr13.js);
  * aqui ela só é ESCRITA com os números (a memória de cálculo do laudo).
  *
+ * S166 · issue 30, Parte 3 (15/11/2026): o Prontuário (Reconstituído) sai deste mesmo gerador — montar(d, { prontuario: { numero, textos } }):
+ *   só as seções do sumário de 12 (DP11), renumeradas, com a capa "RECONSTITUIÇÃO DE PRONTUÁRIO" e "Prontuário Nº P…" no cabeçalho; o relatório não muda.
  * S164 · issue 30, Parte 1 (13/11/2026): o logo da Engetap e a grafia da cidade exportados (logoEngetap, cidadeLaudo) para o documentos-pdf.js (o Resumo); o relatório
  *   não muda aqui: quem deixa de juntar os certificados é a página (doc/index.html, gerarLaudo).
  * S161 · issues 16, 17, 22, 24, 25 e 26 (13/11/2026): a foto no 7.4 (do teste; sem teste, o estado geral do vaso); a figura 1 + 2
@@ -372,6 +374,14 @@ function espessuras(d) {
 function montar(d, opc) {
   opc = opc || {};
   const M = (d.modelo && d.modelo.blocos) || {}, T = M.titulos || {};
+  // S166 · issue 30, Parte 3 (DP11): o Prontuário (Reconstituído) sai DESTE gerador (mesmas contas, mesmo mapa, mesmo texto), da mesma
+  // fotografia: opc.prontuario = { numero, textos }. Ficam só as seções do sumário de 12 — objetivo, referências, abreviações, empresa,
+  // equipamento (vaso e acessórios), espessuras com o mapa, teste hidrostático, espessura mínima, PMTA, categoria, conclusão e anexos —,
+  // renumeradas; o exame visual, as recomendações e os prazos ficam no relatório. Os textos só dele vêm de blocos.prontuario (XP).
+  // NR-13 (Portaria MTP nº 4.219/2022), itens 13.5.1.6 e 13.5.4.12.
+  const PRT = opc.prontuario || null, XP = PRT ? (PRT.textos || M.prontuario || {}) : null;
+  const N_PRT = { '6': '5', '6.1': '5.1', '6.2': '5.2', '7.3': '6', '7.4': '7', '12': '11', '15': '12' };
+  const nS = n => PRT && N_PRT[n] ? N_PRT[n] : n;
   // S146 · item 79: os textos prontos (o caso escolhido em campo ou na revisão), da versão do modelo do laudo
   const PR = M.prontos || {};
   const trocarPalavra = (tipo, k, t) => { t = String(t || '');
@@ -387,6 +397,8 @@ function montar(d, opc) {
   // S145 · A2: o carimbo (o desenho confirmado pelo PLH e o texto da aprovação com a digital); só no laudo com número
   const CAR = opc.numero && opc.carimbo && /^data:image\/(png|jpe?g);base64,/i.test(opc.carimbo.imagem || '') && opc.carimbo.texto ? opc.carimbo : null;
   const numero = opc.numero ? opc.numero + (opc.revisao ? ' Rev. ' + opc.revisao : '') : (opc.marca || 'RASCUNHO');
+  const numeroP = PRT ? (PRT.numero ? PRT.numero + (opc.revisao ? ' Rev. ' + opc.revisao : '') : 'a numerar') : null;   // S166: P + mês + ano − sequência
+  const relatorioP = opc.numero ? numero : 'a numerar';
   const ini = dataSP(I.inicio), fim = dataSP(I.termino || I.inicio);
   const dataTopo = dataBR(fim);
   const cams = (V.camaras || []), rcams = d.resultado_camaras || [], rcomps = d.resultado_componentes || [];
@@ -394,10 +406,17 @@ function montar(d, opc) {
   const numeroTap = V.numero_tap || null;   // S143 · item 63: o campo nasce na D2; sem ele, a linha não sai
   let fig = 0, quadro = 0;
   const FOTO_SO = [420, 300];   // S153 · item 9: a foto sozinha
-  const C = [];   // o conteúdo
+  const CONT = []; let C = CONT;   // o conteúdo
+  // S166: no Prontuário, a seção que fica só no relatório é montada "calada" (as contas e os dados dela continuam valendo para as
+  // seções seguintes; o que ela escreveria e as figuras e quadros que numeraria não contam)
+  let figC = 0, quadroC = 0;
+  const calar = on => { if (!PRT) return;
+    if (on) { if (C === CONT) { figC = fig; quadroC = quadro; C = []; } }
+    else if (C !== CONT) { C = CONT; fig = figC; quadro = quadroC; } };
   const sec = (n, t) => C.push({ text: n + '  ' + t, style: 'h1', tocItem: true, tocMargin: [0, 0, 0, 0], headlineLevel: 1 });
   const sub = (n, t) => C.push({ text: n + '  ' + t, style: 'h2', tocItem: true, tocMargin: [14, 0, 0, 0], headlineLevel: 2 });
-  const par = (t, extra) => { if (t && (typeof t !== 'string' || t.trim())) C.push(Object.assign({ text: Array.isArray(t) ? t : presos(t), style: 'par' }, extra || {})); };
+  const par = (t, extra) => { if (PRT && typeof t === 'string') t = t.replace(/recomendações da seção 11/g, 'recomendações do Relatório de Inspeção');   // S166
+    if (t && (typeof t !== 'string' || t.trim())) C.push(Object.assign({ text: Array.isArray(t) ? t : presos(t), style: 'par' }, extra || {})); };
   const lista = (itens, ol) => { const xs = (itens || []).filter(Boolean).map(presos); if (xs.length) C.push(Object.assign({ style: 'lista', margin: [14, 2, 0, 8] }, ol ? { ol: xs } : { ul: xs })); };
   const vazio = x => x == null || x === '' || /^\s*(—|-+|n[ãa]o h[áa]|n\/a)\s*$/i.test(String(x));
   // S153: o bloco que não se parte (quadro pequeno, conta) leva junto o título que vem logo antes dele, para o título não ficar sozinho no pé da página
@@ -482,20 +501,22 @@ function montar(d, opc) {
     { image: LOGO_ENGETAP, width: 280, alignment: 'center', margin: [0, -36, 0, 20] },   // S153 · item 6: a capa não tem cabeçalho; o logo sobe
     { text: emp.razao_social || '', style: 'capaEmp' },
     { text: emp.cnpj ? 'CNPJ: ' + emp.cnpj : '', style: 'capaCnpj' },
-    { text: (M.capa_tipo || {})[I.tipo] || 'INSPEÇÃO', style: 'capaTipo' },
+    { text: PRT ? (XP.capa || 'RECONSTITUIÇÃO DE PRONTUÁRIO') : (M.capa_tipo || {})[I.tipo] || 'INSPEÇÃO', style: 'capaTipo' },   // S166 · DP11 (quadro 8)
     // S161 · issue 25: a capa só com o tipo (PERIÓDICA ou EXTRAORDINÁRIA), sem o "Exame externo", como no modelo antigo
     capaFoto ? { image: img[capaFoto.path], fit: [470, 320], alignment: 'center', margin: [0, 14, 0, 14] } : { text: '', margin: [0, 120, 0, 0] },
     { text: V.tag || '', style: 'capaTag' },
     // S143 · item 63: o Número TAP no lugar da OS (a OS não aparece no laudo)
-    { text: [numeroTap ? 'Número TAP ' + numeroTap : null, opc.numero ? 'Relatório nº ' + numero : null].filter(Boolean).join(' · '), style: 'capaSub' },
+    { text: [numeroTap ? 'Número TAP ' + numeroTap : null, PRT ? 'Prontuário nº ' + numeroP : opc.numero ? 'Relatório nº ' + numero : null].filter(Boolean).join(' · '), style: 'capaSub' },
     { text: [cidadeLaudo(emp.cidade), emp.uf].filter(Boolean).join(' – '), style: 'capaRodape', margin: [0, 24, 0, 0] },
-    { text: txt(ini === fim ? M.capa_data_um_dia : M.capa_data_periodo, { inicio: dataBR(ini), termino: dataBR(fim) }), style: 'capaRodape', pageBreak: 'after' }
+    { text: txt(PRT ? (XP.capa_data || 'Reconstituição de prontuário realizada em {{data}}') : ini === fim ? M.capa_data_um_dia : M.capa_data_periodo,
+        { inicio: dataBR(ini), termino: dataBR(fim), data: dataBR(fim) }), style: 'capaRodape', pageBreak: 'after' }
   ];
   C.push(...capa);
   C.push({ toc: { title: { text: 'SUMÁRIO', style: 'sumario' }, textStyle: { fontSize: 11 }, numberStyle: { fontSize: 11 } }, pageBreak: 'after' });
 
   // ── 1 a 3 ───────────────────────────────────────────────────────────────
-  sec('1', T.objetivo || 'OBJETIVO'); par(M.objetivo);
+  sec('1', T.objetivo || 'OBJETIVO');
+  par(PRT ? txt(XP.objetivo, { tag: V.tag || '—', tap: numeroTap ? ', Número TAP ' + numeroTap : '', empresa: emp.razao_social || emp.nome_fantasia || '—', relatorio: relatorioP }) : M.objetivo);
   sec('2', T.referencias || 'REFERÊNCIAS'); lista(M.referencias);
   sec('3', T.abreviacoes || 'LISTA DE ABREVIAÇÕES'); lista(M.abreviacoes);
   // ── 4 · a empresa (S143 · item 78: ramo, CNAE e grau de risco do cadastro; linha vazia não sai) ──
@@ -514,6 +535,7 @@ function montar(d, opc) {
     ['Telefone', resp ? resp.telefone : null]
   ], [120, '*']);
   // ── 5 · localização ─────────────────────────────────────────────────────
+  calar(true);   // S166: a localização fica só no relatório
   sec('5', T.localizacao || 'LOCALIZAÇÃO DO EQUIPAMENTO');
   par(txt(M.localizacao, { local: V.localizacao ? ', em ' + String(V.localizacao).replace(/[.\s]+$/, '') : '',
     coordenadas: V.latitude != null ? ', nas coordenadas ' + fmt(V.latitude, 6) + ', ' + fmt(V.longitude, 6) : '',
@@ -521,8 +543,9 @@ function montar(d, opc) {
   fotos('localizacao');
 
   // ── 6 · o equipamento ───────────────────────────────────────────────────
-  sec('6', T.equipamento || 'IDENTIFICAÇÃO DO EQUIPAMENTO');
-  sub('6.1', T.vaso || 'Identificação do vaso de pressão');
+  calar(false);
+  sec(nS('6'), T.equipamento || 'IDENTIFICAÇÃO DO EQUIPAMENTO');
+  sub(nS('6.1'), T.vaso || 'Identificação do vaso de pressão');
   const funcao = V.funcao ? String(V.funcao).toLowerCase().replace(/^(um|uma) /, '') : null;
   const qVaso = quadro + 1;
   // S148 · item 91: a placa com três respostas (com placa indelével, ilegível ou não indelével, sem placa)
@@ -563,7 +586,7 @@ function montar(d, opc) {
   C.push(...blocoPlacas);
   LUG.filter(l => l.secao === 'plaqueta' && !fotoDoLugar(l) && String(SEMAC[l.lugar] || '').trim() && !MESMA_FOTO.test(SEMAC[l.lugar]))   // S149 · item 82: a mesma foto serve para as duas
     .forEach(l => par(presos(l.rotulo) + ': sem foto (' + String(SEMAC[l.lugar]).trim().replace(/[.\s]+$/, '') + ').', { style: 'legenda' }));
-  sub('6.2', T.acessorios || 'Identificação dos acessórios do vaso de pressão');
+  sub(nS('6.2'), T.acessorios || 'Identificação dos acessórios do vaso de pressão');
   const acs = d.acessorios || [];
   if (!acs.length) par(M.acessorios_nenhum);
   else {
@@ -593,6 +616,7 @@ function montar(d, opc) {
   });
 
   // ── 7 · o escopo e os exames ────────────────────────────────────────────
+  calar(true);   // S166: o escopo, o exame visual e a boroscopia ficam só no relatório
   sec('7', T.escopo || 'ESCOPO DA INSPEÇÃO');
   par(txt(M.escopo, { periodo: ini === fim ? 'em ' + dataBR(ini) : 'de ' + dataBR(ini) + ' a ' + dataBR(fim) }));
   const B = d.boroscopia || {}, TE = d.teste || {};
@@ -625,6 +649,8 @@ function montar(d, opc) {
   else { par(txt(M.boro_nao, { motivo: B.motivo_nao || 'não informado' })); if (boroSubst(B.motivo_nao)) par(M.boro_substituida); }
   fotos('boroscopia');
   // 7.3 ultrassom
+  calar(false);   // S166: no Prontuário, a seção 6
+  if (PRT) sec(nS('7.3'), String(T.ultrassom || 'Medição de espessura por ultrassom').toUpperCase()); else
   sub('7.3', T.ultrassom || 'Medição de espessura por ultrassom');
   const med = d.medidor || {};
   const leit = d.leituras || [], comps = ativos;
@@ -672,6 +698,7 @@ function montar(d, opc) {
   fotosLugares(LUG.filter(l => l.secao === 'componentes'));
   fotos('componentes', T.fig_medicao || 'Medição de espessura', f => !deLugar(f));
   // 7.4 teste
+  if (PRT) sec(nS('7.4'), tituloTeste.toUpperCase()); else   // S166: no Prontuário, a seção 7
   sub('7.4', tituloTeste);
   const visOk = !nc.length && vis.some(x => x.conforme === true);
   const abaixoAlgum = ES.some(x => x.abaixo);
@@ -703,6 +730,7 @@ function montar(d, opc) {
     const fGeral = fTeste[0] || (d.fotos || []).find(f => f.secao === 'capa' && img[f.path]);
     if (fGeral) figura([img[fGeral.path]], T.fig_estado_geral || 'Estado geral do vaso de pressão', null, FOTO_74);
   }
+  calar(true);   // S166: as aferições ficam no relatório e nos certificados (o Prontuário cita os certificados nos anexos)
   // 7.5 e 7.6 aferições (S143 · itens 69, 74 e 75: "aferição", nunca "calibração", para o que a Engetap faz)
   const presentes = a => ['ausente', 'retirado'].indexOf(a.situacao) < 0;
   const unidadeTxt = (v, un) => v == null ? '—' : fmt(v, 2) + ' ' + String(un || 'bar').replace('kgf/cm2', 'kgf/cm²');
@@ -798,6 +826,7 @@ function montar(d, opc) {
   });
 
   // ── 8 · espessura mínima requerida ──────────────────────────────────────
+  calar(false);
   sec('8', T.calculo || 'ESPESSURA MÍNIMA REQUERIDA');
   const mat = V.material || {}, S = R.s_mpa != null ? Number(R.s_mpa) : Number(mat.s_mpa), cor = Number(R.corrosao_mm) || 0;
   par(M.calculo_intro);
@@ -923,6 +952,7 @@ function montar(d, opc) {
     [[R.classe_fluido, fmt(Math.abs(R.p_operacao_mpa), 3), fmt(R.volume_m3, 3), fmt(R.pv, 3), R.grupo != null ? String(R.grupo) : '—', { text: R.categoria || '—', style: 'td', bold: true }]], null);
 
   // ── 11 · recomendações ──────────────────────────────────────────────────
+  calar(true);   // S166: as recomendações, a conclusão da inspeção, os prazos e os responsáveis ficam só no relatório
   sec('11', T.recomendacoes || 'RECOMENDAÇÕES');
   par(M.recomendacoes_intro);
   const recs = d.recomendacoes || [];
@@ -1010,9 +1040,29 @@ function montar(d, opc) {
     { text: CAR.texto, style: 'nota', margin: [0, 2, 0, 0] }] });
   if (opc.numero) par('Relatório nº ' + numero + ', emitido em ' + dataBR(opc.emitidoEm) + (opc.revisao ? '. Revisão ' + opc.revisao + (opc.motivoRev ? ': ' + opc.motivoRev : '') : '') + '.', { color: CLARO });
 
+  // ── S166 · o Prontuário: 11 · conclusão e 12 · anexos (os textos só dele, blocos.prontuario) ──
+  calar(false);
+  if (PRT) {
+    sec(nS('12'), T.conclusao || 'CONCLUSÃO');
+    par(txt(XP.conclusao, { tag: V.tag || '—', pmta: bar(pmtaVaso), categoria: R.categoria || '—',
+      plh: plh ? [plh.nome, plh.registro].filter(x => !vazio(x)).join(' – ') : 'que emitir o laudo' }));
+    par(txt(XP.relatorio, { relatorio: relatorioP }));
+    par(XP.atualizacao);
+    if (CAR) C.push({ unbreakable: true, margin: [0, 4, 0, 8], stack: [
+      { image: CAR.imagem, fit: [170, 60] },
+      { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 220, y2: 0, lineWidth: 0.5, lineColor: CINZA }] },
+      { text: CAR.texto, style: 'nota', margin: [0, 2, 0, 0] }] });
+    if (PRT.numero) par(txt(XP.emitido || 'Prontuário nº {{numero}}, emitido em {{data}}.', { numero: numeroP, data: dataBR(opc.emitidoEm) })
+      + (opc.revisao && opc.motivoRev ? ' Revisão ' + opc.revisao + ': ' + opc.motivoRev + '.' : ''), { color: CLARO });
+  }
   // ── 15 · anexos ─────────────────────────────────────────────────────────
-  sec('15', T.anexos || 'ANEXOS');
-  lista(anexosDoLaudo(d) || M.anexos);   // S148 · item 90: a mesma lista que o PDF junta (medidor, padrões, ART)
+  sec(nS('15'), T.anexos || 'ANEXOS');
+  const NOME_AC = a => a.tipo === 'manovacuometro' ? 'manovacuômetro' : a.tipo === 'manometro' ? 'manômetro' : (TIPOS_ACESS[a.tipo] || 'válvula de segurança').toLowerCase();
+  lista(PRT ? [txt(XP.anexo_relatorio, { relatorio: relatorioP })]
+      .concat(acs.filter(a => a.afericao && (a.afericao.resultado === 'aprovado' || a.afericao.resultado === 'reprovado'))
+        .map(a => txt(XP.anexo_certificado, { numero: a.afericao.codigo || 'a numerar', acessorio: NOME_AC(a) })))
+      .concat([txt(XP.anexo_art, { art: (d.art || {}).numero || '—' })])
+    : anexosDoLaudo(d) || M.anexos);   // S148 · item 90: a mesma lista que o PDF junta (medidor, padrões, ART)
 
   // ── a página ────────────────────────────────────────────────────────────
   const logoCli = emp.logo && /^data:image\/(png|jpe?g);base64,/i.test(emp.logo) ? emp.logo : null;
@@ -1024,14 +1074,14 @@ function montar(d, opc) {
     // S153 · issue 6: o cabeçalho em letra 10 e o rodapé cerca de 1 cm mais alto (o carimbo legível); a mesma margem com e sem o carimbo,
     // para o rascunho quebrar as páginas como o laudo emitido
     pageSize: 'A4', pageMargins: [50, 98, 45, 100],
-    info: { title: 'Relatório de inspeção ' + numero + ' · ' + (V.tag || ''), author: empresaM.nome || 'Engetap', creator: 'TapFlow · TapDoc', producer: 'TapFlow · TapDoc (pdfmake)',
-      subject: 'NR-13 · ' + (V.tag || '') + ' · modelo ' + ((d.modelo || {}).versao || '—') },
+    info: { title: (PRT ? 'Prontuário (Reconstituído) ' + numeroP : 'Relatório de inspeção ' + numero) + ' · ' + (V.tag || ''), author: empresaM.nome || 'Engetap', creator: 'TapFlow · TapDoc', producer: 'TapFlow · TapDoc (pdfmake)',
+      subject: 'NR-13 · ' + (PRT ? 'Prontuário (Reconstituído) · ' : '') + (V.tag || '') + ' · modelo ' + ((d.modelo || {}).versao || '—') },
     watermark: opc.marca ? { text: opc.marca, color: '#B42318', opacity: 0.12, bold: true, fontSize: opc.marca.length > 12 ? 38 : 70 } : undefined,
     header: (pag, total) => pag === 1 ? null : {
       margin: [50, 20, 45, 0],
       table: { widths: [112, '*', 190], body: [[
         logoCli ? { image: logoCli, fit: [104, 46], alignment: 'center', margin: [0, 3, 0, 0] } : { text: emp.nome_fantasia || emp.razao_social || '', style: 'cabTxt', margin: [0, cabDir.length > 1 ? 12 : 6, 0, 0] },
-        { stack: [{ text: 'Relatório nº ' + numero, style: 'cabNum' }, { text: 'ART: ' + ((d.art || {}).numero || '—'), style: 'cabTxt' }], alignment: 'center', margin: [0, cabDir.length > 1 ? 12 : 5, 0, 0] },
+        { stack: [{ text: PRT ? 'Prontuário Nº ' + numeroP : 'Relatório nº ' + numero, style: 'cabNum' }, { text: 'ART: ' + ((d.art || {}).numero || '—'), style: 'cabTxt' }], alignment: 'center', margin: [0, cabDir.length > 1 ? 12 : 5, 0, 0] },
         { table: { widths: [64, '*'], body: cabDir.concat([[{ text: dataTopo, style: 'cabMin' }, { text: 'Página ' + pag + ' de ' + total, style: 'cabMin' }]]) },
           layout: { hLineColor: '#C9D2D8', vLineColor: '#C9D2D8', paddingTop: () => 1, paddingBottom: () => 1 } }]] },
       layout: { hLineColor: '#C9D2D8', vLineColor: '#C9D2D8' }
@@ -1051,7 +1101,7 @@ function montar(d, opc) {
             : { text: plh ? plh.nome + '\n' + (plh.registro || '') : '', style: 'rodCar', alignment: 'right', width: 150, margin: [0, 8, 0, 0] }] }]
         .concat(CAR ? [{ text: CAR.texto, style: 'rodCar', alignment: 'right', margin: [0, 3, 0, 0] }] : []) };
     },
-    content: C,
+    content: CONT,
     // título não fica sozinho no pé da página. S153: o pdfmake conta como "seguintes" também os nós do cabeçalho e do rodapé
     // da página; aqui só vale o que vem ABAIXO do título, dentro da área do texto, e que não seja outro título
     pageBreakBefore: (no, seguintes) => !!no.headlineLevel && !!no.startPosition
@@ -1084,6 +1134,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, versao: 'R06a-S164-2026-11-13' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, versao: 'R06a-S166-2026-11-15' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
