@@ -192,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E38';   // E38 (S167 · 212 e 437): issue 30, Parte 4 — o fichário (capa, folha de rosto e divisórias; kit completo ou de inserção, pela caixa "já tem a pasta") e as lombadas (40 ou 60 mm, escolhidas ao baixar), gerados na hora (documentos-pdf.js D4); só para cliente com "Imprime a pasta" = sim
+const VERSAO = 'TapDoc E39';   // E39 (S168 · issue 34): na revisão, o quadro do link do TapWeb do vaso (o QR code da placa e da lombada): o aviso do que falta e o campo para colar o link ali mesmo (tf_placa_link_gravar, 431; sem SQL)
+// const VERSAO = 'TapDoc E38';   // E38 (S167 · 212 e 437): issue 30, Parte 4 — o fichário (capa, folha de rosto e divisórias; kit completo ou de inserção, pela caixa "já tem a pasta") e as lombadas (40 ou 60 mm, escolhidas ao baixar), gerados na hora (documentos-pdf.js D4); só para cliente com "Imprime a pasta" = sim
 // const VERSAO = 'TapDoc E37';   // E37 (S166 · 436): issue 30, Parte 3 — o Prontuário (Reconstituído) (laudo-pdf.js S166: as seções do próprio relatório, sumário de 12, capa "RECONSTITUIÇÃO DE PRONTUÁRIO" e "Prontuário Nº P…" no cabeçalho), com número P próprio, num PDF assinado com o token; a caixa "Reconstituir o prontuário nesta inspeção" na revisão e na tela do laudo; a coluna no quadro "Documentos da inspeção"; os textos pela proposta "Prontuário (Reconstituído)" em Textos do laudo; o próximo P do mês em Laudos › Configurar
 // E36 (S165 · 435): issue 30, Parte 2 — o Registro de Segurança (documentos-pdf.js D2): livro completo (termo de abertura, fabricante e caracterização, anotação) ou só a anotação, pela caixa "O cliente já tem a pasta (DataBook) deste vaso" (na revisão e na tela do laudo); o texto da anotação vem dos textos prontos aprovados pelo PLH (proposta s165); sai no "Aprovar e emitir", num PDF próprio, assinado com o token
 // E35 (S164 · 434): issue 30, Parte 1 — os documentos da inspeção em arquivos próprios: o relatório só com o laudo e a ART no fim; o Resumo (documentos-pdf.js D1) e os certificados de manômetro e de válvula, cada um num PDF, aprovados junto com o relatório e assinados com o token; os nomes padrão dos arquivos; o quadro "Documentos da inspeção" na tela da OS, a lista na tela do laudo e o "Baixar tudo" do vaso e da OS (.zip); laudo-pdf.js S164
@@ -1199,6 +1200,34 @@ function ligarPasta(insp, onde, depois){
   if (bP) bP.addEventListener('click', () => gravarP(bP, null));
 }
 async function pastaVer(insp){ try{ return await rpc('tf_insp_pasta_ver', { p_insp: insp }); }catch(e){ return null; } }
+// ── E39 (S168 · issue 34): o link do TapWeb na revisão ─────────────────────────
+// O QR code da placa de identificação e da lombada do fichário é o link da ficha do vaso no TapWeb (equipamentos.tapweb_link, 431).
+// Antes só se digitava no quadro "Placas" da OS; agora a revisão avisa o que falta e deixa colar o link ali (o mesmo campo: vale para os dois).
+async function qrVer(insp){
+  try{ const D = await rpc('tf_insp_documentos', { p_os: null, p_insp: insp }), v = (D.vasos || [])[0];
+    return v ? { equip: v.equipamento_id, tag: v.tag, link: v.tapweb_link || '', imprime: D.imprime_pasta !== false } : null; }catch(e){ return null; }
+}
+function cartaoQR(Q){
+  if (!Q) return '';
+  const onde = 'a placa de identificação' + (Q.imprime ? ' e a lombada do fichário' : '');
+  return '<div class="card" id="qrRevCard"><b>QR code da placa' + (Q.imprime ? ' e da lombada' : '') + ' (link da ficha no TapWeb)</b>'
+    + (Q.link ? '<p class="muted" style="margin:6px 0">Gravado: o QR de ' + onde + ' abre este link. Confira se é a ficha deste vaso (' + esc(Q.tag || '') + ').</p>'
+      : '<p class="alerta falta" style="margin:8px 0">Falta o link da ficha deste vaso no TapWeb. Sem ele, <b>a placa de identificação não sai</b>' + (Q.imprime ? ' e <b>a lombada sai sem o QR code</b>' : '')
+        + '. Abra a ficha do vaso no TapWeb, copie o endereço da página e cole aqui.</p>')
+    + '<div class="linha" style="flex-wrap:nowrap"><input class="t" id="qrLink" style="margin:0;min-width:220px" placeholder="https://…" value="' + esc(Q.link) + '">'
+    + '<button class="btn mini sec" id="qrGravar">Gravar</button></div>'
+    + '<div class="muted" style="margin-top:4px">É o mesmo link do quadro "Placas de identificação" da OS: gravar aqui ou lá vale para os dois.</div></div>';
+}
+function ligarQR(depois){
+  const b = $('qrGravar'); if (!b || !REV || !REV.qr) return;
+  b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
+    const link = ($('qrLink').value || '').trim();
+    if (link && !/^https:\/\/\S+$/i.test(link)){ U.toast('O link precisa começar com https:// e não pode ter espaço.', 'err'); return; }
+    try{ await rpc('tf_placa_link_gravar', { p_equip: REV.qr.equip, p_link: link });
+      U.toast(link ? (/tapweb/i.test(link) ? 'Link gravado: vale para a placa e a lombada.' : 'Link gravado. Confira: ele não parece ser do TapWeb.') : 'Link apagado.', 'ok'); await depois(); }
+    catch(e){ erro(e); }
+  }));
+}
 async function prontVer(insp){ try{ return await rpc('tf_insp_prontuario_ver', { p_insp: insp }); }catch(e){ return null; } }
 /** E37: os textos do Prontuário para a minuta, antes de o PLH aprovar: a proposta "s166" que espera (só para ver; a emissão não usa). */
 async function textosProntuarioMinuta(d){
@@ -1817,6 +1846,7 @@ async function telaRevisao(id, manter){
   try{ REV_TEXTOS = (await rpc('tf_laudo_textos_prontos')) || {}; REV_PRONTOS = REV_TEXTOS.prontos || null; }catch(e){ REV_TEXTOS = {}; REV_PRONTOS = null; }   // S146 · item 79 · E34
   REV.pasta = await pastaVer(id);   // E36 · issue 30, Parte 2 (DP8): a caixa "já tem a pasta"
   REV.pront = await prontVer(id);   // E37 · issue 30, Parte 3 (DP10): a caixa "Reconstituir o prontuário"
+  REV.qr = await qrVer(id);         // E39 · issue 34: o link do TapWeb (o QR da placa e da lombada)
   pintarRevisao();
 }
 // S148 · item 89: depois de gravar, a revisão volta ao MESMO quadro (não a um número de pixels) e realça a linha mexida
@@ -2073,6 +2103,7 @@ function pintarRevisao(){
           + (bo && bo.resultado === 'com_anomalia' && !bi.length ? '<p class="alerta falta" style="margin-top:6px">Com anomalia: anexe pelo menos uma imagem.</p>' : '')
           + '<div id="boroVisor"></div>'; })() + '</div>';
   h += cartaoPasta(REV.pasta, 'Rev', REV.pront);   // E36 · issue 30, Parte 2 (DP8) · E37 · Parte 3 (DP10)
+  h += cartaoQR(REV.qr);   // E39 · issue 34
   // ações
   h += '<div class="card linha acoesrev">';
   if (eu.pode && (e === 1 || e === 2)) h += '<button class="btn pri" id="revConcluir">Concluir a ' + (e === 1 ? 'Revisão 1' : 'Revisão 2') + '</button>';
@@ -2086,6 +2117,8 @@ function pintarRevisao(){
   const repintarPasta = async (P, R) => { REV.pasta = P || await pastaVer(REV.id); REV.pront = R || await prontVer(REV.id); const c = $('pastaRevCard'); if (!c) return;
     c.outerHTML = cartaoPasta(REV.pasta, 'Rev', REV.pront); ligarPasta(REV.id, 'Rev', repintarPasta); };
   ligarPasta(REV.id, 'Rev', repintarPasta);
+  const repintarQR = async () => { REV.qr = await qrVer(REV.id); const c = $('qrRevCard'); if (c){ c.outerHTML = cartaoQR(REV.qr); ligarQR(repintarQR); } };   // E39 · issue 34: só o quadro se refaz
+  ligarQR(repintarQR);
   ligarMapa().catch(e => console.warn('mapa', e));   // S151 · issue 7 (não trava a revisão)
 }
 // E9 (410): as próximas inspeções na aprovação. O PLH só ENCURTA (o banco confere);
