@@ -1001,7 +1001,9 @@ function ligarDownloads(cx, D, aviso){
     try{ await baixarZip(nomeVasoZip(D, v) + ' - ' + (D.cliente || '') + '.zip', itensZipVaso(D, v), aviso); }catch(e){ erro(e); }
   })));
   cx.querySelectorAll('[data-zipos]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
-    try{ await baixarZip((window.DocumentosPDF ? DocumentosPDF.osRot((D.os || {}).numero) : 'OS ' + ((D.os || {}).numero || '')) + ' - ' + (D.cliente || '') + '.zip', itensZipOS(D, () => largurasDoQuadro(cx)), aviso); }catch(e){ erro(e); }
+    const itens = itensZipOS(D, () => largurasDoQuadro(cx)), lb = itens.find(x => x.tipo === 'lombadas');
+    try{ await baixarZip((window.DocumentosPDF ? DocumentosPDF.osRot((D.os || {}).numero) : 'OS ' + ((D.os || {}).numero || '')) + ' - ' + (D.cliente || '') + '.zip', itens, aviso);
+      if (lb && lb.avisos.length) setTimeout(() => U.toast('As lombadas do .zip: ' + lb.avisos.join(' · ') + '.', 'err'), 2500); }catch(e){ erro(e); }
   })));
   // E38 · issue 30, Parte 4: o fichário do vaso e as lombadas (da OS inteira, ou só a deste vaso na tela do laudo), gerados na hora
   cx.querySelectorAll('[data-fich]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
@@ -1062,7 +1064,9 @@ async function gerarLombadas(D, vasos, larguras){
 /** As lombadas como um arquivo do .zip da OS (na raiz, DP15); larguras = função que lê as escolhas do quadro. */
 function lombArquivo(D, larguras){
   const vs = vasosLombada(D); if (!vs.length || !(window.DocumentosPDF && DocumentosPDF.lombadas)) return null;
-  return { tipo:'lombadas', nome:nomeArq('lombadas', { cliente:D.cliente, os:(D.os || {}).numero }), gerar:async () => (await gerarLombadas(D, vs, larguras ? larguras() : {})).bytes };
+  const it = { tipo:'lombadas', nome:nomeArq('lombadas', { cliente:D.cliente, os:(D.os || {}).numero }), avisos:[] };
+  it.gerar = async () => { const r = await gerarLombadas(D, vs, larguras ? larguras() : {}); it.avisos = r.avisos; return r.bytes; };   // os avisos aparecem depois do .zip (DP13: sem o link, sai sem o QR e avisa)
+  return it;
 }
 /** A coluna "Fichário" do quadro da OS: o kit do vaso e a largura da lombada dele. */
 function celFichario(D, v){
