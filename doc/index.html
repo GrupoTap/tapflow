@@ -192,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E37';   // E37 (S166 · 436): issue 30, Parte 3 — o Prontuário (Reconstituído) (laudo-pdf.js S166: as seções do próprio relatório, sumário de 12, capa "RECONSTITUIÇÃO DE PRONTUÁRIO" e "Prontuário Nº P…" no cabeçalho), com número P próprio, num PDF assinado com o token; a caixa "Reconstituir o prontuário nesta inspeção" na revisão e na tela do laudo; a coluna no quadro "Documentos da inspeção"; os textos pela proposta "Prontuário (Reconstituído)" em Textos do laudo; o próximo P do mês em Laudos › Configurar
+const VERSAO = 'TapDoc E38';   // E38 (S167 · 212 e 437): issue 30, Parte 4 — o fichário (capa, folha de rosto e divisórias; kit completo ou de inserção, pela caixa "já tem a pasta") e as lombadas (40 ou 60 mm, escolhidas ao baixar), gerados na hora (documentos-pdf.js D4); só para cliente com "Imprime a pasta" = sim
+// const VERSAO = 'TapDoc E37';   // E37 (S166 · 436): issue 30, Parte 3 — o Prontuário (Reconstituído) (laudo-pdf.js S166: as seções do próprio relatório, sumário de 12, capa "RECONSTITUIÇÃO DE PRONTUÁRIO" e "Prontuário Nº P…" no cabeçalho), com número P próprio, num PDF assinado com o token; a caixa "Reconstituir o prontuário nesta inspeção" na revisão e na tela do laudo; a coluna no quadro "Documentos da inspeção"; os textos pela proposta "Prontuário (Reconstituído)" em Textos do laudo; o próximo P do mês em Laudos › Configurar
 // E36 (S165 · 435): issue 30, Parte 2 — o Registro de Segurança (documentos-pdf.js D2): livro completo (termo de abertura, fabricante e caracterização, anotação) ou só a anotação, pela caixa "O cliente já tem a pasta (DataBook) deste vaso" (na revisão e na tela do laudo); o texto da anotação vem dos textos prontos aprovados pelo PLH (proposta s165); sai no "Aprovar e emitir", num PDF próprio, assinado com o token
 // E35 (S164 · 434): issue 30, Parte 1 — os documentos da inspeção em arquivos próprios: o relatório só com o laudo e a ART no fim; o Resumo (documentos-pdf.js D1) e os certificados de manômetro e de válvula, cada um num PDF, aprovados junto com o relatório e assinados com o token; os nomes padrão dos arquivos; o quadro "Documentos da inspeção" na tela da OS, a lista na tela do laudo e o "Baixar tudo" do vaso e da OS (.zip); laudo-pdf.js S164
 // const VERSAO = 'TapDoc E34';   // E34 (S163 · 433): issues 12, 18, 20 e 21 — as recomendações numa lista só (recomendacoes.js RC1: a mesma do celular e do laudo; o revisor tira e edita qualquer uma), todas com "Que…", a limpeza uma vez só; a justificativa do prazo menor numa lista (A1, A2, B, Outros); laudo-pdf.js S163
@@ -969,7 +970,7 @@ async function baixarZip(nomeZip, itens, aviso){
   const arqs = [], falhou = [];
   for (let k = 0; k < itens.length; k++){
     aviso('Baixando ' + (k + 1) + ' de ' + itens.length + '…');
-    try{ arqs.push({ nome: itens[k].nome, bytes: await baixar(itens[k].path) }); }catch(e){ falhou.push(itens[k].nome.split('/').pop()); }
+    try{ arqs.push({ nome: itens[k].nome, bytes: itens[k].gerar ? await itens[k].gerar() : await baixar(itens[k].path) }); }catch(e){ falhou.push(itens[k].nome.split('/').pop()); }   // E38: o fichário e as lombadas são gerados na hora
   }
   aviso('');
   if (!arqs.length) throw new Error('Nenhum arquivo abriu.');
@@ -979,13 +980,13 @@ async function baixarZip(nomeZip, itens, aviso){
 }
 /** DP15 · o .zip do vaso: os documentos dele + a ART + os certificados dos instrumentos usados nele. */
 function itensZipVaso(D, v){
-  return arquivosVaso(D, v).concat([artArquivo(D)].filter(Boolean), instrumentosArquivos(D, v.instrumentos || []));
+  return arquivosVaso(D, v).concat([fichArquivo(D, v)].filter(Boolean), [artArquivo(D)].filter(Boolean), instrumentosArquivos(D, v.instrumentos || []));   // E38: + o fichário (kit completo)
 }
-/** DP15 · o .zip da OS: a ART na raiz, a pasta "Instrumentos" e uma pasta por vaso. */
-function itensZipOS(D){
+/** DP15 · o .zip da OS: a ART e as lombadas na raiz, a pasta "Instrumentos" e uma pasta por vaso (com o fichário de quem leva o kit completo). */
+function itensZipOS(D, larguras){
   const pasta = (p, xs) => xs.map(x => Object.assign({}, x, { nome: p + '/' + x.nome }));
-  let it = [artArquivo(D)].filter(Boolean).concat(pasta('Instrumentos', instrumentosArquivos(D)));
-  (D.vasos || []).forEach(v => { it = it.concat(pasta(nomeVasoZip(D, v), arquivosVaso(D, v))); });
+  let it = [artArquivo(D), lombArquivo(D, larguras)].filter(Boolean).concat(pasta('Instrumentos', instrumentosArquivos(D)));
+  (D.vasos || []).forEach(v => { it = it.concat(pasta(nomeVasoZip(D, v), arquivosVaso(D, v).concat([fichArquivo(D, v)].filter(Boolean)))); });
   return it;
 }
 function chipDoc(sit){ const s = SIT_DOC[sit]; return s ? '<span class="chip ' + s[1] + '">' + s[0] + '</span>' : ''; }
@@ -1000,8 +1001,88 @@ function ligarDownloads(cx, D, aviso){
     try{ await baixarZip(nomeVasoZip(D, v) + ' - ' + (D.cliente || '') + '.zip', itensZipVaso(D, v), aviso); }catch(e){ erro(e); }
   })));
   cx.querySelectorAll('[data-zipos]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
-    try{ await baixarZip((window.DocumentosPDF ? DocumentosPDF.osRot((D.os || {}).numero) : 'OS ' + ((D.os || {}).numero || '')) + ' - ' + (D.cliente || '') + '.zip', itensZipOS(D), aviso); }catch(e){ erro(e); }
+    try{ await baixarZip((window.DocumentosPDF ? DocumentosPDF.osRot((D.os || {}).numero) : 'OS ' + ((D.os || {}).numero || '')) + ' - ' + (D.cliente || '') + '.zip', itensZipOS(D, () => largurasDoQuadro(cx)), aviso); }catch(e){ erro(e); }
   })));
+  // E38 · issue 30, Parte 4: o fichário do vaso e as lombadas (da OS inteira, ou só a deste vaso na tela do laudo), gerados na hora
+  cx.querySelectorAll('[data-fich]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
+    const v = (D.vasos || []).find(w => w.inspecao_id === b.dataset.fich); if (!v) return;
+    try{ aviso('Montando o fichário…'); baixarBytes(nomeFichario(D, v), new Blob([await gerarFichario(D, v)], { type:'application/pdf' })); aviso(''); }catch(e){ aviso(''); erro(e); }
+  })));
+  cx.querySelectorAll('[data-lombos]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
+    const vs = vasosLombada(D).filter(v => b.dataset.lombos === '1' || v.inspecao_id === b.dataset.lombos);
+    try{ aviso('Montando as lombadas…'); const r = await gerarLombadas(D, vs, largurasDoQuadro(cx)); aviso('');
+      baixarBytes(nomeArq('lombadas', { cliente:D.cliente, os:(D.os || {}).numero }), new Blob([r.bytes], { type:'application/pdf' }));
+      if (r.avisos.length) U.toast('Lombadas baixadas. Confira: ' + r.avisos.join(' · ') + '.', 'err'); else U.toast(r.n + ' lombada(s) em ' + Math.ceil(r.n / 2) + ' folha(s).', 'ok'); }
+    catch(e){ aviso(''); erro(e); }
+  })));
+}
+
+// ── 2c2 · E38 (S167 · issue 30, Parte 4): o fichário e as lombadas (desenho: DP12 e DP13) ──
+// Não são guardados nem assinados: saem na hora, da fotografia do laudo emitido (tf_laudo_ver), como a placa. Só para cliente com
+// "Imprime a pasta" = sim (Cadastros › Clientes). Kit completo (capa, folha de rosto e divisórias) quando o cliente ainda não tem a
+// pasta do vaso; kit de inserção (nenhuma folha nova) quando já tem: quem diz é a caixa "O cliente já tem a pasta" (regra 45).
+// A largura da lombada (40 mm, ou 60 mm no fichário maior) é escolhida aqui, vaso a vaso, na hora de baixar: nada é gravado.
+const FOTOG = {}, FOTO_CAPA = {};
+async function fotografiaDoLaudo(L){ if (!FOTOG[L.id]) FOTOG[L.id] = (await rpc('tf_laudo_ver', { p_laudo: L.id })).dados; return FOTOG[L.id]; }
+async function fotoCapaDe(d){
+  const f = (d.fotos || []).find(x => x.secao === 'capa'); if (!f) return null;
+  if (FOTO_CAPA[f.path] === undefined){ try{ FOTO_CAPA[f.path] = dataURLDe(await baixar(f.path)); }catch(e){ FOTO_CAPA[f.path] = null; } }
+  return FOTO_CAPA[f.path];
+}
+const temLaudo = v => !!(v && v.laudo && v.laudo.situacao !== 'emitindo' && v.laudo.pdf_path);
+const kitDe = (D, v) => temLaudo(v) && window.DocumentosPDF && DocumentosPDF.kit ? DocumentosPDF.kit(D.imprime_pasta !== false, !!v.ja_tem_pasta) : null;
+/** As divisórias que o vaso tem: a do Prontuário só com ele emitido; a dos certificados só com certificado (laudo antigo, com tudo dentro: pela fotografia). */
+function divisoriasDe(v){
+  const ds = v.laudo.docs || [], o = { prontuario: ds.some(x => x.tipo === 'prontuario') };
+  if (!v.laudo.docs_juntos) o.certificados = ds.some(x => x.tipo === 'cert_manometro' || x.tipo === 'cert_valvula');
+  return o;
+}
+async function libsFichario(){ await libsLaudo(); await libsPlaca(); }
+async function gerarFichario(D, v){
+  await libsFichario();
+  const d = await fotografiaDoLaudo(v.laudo);
+  return new Uint8Array(await pdfBytes(DocumentosPDF.fichario(d, Object.assign({ foto: await fotoCapaDe(d) }, divisoriasDe(v)))));
+}
+const nomeFichario = (D, v) => nomeArq('fichario', { tag:v.tag, tap:v.numero_tap, duplicada:(D.vasos || []).filter(w => w.tag === v.tag).length > 1, cliente:D.cliente });
+const fichArquivo = (D, v) => kitDe(D, v) === 'completo' ? { tipo:'fichario', nome:nomeFichario(D, v), gerar:() => gerarFichario(D, v) } : null;
+const vasosLombada = D => D.imprime_pasta === false ? [] : (D.vasos || []).filter(temLaudo);
+const largurasDoQuadro = cx => { const o = {}; (cx || document).querySelectorAll('[data-lomb]').forEach(z => { o[z.dataset.lomb] = Number(z.value) || 40; }); return o; };
+const seletorLombada = v => '<select class="t" data-lomb="' + esc(v.inspecao_id) + '" title="Largura da lombada deste vaso" style="margin:0;width:auto"><option value="40" selected>40 mm</option><option value="60">60 mm (fichário maior)</option></select>';
+/** As lombadas dos vasos (2 por folha), cada uma com a largura escolhida; os avisos do que saiu faltando (o QR sem o link do TapWeb…). */
+async function gerarLombadas(D, vasos, larguras){
+  await libsFichario();
+  const itens = [];
+  for (const v of vasos){ const d = await fotografiaDoLaudo(v.laudo);
+    itens.push(DocumentosPDF.lombadaDe(d, { foto: await fotoCapaDe(d), link: v.tapweb_link, largura: (larguras || {})[v.inspecao_id] || 40 })); }
+  const def = DocumentosPDF.lombadas(itens, { os:(D.os || {}).numero, cliente:D.cliente });
+  if (!def) throw new Error('Nenhum vaso com laudo emitido para a lombada.');
+  const avisos = itens.map(x => { const a = DocumentosPDF.avisosLombada(x); return a.length ? x.tag + ' ' + a.join(', ') : null; }).filter(Boolean);
+  return { bytes: new Uint8Array(await pdfBytes(def)), avisos, n: itens.length };
+}
+/** As lombadas como um arquivo do .zip da OS (na raiz, DP15); larguras = função que lê as escolhas do quadro. */
+function lombArquivo(D, larguras){
+  const vs = vasosLombada(D); if (!vs.length || !(window.DocumentosPDF && DocumentosPDF.lombadas)) return null;
+  return { tipo:'lombadas', nome:nomeArq('lombadas', { cliente:D.cliente, os:(D.os || {}).numero }), gerar:async () => (await gerarLombadas(D, vs, larguras ? larguras() : {})).bytes };
+}
+/** A coluna "Fichário" do quadro da OS: o kit do vaso e a largura da lombada dele. */
+function celFichario(D, v){
+  const k = kitDe(D, v);
+  if (!k) return '<span class="muted">—</span>';
+  if (k === 'nao_imprime') return '<span class="muted">o cliente não imprime a pasta</span>';
+  const lomb = '<div class="muted" style="margin-top:6px">Lombada</div>' + seletorLombada(v);
+  if (k === 'insercao') return 'kit de inserção<div class="muted">sem folhas novas (o cliente já tem a pasta)</div>' + lomb;
+  const o = divisoriasDe(v), n = o.certificados == null ? 0 : 3 + (o.prontuario ? 1 : 0) + (o.certificados ? 1 : 0);
+  return 'kit completo<div class="muted">capa, rosto e ' + (n ? n + ' divisórias' : 'as divisórias') + '</div><div><button class="btn mini sec" data-fich="' + esc(v.inspecao_id) + '">baixar</button></div>' + lomb;
+}
+/** As linhas do fichário e da lombada na lista "Documentos deste vaso" (tela do laudo). */
+function linhasFichario(D, v){
+  const k = kitDe(D, v); if (!k) return '';
+  if (k === 'nao_imprime') return '<tr><td>Fichário e lombada</td><td data-r="Número">—</td><td data-r="Arquivo" class="muted">—</td><td data-r="Situação"><span class="muted">o cliente não imprime a pasta (Cadastros › Clientes)</span></td><td></td></tr>';
+  return '<tr><td>Fichário' + (k === 'completo' ? ' (capa, folha de rosto e divisórias)' : '') + '</td><td data-r="Número">—</td><td data-r="Arquivo" class="muted">' + (k === 'completo' ? esc(nomeFichario(D, v)) : '—')
+      + '</td><td data-r="Situação"><span class="muted">' + (k === 'completo' ? 'kit completo · gerado na hora, não é assinado' : 'kit de inserção: sem folhas novas (o cliente já tem a pasta)') + '</span></td><td>'
+      + (k === 'completo' ? '<button class="btn mini sec" data-fich="' + esc(v.inspecao_id) + '">baixar</button>' : '') + '</td></tr>'
+    + '<tr><td>Lombada deste vaso</td><td data-r="Largura">' + seletorLombada(v) + '</td><td data-r="Arquivo" class="muted">' + esc(nomeArq('lombadas', { cliente:D.cliente, os:(D.os || {}).numero }))
+      + '</td><td data-r="Situação"><span class="muted">gerada na hora · as da OS inteira ficam na tela da OS</span></td><td><button class="btn mini sec" data-lombos="' + esc(v.inspecao_id) + '">baixar</button></td></tr>';
 }
 /** O quadro "Documentos da inspeção" na tela da OS (DP14 a). */
 async function quadroDocumentos(os){
@@ -1020,20 +1101,26 @@ async function quadroDocumentos(os){
     : xs.map(x => chipDoc(x.situacao) + (x.numero && x.numero !== '—' ? '<div>' + esc(x.numero) + '</div>' : '') + '<div>' + btDl(x) + '</div>').join('<div style="height:6px"></div>');
   let h = '<div class="linha" style="justify-content:space-between;margin-bottom:8px"><div><div class="muted">Cada documento num arquivo. Sai depois do "Aprovar e emitir" de cada vaso; o oficial é o assinado com o token.</div></div>'
     + '<button class="btn pri" data-zipos="1"' + (comLaudo.length ? '' : ' disabled') + '>Baixar tudo da OS (.zip)</button></div>';
-  h += '<table class="tv cartoes" id="docsTab"><tr><th>Vaso</th><th>Relatório (+ ART no fim)</th><th>Resumo</th><th>Registro de Segurança</th><th>Cert. manômetro</th><th>Cert. válvula</th><th>Prontuário</th><th></th></tr>' + (D.vasos || []).map(v => {
+  h += '<table class="tv cartoes" id="docsTab"><tr><th>Vaso</th><th>Relatório (+ ART no fim)</th><th>Resumo</th><th>Registro de Segurança</th><th>Cert. manômetro</th><th>Cert. válvula</th><th>Prontuário</th><th>Fichário</th><th></th></tr>' + (D.vasos || []).map(v => {
     const A = arquivosVaso(D, v), L = v.laudo, so = t => A.filter(x => x.tipo === t), juntos = !!(L && L.docs_juntos);
     return '<tr data-docv="' + esc(v.inspecao_id) + '"><td><b>' + esc(v.tag) + '</b>' + (v.numero_tap ? '<div class="muted">Nº TAP ' + esc(v.numero_tap) + '</div>' : '') + '</td>'
       + (A.length ? '<td data-r="Relatório">' + cel(so('relatorio')) + '</td><td data-r="Resumo">' + cel(so('resumo'), juntos) + '</td><td data-r="Registro de Segurança">' + celReg(v, so('registro'), juntos) + '</td><td data-r="Cert. manômetro">' + cel(so('cert_manometro'), juntos)
           + '</td><td data-r="Cert. válvula">' + cel(so('cert_valvula'), juntos) + '</td><td data-r="Prontuário">' + (so('prontuario').length ? cel(so('prontuario')) : '<span class="muted">não reconstituído</span>')   // E37 · DP10
+          + '</td><td data-r="Fichário">' + celFichario(D, v)   // E38 · DP12, DP13
           + '</td><td class="acoes" style="text-align:right"><button class="btn mini" data-zipv="' + esc(v.inspecao_id) + '" style="white-space:nowrap">Baixar tudo do vaso</button></td>'
-        : '<td colspan="7" class="muted">' + (L && L.situacao === 'emitindo' ? 'número ' + esc(L.numero) + ' reservado, o PDF ainda não foi gravado' : 'sem laudo emitido') + '</td>') + '</tr>';
+        : '<td colspan="8" class="muted">' + (L && L.situacao === 'emitindo' ? 'número ' + esc(L.numero) + ' reservado, o PDF ainda não foi gravado' : 'sem laudo emitido') + '</td>') + '</tr>';
   }).join('') + '</table>';
-  const art = artArquivo(D), ins = instrumentosArquivos(D);
+  const art = artArquivo(D), ins = instrumentosArquivos(D), vl = vasosLombada(D);
+  // E38 · DP13: as lombadas da OS, junto da ART
+  const lombOS = D.imprime_pasta === false ? '<span class="muted">Lombadas: o cliente não imprime a pasta (Cadastros › Clientes).</span>'
+    : vl.length ? 'Lombadas · ' + vl.length + ' lombada(s), ' + Math.ceil(vl.length / 2) + ' folha(s) <button class="btn mini sec" data-lombos="1">baixar</button><div class="muted">'
+        + esc(nomeArq('lombadas', { cliente:D.cliente, os:(D.os || {}).numero })) + ' (a largura de cada vaso se escolhe na coluna Fichário: 40 mm já vem marcado)</div>'
+    : '<span class="muted">Lombadas: depois do laudo emitido.</span>';
   h += '<div class="g3" style="margin-top:10px"><div class="card" style="margin:0"><b>Da OS</b><div style="margin-top:4px">'
-    + (art ? 'ART nº ' + esc(art.numero) + ' ' + btDl(art) + '<div class="muted">' + esc(art.nome) + ' (o arquivo do CREA, sem mudar nada)</div>' : '<span class="muted">ART sem o PDF</span>') + '</div></div>'
+    + (art ? 'ART nº ' + esc(art.numero) + ' ' + btDl(art) + '<div class="muted">' + esc(art.nome) + ' (o arquivo do CREA, sem mudar nada)</div>' : '<span class="muted">ART sem o PDF</span>') + '</div><div style="margin-top:6px" id="docsLomb">' + lombOS + '</div></div>'
     + '<div class="card" style="margin:0"><b>Instrumentos usados nesta OS</b><div style="margin-top:4px">' + (ins.length ? ins.map(z => '<div>' + esc(z.rot) + ' ' + btDl(z) + '</div>').join('')
       + '<div class="muted">O PDF do laboratório como veio (com a assinatura dele).</div>' : '<span class="muted">nenhum certificado anexado</span>') + '</div></div>'
-    + '<div class="muted" style="align-self:center">' + chipDoc('assinado') + ' o PDF assinado pelo PLH (o oficial)<br>' + chipDoc('aprovado') + ' aprovado e numerado (é o que vai para o token)</div></div>'
+    + '<div class="muted" style="align-self:center">' + chipDoc('assinado') + ' o PDF assinado pelo PLH (o oficial)<br>' + chipDoc('aprovado') + ' aprovado e numerado (é o que vai para o token)<br>Fichário e lombadas: só para cliente com "Imprime a pasta" = sim; gerados na hora, sem assinatura</div></div>'
     + '<span class="muted" id="docsAviso"></span>' + cartaoPacote(P);
   cx.innerHTML = h;
   ligarDownloads(cx, D, t => { const a = $('docsAviso'); if (a) a.textContent = t || ''; });
@@ -1050,7 +1137,7 @@ function cartaoDocsVaso(D){
     + '<button class="btn pri" data-zipv="' + esc(v.inspecao_id) + '">Baixar tudo do vaso (.zip)</button></div>'
     + '<table class="cartoes"><tr><th>Documento</th><th>Número</th><th>Nome do arquivo</th><th>Situação</th><th></th></tr>' + linhas.map(x => '<tr><td>' + esc(x.rot) + '</td><td data-r="Número">' + esc(x.numero || '—')
       + '</td><td data-r="Arquivo" class="muted">' + esc(x.nome) + '</td><td data-r="Situação">' + (x.tipo === 'art' ? '<span class="muted">arquivo do CREA</span>' : x.tipo === 'instrumento' ? '<span class="muted">do laboratório</span>' : chipDoc(x.situacao))
-      + '</td><td>' + btDl(x) + '</td></tr>').join('') + '</table></div>';
+      + '</td><td>' + btDl(x) + '</td></tr>').join('') + linhasFichario(D, v) + '</table></div>';
 }
 
 // ── 2d · E36 (S165 · issue 30, Parte 2): a caixa "O cliente já tem a pasta (DataBook) deste vaso" (DP8) ──
@@ -2962,7 +3049,7 @@ function libsLaudo(){
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
     if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S166');
-    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D3');   // E35 · issue 30: o Resumo e os nomes dos arquivos
+    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D4');   // E35 · issue 30: o Resumo e os nomes dos arquivos
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S158');
     return true;
   })().catch(e => { LIBS = null; throw e; });
@@ -3250,7 +3337,7 @@ function ligarDesenho(){
 }
 // A4/A5: o pacote para o token (Assinador SERPRO, em lote) e a devolução dos assinados
 // E35 · issue 30 (DP4): o pacote leva todos os documentos técnicos (o relatório, o Resumo e os certificados), cada um num PDF
-function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D3').then(() => true, () => false); }
+function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D4').then(() => true, () => false); }
 /** O que falta assinar: os relatórios (tf_laudo_para_assinar) e os outros documentos (tf_insp_docs_para_assinar). insps: só dessas inspeções. */
 async function pacoteParaAssinar(insps){
   const [L, D] = await Promise.all([rpc('tf_laudo_para_assinar').catch(() => []), rpc('tf_insp_docs_para_assinar').catch(() => []), libDocs()]);
