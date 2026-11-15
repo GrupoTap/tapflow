@@ -192,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E36';   // E36 (S165 · 435): issue 30, Parte 2 — o Registro de Segurança (documentos-pdf.js D2): livro completo (termo de abertura, fabricante e caracterização, anotação) ou só a anotação, pela caixa "O cliente já tem a pasta (DataBook) deste vaso" (na revisão e na tela do laudo); o texto da anotação vem dos textos prontos aprovados pelo PLH (proposta s165); sai no "Aprovar e emitir", num PDF próprio, assinado com o token
+const VERSAO = 'TapDoc E37';   // E37 (S166 · 436): issue 30, Parte 3 — o Prontuário (Reconstituído) (laudo-pdf.js S166: as seções do próprio relatório, sumário de 12, capa "RECONSTITUIÇÃO DE PRONTUÁRIO" e "Prontuário Nº P…" no cabeçalho), com número P próprio, num PDF assinado com o token; a caixa "Reconstituir o prontuário nesta inspeção" na revisão e na tela do laudo; a coluna no quadro "Documentos da inspeção"; os textos pela proposta "Prontuário (Reconstituído)" em Textos do laudo; o próximo P do mês em Laudos › Configurar
+// E36 (S165 · 435): issue 30, Parte 2 — o Registro de Segurança (documentos-pdf.js D2): livro completo (termo de abertura, fabricante e caracterização, anotação) ou só a anotação, pela caixa "O cliente já tem a pasta (DataBook) deste vaso" (na revisão e na tela do laudo); o texto da anotação vem dos textos prontos aprovados pelo PLH (proposta s165); sai no "Aprovar e emitir", num PDF próprio, assinado com o token
 // E35 (S164 · 434): issue 30, Parte 1 — os documentos da inspeção em arquivos próprios: o relatório só com o laudo e a ART no fim; o Resumo (documentos-pdf.js D1) e os certificados de manômetro e de válvula, cada um num PDF, aprovados junto com o relatório e assinados com o token; os nomes padrão dos arquivos; o quadro "Documentos da inspeção" na tela da OS, a lista na tela do laudo e o "Baixar tudo" do vaso e da OS (.zip); laudo-pdf.js S164
 // const VERSAO = 'TapDoc E34';   // E34 (S163 · 433): issues 12, 18, 20 e 21 — as recomendações numa lista só (recomendacoes.js RC1: a mesma do celular e do laudo; o revisor tira e edita qualquer uma), todas com "Que…", a limpeza uma vez só; a justificativa do prazo menor numa lista (A1, A2, B, Outros); laudo-pdf.js S163
 // const VERSAO = 'TapDoc E33';   // E33 (S162): issues 13, 14, 15, 19 e 23 — a conferência se fecha ao marcar; as fotos dos acessórios com o nome do acessório; o aviso que bloqueia leva até a parte com problema e a marca em vermelho; "substituir" × aferição conforme; o aviso ao PLH quando a incerteza (U) de um ponto passa da tolerância
@@ -437,6 +438,8 @@ function rotTexto(ch, B){
   if (p[0] === 'prontos'){ const c = (B.prontos || {})[p[1]] || {}; return p[1] + ' · ' + (c.rotulo || '') + ({ texto:'', conc:' · frase da conclusão (12)', rotulo:' · nome na lista' }[p[2]] != null ? { texto:'', conc:' · frase da conclusão (12)', rotulo:' · nome na lista' }[p[2]] : ' · ' + p.slice(2).join('.')); }
   if (p[0] === 'conc') return 'Conclusão (12) · ' + p.slice(1).join('.');
   if (p[0] === 'titulos') return 'Título · ' + p.slice(1).join('.');
+  if (p[0] === 'registro') return 'Registro de Segurança · ' + p.slice(1).join('.');
+  if (p[0] === 'prontuario') return 'Prontuário (Reconstituído) · ' + p.slice(1).join('.');   // E37
   return ch;
 }
 /** antes e depois, palavra por palavra: o que sai riscado em vermelho, o que entra sublinhado em verde */
@@ -1017,12 +1020,13 @@ async function quadroDocumentos(os){
     : xs.map(x => chipDoc(x.situacao) + (x.numero && x.numero !== '—' ? '<div>' + esc(x.numero) + '</div>' : '') + '<div>' + btDl(x) + '</div>').join('<div style="height:6px"></div>');
   let h = '<div class="linha" style="justify-content:space-between;margin-bottom:8px"><div><div class="muted">Cada documento num arquivo. Sai depois do "Aprovar e emitir" de cada vaso; o oficial é o assinado com o token.</div></div>'
     + '<button class="btn pri" data-zipos="1"' + (comLaudo.length ? '' : ' disabled') + '>Baixar tudo da OS (.zip)</button></div>';
-  h += '<table class="tv cartoes" id="docsTab"><tr><th>Vaso</th><th>Relatório (+ ART no fim)</th><th>Resumo</th><th>Registro de Segurança</th><th>Cert. manômetro</th><th>Cert. válvula</th><th></th></tr>' + (D.vasos || []).map(v => {
+  h += '<table class="tv cartoes" id="docsTab"><tr><th>Vaso</th><th>Relatório (+ ART no fim)</th><th>Resumo</th><th>Registro de Segurança</th><th>Cert. manômetro</th><th>Cert. válvula</th><th>Prontuário</th><th></th></tr>' + (D.vasos || []).map(v => {
     const A = arquivosVaso(D, v), L = v.laudo, so = t => A.filter(x => x.tipo === t), juntos = !!(L && L.docs_juntos);
     return '<tr data-docv="' + esc(v.inspecao_id) + '"><td><b>' + esc(v.tag) + '</b>' + (v.numero_tap ? '<div class="muted">Nº TAP ' + esc(v.numero_tap) + '</div>' : '') + '</td>'
       + (A.length ? '<td data-r="Relatório">' + cel(so('relatorio')) + '</td><td data-r="Resumo">' + cel(so('resumo'), juntos) + '</td><td data-r="Registro de Segurança">' + celReg(v, so('registro'), juntos) + '</td><td data-r="Cert. manômetro">' + cel(so('cert_manometro'), juntos)
-          + '</td><td data-r="Cert. válvula">' + cel(so('cert_valvula'), juntos) + '</td><td class="acoes" style="text-align:right"><button class="btn mini" data-zipv="' + esc(v.inspecao_id) + '" style="white-space:nowrap">Baixar tudo do vaso</button></td>'
-        : '<td colspan="6" class="muted">' + (L && L.situacao === 'emitindo' ? 'número ' + esc(L.numero) + ' reservado, o PDF ainda não foi gravado' : 'sem laudo emitido') + '</td>') + '</tr>';
+          + '</td><td data-r="Cert. válvula">' + cel(so('cert_valvula'), juntos) + '</td><td data-r="Prontuário">' + (so('prontuario').length ? cel(so('prontuario')) : '<span class="muted">não reconstituído</span>')   // E37 · DP10
+          + '</td><td class="acoes" style="text-align:right"><button class="btn mini" data-zipv="' + esc(v.inspecao_id) + '" style="white-space:nowrap">Baixar tudo do vaso</button></td>'
+        : '<td colspan="7" class="muted">' + (L && L.situacao === 'emitindo' ? 'número ' + esc(L.numero) + ' reservado, o PDF ainda não foi gravado' : 'sem laudo emitido') + '</td>') + '</tr>';
   }).join('') + '</table>';
   const art = artArquivo(D), ins = instrumentosArquivos(D);
   h += '<div class="g3" style="margin-top:10px"><div class="card" style="margin:0"><b>Da OS</b><div style="margin-top:4px">'
@@ -1053,11 +1057,27 @@ function cartaoDocsVaso(D){
 // Marcada sozinha quando a preparação registrou laudo anterior do vaso (ou ele já teve laudo do TapDoc); quem revisa a etapa
 // muda até a aprovação do PLH. Desmarcada: o Registro de Segurança sai em livro completo; marcada: só a folha da anotação.
 const regVarianteDe = P => P && P.valor ? 'anotacao' : 'livro';
-function cartaoPasta(P, onde){
+// E37 (S166 · issue 30, Parte 3 · DP10): a caixa "Reconstituir o prontuário nesta inspeção", no mesmo quadro e do mesmo jeito (R = tf_insp_prontuario_ver).
+// Marcada sozinha na 1ª inspeção do vaso no TapDoc, quando a preparação não registrou documentação anterior dele; quem revisa a etapa muda até
+// a aprovação do PLH. Marcada: sai o Prontuário (Reconstituído), com número P (NR-13, item 13.5.1.6).
+function caixaProntuario(R, onde){
+  if (!R) return '';
+  const fechada = ['liberada','assinada'].indexOf(R.situacao) >= 0, pode = R.pode && !fechada, id = 'pront' + onde;
+  return '<label class="linha" style="align-items:flex-start;gap:8px;margin-top:6px"><input type="checkbox" id="' + id + '"' + (R.valor ? ' checked' : '') + (pode ? '' : ' disabled') + ' style="margin-top:3px">'
+    + '<span>Reconstituir o prontuário nesta inspeção<br><span class="muted">' + (R.valor ? 'Marcada: sai o Prontuário (Reconstituído), com número P, junto com o relatório (o prontuário do vaso não existe ou foi extraviado).'
+        : 'Desmarcada: o Prontuário não sai nesta inspeção.')
+      + ' ' + (R.automatico ? 'Automático: ' + esc(R.motivo || '') + '.' : 'Escolhida na revisão (a sugestão era ' + (R.sugerido ? 'marcada' : 'desmarcada') + ': ' + esc(R.motivo || '') + ').')
+      + (R.numero ? ' Número reservado: ' + esc(R.numero) + ' (não muda).' : '')
+      + (fechada ? ' Aprovada: fica como está; para mudar, reabra a inspeção.' : pode ? ' Quem revisa pode mudar até a aprovação do PLH.' : ' Quem muda é quem revisa a etapa, até a aprovação do PLH.') + '</span></span></label>'
+    + (pode && !R.automatico ? '<button class="btn mini sec" id="' + id + 'Auto" style="margin:4px 0 6px">Voltar ao automático</button>' : '')
+    + (R.valor && !R.textos_prontuario ? '<p class="alerta falta" style="margin:8px 0">O Prontuário (Reconstituído) ainda não sai no "Aprovar e emitir": falta o PLH aprovar os textos dele'
+        + (R.proposta_prontuario === 'pendente' ? ' (TapDoc › Textos do laudo › "Prontuário (Reconstituído)")' : '') + '. A minuta já mostra como fica.</p>' : '');
+}
+function cartaoPasta(P, onde, R){
   if (!P) return '';
   const fechada = ['liberada','assinada'].indexOf(P.situacao) >= 0, pode = P.pode && !fechada;
   const id = 'pasta' + onde;
-  return '<div class="card" id="' + id + 'Card"><b>Nesta inspeção</b>'
+  return '<div class="card" id="' + id + 'Card"><b>Nesta inspeção</b>' + caixaProntuario(R, onde)
     + '<label class="linha" style="align-items:flex-start;gap:8px;margin-top:6px"><input type="checkbox" id="' + id + '"' + (P.valor ? ' checked' : '') + (pode ? '' : ' disabled') + ' style="margin-top:3px">'
     + '<span>O cliente já tem a pasta (DataBook) deste vaso<br><span class="muted">' + (P.valor ? 'Marcada: o Registro de Segurança sai só com a folha da anotação, para pôr no livro que está no cliente.'
         : 'Desmarcada: o Registro de Segurança sai em livro completo (termo de abertura, fabricante e caracterização, e a anotação).')
@@ -1077,8 +1097,30 @@ function ligarPasta(insp, onde, depois){
   });
   if (cx) cx.addEventListener('change', () => gravar(cx, cx.checked));
   if (bA) bA.addEventListener('click', () => gravar(bA, null));
+  // E37 · issue 30, Parte 3: a caixa "Reconstituir o prontuário"
+  const cp = $('pront' + onde), bP = $('pront' + onde + 'Auto');
+  const gravarP = (el, valor) => U.semDuploEnvio(el, async () => {
+    try{ const R = await rpc('tf_insp_prontuario_gravar', { p_insp: insp, p_valor: valor });
+      U.toast(R.valor ? 'Reconstituir o prontuário: sai o Prontuário (Reconstituído) nesta inspeção.' : 'O Prontuário não sai nesta inspeção.', 'ok'); await depois(null, R); }
+    catch(e){ erro(e); await depois(null, null); }
+  });
+  if (cp) cp.addEventListener('change', () => gravarP(cp, cp.checked));
+  if (bP) bP.addEventListener('click', () => gravarP(bP, null));
 }
 async function pastaVer(insp){ try{ return await rpc('tf_insp_pasta_ver', { p_insp: insp }); }catch(e){ return null; } }
+async function prontVer(insp){ try{ return await rpc('tf_insp_prontuario_ver', { p_insp: insp }); }catch(e){ return null; } }
+/** E37: os textos do Prontuário para a minuta, antes de o PLH aprovar: a proposta "s166" que espera (só para ver; a emissão não usa). */
+async function textosProntuarioMinuta(d){
+  if (d.modelo && d.modelo.blocos && d.modelo.blocos.prontuario) return null;
+  try{ const T = await rpc('tf_laudo_textos_ver'); const x = ((T && T.propostas) || []).find(p => p.origem === 's166' && p.situacao === 'pendente');
+    return x && window.DocumentosPDF ? DocumentosPDF.textosDaProposta(x.mudancas, 'prontuario') : null; }catch(e){ return null; }
+}
+/** E37: o que a minuta precisa para montar o Prontuário (null = não sai): a caixa marcada e os textos (os aprovados ou os da proposta). */
+async function prontuarioMinuta(d, R){
+  if (!R || !R.valor) return null;
+  const tem = !!(d.modelo && d.modelo.blocos && d.modelo.blocos.prontuario), textos = tem ? null : await textosProntuarioMinuta(d);
+  return tem || textos ? { numero: null, textos } : null;
+}
 /** A minuta do Registro antes de o PLH aprovar os textos: usa a proposta "s165" que espera (só para ver; a emissão não usa). */
 async function textosRegistroMinuta(d){
   if (d.modelo && d.modelo.blocos && d.modelo.blocos.registro) return null;
@@ -1683,6 +1725,7 @@ async function telaRevisao(id, manter){
   try{ REV.M = await rpc('tf_insp_mapa_ver', { p_id:id }); }catch(e){ REV.M = null; }   // S151 · issue 7 (428): as medidas e a imagem do mapa
   try{ REV_TEXTOS = (await rpc('tf_laudo_textos_prontos')) || {}; REV_PRONTOS = REV_TEXTOS.prontos || null; }catch(e){ REV_TEXTOS = {}; REV_PRONTOS = null; }   // S146 · item 79 · E34
   REV.pasta = await pastaVer(id);   // E36 · issue 30, Parte 2 (DP8): a caixa "já tem a pasta"
+  REV.pront = await prontVer(id);   // E37 · issue 30, Parte 3 (DP10): a caixa "Reconstituir o prontuário"
   pintarRevisao();
 }
 // S148 · item 89: depois de gravar, a revisão volta ao MESMO quadro (não a um número de pixels) e realça a linha mexida
@@ -1938,7 +1981,7 @@ function pintarRevisao(){
           + '</div>' + (pode ? '<button class="btn mini" id="boroAnexar" style="margin-top:6px">Anexar imagens</button><input type="file" id="boroArq" accept="image/*" multiple hidden>' : '')
           + (bo && bo.resultado === 'com_anomalia' && !bi.length ? '<p class="alerta falta" style="margin-top:6px">Com anomalia: anexe pelo menos uma imagem.</p>' : '')
           + '<div id="boroVisor"></div>'; })() + '</div>';
-  h += cartaoPasta(REV.pasta, 'Rev');   // E36 · issue 30, Parte 2 (DP8)
+  h += cartaoPasta(REV.pasta, 'Rev', REV.pront);   // E36 · issue 30, Parte 2 (DP8) · E37 · Parte 3 (DP10)
   // ações
   h += '<div class="card linha acoesrev">';
   if (eu.pode && (e === 1 || e === 2)) h += '<button class="btn pri" id="revConcluir">Concluir a ' + (e === 1 ? 'Revisão 1' : 'Revisão 2') + '</button>';
@@ -1949,8 +1992,8 @@ function pintarRevisao(){
   $('tela').innerHTML = h;
   ligarRevisao();
   // E36 · issue 30, Parte 2: gravou a caixa → só o quadro dela se refaz (a revisão fica onde está)
-  const repintarPasta = async P => { REV.pasta = P || await pastaVer(REV.id); const c = $('pastaRevCard'); if (!c) return;
-    c.outerHTML = cartaoPasta(REV.pasta, 'Rev'); ligarPasta(REV.id, 'Rev', repintarPasta); };
+  const repintarPasta = async (P, R) => { REV.pasta = P || await pastaVer(REV.id); REV.pront = R || await prontVer(REV.id); const c = $('pastaRevCard'); if (!c) return;
+    c.outerHTML = cartaoPasta(REV.pasta, 'Rev', REV.pront); ligarPasta(REV.id, 'Rev', repintarPasta); };
   ligarPasta(REV.id, 'Rev', repintarPasta);
   ligarMapa().catch(e => console.warn('mapa', e));   // S151 · issue 7 (não trava a revisão)
 }
@@ -2732,7 +2775,9 @@ function ligarRevisao(){
     if (!await N.janela.confirmar('Aprovar e liberar', '<p>Grava o cálculo oficial (categoria ' + esc(r.categoria) + ', próxima externa em ' + dataBR(r.proxima_externa)
       + (r.datas_pelo_plh ? ', datas definidas pelo PLH' : '') + ') e libera a inspeção para o laudo.</p>'
       + (REV.pasta ? '<p>O cliente ' + (REV.pasta.valor ? '<b>já tem</b>' : '<b>ainda não tem</b>') + ' a pasta deste vaso: o Registro de Segurança sai '
-          + (REV.pasta.valor ? 'só com a anotação' : 'em livro completo') + '. Depois de aprovar, isso não muda (só reabrindo).</p>' : ''), 'Aprovar')) return;   // E36 · DP8
+          + (REV.pasta.valor ? 'só com a anotação' : 'em livro completo') + '. Depois de aprovar, isso não muda (só reabrindo).</p>' : '')   // E36 · DP8
+      + (REV.pront ? '<p>Reconstituir o prontuário: <b>' + (REV.pront.valor ? 'sim' : 'não') + '</b>' + (REV.pront.valor ? ' — sai o Prontuário (Reconstituído), com número P, junto com o relatório'
+          + (REV.pront.textos_prontuario ? '' : ' (depois que o PLH aprovar os textos dele)') : ' — o Prontuário não sai nesta inspeção') + '. Depois de aprovar, isso não muda (só reabrindo).</p>' : ''), 'Aprovar')) return;   // E37 · DP10: o PLH vê a marca
     try{ await rpc('tf_insp_revisao_aprovar', { p_id:id, p_r:r }); U.toast('Aprovada e liberada.', 'ok'); location.hash = 'aba=rev'; }catch(e){ problemaRev(e); }
   }));
 }
@@ -2916,8 +2961,8 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S164');
-    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D2');   // E35 · issue 30: o Resumo e os nomes dos arquivos
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S166');
+    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D3');   // E35 · issue 30: o Resumo e os nomes dos arquivos
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S158');
     return true;
   })().catch(e => { LIBS = null; throw e; });
@@ -3001,7 +3046,7 @@ async function gerarLaudo(d, opc, aviso){
   if (opc.numero) await carimbarPaginas(out, nBase, opc.carimbo);   // o carimbo também nas páginas da ART
   out.setTitle(def.info.title); out.setAuthor(def.info.author); out.setCreator(def.info.creator); out.setProducer(def.info.producer); out.setSubject(def.info.subject);
   const bytes = await out.save();
-  return { bytes, paginas: out.getPageCount(), sha: hexDe(await crypto.subtle.digest('SHA-256', bytes)), semFoto, semAnexo };
+  return { bytes, paginas: out.getPageCount(), sha: hexDe(await crypto.subtle.digest('SHA-256', bytes)), semFoto, semAnexo, imagens };   // E37: as fotos já baixadas servem ao Prontuário
 }
 /** E35 · issue 30 (DP6, DP7): os outros documentos do mesmo laudo, cada um num PDF: o Resumo e o certificado de cada aferição
  *  terminada (o de manômetro e o de válvula, S150), na ordem dos acessórios. Mesmos dados (a fotografia) e o mesmo carimbo do relatório.
@@ -3030,6 +3075,14 @@ async function gerarDocumentos(d, opc, aviso){
     vez[t] = (vez[t] || 0) + 1;
     aviso('certificado ' + (k + 1) + ' de ' + lista.length, 'documentos', (k + 1) / (lista.length + 1));
     await fim({ tipo:t, ordem:vez[t], total:total[t], numero:dc.codigo, acessorio_id:(comAf[k] || {}).id || null }, dc.def, true);
+  }
+  // E37 · issue 30, Parte 3 (DP10, DP11): o Prontuário (Reconstituído), das seções do próprio laudo-pdf.js (mesmas contas, mesmo mapa, mesmo texto),
+  // da mesma fotografia, com o número P e o carimbo no rodapé de cada página. Sai com a caixa marcada (opc.prontuario).
+  if (opc.prontuario){
+    aviso('o Prontuário', 'documentos', 0.95);
+    let imagens = opc.imagens;
+    if (!imagens){ imagens = {}; for (const p of LaudoPDF.fotosDoLaudo(d)){ try{ imagens[p] = dataURLDe(await baixar(p)); }catch(e){} } }
+    await fim({ tipo:'prontuario', ordem:1, total:1, numero: opc.prontuario.numero || null, acessorio_id:null }, LaudoPDF.montar(d, Object.assign({}, opc, { imagens, prontuario: opc.prontuario })), false);
   }
   aviso('', 'documentos', 1);
   return docs;
@@ -3070,11 +3123,13 @@ function mostrarDocs(docs, d, o){
 const SIT_LAUDO = { emitindo:['número reservado, PDF pendente','s-em_conferencia'], emitido:['emitido, falta a assinatura','s-pegar_cliente'],
                     assinado:['assinado','s-pronto'], substituido:['substituído','s-sem_laudo'] };
 async function abaLaudos(h){
-  const [L, cfg, DES, PAC] = await Promise.all([rpc('tf_laudo_lista'), rpc('tf_laudo_config_ver'),
-    rpc('tf_laudo_desenho_situacao').catch(() => null), PLH ? pacoteParaAssinar() : Promise.resolve([])]);   // E35 · issue 30: com os documentos
+  const [L, cfg, DES, PAC, NP] = await Promise.all([rpc('tf_laudo_lista'), rpc('tf_laudo_config_ver'),
+    rpc('tf_laudo_desenho_situacao').catch(() => null), PLH ? pacoteParaAssinar() : Promise.resolve([]),
+    rpc('tf_laudo_prontuario_numeracao', { p_proximo: null }).catch(() => null)]);   // E37: o próximo P do mês   // E35 · issue 30: com os documentos
   h += '<div class="card"><div class="linha" style="justify-content:space-between"><div><b>Emissão oficial: ' + (cfg.oficial ? 'ligada' : 'desligada') + '</b>'
     + '<div class="muted">' + (cfg.oficial ? 'O PLH emite o laudo com número.' : 'Piloto: sai só o rascunho, marcado "PILOTO", sem gastar número. Compare com o PDF do TapDoc antigo.')
-    + ' Numeração de ' + String(cfg.mes).padStart(2, '0') + '/' + cfg.ano + ': ' + (cfg.proximo_codigo ? 'próximo <b>' + esc(cfg.proximo_codigo) + '</b>' : 'não informada') + '.</div></div>'
+    + ' Numeração de ' + String(cfg.mes).padStart(2, '0') + '/' + cfg.ano + ': ' + (cfg.proximo_codigo ? 'próximo <b>' + esc(cfg.proximo_codigo) + '</b>' : 'não informada')
+    + (NP ? ' · prontuários: próximo <b>' + esc(NP.proximo_codigo) + '</b>' + (NP.proximo ? '' : ' (não informado: começa do 001)') : '') + '.</div></div>'
     + (cfg.admin ? '<button class="btn" id="ldCfg">Configurar</button>' : '') + '</div></div>';
   h += cartaoDesenho(DES) + cartaoPacote(PAC);
   h += '<div class="card"><h3>Inspeções liberadas e laudos</h3>' + (L.length ? '<table class="cartoes"><tr><th>Vaso</th><th>Cliente</th><th>OS</th><th>Laudo</th><th>Antes de emitir</th></tr>'   // E31 · issue 31: no celular, cartões
@@ -3090,11 +3145,16 @@ async function abaLaudos(h){
   const bc = $('ldCfg'); if (bc) bc.addEventListener('click', () => {
     janela('Emissão do laudo', '<label class="okrev"><input type="checkbox" id="cfgOf"' + (cfg.oficial ? ' checked' : '') + '> o TapHub emite os laudos oficiais (fim do piloto)</label>'
       + '<label class="f">Próximo número R de ' + String(cfg.mes).padStart(2, '0') + '/' + cfg.ano + ' <small>(o último do TapDoc antigo + 1)</small><input class="t" id="cfgProx" inputmode="numeric" value="' + esc(cfg.proximo || '') + '" placeholder="ex.: 22"></label>'
-      + '<p class="muted">A numeração recomeça a cada mês (R + mês + ano − sequência, ex.: R1026-001). Número usado não volta.</p>',
+      + (NP ? '<label class="f">Próximo número P (prontuário) de ' + String(NP.mes).padStart(2, '0') + '/' + NP.ano + ' <small>(o último do TapDoc antigo + 1)</small><input class="t" id="cfgProxP" inputmode="numeric" value="' + esc(NP.proximo || '') + '" placeholder="ex.: 3"></label>' : '')
+      + '<p class="muted">A numeração recomeça a cada mês (R + mês + ano − sequência, ex.: R1026-001; o prontuário reconstituído usa P, com contador próprio). Número usado não volta.</p>',
       [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
         const px = ($('cfgProx').value || '').trim(), n = px ? parseInt(px, 10) : null;
         if (px && !(n >= 1 && n <= 999)){ U.toast('O número vai de 1 a 999.', 'err'); return false; }
-        try{ await rpc('tf_laudo_config', { p_oficial: $('cfgOf').checked, p_proximo: n }); U.toast('Gravado.', 'ok'); pintar(); }catch(e){ erro(e); return false; }
+        const pp = $('cfgProxP') ? ($('cfgProxP').value || '').trim() : '', np = pp ? parseInt(pp, 10) : null;   // E37
+        if (pp && !(np >= 1 && np <= 999)){ U.toast('O número P vai de 1 a 999.', 'err'); return false; }
+        try{ await rpc('tf_laudo_config', { p_oficial: $('cfgOf').checked, p_proximo: n });
+          if (np && NP && np !== NP.proximo) await rpc('tf_laudo_prontuario_numeracao', { p_proximo: np });
+          U.toast('Gravado.', 'ok'); pintar(); }catch(e){ erro(e); return false; }
       } }]);
   });
 }
@@ -3190,7 +3250,7 @@ function ligarDesenho(){
 }
 // A4/A5: o pacote para o token (Assinador SERPRO, em lote) e a devolução dos assinados
 // E35 · issue 30 (DP4): o pacote leva todos os documentos técnicos (o relatório, o Resumo e os certificados), cada um num PDF
-function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D2').then(() => true, () => false); }
+function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D3').then(() => true, () => false); }
 /** O que falta assinar: os relatórios (tf_laudo_para_assinar) e os outros documentos (tf_insp_docs_para_assinar). insps: só dessas inspeções. */
 async function pacoteParaAssinar(insps){
   const [L, D] = await Promise.all([rpc('tf_laudo_para_assinar').catch(() => []), rpc('tf_insp_docs_para_assinar').catch(() => []), libDocs()]);
@@ -3208,7 +3268,7 @@ function cartaoPacote(P){
   return '<div class="card"><h3>Para assinar com o token (' + P.length + ')</h3>'
     + '<p class="muted">1) Baixe o pacote; 2) assine todos de uma vez no Assinador SERPRO, com o token (PAdES), sem abrir nem salvar os PDFs em outro programa; '
     + '3) devolva os assinados aqui (pode escolher vários). O TapDoc confere cada um: tem de ser o PDF aprovado, assinado com o seu certificado. '
-    + 'Cada documento (relatório, resumo, certificados) é um PDF e vai assinado.</p>'
+    + 'Cada documento (relatório, resumo, registro, certificados e prontuário) é um PDF e vai assinado.</p>'
     + '<table class="cartoes"><tr><th>Laudo</th><th>Vaso</th><th>Cliente</th><th>Documentos</th><th>Aprovado</th></tr>' + grupos.map(g => '<tr><td><b>' + esc(g.x.laudo_numero) + (g.x.revisao ? ' Rev. ' + g.x.revisao : '') + '</b></td><td data-r="Vaso">'
       + esc(g.x.tag || '') + '</td><td data-r="Cliente">' + esc(g.x.cliente || '') + '</td><td data-r="Documentos">' + g.itens.map(x => esc(rotDoc(x))).join('<br>')
       + '</td><td data-r="Aprovado">' + quandoBR(g.x.emitido_em) + '</td></tr>').join('') + '</table>'
@@ -3344,6 +3404,7 @@ async function telaLaudo(id){
   try{ await libDocs(); LD.docs = await rpc('tf_insp_documentos', { p_os: null, p_insp: id }); }catch(e){ LD.docs = null; }
   if ((LD.d.eu || {}).plh) LD.pac = await pacoteParaAssinar([id]).catch(() => []);
   LD.pasta = await pastaVer(id);   // E36 · issue 30, Parte 2 (DP8)
+  LD.pront = await prontVer(id);   // E37 · issue 30, Parte 3 (DP10)
   pintarLaudo();
 }
 function laudoAtual(d){ return (d.laudos || []).filter(l => l.situacao !== 'substituido').pop() || null; }
@@ -3388,7 +3449,7 @@ function pintarLaudo(){
       + (l.pdf_path ? '<button class="btn mini" data-ldpdf="' + esc(l.pdf_path) + '" data-ldnome="' + esc(nomeLaudo(d, { revisao: l.revisao, paraAssinar: l.situacao === 'emitido' })) + '">Abrir</button><div class="muted">' + l.paginas + ' pág.</div>' : '—') + '</td><td data-r="Assinado">'
       + (l.assinado_path ? '<button class="btn mini" data-ldpdf="' + esc(l.assinado_path) + '" data-ldnome="' + esc(nomeLaudo(d, { revisao: l.revisao })) + '">Abrir</button><div class="muted">' + esc(l.assinado_por_nome || '') + ' · ' + quandoBR(l.assinado_em) + '</div>' : '—')
       + '</td></tr>').join('') + '</table></div>';
-  h += cartaoPasta(LD.pasta, 'Ld');   // E36 · issue 30, Parte 2 (DP8, quadro 2)
+  h += cartaoPasta(LD.pasta, 'Ld', LD.pront);   // E36 · issue 30, Parte 2 (DP8, quadro 2) · E37 · Parte 3 (DP10)
   h += cartaoDocsVaso(LD.docs);   // E35 · issue 30 (DP14 b)
   h += '<div id="ldRes"></div><div id="ldVisor"></div>';
   $('tela').innerHTML = h;
@@ -3409,10 +3470,11 @@ function ligarLaudo(){
       A('', 'gerador', 0); await libsLaudo(); A('', 'gerador', 1);
       await mapaLaudo(d, A, false);   // S151 · issue 7: a imagem do mapa (sem 3D, o rascunho sai com o 2D)
       const opcR = { marca: oficial ? 'MINUTA — NÃO VALE COMO LAUDO' : 'PILOTO — NÃO VALE COMO LAUDO',
-        variante: regVarianteDe(LD.pasta), textosRegistro: await textosRegistroMinuta(d) };   // E36 · issue 30, Parte 2
+        variante: regVarianteDe(LD.pasta), textosRegistro: await textosRegistroMinuta(d),   // E36 · issue 30, Parte 2
+        prontuario: await prontuarioMinuta(d, LD.pront) };   // E37 · issue 30, Parte 3: a minuta do Prontuário (sem número)
       const g = await gerarLaudo(d, opcR, A);
       A('', 'anexos', 1);
-      const docs = await gerarDocumentos(d, opcR, A); A.fim();   // E35 · issue 30 (DP3): a minuta de cada documento
+      const docs = await gerarDocumentos(d, Object.assign({}, opcR, { imagens: g.imagens }), A); A.fim();   // E35 · issue 30 (DP3): a minuta de cada documento
       aviso(g.semFoto.length || g.semAnexo.length ? 'Rascunho pronto. ' + [g.semFoto.length ? g.semFoto.length + ' foto(s) não abriram' : '', g.semAnexo.length ? 'sem ' + g.semAnexo.join(' e ') : ''].filter(Boolean).join('; ') + '.' : 'Rascunho pronto (' + g.paginas + ' páginas).');
       mostrarPdf(g.bytes, nomeLaudo(d, { extra: oficial ? 'rascunho' : 'piloto' }));
       mostrarDocs(docs, d, { extra: oficial ? 'rascunho' : 'piloto' });
@@ -3424,9 +3486,13 @@ function ligarLaudo(){
     const L = await rpc('tf_laudo_ver', { p_laudo: laudoId }), dd = L.dados;
     const carimbo = await rpc('tf_laudo_carimbo', { p_laudo: laudoId });   // S145 · A2/A7.3: só o PLH que aprovou, com a digital
     const pasta = await rpc('tf_insp_pasta_ver', { p_insp: L.inspecao_id });   // E36 · issue 30, Parte 2: livro completo ou só a anotação (o banco confere)
-    const opcE = { numero: L.numero, revisao: L.revisao, emitidoEm: dd.emitido_em, motivoRev: L.motivo_rev, plh: dd.plh, exigirAnexos: true, carimbo, variante: regVarianteDe(pasta) };
+    // E37 · issue 30, Parte 3 (DP10): com a caixa marcada e os textos aprovados, reserva o número P (o mesmo na reemissão) e o grava na fotografia
+    const pr = await rpc('tf_insp_prontuario_reservar', { p_laudo: laudoId });
+    if (pr && pr.numero) dd.prontuario = { numero: pr.numero };
+    const opcE = { numero: L.numero, revisao: L.revisao, emitidoEm: dd.emitido_em, motivoRev: L.motivo_rev, plh: dd.plh, exigirAnexos: true, carimbo, variante: regVarianteDe(pasta),
+      prontuario: pr && pr.numero ? { numero: pr.numero } : null };
     const g = await gerarLaudo(dd, opcE, A);
-    const docs = await gerarDocumentos(dd, opcE, A);   // E35 · issue 30: o Resumo e os certificados, cada um num PDF (DP2, DP6, DP7)
+    const docs = await gerarDocumentos(dd, Object.assign({}, opcE, { imagens: g.imagens }), A);   // E35 · issue 30: o Resumo e os certificados, cada um num PDF (DP2, DP6, DP7)
     A('', 'enviar', 0.05);
     const pre = L.inspecao_id + '/', suf = '-' + String(L.numero).replace(/[^\w-]+/g, '-') + (L.revisao ? '-rev' + L.revisao : '');
     const caminho = pre + 'laudo' + suf + '-' + uid().slice(0, 8) + '.pdf';
@@ -3454,6 +3520,8 @@ function ligarLaudo(){
     if (!await N.janela.confirmar(atual ? 'Aprovar e emitir a revisão' : 'Aprovar e emitir o laudo', '<p>' + (atual ? 'Sai a <b>Rev. ' + (atual.revisao + 1) + '</b> do ' + esc(atual.numero) + ', com o motivo da reabertura. O anterior fica como substituído.'
         : 'Reserva o próximo número do mês e grava o PDF.') + '</p>'
         + (LD.pasta && LD.pasta.textos_registro ? '<p>Registro de Segurança: <b>' + (LD.pasta.valor ? 'só a anotação' : 'livro completo') + '</b> (o cliente ' + (LD.pasta.valor ? 'já tem' : 'ainda não tem') + ' a pasta deste vaso).</p>' : '')   // E36
+        + (LD.pront && LD.pront.valor && LD.pront.textos_prontuario ? '<p>Prontuário (Reconstituído): <b>sai nesta emissão</b>, ' + (LD.pront.numero ? 'com o mesmo número (' + esc(LD.pront.numero) + ')' : 'com o próximo número P do mês')
+            + ' (caixa "Reconstituir o prontuário" marcada).</p>' : '')   // E37
         + '<p>Você aprova com a <b>sua digital</b> (o PIN não vale). Cada página sai com o desenho da sua assinatura e "Aprovado eletronicamente por …".</p>'
         + '<p class="muted">Depois de aprovado, o laudo não muda: para corrigir, só reabrindo a inspeção (sai uma revisão). Depois, assine o PDF com o token.</p>', 'Aprovar com a digital')) return;
     const A = andamento(PASSOS_EMITIR, () => refazerLaudo('ldRefazer', 'ldEmitir'));
