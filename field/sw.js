@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S58-T38';   // S163: TapDoc 26 (issues 12, 20 e 21: as recomendações do laudo no Fechamento e a justificativa do prazo numa lista; recomendacoes.js RC1; 433)
+const VERSAO = 'S59-T39';   // S171: Field S59, núcleo N11 e TapDoc 27 (issues 35, 36, 37 e 41: sem espaço avisa, o pacote não apaga a resposta pela metade, envio recusado não prende o vaso, PMTA/PTH maiores que zero)
+// const VERSAO = 'S58-T38';   // S163: TapDoc 26 (issues 12, 20 e 21: as recomendações do laudo no Fechamento e a justificativa do prazo numa lista; recomendacoes.js RC1; 433)
 // const VERSAO = 'S58-T37';   // S162: TapDoc 25 (issues 15, 19 e 23: o que falta leva até a parte; "substituir" × aferição conforme; leitura suspeita em vermelho)
 // const VERSAO = 'S58-T36';   // S160: núcleo N10 (confirmarPessoa só com a digital, para aprovar o laudo; issue 29)
 // const VERSAO = 'S58-T35';   // S157: issue 10 — Field S58 e núcleo N9 (o acesso vencido renovado antes de enviar a fila e no envio das fotos)
@@ -61,9 +62,9 @@ const ESSENCIAIS = [
   // IDÊNTICO ao do <script> do index.html, com o ?v= (c.match compara a consulta inteira).
   // Sem isto o Field sem sinal abriria sem o núcleo. Trocou o ?v= no index.html? Troque aqui também.
   // S34: N2 (fila de envios e utilitários)
-  '../nucleo/nucleo.js?v=N10',
-  '../nucleo/nucleo.css?v=N10',
-  '../nucleo/config.js?v=N10',
+  '../nucleo/nucleo.js?v=N11',
+  '../nucleo/nucleo.css?v=N11',
+  '../nucleo/config.js?v=N11',
   // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo"
   '../nucleo/modulos.js?v=M4',
   // S35 · TapDoc 1: a coleta da inspeção (página própria, abre sem sinal)
