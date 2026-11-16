@@ -188,10 +188,12 @@ input.t.suspeita{border-color:var(--crit);background:var(--crit-soft);color:var(
 <div id="salvo" aria-hidden="true">salvo ✓</div>
 <div id="desfazer" hidden role="status"><span id="desfTx"></span><button id="desfBt">Desfazer</button></div>
 <input type="file" id="arqPdf" accept="application/pdf" hidden>
+<input type="file" id="arqCsv" accept=".csv,text/csv,text/plain" hidden>
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 30';   // S174 · issues 38, 39, 52, 82 e 83 (Revisão TapDoc · Rodada 4a): o CSV do medidor com uma leitura inválida entra com as boas e diz quais ficaram de fora; o PDF do laudo anterior que não coube avisa; a miniatura renova o acesso antes de baixar; depois de a câmera fechar o app, volta para a mesma tela e avisa que a foto não chegou; PDF até 50 MB (441); o GPS do vaso volta no pacote da OS (441)
+const VERSAO = 'TapDoc 31';   // S175 · issues 48, 49, 50, 51 e 53 (Revisão TapDoc · Rodada 4b): tocar no que já está marcado não apaga a resposta e trocar com texto escrito pergunta (visual, boroscopia, teste); a pressão volta como foi digitada (sem 10,0004) e "1.013" pergunta; mensagens da conta em português simples, avisos na unidade do inspetor, "pelo PLH"; acessórios: "Trazer os da anterior" fica e a pressão não redesenha a tela; ajustes pequenos (laudo sem páginas, janela, código "Outro", GPS, ordem das fotos, CSV); sem SQL
+// const VERSAO = 'TapDoc 30';   // S174 · issues 38, 39, 52, 82 e 83 (Revisão TapDoc · Rodada 4a): o CSV do medidor com uma leitura inválida entra com as boas e diz quais ficaram de fora; o PDF do laudo anterior que não coube avisa; a miniatura renova o acesso antes de baixar; depois de a câmera fechar o app, volta para a mesma tela e avisa que a foto não chegou; PDF até 50 MB (441); o GPS do vaso volta no pacote da OS (441)
 // const VERSAO = 'TapDoc 29';   // S173 · issues 43, 44, 45, 46 e 47 (Revisão TapDoc · Rodada 3): a aferição reprovada põe "substituir" só ao sair do campo e a situação volta quando o resultado deixa de ser reprovado (o banco não troca mais: 440); "Cancelar esta aferição" (com o motivo) e trocar o tipo do acessório pede para cancelá-la; sem a PMTA vigente, a válvula é conferida (aviso) contra a menor entre a PMTA da plaqueta e a da prévia; "Gerar os pontos" pergunta antes de apagar leituras; o prazo menor não grava a cada letra, só aparece com a categoria e a escolha pela metade fica guardada
 // const VERSAO = 'TapDoc 28';   // S172 · issues 40, 42 e 55 (Revisão TapDoc · Rodada 2): a leitura do número com ponto de milhar — vírgula é a decimal; "1.250" sem vírgula pergunta "1250 ou 1,25?" e não grava até escolher; volume abaixo de 20 litros e circunferência abaixo de 300 mm avisam; a mesma regra do escritório (E41)
 // const VERSAO = 'TapDoc 27';   // S171 · issues 35, 36, 37 e 41 (Revisão TapDoc · Rodada 1): sem espaço avisa em vermelho e as OS antigas sem nada pendente saem do aparelho; miniaturas no IndexedDB; o pacote que chega sozinho não troca o vaso em campo nem redesenha a tela; envio recusado depois do "Enviar" volta o vaso para "em campo" com o motivo; a correção toma o lugar do envio recusado; PMTA, PTH e PMTA externa maiores que zero
@@ -1174,10 +1176,15 @@ function numOuAviso(el, min, max, rot, fora){
 const CIRC_MIN_AVISO = 300, VOL_MIN_AVISO = 20;
 function avisarCirc(x){ if (x != null && x > 0 && x < CIRC_MIN_AVISO) U.toast('Confira: circunferência de ' + fmt(x, 1) + ' mm dá um vaso de Ø ' + fmt(x / Math.PI, 0) + ' mm, pequeno demais para um vaso de pressão. A medida é em mm, com a trena por fora do costado (mil e duzentos = 1200).'); }
 function unidadeDe(v){ const c = ativas(v)[0]; return (c && c.unidade_campo) || v._unid || 'bar'; }
+// S174b · issue 49: a pressão é guardada em MPa com 4 casas; mostrada de volta com 4 casas na unidade da pessoa, aparecia o
+// arredondamento (10 kgf/cm² voltava 10,0004; 150 psi, 149,998). As casas abaixo são as que a conversão sustenta em cada unidade
+// (4 casas em MPa = 0,001 bar ou kgf/cm², 0,1 psi): o número volta como foi digitado. O guardado e o laudo não mudam.
+const CASAS_UNID = { 'bar':3, 'kgf/cm2':3, 'MPa':4, 'psi':1 };
+function fmtP(mpa, u){ return mpa == null ? '' : fmt(deMPa(mpa, u), CASAS_UNID[u] == null ? 4 : CASAS_UNID[u]); }
 function campoPressao(rot, id, mpa, u, ajuda){
-  const val = mpa == null ? '' : fmt(deMPa(mpa, u), 4);
+  const val = fmtP(mpa, u);
   return '<label class="f">' + rot + ' (' + UNID_ROT[u] + ')' + (ajuda ? '<small>' + ajuda + '</small>' : '') +
-    '<input class="t" id="' + id + '" inputmode="decimal" value="' + esc(val) + '"' + SEM_AUTO + '></label><div class="conv" id="' + id + '_c">' +
+    '<input class="t" id="' + id + '" inputmode="decimal" value="' + esc(val) + '" data-mpa="' + (mpa == null ? '' : esc(String(mpa))) + '"' + SEM_AUTO + '></label><div class="conv" id="' + id + '_c">' +
     (mpa != null && u !== 'MPa' ? '= ' + fmt(mpa, 4) + ' MPa' : '') + '</div>';
 }
 /** S171 · issue 41: `o.positivo` = o banco só aceita maior que zero (PMTA, PTH, PMTA externa); `o.rot` = o nome do campo na mensagem.
@@ -1192,10 +1199,18 @@ function ligarPressao(id, u, fn, max, o){
     const erro = t => { el.classList.add('problema'); if (c){ c.textContent = t; c.style.color = 'var(--crit)'; } U.toast(t, 'err'); };
     el.classList.remove('problema'); if (c) c.style.color = '';
     if (Number.isNaN(x)) return erro(rot + ': número inválido. Não foi gravado.');
+    // S174b · issue 49: a pressão segue a regra do número da S172 — "1.013" sem vírgula pergunta "1013 ou 1,013?" e não grava
+    const lido = lerNum(el.value);
+    if (lido.ambiguo){ perguntarMilhar(el, lido, rot); return; }
+    tirarPergunta(el);
     const m = paraMPa(x, u);
     if (m != null && o.positivo && m <= 0) return erro(rot + ': tem de ser maior que zero. Se não souber, deixe em branco. Não foi gravado.');
     if (m != null && m <= -0.1013) return erro(rot + ': abaixo do vácuo total (−1 bar). Confira o número e a unidade. Não foi gravado.');
     if (m != null && m >= (max || 100)) return erro(rot + ': acima do que o sistema aceita (tem de ser menor que ' + fmt(deMPa(max || 100, u), 1) + ' ' + UNID_ROT[u] + '). Confira a unidade. Não foi gravado.');
+    // S174b · issue 49: o mesmo número (a pessoa só reescreveu o que estava) não grava de novo
+    const antes = el.dataset.mpa === '' || el.dataset.mpa == null ? null : Number(el.dataset.mpa);
+    if (el.dataset.mpa != null && antes === m) return;
+    el.dataset.mpa = m == null ? '' : String(m);
     fn(m);
   });
 }
@@ -1391,7 +1406,7 @@ function miniatura(blob){
 async function registrarArquivo(v, secao, legenda, blob, ext, tipo, mini, item, extra){
   const fid = uid(), caminho = v.inspecao.id + '/' + fid + '.' + ext;
   const chave = await N.fila.guardarFoto(blob);
-  const ordem = fotosDe(v, secao).length + 1;
+  const ordem = fotosDe(v, secao).reduce((m, f) => Math.max(m, Number(f.ordem) || 0), 0) + 1;   // S174b · issue 53, item 5: a maior + 1 (tirar uma do meio repetia o número)
   item = item == null ? null : String(item);
   const gal = extra && extra.origem === 'galeria';   // S140 · item 53 (416)
   v.inspecao.fotos.push({ id:fid, secao, legenda, ordem, storage_path:caminho, item_ref:item, origem:gal ? 'galeria' : 'camera', tirada_em:gal ? extra.tirada_em : null });
@@ -1414,7 +1429,14 @@ function tirarFotoDaLista(v, fid){
     const ainda = N.fila.listar({ tipo:'insp', grupo:'insp|' + v.id }).find(e => e.id === 'foto~' + fid);
     if (ainda) N.fila.descartar(ainda.assinatura);       // nem chegou a subir
     else enfileirar(v, 'fotorem-' + fid, 'tirar foto', { funcao:'tf_insp_foto_remover', payload:{ p_id:fid } }, null, true);
+    const eraLaudo = (v.inspecao.fotos.find(f => f.id === fid) || {}).secao === 'laudo_anterior';
     v.inspecao.fotos = v.inspecao.fotos.filter(f => f.id !== fid);
+    // S174b · issue 53, item 1: sem nenhuma página (nem PDF), o laudo anterior volta a "pendente" (o escritório esperava páginas que não existem)
+    const la = v.laudo_anterior;
+    if (eraLaudo && la && la.situacao === 'em_conferencia' && !fotosDe(v, 'laudo_anterior').length){
+      la.situacao = 'pendente_cliente'; la.origem = null;
+      enfileirar(v, 'laudo', 'laudo anterior', { funcao:'tf_insp_laudo_anterior_gravar', payload:{ p_equip:v.id, p_dados:{ id:la.id, situacao:'pendente_cliente', inspecao_id:v.inspecao.id } } });
+    }
     delete MINI[fid]; salvarMini(); salvar(); pintar();
   });
 }
@@ -1460,7 +1482,10 @@ function telaPlaqueta(v){
   titulo('Plaqueta', v.tag);
   const u = unidadeDe(v), cs = ativas(v);
   const fabs = E.fabricantes || [];
-  const codOutro = v.codigo_construcao && CODIGOS.indexOf(v.codigo_construcao) < 0;
+  // S174b · issue 53, item 3: "Outro…" não guarda mais "(outro)" (contava como preenchido e o escritório não recebia nada);
+  // o campo fica em branco até escrever. O "(outro)" de um aparelho antigo (nunca foi enviado) vira a mesma marca local.
+  if (v.codigo_construcao === '(outro)'){ v.codigo_construcao = null; v._codOutro = true; salvar(); }
+  const codOutro = (v.codigo_construcao && CODIGOS.indexOf(v.codigo_construcao) < 0) || !!v._codOutro;
   // S140 · item 49: uma foto por lugar, com o nome que vai no laudo
   const lugP = lugaresDe(v).filter(l => l.secao === 'plaqueta'), soltas = fotosDe(v, 'plaqueta', '__solta');
   let h = '<div class="card"><b>Fotos da plaqueta</b><p class="muted" style="margin:2px 0 0">Primeiro as fotos: o escritório confere por elas. Cada uma vai no laudo com este nome.</p>' +
@@ -1532,7 +1557,7 @@ function telaPlaqueta(v){
   ligar('pModelo', el => mudouVaso(v, 'modelo', el.value.trim() || null));
   ligar('pAno', el => { const a = numOuAviso(el, 1900, new Date().getFullYear() + 1, 'Ano'); if (a !== undefined) mudouVaso(v, 'ano_fabricacao', a == null ? null : Math.round(a)); });
   ligar('pSemCod', el => { mudouVaso(v, 'sem_codigo_construcao', el.checked); if (el.checked){ mudouVaso(v, 'codigo_construcao', null); } pintar(); });
-  ligar('pCod', el => { if (el.value === '+'){ v.codigo_construcao = '(outro)'; pintar(); const o = $('pCodOutro'); if (o){ o.value = ''; o.focus(); } return; } mudouVaso(v, 'codigo_construcao', el.value || null); pintar(); });
+  ligar('pCod', el => { if (el.value === '+'){ v._codOutro = true; salvar(); pintar(); const o = $('pCodOutro'); if (o){ o.value = ''; o.focus(); } return; } v._codOutro = false; mudouVaso(v, 'codigo_construcao', el.value || null); pintar(); });
   ligar('pCodOutro', el => mudouVaso(v, 'codigo_construcao', el.value.trim() || null));
   ligar('pEd', el => mudouVaso(v, 'codigo_edicao', el.value.trim() || null));
   $('pUn').querySelectorAll('[data-u]').forEach(b => b.addEventListener('click', () => {
@@ -1825,9 +1850,11 @@ function telaComponentes(v){
   const doCartao = k => cards.find(x => x.chave === k);
   $('tela').querySelectorAll('[data-cp]').forEach(el => el.addEventListener('change', () => {
     const c = v.componentes.find(x => x.id === el.dataset.cp); if (!c) return;
-    const val = el.dataset.k === 'posicao' ? (el.value || null) : el.value;
+    const val = el.dataset.k === 'posicao' ? (el.value || null) : el.value, eraJanela = c.tipo === 'janela';
     mudouComp(v, c, el.dataset.k, val);
     if (el.dataset.k === 'tipo' && val === 'janela' && !c.nao_medir) mudouComp(v, c, 'nao_medir', true);
+    // S174b · issue 53, item 2: ao sair de "janela", sai o "não medir" que o sistema pôs (o da pessoa tem motivo e fica)
+    if (el.dataset.k === 'tipo' && eraJanela && val !== 'janela' && c.nao_medir && !(semLeitura(v)[c.id] || '').trim()) mudouComp(v, c, 'nao_medir', false);
     mudouComp(v, c, 'nome', nomeAuto(v, c));
     pintar();   // a geometria e o título mudam
   }));
@@ -1953,14 +1980,23 @@ function telaLocal(v){
     const b = $('lGps');
     if (!navigator.geolocation){ U.toast('Este aparelho não dá o GPS ao navegador.', 'err'); return; }
     b.disabled = true; b.textContent = 'Procurando o GPS…';
-    navigator.geolocation.getCurrentPosition(p => {
+    // S174b · issue 53, item 4: só redesenha se a tela do GPS deste vaso ainda está aberta (o teclado de outra tela fechava)
+    const aqui = () => telaAtual.nome === 'localizacao' && telaAtual.vaso === v.id;
+    navigator.geolocation.getCurrentPosition(async p => {
+      const prec = p.coords.accuracy != null ? Math.round(p.coords.accuracy * 10) / 10 : null;
+      // S174b · issue 53, item 4: "Capturar de novo" com uma posição pior que a guardada pergunta antes de trocar
+      if (v.latitude != null && v.gps_precisao_m != null && prec != null && prec > v.gps_precisao_m
+          && !(await N.janela.confirmar('Posição menos precisa', '<p>A posição nova tem precisão de <b>' + Math.round(prec) + ' m</b>; a guardada tem <b>' + Math.round(v.gps_precisao_m) + ' m</b>.</p><p class="muted">Troque só se o vaso mudou de lugar.</p>', 'Trocar mesmo assim', false))){
+        if (aqui()) pintar(); return;
+      }
       v.latitude = Math.round(p.coords.latitude * 1e6) / 1e6; v.longitude = Math.round(p.coords.longitude * 1e6) / 1e6;
-      v.gps_precisao_m = p.coords.accuracy != null ? Math.round(p.coords.accuracy * 10) / 10 : null; salvar();
+      v.gps_precisao_m = prec; salvar();
       enfileirar(v, 'gps', 'GPS', { funcao:'tf_insp_gps_gravar', payload:{ p_equip:v.id, p_lat:v.latitude, p_lon:v.longitude, p_precisao:v.gps_precisao_m } });
       if (v.gps_precisao_m > 50) U.toast('Precisão de ' + Math.round(v.gps_precisao_m) + ' m: se puder, capture de novo ao ar livre.');
-      pintar();
+      if (aqui()) pintar(); else U.toast('GPS do ' + v.tag + ' guardado.');
     }, e => {
-      b.disabled = false; b.textContent = 'Capturar o GPS';
+      if (!aqui()) return;
+      const b = $('lGps'); if (b){ b.disabled = false; b.textContent = 'Capturar o GPS'; }
       U.toast(e && e.code === 1 ? 'O GPS foi negado. Libere a localização para o navegador.' : 'Não consegui o GPS agora. Tente ao ar livre.', 'err');
     }, { enableHighAccuracy:true, timeout:20000, maximumAge:0 });
   });
@@ -2250,7 +2286,7 @@ function aplicarMarca(v){
 }
 function avisosEnvio(v){
   const a = alertas(v).slice();
-  try{ previa(v).avisos.forEach(x => a.push(x)); }catch(e){ a.push('Prévia do cálculo: ' + e.message); }
+  try{ previa(v).avisos.forEach(x => a.push(x)); }catch(e){ a.push('Prévia do cálculo: ' + msgConta(e)); }
   avisosAcess(v).forEach(x => a.push(x));
   // S162 · issue 23: a leitura suspeita da aferição ainda não conferida (não trava: o inspetor corrige ou confirma)
   acessDe(v).forEach(ac => { const af = afDe(v, ac); if (af && af.tipo === 'manometro'){ const n = suspeitasAbertas(af).length;
@@ -2318,9 +2354,13 @@ function telaVisual(v){
   $('tela').innerHTML = h;
   if (!pode){ $('tela').querySelectorAll('button,textarea').forEach(el => { el.disabled = true; }); somenteLeitura(); return; }
   ligarLugares(v, lugV);
-  $('tela').querySelectorAll('[data-vis]').forEach(seg => seg.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => {
-    const x = i.visual[Number(seg.dataset.vis)];
-    x.conforme = b.dataset.c === '1'; if (x.conforme) x.anomalia = null;
+  $('tela').querySelectorAll('[data-vis]').forEach(seg => seg.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', async () => {
+    const x = i.visual[Number(seg.dataset.vis)], novo = b.dataset.c === '1';
+    if (x.conforme === novo) return;   // S174b · issue 48: tocar no que já está marcado não muda nada
+    const nFotos = fotosDe(v, 'visual', x.item).length;
+    if (novo && x.conforme === false && ((x.anomalia || '').trim() || nFotos)
+        && !(await trocarResposta('Conforme', (x.anomalia || '').trim() ? 'a descrição' : null, nFotos ? 'As ' + nFotos + ' foto(s) deste item ficam guardadas, mas saem da tela.' : null))) return;
+    x.conforme = novo; if (x.conforme) x.anomalia = null;
     salvar(); adiar2('visual:' + v.id, 'visual', v); pintar();
   })));
   $('tela').querySelectorAll('[data-van]').forEach(el => el.addEventListener('input', () => {
@@ -2374,17 +2414,20 @@ function contradicaoAc(v, a){
   if (a.situacao === 'ok' && r === 'reprovado') return nome + ': a situação está "ok" e a aferição deu NÃO CONFORME. Decida qual vale: troque a situação ou reveja a aferição.';
   return null;
 }
+function htmlAvisosAc(v){ const av = avisosAcess(v); return av.length ? '<div class="alerta"><b>Atenção</b><ul>' + av.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : ''; }
 function avisosAcess(v){
   const a = [], l = acessDe(v).filter(x => x.situacao !== 'retirado');
   l.forEach(x => { const t = contradicaoAc(v, x); if (t) a.push(t); });   // S162 · issue 19
   l.filter(x => VALVULAS.includes(x.tipo) && x.pressao_ajuste_mpa != null).forEach(x => {
     const p = pmtaVigenteCam(v, x.camara_id);
-    if (p && x.pressao_ajuste_mpa > p + 1e-9) a.push((TIPOS_ACESS[x.tipo]) + (x.lacre_num ? ' lacre ' + x.lacre_num : '') + ': ajuste ' + fmt(x.pressao_ajuste_mpa, 3) +
-      ' MPa acima da PMTA vigente (' + fmt(p, 3) + ' MPa). NR-13 13.5.1.2 "a".');
+    // S174b · issue 50: a pressão do aviso na unidade em que o inspetor trabalha (antes, sempre em MPa)
+    const u = x.unidade_campo || unidadeDe(v), pr = m => fmtP(m, u) + ' ' + UNID_ROT[u];
+    if (p && x.pressao_ajuste_mpa > p + 1e-9) a.push((TIPOS_ACESS[x.tipo]) + (x.lacre_num ? ' lacre ' + x.lacre_num : '') + ': ajuste ' + pr(x.pressao_ajuste_mpa) +
+      ' acima da PMTA vigente (' + pr(p) + '). NR-13 13.5.1.2 "a".');
     else if (!p){   // S173 · issue 45: sem a PMTA vigente, o aviso contra a da plaqueta ou a da prévia (a menor)
       const ref = pmtaRefCampo(v, x.camara_id);
-      if (ref && x.pressao_ajuste_mpa > ref.mpa + 1e-9) a.push((TIPOS_ACESS[x.tipo]) + (x.lacre_num ? ' lacre ' + x.lacre_num : '') + ': abertura da plaqueta ' + fmt(x.pressao_ajuste_mpa, 3) +
-        ' MPa acima da PMTA ' + ref.de + ' (' + fmt(ref.mpa, 3) + ' MPa): confira e, se puder, reajuste agora. Sem laudo anterior, o escritório decide contra a PMTA adotada.');
+      if (ref && x.pressao_ajuste_mpa > ref.mpa + 1e-9) a.push((TIPOS_ACESS[x.tipo]) + (x.lacre_num ? ' lacre ' + x.lacre_num : '') + ': abertura da plaqueta ' + pr(x.pressao_ajuste_mpa) +
+        ' acima da PMTA ' + ref.de + ' (' + pr(ref.mpa) + '): confira e, se puder, reajuste agora. Sem laudo anterior, o escritório decide contra a PMTA adotada.');
     }
   });
   // S144 · item 75: a conexão da válvula sai no 7.6 do laudo ("com conexão …")
@@ -2673,7 +2716,7 @@ function telaAfericao(v){
   if (e1n) h += '<p class="muted" style="margin:6px 0 2px">O que tem de errado (um ou mais)</p>' + DEFEITOS_E1[vv ? 'valvula' : 'manometro'].map((d, k) => '<div class="chk"><input type="checkbox" id="afD' + k + '" data-def="' + esc(d) + '"'
       + ((E1.defeitos || []).indexOf(d) >= 0 ? ' checked' : '') + '><label for="afD' + k + '">' + esc(d) + '</label></div>').join('')
     + '<label class="f">Observação (opcional)<input class="t" id="afE1Obs" value="' + esc(E1.obs || '') + '"></label>'
-    + '<p class="muted" style="margin:6px 0 0">A aferição foi feita e termina aqui: NÃO CONFORME, etapa 2 "não aplicável". Tire a foto do ' + (vv ? 'válvula' : 'manômetro') + ' em teste (na lista de acessórios).</p>';
+    + '<p class="muted" style="margin:6px 0 0">A aferição foi feita e termina aqui: NÃO CONFORME, etapa 2 "não aplicável". Tire a foto ' + (vv ? 'da válvula' : 'do manômetro') + ' em teste (na lista de acessórios).</p>';
   h += '</div>';
   if (!e1n){
   h += '<div class="card"><label class="f">Manômetro padrão<select class="t" id="afPad"><option value="">—</option>' + (E.padroes || []).map(p => '<option value="' + esc(p.id) + '"' + (p.id === af.padrao_id ? ' selected' : '') + '>'
@@ -2825,10 +2868,10 @@ function telaAcessorios(v){
   const i = v.inspecao, pode = ed(v), l = acessDe(v), cs = ativas(v);
   const ant = (v.acessorios_anteriores || []).filter(x => !l.some(y => y.origem_id === x.id));
   let h = '';
-  const av = avisosAcess(v);
-  if (av.length) h += '<div class="alerta"><b>Atenção</b><ul>' + av.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
-  if (pode && ant.length && !l.length)
-    h += '<div class="card"><b>Da inspeção anterior</b><p class="muted" style="margin:2px 0 0">' + ant.length + ' acessório(s): ' +
+  h += '<div id="acAvisos">' + htmlAvisosAc(v) + '</div>';   // S174b · issue 51: atualizado sozinho depois da pressão (sem redesenhar a tela)
+  // S174b · issue 51: o botão fica enquanto houver acessório da inspeção anterior ainda não trazido (antes, só com a lista vazia)
+  if (pode && ant.length)
+    h += '<div class="card"><b>Da inspeção anterior</b><p class="muted" style="margin:2px 0 0">' + (l.length ? 'Ainda não trazido(s): ' : '') + ant.length + ' acessório(s): ' +
       esc(ant.map(x => TIPOS_ACESS[x.tipo] + (x.lacre_num ? ' (lacre ' + x.lacre_num + ')' : '')).join(', ')) +
       '. Traga e confirme um por um.</p><button class="btn pri" id="acAnt">Trazer os da inspeção anterior</button></div>';
   l.forEach(a => {
@@ -2855,7 +2898,7 @@ function telaAcessorios(v){
       if (a.tipo === 'disco_ruptura'){   // S146 · T4 (D4): vale a pressão do certificado do fabricante
         const pm = pmtaVigenteCam(v, a.camara_id);
         h += campoPressao('Pressão de ruptura (certificado ou etiqueta)', 'ac_p_' + a.id, a.pressao_ajuste_mpa, u, 'Não se afere em bancada: vale a do fabricante');
-        if (pm != null && a.pressao_ajuste_mpa != null && a.pressao_ajuste_mpa > pm + 1e-9) h += '<p class="alerta" style="margin:6px 0 0">Acima da PMTA vigente: o laudo sai NÃO CONFORME e pede a troca do disco.</p>';
+        h += '<p class="alerta" data-dscav style="margin:6px 0 0"' + (pm != null && a.pressao_ajuste_mpa != null && a.pressao_ajuste_mpa > pm + 1e-9 ? '' : ' hidden') + '>Acima da PMTA vigente: o laudo sai NÃO CONFORME e pede a troca do disco.</p>';
         h += '<div class="chk"><input type="checkbox" id="dsc_' + esc(a.id) + '" data-dsc="' + esc(a.id) + '"' + ((a.caso_campos || {}).sem_certificado ? ' checked' : '') + '><label for="dsc_' + esc(a.id) + '">O cliente não tem o certificado (o laudo recomenda obtê-lo)</label></div>';
       }
       if (MEDIDORES.includes(a.tipo)) h += campoTexto('Escala', 'ac_esc_' + a.id, a.escala, 'data-k="escala" placeholder="Ex.: 0 a 16 bar"');
@@ -2897,7 +2940,13 @@ function telaAcessorios(v){
     }));
     const seg = card.querySelector('[data-sit]');
     seg.querySelectorAll('[data-s]').forEach(b => b.addEventListener('click', () => { sitManual(v, a); mudou(a, 'situacao', b.dataset.s); pintar(); }));   // S173 · issue 43
-    ligarPressao('ac_p_' + a.id, a.unidade_campo || unidadeDe(v), m => { mudou(a, 'pressao_ajuste_mpa', m); pintar(); });
+    // S174b · issue 51: depois da pressão, só os avisos mudam (redesenhar a tela fechava o teclado e perdia o toque no campo seguinte)
+    ligarPressao('ac_p_' + a.id, a.unidade_campo || unidadeDe(v), m => {
+      mudou(a, 'pressao_ajuste_mpa', m);
+      const caixa = $('acAvisos'); if (caixa) caixa.innerHTML = htmlAvisosAc(v);
+      const dav = card.querySelector('[data-dscav]');
+      if (dav){ const pm = pmtaVigenteCam(v, a.camara_id); dav.hidden = !(pm != null && m != null && m > pm + 1e-9); }
+    });
   });
   ligarBlocoAfericao(v, l, mudou);
   // S146 · item 79: o texto do laudo do acessório que falta e o disco sem certificado
@@ -2938,6 +2987,12 @@ function telaAcessorios(v){
   });
 }
 
+/** S174b · issue 48: trocar de resposta com algo já escrito pergunta antes de apagar. */
+function trocarResposta(para, oQue, obs){
+  return N.janela.confirmar('Trocar para "' + para + '"?', (oQue ? '<p>Isso apaga ' + esc(oQue) + '.</p>' : '') + (obs ? '<p class="muted">' + esc(obs) + '</p>' : ''),
+    oQue ? 'Trocar e apagar' : 'Trocar', !!oQue);
+}
+
 // ── boroscopia ─────────────────────────────────────────────────────────────
 const casosBoro = () => { const P = PRONTOS() || {}; return Object.keys(P).map(k => [k, P[k]]).filter(([k, c]) => c && c.grupo === 'boroscopia').sort(ordemCaso); };
 function telaBoroscopia(v){
@@ -2969,15 +3024,22 @@ function telaBoroscopia(v){
   ligar('bObs', el => { b.observacao = el.value; salvar(); adiar2('boro:' + v.id, 'boro', v); }, 'input');
   if (!pode){ $('tela').querySelectorAll('input,select,button,textarea').forEach(el => { el.disabled = true; }); somenteLeitura(); return; }
   const mudou = () => { salvar(); adiar2('boro:' + v.id, 'boro', v); };
-  $('bR').querySelectorAll('[data-r]').forEach(x => x.addEventListener('click', () => {
-    b.realizada = x.dataset.r === '1'; b.resultado = null; b.observacao = b.observacao || null; b.anomalia = null; b.motivo_nao = null; b._outro = false; b.caso = null; b.caso_campos = null; mudou(); pintar();
+  $('bR').querySelectorAll('[data-r]').forEach(x => x.addEventListener('click', async () => {
+    const novo = x.dataset.r === '1';
+    if (b.realizada === novo) return;   // S174b · issue 48: tocar no que já está marcado não apaga a resposta
+    if (b.realizada != null && (b.resultado || (b.anomalia || '').trim() || (b.motivo_nao || '').trim() || b.caso)
+        && !(await trocarResposta(novo ? 'Sim' : 'Não', b.realizada ? 'o resultado e a descrição' : 'o motivo'))) return;
+    b.realizada = novo; b.resultado = null; b.observacao = b.observacao || null; b.anomalia = null; b.motivo_nao = null; b._outro = false; b.caso = null; b.caso_campos = null; mudou(); pintar();
   }));
   const VALIDADE = 'A inspeção interna está dentro do prazo de validade.';
   ligar('bCaso', () => janelaCasos('Por que a boroscopia não foi feita?', casosBoro(), b.caso, b.caso_campos, null,
     [{ v:'val', rotulo:'A inspeção interna está dentro do prazo de validade', texto:VALIDADE, on:!b.caso && b.motivo_nao === VALIDADE },
      { v:'+', rotulo:'Outro motivo (escrever)', escrever:true, on:!b.caso && !!b.motivo_nao && b.motivo_nao !== VALIDADE, texto:b.caso ? '' : b.motivo_nao || '' }],
     (k, campos, texto) => { b.caso = k; b.caso_campos = campos; b.motivo_nao = texto; mudou(); pintar(); }), 'click');
-  const res = $('bRes'); if (res) res.querySelectorAll('[data-x]').forEach(x => x.addEventListener('click', () => { b.resultado = x.dataset.x; if (b.resultado !== 'com_anomalia') b.anomalia = null; mudou(); pintar(); }));
+  const res = $('bRes'); if (res) res.querySelectorAll('[data-x]').forEach(x => x.addEventListener('click', async () => {
+    if (b.resultado === x.dataset.x) return;
+    if (x.dataset.x !== 'com_anomalia' && (b.anomalia || '').trim() && !(await trocarResposta('Sem anomalia', 'a descrição da anomalia'))) return;
+    b.resultado = x.dataset.x; if (b.resultado !== 'com_anomalia') b.anomalia = null; mudou(); pintar(); }));
   ligar('bAn', el => { b.anomalia = el.value; mudou(); }, 'input');
   ligar('bMot', el => { if (el.value === '+'){ b._outro = true; b.motivo_nao = null; mudou(); pintar(); return; } b._outro = false; b.motivo_nao = el.value || null; mudou(); pintar(); });
   ligar('bMotTx', el => { b.motivo_nao = el.value.trim() || null; mudou(); }, 'input');
@@ -3013,14 +3075,20 @@ function telaTeste(v){
   ligarFotos(v, 'teste', () => 'Teste de pressão');
   if (!pode){ $('tela').querySelectorAll('input,select,button,textarea').forEach(el => { el.disabled = true; }); somenteLeitura(); return; }
   const mudou = () => { salvar(); adiar2('teste:' + v.id, 'teste', v); };
-  $('tR').querySelectorAll('[data-r]').forEach(x => x.addEventListener('click', () => {
+  $('tR').querySelectorAll('[data-r]').forEach(x => x.addEventListener('click', async () => {
     const r = x.dataset.r === '1';
+    if (t.realizado === r) return;   // S174b · issue 48: tocar de novo em "Sim" não apaga a pressão, a duração e o resultado
+    if (t.realizado != null && (t.realizado ? (t.pressao_mpa != null || t.duracao_min != null || t.resultado || (t.anomalia || '').trim()) : ((t.motivo_nao || '').trim() || t.th_fabricacao_comprovado))
+        && !(await trocarResposta(r ? 'Sim' : 'Não', t.realizado ? 'a pressão, a duração e o resultado' : 'o motivo'))) return;
     i.teste = { realizado:r, unidade_campo:u, tipo:r ? 'hidrostatico' : null, pressao_mpa:r ? pth : null }; mudou(); pintar();
   }));
   const tp = $('tTipo'); if (tp) tp.querySelectorAll('[data-t]').forEach(x => x.addEventListener('click', () => { t.tipo = x.dataset.t; mudou(); pintar(); }));
   ligarPressao('tP', u, m => { t.pressao_mpa = m; t.unidade_campo = u; mudou(); }, 150);
   ligar('tD', el => { const d = numOuAviso(el, 1, 1440, 'Duração'); if (d !== undefined){ t.duracao_min = d == null ? null : Math.round(d); mudou(); } });
-  const tr = $('tRes'); if (tr) tr.querySelectorAll('[data-x]').forEach(x => x.addEventListener('click', () => { t.resultado = x.dataset.x; if (t.resultado !== 'reprovado') t.anomalia = null; mudou(); pintar(); }));
+  const tr = $('tRes'); if (tr) tr.querySelectorAll('[data-x]').forEach(x => x.addEventListener('click', async () => {
+    if (t.resultado === x.dataset.x) return;
+    if (x.dataset.x !== 'reprovado' && (t.anomalia || '').trim() && !(await trocarResposta('Aprovado', 'o que reprovou'))) return;
+    t.resultado = x.dataset.x; if (t.resultado !== 'reprovado') t.anomalia = null; mudou(); pintar(); }));
   ligar('tAn', el => { t.anomalia = el.value; mudou(); }, 'input');
   ligar('tMot', el => { if (el.value === '+'){ t._outro = true; t.motivo_nao = null; mudou(); pintar(); return; } t._outro = false; t.motivo_nao = el.value || null; mudou(); pintar(); });
   ligar('tMotTx', el => { t.motivo_nao = el.value.trim() || null; mudou(); }, 'input');
@@ -3082,7 +3150,7 @@ function gravarRascPrazo(insp, r){
 /** S173 · issue 47: o prazo da norma pela categoria da prévia; sem ela, o motivo (não se oferece a lista: o teto seria inventado). */
 function przNorma(v){
   try{ const r = previa(v); return r.vaso && !r.vaso.erro ? { pz:r.vaso.prazos } : { erro:(r.vaso && r.vaso.erro) || 'Sem a categoria do vaso.' }; }
-  catch(e){ return { erro:e.message }; }
+  catch(e){ return { erro:msgConta(e) }; }
 }
 function cartaoPrazo(v){
   const i = v.inspecao, RS = PRZ_RASC[i.id] || null, PR = RS ? { externo:RS.externo, interno:RS.interno, caso:RS.caso, just:RS.outros } : i.prazo_red || null;
@@ -3301,7 +3369,7 @@ function eMinDe(v, c){
     const g = geoDe(v, c);
     const e = MotorNR13.espessuraMinima(g, k.p_operacao_max_mpa, Number(m.s_mpa), g.E);
     return { valor: Math.max(e, 1.5) + (Number(v.corrosao_mm) || 0), padrao:g.padrao };
-  }catch(e){ return { erro:e.message }; }
+  }catch(e){ return { erro:msgConta(e) }; }
 }
 
 // ── gravar ─────────────────────────────────────────────────────────────────
@@ -3471,16 +3539,17 @@ function csvForaHtml(d, classe){
   return '<p class="' + classe + '">' + f.length + ' leitura' + (f.length > 1 ? 's ficaram' : ' ficou') + ' de fora (zero, vazia ou acima de 300 mm), no' + (pts.length > 1 ? 's pontos ' : ' ponto ')
     + esc(pts.join(', ')) + ' do arquivo.' + (vazios.length ? ' Sem nenhuma leitura válida: ' + esc(vazios.join(', ')) + '.' : '') + '</p>';
 }
-function importarCsv(v){
-  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.csv,text/csv,text/plain';
-  inp.addEventListener('change', () => {
-    const f = inp.files && inp.files[0]; if (!f) return;
-    const rd = new FileReader();
-    rd.onload = () => { try{ distribuirCsv(v, lerCsv(rd.result)); }catch(e){ U.toast(e.message, 'err'); } };
-    rd.readAsText(f);
-  });
-  inp.click();
-}
+// S174b · issue 53, item 6: o campo de arquivo é o da página (#arqCsv), como o das fotos; o criado fora da página pode não
+// abrir a escolha do arquivo no iPhone (não conferido num iPhone).
+let alvoCsv = null;
+function importarCsv(v){ alvoCsv = v.id; const a = $('arqCsv'); a.value = ''; a.click(); }
+$('arqCsv').addEventListener('change', () => {
+  const f = $('arqCsv').files && $('arqCsv').files[0], v = alvoCsv ? vaso(alvoCsv) : null; alvoCsv = null;
+  if (!f || !v) return;
+  const rd = new FileReader();
+  rd.onload = () => { try{ distribuirCsv(v, lerCsv(rd.result)); }catch(e){ U.toast(e.message, 'err'); } };
+  rd.readAsText(f);
+});
 function distribuirCsv(v, d){
   const cs = compsMedir(v).filter(c => !(semLeitura(v)[c.id] || '').trim());
   const n = d.spots.length;
@@ -3542,6 +3611,29 @@ function conferirCsv(v, d, plano){
   } }]);
 }
 
+// S174b · issue 50: a mensagem interna da conta ("Valor inválido ou ausente para R: undefined", ou um erro em inglês quando o
+// material do componente não está na lista) vira o que o inspetor precisa fazer. O motor é o mesmo do escritório e do laudo: a
+// tradução fica aqui, no celular, sem mudar o motor.
+const CONTA_FALTA = [
+  [/para R:/, 'Falta a circunferência (Operação e câmaras).'],
+  [/para alfaGraus:/, 'Falta o ângulo do cone (Componentes).'],
+  [/para L \(raio interno\):/, 'Falta o raio interno do tampo (Componentes).'],
+  [/para L:/, 'Falta a altura do tampo (Componentes).'],
+  [/para [dC]:/, 'Falta a medida do tampo plano (Componentes).'],
+  [/para E:/, 'Falta a eficiência de junta: o escritório informa.'],
+  [/para P:/, 'Falta a pressão de operação (Operação e câmaras).'],
+  [/para S:|s_mpa/, 'Material do componente fora da lista: avise o escritório.'],
+  [/para t:/, 'Falta a espessura medida (Ultrassom).'],
+  [/para V:/, 'Falta o volume (Operação e câmaras).']];
+function msgConta(e){
+  const t = String((e && e.message) || e || '');
+  const x = CONTA_FALTA.find(([re]) => re.test(t));
+  if (x) return x[1];
+  // erro do navegador (em inglês), sem tradução acima: frase simples, sem o texto técnico
+  if (e instanceof TypeError || /\b(Cannot|undefined|null|is not)\b/.test(t)) return 'A conta não fechou com os dados deste vaso: confira os dados ou avise o escritório.';
+  return t;
+}
+
 // ── a prévia do cálculo (motor no aparelho, sem sinal) ─────────────────────
 const RISCO = { A:4, B:3, C:2, D:1 };
 /** O nome da governante: no costado com regiões, "Costado (menor leitura no CS)" (item 51). */
@@ -3556,7 +3648,7 @@ function previa(v){
   const m = materialDe(v, null);
   if (!m) r.avisos.push('Prévia: sem o material do costado (Operação e câmaras), a PMTA não sai.');
   else {
-    if (!m.conferido) r.avisos.push('O material ' + m.especificacao + ' é da lista provisória, ainda não conferida pelo Fernando: a prévia é indicativa.');
+    if (!m.conferido) r.avisos.push('O material ' + m.especificacao + ' é da lista provisória, ainda não conferida pelo PLH: a prévia é indicativa.');
     cs.forEach(k => { if (m.t_max_c != null && k.t_operacao_c != null && Number(k.t_operacao_c) > Number(m.t_max_c))
       r.avisos.push('Temperatura de operação' + (cs.length > 1 ? ' (' + k.nome + ')' : '') + ' acima de ' + fmt(m.t_max_c, 0) + ' °C: o S do material não vale.'); });
   }
@@ -3577,7 +3669,7 @@ function previa(v){
           const rc = res.componentes[0];
           x.eMin = rc.eMin; x.pmta = rc.pmtaMPa; x.abaixo = rc.abaixoDaMinima;
           g.padrao.forEach(p => padrao.add(c.nome));
-        }catch(e){ x.erro = e.message; }
+        }catch(e){ x.erro = msgConta(e); }
       }
       ck.comps.push(x);
     });
@@ -3589,7 +3681,7 @@ function previa(v){
     ck.comps.filter(x => x.erro).forEach(x => r.detalhes.push(x.c.nome + ': ' + x.erro));
     r.camaras.push(ck);
   });
-  if (padrao.size) r.detalhes.push('Geometria padrão (a validar pelo Fernando) em: ' + [...padrao].join(', ') + '.');
+  if (padrao.size) r.detalhes.push('Geometria padrão (a validar pelo PLH) em: ' + [...padrao].join(', ') + '.');
   // a categoria do vaso pela conta única (pendência 20)
   try{
     if (!cs.length) throw new Error('Sem câmaras.');
@@ -3601,14 +3693,14 @@ function previa(v){
     const cat = MotorNR13.categoria(classe, kP.p_operacao_max_mpa, V);
     const pr = MotorNR13.prazos(cat.categoria, { semCodigoConstrucao:!!v.sem_codigo_construcao, temperaturaAbaixoDeZeroSemDeterioracao:!!v.abaixo_zero_sem_deterioracao });
     r.vaso = { P:kP.p_operacao_max_mpa, deCamara:kP, V, classe, pv:cat.pv, grupo:cat.grupo, categoria:cat.categoria, prazos:pr };
-  }catch(e){ r.vaso = { erro:e.message }; }
+  }catch(e){ r.vaso = { erro:msgConta(e) }; }
   return r;
 }
 function telaPrevia(v){
   titulo('Prévia do cálculo', v.tag);
   const u = unidadeDe(v), pr = (x, c) => x == null ? '—' : fmt(deMPa(x, u), c == null ? 2 : c) + ' ' + UNID_ROT[u] + (u !== 'MPa' ? ' <span class="muted">(' + fmt(x, 3) + ' MPa)</span>' : '');
   let r;
-  try{ r = previa(v); }catch(e){ $('tela').innerHTML = '<div class="card">' + esc(e.message) + '</div>'; return; }
+  try{ r = previa(v); }catch(e){ $('tela').innerHTML = '<div class="card">' + esc(msgConta(e)) + '</div>'; return; }
   const m = materialDe(v, null);
   let h = '<div class="alerta" style="background:var(--accent-soft);color:var(--accent-ink)"><b>Só informativa</b>O resultado oficial é calculado e gravado na revisão, no escritório.</div>';
   if (r.avisos.length) h += '<div class="alerta"><b>Avisos</b><ul>' + r.avisos.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
