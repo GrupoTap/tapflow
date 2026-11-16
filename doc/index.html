@@ -192,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E43';   // E43 (S174 · issue 38, Revisão TapDoc · Rodada 4a): o CSV do medidor com uma leitura inválida (zero ou vazia) não é mais recusado inteiro — as boas entram e a janela diz quais ficaram de fora; sem SQL
+const VERSAO = 'TapDoc E44';   // E44 (S177 · issues 54, 63, 64 e 85, Revisão TapDoc · Rodada 5): a PMTA recalculada é sempre a do vaso aberto; o laudo anterior não perde o que foi digitado; desativar instrumento ou material pergunta e dá para reativar; "Nova calibração" guarda o certificado anterior e cada inspeção baixa o do dia dela (442)
+// const VERSAO = 'TapDoc E43';   // E43 (S174 · issue 38, Revisão TapDoc · Rodada 4a): o CSV do medidor com uma leitura inválida (zero ou vazia) não é mais recusado inteiro — as boas entram e a janela diz quais ficaram de fora; sem SQL
 // const VERSAO = 'TapDoc E42';   // E42 (S173 · issue 57, Revisão TapDoc · Rodada 3): o prazo "reduzido" — a revisão mostra em vermelho a redução que não é menor que a da norma (ou sem a categoria para conferir) e a aprovação a ignora; "Gravar o prazo reduzido" pede a categoria e um prazo menor que o da norma; o laudo (laudo-pdf.js S173) e o Registro (documentos-pdf.js D5) escrevem o prazo que a data aprovada dá; sem SQL
 // const VERSAO = 'TapDoc E41';   // E41 (S172 · issues 40, 42 e 55, Revisão TapDoc · Rodada 2): a leitura do número com ponto de milhar — vírgula é a decimal; "1.250" sem vírgula pergunta "1250 ou 1,25?" e não grava (componentes do laudo anterior, mapa, modelo de vaso, instrumentos, corrigir o volume, volume da revisão); a revisão avisa volume abaixo de 20 litros e circunferência abaixo de 300 mm; a mesma regra do celular (28); sem SQL
 // const VERSAO = 'TapDoc E40';   // E40 (S169 · issue 68): com a caixa "Reconstituir o prontuário" marcada, o Relatório de Inspeção sai com o conteúdo do relatório (o gerarLaudo monta sempre com prontuario: null; só o gerarDocumentos monta o Prontuário); sem SQL
@@ -260,7 +261,7 @@ function ligarMaterialCampo(ins){
   document.querySelectorAll('[data-matdec]').forEach(b => b.addEventListener('click', async () => {
     const aceitar = b.dataset.matdec === '1';
     try{ await rpc('tf_insp_material_campo_decidir', { p_id: ins.id, p_aceitar: aceitar });
-      U.toast(aceitar ? 'Aceito: fica o material de campo.' : 'Voltou o material do escritório.', 'ok'); PREP = null; pintar(); }
+      U.toast(aceitar ? 'Aceito: fica o material de campo.' : 'Voltou o material do escritório.', 'ok'); PREP = null; await repintarVaso(); }   // S177 · issue 63
     catch(e){ erro(e); }
   }));
 }
@@ -611,12 +612,35 @@ function pintarTextos(h){
 
 // ── E2 (S80) · instrumentos e materiais ────────────────────────────────────
 const TIPOS_INST = { medidor_espessura:'Medidor de espessura', manometro_padrao:'Manômetro padrão', bancada:'Bancada', outro:'Outro' };
+/** S177 · issue 64: confirmar DENTRO da mesma janela. A janela do núcleo é uma só: abrir outra por cima apagaria o que está
+ *  digitado no formulário. 1º toque: o aviso aparece no corpo da janela e o botão muda de nome; 2º toque: segue.
+ *  A chave muda com o dado (ex.: outro nº de série avisa de novo). */
+function segundoToque(chave, de, para, html){
+  const corpo = $('mBody'); if (!corpo) return true;
+  if (corpo.querySelector('.av2toque[data-k="' + CSS.escape(chave) + '"]')) return true;
+  corpo.querySelectorAll('.av2toque').forEach(x => x.remove());
+  const av = document.createElement('div'); av.className = 'alerta falta av2toque'; av.dataset.k = chave; av.innerHTML = html;
+  corpo.appendChild(av); av.scrollIntoView({ block:'nearest' });
+  // o botão está "Processando…" enquanto a ação roda (semDuploEnvio) e volta ao nome ao terminar: o novo nome vai depois
+  setTimeout(() => { const bt = [...document.querySelectorAll('#mFoot .btn')].find(b => b.textContent === de); if (bt) bt.textContent = para; }, 0);
+  return false;
+}
+// S177 · issue 64: a lista pode mostrar os desativados (com "Reativar"); guardada para o aviso de nº de série repetido
+let INST_DESAT = false, INST_LISTA = [];
 async function telaInstrumentos(){
-  const L = await rpc('tf_insp_instrumentos_lista');
+  const [ATIVOS, DESAT] = await Promise.all([rpc('tf_insp_instrumentos_lista'), rpc('tf_insp_desativados', { p_qual:'instrumentos' }).catch(() => [])]);
+  const TODOS = ATIVOS.concat((DESAT || []).map(x => Object.assign({}, x, { ativo:false })));
+  INST_LISTA = TODOS;   // o aviso de repetido olha também os desativados
+  const nDes = TODOS.filter(x => x.ativo === false).length, L = INST_DESAT ? TODOS : TODOS.filter(x => x.ativo !== false);
   let h = '<div class="card"><div class="linha" style="justify-content:space-between"><h3 style="margin:0">Instrumentos</h3><button class="btn pri" id="instNovo">+ instrumento</button></div>'
-    + '<p class="muted">O celular só oferece medidor, padrão e bancada com o certificado válido. Vencido não aparece para escolha. O padrão precisa da U do certificado.</p>'
+    + '<p class="muted">O celular só oferece medidor, padrão e bancada com o certificado válido. Vencido não aparece para escolha. O padrão precisa da U do certificado. '
+    + 'Quando o instrumento voltar da calibração, use <b>Editar › Nova calibração</b>: o certificado anterior fica guardado para as inspeções feitas com ele.</p>'
+    + '<label class="linha" style="margin:4px 0 8px;font-size:13px"><input type="checkbox" id="instDesat"' + (INST_DESAT ? ' checked' : '') + '> Mostrar os desativados'
+    + (nDes ? ' <span class="muted">(' + nDes + ')</span>' : '') + '</label>'
     + (L.length ? '<table><tr><th>Tipo</th><th>Descrição</th><th>Nº de série</th><th>Certificado</th><th>Validade</th><th></th></tr>'
-      + L.map(x => '<tr><td>' + esc(TIPOS_INST[x.tipo] || x.tipo) + '</td><td><b>' + esc(x.descricao || '') + '</b><div class="muted">' + esc([x.marca, x.modelo].filter(Boolean).join(' · ')) + '</div></td><td>'
+      + L.map(x => '<tr' + (x.ativo === false ? ' style="opacity:.6"' : '') + '><td>' + esc(TIPOS_INST[x.tipo] || x.tipo)
+        + (x.ativo === false ? '<div><span class="chip s-grave">desativado</span></div>' : '') + '</td><td><b>' + esc(x.descricao || '') + '</b><div class="muted">' + esc([x.marca, x.modelo].filter(Boolean).join(' · ')) + '</div>'
+        + (x.em_uso ? '<div class="muted">em ' + x.em_uso + ' inspeção(ões) aberta(s)</div>' : '') + '</td><td>'
         + esc(x.numero_serie || '—') + '</td><td>' + esc(x.certificado_num || '—')
         + (x.certificado_num && (x.certificado_num.toUpperCase() === ((x.descricao || '').match(/^[A-Z]{2,5}-?\d{1,5}/i) || [''])[0].toUpperCase() || x.certificado_num === x.numero_serie)
            ? '<div><span class="chip s-grave">confira: igual ao código</span></div>' : '')
@@ -626,13 +650,18 @@ async function telaInstrumentos(){
            : (x.tipo === 'medidor_espessura' || x.tipo === 'manometro_padrao' ? '<div><span class="chip s-grave">sem o PDF</span></div>' : ''))
         + (x.tipo === 'manometro_padrao' ? '<div class="muted">' + (x.u_expandida != null ? 'U ' + fmt(x.u_expandida, 4) + ' ' + esc(x.unidade || '') + ' (k = ' + fmt(x.k || 2, 2) + ')' : '<span class="chip s-grave">sem a U</span>') + '</div>' : '') + '</td><td>'
         + (x.validade ? (x.vencido ? '<span class="chip s-grave">vencido ' + dataBR(x.validade) + '</span>' : dataBR(x.validade)) : '<span class="muted">sem validade</span>')
-        + '</td><td><button class="btn mini" data-inst="' + esc(x.id) + '">Editar</button></td></tr>').join('') + '</table>'
+        + '</td><td>' + (x.ativo === false ? '<button class="btn mini pri" data-instreat="' + esc(x.id) + '">Reativar</button>' : '<button class="btn mini" data-inst="' + esc(x.id) + '">Editar</button>') + '</td></tr>').join('') + '</table>'
       : '<p class="vazio">Nenhum instrumento cadastrado. Cadastre o medidor de espessura antes da primeira inspeção.</p>') + '</div>';
   $('tela').lastElementChild.remove();   // o "Carregando…"
   $('tela').insertAdjacentHTML('beforeend', h + '<div class="card" id="cxNum"><p class="muted">Carregando a numeração…</p></div>');
   $('instNovo').addEventListener('click', () => editarInstrumento(null));
   cartaoNumeracao();
   $('tela').querySelectorAll('[data-inst]').forEach(b => b.addEventListener('click', () => editarInstrumento(L.find(x => x.id === b.dataset.inst))));
+  $('instDesat').addEventListener('change', () => { INST_DESAT = $('instDesat').checked; pintar(); });
+  $('tela').querySelectorAll('[data-instreat]').forEach(b => b.addEventListener('click', () => N.util.semDuploEnvio(b, async () => {
+    try{ await rpc('tf_insp_instrumento_gravar', { p_dados:{ id:b.dataset.instreat, ativo:true } }); U.toast('Reativado: volta a ser oferecido ao celular (com o certificado válido).', 'ok'); pintar(); }
+    catch(e){ erro(e); }
+  })));
   // E9: o PDF do certificado abre numa janela
   $('tela').querySelectorAll('[data-cert]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault();
     janela('Certificado', '<div id="certVis" class="visorrev" style="min-height:420px"></div>', [{ rotulo:'Fechar' }]);
@@ -641,6 +670,19 @@ async function telaInstrumentos(){
 function editarInstrumento(x){
   x = x || { tipo:'medidor_espessura' };
   const c = (k, rot, tipo) => '<label class="f">' + rot + '<input class="t" id="in_' + k + '" type="' + (tipo || 'text') + '" value="' + esc(x[k] || '') + '"></label>';
+  // S177 · issue 85: as calibrações anteriores (guardadas pela 442), com o PDF de cada uma
+  const calibs = (x.calibracoes || []);
+  const htmlCalibs = calibs.length ? '<details style="margin-top:10px"><summary>Calibrações anteriores (' + calibs.length + ')</summary><table class="comp"><tr><th>Certificado</th><th>Calibrado em</th><th>Validade</th><th>PDF</th></tr>'
+    + calibs.map(k => '<tr><td>' + esc(k.certificado_num || '—') + (k.laboratorio ? '<div class="muted">' + esc(k.laboratorio) + '</div>' : '') + '</td><td>' + (k.calibrado_em ? dataBR(k.calibrado_em) : '—') + '</td><td>'
+      + (k.validade ? dataBR(k.validade) : '—') + '</td><td>' + (k.certificado_path ? '<a href="#" data-certant="' + esc(k.certificado_path) + '">abrir</a>'
+        : '<span class="chip s-grave">sem o PDF</span> <button class="btn mini" data-calpdf="' + esc(k.id) + '">anexar</button>') + '</td></tr>').join('')
+    + '</table><p class="muted">As inspeções feitas com o instrumento antes de cada troca continuam com o certificado daquele dia.</p></details>' : '';
+  setTimeout(() => {
+    document.querySelectorAll('[data-certant]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault();
+      janela('Certificado anterior', '<div id="certVis" class="visorrev" style="min-height:420px"></div>', [{ rotulo:'Fechar' }]);
+      setTimeout(() => mostrarArquivoEm($('certVis'), { storage_path: a.dataset.certant }), 0); }));
+    document.querySelectorAll('[data-calpdf]').forEach(b => b.addEventListener('click', () => anexarPdfCalibracao(x, b.dataset.calpdf)));
+  }, 0);
   janela(x.id ? 'Editar instrumento' : 'Novo instrumento',
     (x.id ? '' : '<label class="f">Tipo<select class="t" id="in_tipo">' + Object.keys(TIPOS_INST).map(t => '<option value="' + t + '"' + (t === x.tipo ? ' selected' : '') + '>' + TIPOS_INST[t] + '</option>').join('') + '</select></label>')
     // S144 · item 69: cada campo no seu lugar (o laudo escreve "manômetro padrão da marca …, calibrado pelo laboratório …, certificado nº …")
@@ -655,9 +697,16 @@ function editarInstrumento(x){
     + '<div class="g3"><label class="f">Faixa máxima<input class="t" id="in_fx" inputmode="decimal" value="' + esc(fmt(x.faixa_max, 4)) + '"></label>'
     + '<label class="f">Resolução<input class="t" id="in_res" inputmode="decimal" value="' + esc(fmt(x.resolucao, 5)) + '"></label></div></fieldset>'
     // E9 (R06a): o PDF do certificado; o laudo anexa o do medidor escolhido em campo
-    + '<label class="f">PDF do certificado <small>' + (x.certificado_path ? '(já anexado; escolha outro para trocar)' : '(o laudo anexa o do medidor de espessura)') + '</small>'
-    + '<input class="t" id="in_cert" type="file" accept="application/pdf,image/*"></label>',
-    (x.id ? [{ rotulo:'Desativar', acao:async () => { try{ await rpc('tf_insp_instrumento_gravar', { p_dados:{ id:x.id, ativo:false } }); U.toast('Desativado.', 'ok'); pintar(); }catch(e){ erro(e); return false; } } }] : [])
+    + '<label class="f">PDF do certificado <small>' + (x.certificado_path ? '(já anexado; para um certificado NOVO, use "Nova calibração")' : '(o laudo anexa o do medidor de espessura)') + '</small>'
+    + '<input class="t" id="in_cert" type="file" accept="application/pdf,image/*"></label>' + htmlCalibs,
+    // S177 · issue 64: "Desativar" pergunta antes e diz o que acontece; issue 85: "Nova calibração" guarda a anterior
+    (x.id ? [{ rotulo:'Desativar', acao:async () => {
+        if (!segundoToque('desativar', 'Desativar', 'Confirmar: desativar',
+          '<b>Desativar ' + esc(x.descricao || 'o instrumento') + '?</b> Ele sai da lista e <b>deixa de ser oferecido ao celular</b>.'
+          + (x.em_uso ? ' Está em ' + x.em_uso + ' inspeção(ões) aberta(s): elas continuam com ele, mas o celular passa a mostrá-lo como "desativado".' : '')
+          + ' Dá para reativar depois (Instrumentos › "Mostrar os desativados" › Reativar). Toque em "Confirmar: desativar" para seguir, ou em "Cancelar".')) return false;
+        try{ await rpc('tf_insp_instrumento_gravar', { p_dados:{ id:x.id, ativo:false } }); U.toast('Desativado. Para reativar: "Mostrar os desativados".', 'ok'); pintar(); }catch(e){ erro(e); return false; } } },
+      { rotulo:'Nova calibração', acao:() => { setTimeout(() => novaCalibracao(x), 0); } }] : [])
     .concat([{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
       const d = {}; ['descricao','marca','modelo','numero_serie','certificado_num','laboratorio','calibrado_em','validade'].forEach(k => { d[k] = ($('in_' + k).value || '').trim() || null; });
       if (!d.descricao){ U.toast('Escreva a descrição.', 'err'); return false; }
@@ -676,18 +725,88 @@ function editarInstrumento(x){
       }
       const arq = $('in_cert').files && $('in_cert').files[0];
       if (arq && arq.size > ARQ_MAX_MB * 1048576){ U.toast('O certificado tem ' + mbDe(arq) + ' MB; o máximo é ' + ARQ_MAX_MB + ' MB.', 'err'); return false; }
-      try{
-        const id = await rpc('tf_insp_instrumento_gravar', { p_dados:d });
-        if (arq){
-          const pdf = /pdf/i.test(arq.type) || /\.pdf$/i.test(arq.name);
-          const blob = pdf ? new Blob([arq], { type:'application/pdf' }) : await N.foto.reduzir(arq, { lado:2000, qualidade:0.9 });
-          const caminho = 'instrumentos/' + (id || x.id) + '/' + uid() + (pdf ? '.pdf' : '.jpg');
-          await enviarArq(caminho, blob, pdf ? 'O PDF do certificado' : 'A foto do certificado');
-          await rpc('tf_insp_instrumento_gravar', { p_dados:{ id: id || x.id, certificado_path: caminho } });
-        }
-        U.toast('Gravado.', 'ok'); pintar();
-      }catch(e){ erro(e); return false; }
+      // S177 · issue 64 (o aviso fica na própria janela, sem apagar o que foi digitado): o mesmo nº de série num instrumento do mesmo tipo (ativo ou desativado) é o mesmo instrumento
+      if (d.numero_serie){
+        const igual = (INST_LISTA || []).find(y => y.id !== x.id && y.tipo === (x.id ? x.tipo : d.tipo) && String(y.numero_serie || '').trim().toUpperCase() === d.numero_serie.toUpperCase());
+        if (igual && !segundoToque('serie:' + d.numero_serie.toUpperCase(), 'Gravar', 'Gravar outro assim mesmo', 'Já existe <b>' + esc(igual.descricao || '') + '</b> com o nº de série ' + esc(d.numero_serie) + (igual.ativo === false ? ' (desativado)' : '')
+          + '. Se for o mesmo instrumento, cancele e ' + (igual.ativo === false ? 'reative o que existe' : 'edite o que existe') + '; para cadastrar outro mesmo assim, toque em "Gravar outro assim mesmo".')) return false;
+      }
+      const subir = async () => {
+        const pdf = /pdf/i.test(arq.type) || /\.pdf$/i.test(arq.name);
+        const blob = pdf ? new Blob([arq], { type:'application/pdf' }) : await N.foto.reduzir(arq, { lado:2000, qualidade:0.9 });
+        const caminho = 'instrumentos/' + x.id + '/' + uid() + (pdf ? '.pdf' : '.jpg');
+        await enviarArq(caminho, blob, pdf ? 'O PDF do certificado' : 'A foto do certificado');
+        return caminho;
+      };
+      // S177 · issue 85: instrumento que já existe: o PDF sobe ANTES e o cadastro muda de uma vez (o banco guarda o anterior inteiro)
+      if (x.id && arq){
+        try{ d.certificado_path = await subir(); await rpc('tf_insp_instrumento_gravar', { p_dados:d }); U.toast('Gravado.', 'ok'); pintar(); }
+        catch(e){ erro(e); return false; }
+        return;
+      }
+      // S177 · issue 64: depois da 1ª gravação a janela passa a editar o instrumento criado: se o PDF não subir, "Gravar"
+      // de novo só tenta o PDF, sem criar um segundo instrumento igual
+      try{ const id = await rpc('tf_insp_instrumento_gravar', { p_dados:d }); if (!x.id && id){ x.id = id; x.tipo = d.tipo; } }
+      catch(e){ erro(e); return false; }
+      if (arq){
+        try{
+          const caminho = await subir();
+          await rpc('tf_insp_instrumento_gravar', { p_dados:{ id: x.id, certificado_path: caminho } });
+        }catch(e){ U.toast('O instrumento foi gravado, mas o certificado não subiu (' + ((e && e.message) || e) + '). Toque em "Gravar" de novo: não cria outro.', 'err'); return false; }
+      }
+      U.toast('Gravado.', 'ok'); pintar();
     } }]));
+}
+/** S177 · issue 85: o instrumento voltou da calibração. O PDF sobe ANTES e o cadastro troca de uma vez só; o banco guarda
+ *  o certificado anterior (instrumento_calibracoes), que continua valendo para as inspeções feitas até a troca. */
+function novaCalibracao(x){
+  const pad = x.tipo === 'manometro_padrao';
+  janela('Nova calibração · ' + (x.descricao || ''),
+    '<p class="muted">O certificado de agora (' + esc(x.certificado_num || 'sem nº') + (x.validade ? ', validade ' + dataBR(x.validade) : '') + ') fica guardado: as inspeções feitas com ele continuam baixando ele.</p>'
+    + '<label class="f">Nº do novo certificado *<input class="t" id="nc_num"></label>'
+    + '<label class="f">Laboratório<input class="t" id="nc_lab" value="' + esc(x.laboratorio || '') + '"></label>'
+    + '<div class="g3"><label class="f">Calibrado em *<input class="t" id="nc_cal" type="date"></label><label class="f">Validade *<input class="t" id="nc_val" type="date"></label></div>'
+    + (pad ? '<div class="g3"><label class="f">U (incerteza expandida) *<input class="t" id="nc_u" inputmode="decimal"></label><label class="f">k<input class="t" id="nc_k" inputmode="decimal" value="' + esc(fmt(x.k == null ? 2 : x.k, 2)) + '"></label>'
+      + '<label class="f">Unidade<select class="t" id="nc_un">' + ['kgf/cm2','bar','MPa','psi','kPa'].map(u => '<option value="' + u + '"' + ((x.unidade || 'kgf/cm2') === u ? ' selected' : '') + '>' + u.replace('cm2', 'cm²') + '</option>').join('') + '</select></label></div>' : '')
+    + '<label class="f">PDF do novo certificado *<input class="t" id="nc_pdf" type="file" accept="application/pdf,image/*"></label>',
+    [{ rotulo:'Cancelar' }, { rotulo:'Gravar a nova calibração', classe:'pri', acao:async () => {
+      const d = { id:x.id, certificado_num:($('nc_num').value || '').trim() || null, laboratorio:($('nc_lab').value || '').trim() || null,
+                  calibrado_em:$('nc_cal').value || null, validade:$('nc_val').value || null };
+      const arq = $('nc_pdf').files && $('nc_pdf').files[0];
+      if (!d.certificado_num || !d.calibrado_em || !d.validade || !arq){ U.toast('Preencha o nº, as duas datas e escolha o PDF.', 'err'); return false; }
+      if (d.validade <= d.calibrado_em){ U.toast('A validade tem de ser depois da data da calibração.', 'err'); return false; }
+      if (x.calibrado_em && d.calibrado_em <= x.calibrado_em){ U.toast('A data da calibração é igual ou anterior à de agora (' + dataBR(x.calibrado_em) + '). Para corrigir o certificado de agora, use "Gravar" no Editar.', 'err'); return false; }
+      if (d.certificado_num === x.certificado_num){ U.toast('O nº é o mesmo do certificado de agora: confira o nº do certificado novo.', 'err'); return false; }
+      if (pad){
+        try{ d.u_expandida = numMedida($('nc_u'), 'U expandida'); d.k = numMedida($('nc_k'), 'Fator k') || 2; d.unidade = $('nc_un').value; }catch(e){ U.toast(e.message, 'err'); return false; }
+        if (d.u_expandida == null){ U.toast('O padrão precisa da U do certificado.', 'err'); return false; }
+      }
+      if (arq.size > ARQ_MAX_MB * 1048576){ U.toast('O certificado tem ' + mbDe(arq) + ' MB; o máximo é ' + ARQ_MAX_MB + ' MB.', 'err'); return false; }
+      try{
+        const pdf = /pdf/i.test(arq.type) || /\.pdf$/i.test(arq.name);
+        const blob = pdf ? new Blob([arq], { type:'application/pdf' }) : await N.foto.reduzir(arq, { lado:2000, qualidade:0.9 });
+        d.certificado_path = 'instrumentos/' + x.id + '/' + uid() + (pdf ? '.pdf' : '.jpg');
+        await enviarArq(d.certificado_path, blob, pdf ? 'O PDF do certificado' : 'A foto do certificado');
+        await rpc('tf_insp_instrumento_gravar', { p_dados:d });
+        U.toast('Nova calibração gravada. A anterior ficou guardada.', 'ok'); pintar();
+      }catch(e){ erro(e); return false; }
+    } }]);
+}
+/** S177 · issue 85: o PDF de uma calibração anterior que ficou sem ele (só completa; não troca). */
+function anexarPdfCalibracao(x, calId){
+  janela('Anexar o PDF da calibração anterior', '<label class="f">PDF do certificado<input class="t" id="cp_pdf" type="file" accept="application/pdf,image/*"></label>',
+    [{ rotulo:'Cancelar' }, { rotulo:'Anexar', classe:'pri', acao:async () => {
+      const arq = $('cp_pdf').files && $('cp_pdf').files[0]; if (!arq){ U.toast('Escolha o arquivo.', 'err'); return false; }
+      if (arq.size > ARQ_MAX_MB * 1048576){ U.toast('O certificado tem ' + mbDe(arq) + ' MB; o máximo é ' + ARQ_MAX_MB + ' MB.', 'err'); return false; }
+      try{
+        const pdf = /pdf/i.test(arq.type) || /\.pdf$/i.test(arq.name);
+        const blob = pdf ? new Blob([arq], { type:'application/pdf' }) : await N.foto.reduzir(arq, { lado:2000, qualidade:0.9 });
+        const caminho = 'instrumentos/' + x.id + '/' + uid() + (pdf ? '.pdf' : '.jpg');
+        await enviarArq(caminho, blob, pdf ? 'O PDF do certificado' : 'A foto do certificado');
+        await rpc('tf_insp_instrumento_calibracao_pdf', { p_id:calId, p_path:caminho });
+        U.toast('PDF anexado.', 'ok'); N.janela.fechar(); pintar();
+      }catch(e){ erro(e); return false; }
+    } }]);
 }
 // S86 · R04a: a numeração dos relatórios (M) e certificados (V)
 async function cartaoNumeracao(){
@@ -742,23 +861,36 @@ async function cartaoAfericoes(ins){
         catch(e){ erro(e); return false; } } }]);
   }));
 }
+// S177 · issue 64: os materiais desativados aparecem a pedido, com "Reativar" (só o PLH grava)
+let MAT_DESAT = false, MAT_LISTA = [];
 async function telaMateriais(){
-  const L = await rpc('tf_insp_materiais_lista'), admin = PLH,   /* E7: gravar e conferir material é do PLH */ nConf = L.filter(x => !x.conferido).length;
+  const [ATIVOS, DESAT] = await Promise.all([rpc('tf_insp_materiais_lista'), rpc('tf_insp_desativados', { p_qual:'materiais' }).catch(() => [])]);
+  const TODOS = ATIVOS.concat((DESAT || []).map(x => Object.assign({}, x, { ativo:false }))), admin = PLH,   /* E7: gravar e conferir material é do PLH */ nConf = TODOS.filter(x => !x.conferido && x.ativo !== false).length;
+  MAT_LISTA = TODOS;   // o aviso de repetido olha também os desativados
+  const nDesM = TODOS.filter(x => x.ativo === false).length, L = MAT_DESAT ? TODOS : TODOS.filter(x => x.ativo !== false);
   let h = '<div class="card"><div class="linha" style="justify-content:space-between"><h3 style="margin:0">Materiais (tensão admissível)</h3>'
     + (admin ? '<button class="btn pri" id="matNovo">+ material</button>' : '') + '</div>'
     + '<p class="muted">S da ASME II-D, Tabela 1A (edição atual, fator 3,5): é o <b>teto</b> do cálculo. A faixa de resistência é a da norma do material. A prévia do celular usa também os não conferidos (avisando). <b>O resultado do laudo só grava com material conferido pelo PLH.</b>'
     + (nConf ? ' Faltam conferir: <b>' + nConf + '</b>.' : '') + '</p>'
+    + '<label class="linha" style="margin:4px 0 8px;font-size:13px"><input type="checkbox" id="matDesat"' + (MAT_DESAT ? ' checked' : '') + '> Mostrar os desativados'
+    + (nDesM ? ' <span class="muted">(' + nDesM + ')</span>' : '') + '</label>'
     + (L.length ? '<table><tr><th>Especificação</th><th>Forma</th><th>Resistência (MPa)</th><th>S (MPa)</th><th>Até</th><th>Situação</th><th></th></tr>'
-      + L.map(x => '<tr><td><b>' + esc(x.especificacao) + '</b>' + (x.tabela_asme ? ' <span class="muted">' + esc(x.tabela_asme) + '</span>' : '') + '</td><td>' + esc(x.forma || '—') + '</td><td>'
+      + L.map(x => '<tr' + (x.ativo === false ? ' style="opacity:.6"' : '') + '><td><b>' + esc(x.especificacao) + '</b>' + (x.tabela_asme ? ' <span class="muted">' + esc(x.tabela_asme) + '</span>' : '') + '</td><td>' + esc(x.forma || '—') + '</td><td>'
         + (x.resist_min_mpa != null ? fmt(x.resist_min_mpa, 0) + (x.resist_max_mpa != null ? ' a ' + fmt(x.resist_max_mpa, 0) : ' (mín.)') : '<span class="muted">—</span>') + '</td><td>'
         + fmt(x.s_mpa, 1) + '</td><td>' + fmt(x.t_max_c, 0) + ' °C</td><td>'
-        + (x.conferido ? '<span class="chip s-pronto">conferido' + (x.conferido_por ? ' · ' + esc(x.conferido_por) : '') + '</span>' : '<span class="chip s-em_conferencia">a conferir</span>')
-        + '</td><td>' + (admin ? (x.conferido ? '' : '<button class="btn mini pri" data-mconf="' + esc(x.id) + '">Conferir</button> ') + '<button class="btn mini" data-med="' + esc(x.id) + '">Editar</button>' : '')
+        + (x.ativo === false ? '<span class="chip s-grave">desativado</span>' : x.conferido ? '<span class="chip s-pronto">conferido' + (x.conferido_por ? ' · ' + esc(x.conferido_por) : '') + '</span>' : '<span class="chip s-em_conferencia">a conferir</span>')
+        + '</td><td>' + (admin ? (x.ativo === false ? '<button class="btn mini pri" data-mreat="' + esc(x.id) + '">Reativar</button>'
+          : (x.conferido ? '' : '<button class="btn mini pri" data-mconf="' + esc(x.id) + '">Conferir</button> ') + '<button class="btn mini" data-med="' + esc(x.id) + '">Editar</button>') : '')
         + '</td></tr>').join('') + '</table>' : '<p class="vazio">Nenhum material.</p>') + '</div>';
   $('tela').lastElementChild.remove();
   $('tela').insertAdjacentHTML('beforeend', h);
+  $('matDesat').addEventListener('change', () => { MAT_DESAT = $('matDesat').checked; pintar(); });
   if (!admin) return;
   $('matNovo').addEventListener('click', () => editarMaterial(null));
+  $('tela').querySelectorAll('[data-mreat]').forEach(b => b.addEventListener('click', () => N.util.semDuploEnvio(b, async () => {
+    try{ await rpc('tf_insp_material_gravar', { p_dados:{ id:b.dataset.mreat, ativo:true } }); U.toast('Reativado: volta para a escolha do material.', 'ok'); pintar(); }
+    catch(e){ erro(e); }
+  })));
   $('tela').querySelectorAll('[data-med]').forEach(b => b.addEventListener('click', () => editarMaterial(L.find(x => x.id === b.dataset.med))));
   $('tela').querySelectorAll('[data-mconf]').forEach(b => b.addEventListener('click', () => {
     const x = L.find(y => y.id === b.dataset.mconf);
@@ -783,7 +915,12 @@ function editarMaterial(x){
     + '<label class="f">Vale até (°C)<input class="t" id="mt_t" inputmode="decimal" value="' + esc(fmt(x.t_max_c, 0) || '200') + '"></label>'
     + '<label class="f">Fonte<input class="t" id="mt_f" value="' + esc(x.fonte || 'ASME II-D, Tabela 1A') + '"></label>'
     + '<p class="muted">Mudar o S ou a faixa apaga a conferência: o número novo ainda não foi visto pelo PLH.</p>',
-    (x.id ? [{ rotulo:'Desativar', acao:async () => { try{ await rpc('tf_insp_material_gravar', { p_dados:{ id:x.id, ativo:false } }); pintar(); }catch(e){ erro(e); return false; } } }] : [])
+    // S177 · issue 64: "Desativar" pergunta antes e diz o que acontece
+    (x.id ? [{ rotulo:'Desativar', acao:async () => {
+        if (!segundoToque('desativar', 'Desativar', 'Confirmar: desativar',
+          '<b>Desativar ' + esc(x.especificacao || 'o material') + '?</b> Ele sai da lista e <b>deixa de ser oferecido</b> na preparação, no laudo anterior e no celular. Os vasos e laudos que já usam este material continuam com ele.'
+          + ' Dá para reativar depois (Materiais › "Mostrar os desativados" › Reativar). Toque em "Confirmar: desativar" para seguir, ou em "Cancelar".')) return false;
+        try{ await rpc('tf_insp_material_gravar', { p_dados:{ id:x.id, ativo:false } }); U.toast('Desativado. Para reativar: "Mostrar os desativados".', 'ok'); pintar(); }catch(e){ erro(e); return false; } } }] : [])
     .concat([{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
       const s = num($('mt_s').value), t = num($('mt_t').value);
       if (!$('mt_esp').value.trim() || !(s > 0)){ U.toast('Especificação e S são obrigatórios.', 'err'); return false; }
@@ -792,6 +929,11 @@ function editarMaterial(x){
       const d = { especificacao:$('mt_esp').value.trim(), forma:$('mt_forma').value.trim() || null, s_mpa:s, t_max_c:t || 200, fonte:$('mt_f').value.trim() || null, tabela_asme:'UCS-23',
                   resist_min_mpa:rmin, resist_max_mpa:rmax, escoamento_min_mpa:resc };
       if (x.id) d.id = x.id;
+      // S177 · issue 64 (o aviso fica na própria janela, sem apagar o que foi digitado): a mesma especificação e forma já cadastrada (ativa ou desativada) é o mesmo material
+      const chave = v => String(v || '').trim().toUpperCase().replace(/\s+/g, ' ');
+      const igual = (MAT_LISTA || []).find(y => y.id !== x.id && chave(y.especificacao) === chave(d.especificacao) && chave(y.forma) === chave(d.forma));
+      if (igual && !segundoToque('mat:' + chave(d.especificacao) + '|' + chave(d.forma), 'Gravar', 'Gravar outro assim mesmo', 'Já existe <b>' + esc(igual.especificacao) + (igual.forma ? ' (' + esc(igual.forma) + ')' : '') + '</b>' + (igual.ativo === false ? ' (desativado)' : '')
+        + '. Se for o mesmo, cancele e ' + (igual.ativo === false ? 'reative o que existe' : 'edite o que existe') + '; para cadastrar outro mesmo assim, toque em "Gravar outro assim mesmo".')) return false;
       try{ await rpc('tf_insp_material_gravar', { p_dados:d }); U.toast('Gravado.', 'ok'); pintar(); }catch(e){ erro(e); return false; }
     } }]));
 }
@@ -1033,11 +1175,27 @@ function arquivosVaso(D, v){
   return out;
 }
 const artArquivo = D => D.art && D.art.path ? { tipo:'art', rot:'ART (da OS)', numero:D.art.numero || '—', path:D.art.path, nome:nomeArq('art', { cliente:D.cliente, os:(D.os || {}).numero }) } : null;
-/** Os certificados dos instrumentos (o PDF do laboratório como veio). ids: só esses (os usados num vaso). */
-function instrumentosArquivos(D, ids){
-  return (D.instrumentos || []).filter(z => z.certificado_path && (!ids || ids.indexOf(z.id) >= 0))
-    .map(z => ({ tipo:'instrumento', rot:(z.tipo === 'medidor_espessura' ? 'Medidor de espessura ' : z.tipo === 'manometro_padrao' ? 'Manômetro padrão ' : 'Instrumento ') + (z.descricao || z.numero_serie || ''),
-      numero:z.certificado_num || '—', path:z.certificado_path, nome:nomeArq('instrumento', { instrumento:z }) }));
+/** Os certificados dos instrumentos (o PDF do laboratório como veio). v: só os de um vaso; sem v: os da OS inteira.
+ *  S177 · issue 85: de cada vaso vale o certificado do DIA dele (442: "certificados"; laudo emitido: o da fotografia),
+ *  não o do cadastro de hoje. Servidor antes da 442: a lista antiga (o cadastro de hoje). */
+function certificadosDoVaso(D, v){
+  if (Array.isArray(v.certificados)) return v.certificados;
+  const ids = v.instrumentos || [];
+  return (D.instrumentos || []).filter(z => ids.indexOf(z.id) >= 0);
+}
+function instrumentosArquivos(D, v){
+  let zs;
+  if (v) zs = certificadosDoVaso(D, v);
+  else { const vistos = {}; zs = [];
+    (D.vasos || []).forEach(w => certificadosDoVaso(D, w).forEach(z => { const k = z.certificado_path || ('id:' + z.id); if (!vistos[k]){ vistos[k] = 1; zs.push(z); } }));
+    if (!(D.vasos || []).length) zs = D.instrumentos || []; }
+  zs = zs.filter(z => z.certificado_path);
+  const certsDe = {}; zs.forEach(z => { certsDe[z.id] = (certsDe[z.id] || 0) + 1; });
+  return zs.map(z => { let nome = nomeArq('instrumento', { instrumento:z });
+    // o mesmo instrumento com dois certificados na mesma OS (antes e depois da calibração): o nº do certificado no nome
+    if (certsDe[z.id] > 1) nome = nome.replace(/\.pdf$/i, ' - certificado ' + String(z.certificado_num || 'sem nº').replace(/[\\/:*?"<>|]+/g, '-') + '.pdf');
+    return { tipo:'instrumento', rot:(z.tipo === 'medidor_espessura' ? 'Medidor de espessura ' : z.tipo === 'manometro_padrao' ? 'Manômetro padrão ' : 'Instrumento ') + (z.descricao || z.numero_serie || ''),
+      numero:z.certificado_num || '—', path:z.certificado_path, nome }; });
 }
 const nomeVasoZip = (D, v) => (window.DocumentosPDF ? DocumentosPDF.tagNome(v.tag, v.numero_tap, (D.vasos || []).filter(w => w.tag === v.tag).length > 1) : v.tag);
 /** Baixa os arquivos, monta o .zip (sem compressão) e entrega. Arquivo que não abre fica de fora e é avisado. */
@@ -1056,7 +1214,7 @@ async function baixarZip(nomeZip, itens, aviso){
 }
 /** DP15 · o .zip do vaso: os documentos dele + a ART + os certificados dos instrumentos usados nele. */
 function itensZipVaso(D, v){
-  return arquivosVaso(D, v).concat([fichArquivo(D, v)].filter(Boolean), [artArquivo(D)].filter(Boolean), instrumentosArquivos(D, v.instrumentos || []));   // E38: + o fichário (kit completo)
+  return arquivosVaso(D, v).concat([fichArquivo(D, v)].filter(Boolean), [artArquivo(D)].filter(Boolean), instrumentosArquivos(D, v));   // E38: + o fichário (kit completo) · E44: o certificado do dia (issue 85)
 }
 /** DP15 · o .zip da OS: a ART e as lombadas na raiz, a pasta "Instrumentos" e uma pasta por vaso (com o fichário de quem leva o kit completo). */
 function itensZipOS(D, larguras){
@@ -1198,7 +1356,7 @@ async function quadroDocumentos(os){
     : '<span class="muted">Lombadas: depois do laudo emitido.</span>';
   h += '<div class="g3" style="margin-top:10px"><div class="card" style="margin:0"><b>Da OS</b><div style="margin-top:4px">'
     + (art ? 'ART nº ' + esc(art.numero) + ' ' + btDl(art) + '<div class="muted">' + esc(art.nome) + ' (o arquivo do CREA, sem mudar nada)</div>' : '<span class="muted">ART sem o PDF</span>') + '</div><div style="margin-top:6px" id="docsLomb">' + lombOS + '</div></div>'
-    + '<div class="card" style="margin:0"><b>Instrumentos usados nesta OS</b><div style="margin-top:4px">' + (ins.length ? ins.map(z => '<div>' + esc(z.rot) + ' ' + btDl(z) + '</div>').join('')
+    + '<div class="card" style="margin:0"><b>Instrumentos usados nesta OS</b><div style="margin-top:4px">' + (ins.length ? ins.map(z => '<div>' + esc(z.rot) + ' <span class="muted">cert. ' + esc(z.numero) + '</span> ' + btDl(z) + '</div>').join('')
       + '<div class="muted">O PDF do laboratório como veio (com a assinatura dele).</div>' : '<span class="muted">nenhum certificado anexado</span>') + '</div></div>'
     + '<div class="muted" style="align-self:center">' + chipDoc('assinado') + ' o PDF assinado pelo PLH (o oficial)<br>' + chipDoc('aprovado') + ' aprovado e numerado (é o que vai para o token)<br>Fichário e lombadas: só para cliente com "Imprime a pasta" = sim; gerados na hora, sem assinatura</div></div>'
     + '<span class="muted" id="docsAviso"></span>' + cartaoPacote(P);
@@ -1211,7 +1369,7 @@ function cartaoDocsVaso(D){
   const v = D && (D.vasos || [])[0]; if (!v) return '';
   const A = arquivosVaso(D, v);
   if (!A.length) return '';
-  const linhas = A.concat([artArquivo(D)].filter(Boolean), instrumentosArquivos(D, v.instrumentos || []));
+  const linhas = A.concat([artArquivo(D)].filter(Boolean), instrumentosArquivos(D, v));   // E44 · issue 85: o certificado do dia
   return '<h2>Documentos deste vaso</h2><div class="card" id="cxDocsVaso"><div class="linha" style="justify-content:space-between;margin-bottom:6px"><span class="muted" id="docsAviso">'
     + (v.laudo.docs_juntos ? 'Laudo emitido antes da separação dos documentos: os certificados estão dentro do relatório.' : 'Cada documento num arquivo; o oficial é o assinado com o token.') + '</span>'
     + '<button class="btn pri" data-zipv="' + esc(v.inspecao_id) + '">Baixar tudo do vaso (.zip)</button></div>'
@@ -1330,7 +1488,7 @@ async function telaVaso(os, vid){
   VASO = PREP.vasos.find(v => v.id === vid);
   if (!VASO){ await carregarOS(os); VASO = PREP.vasos.find(v => v.id === vid); }
   if (!VASO) throw new Error('Vaso não encontrado nesta OS.');
-  LAUDO = VASO.laudo || null; PREVIA = null;
+  LAUDO = VASO.laudo || null; PREVIA = null; PMTA_RECALC = null;   // S177 · issue 54: a PMTA recalculada é de cada vaso (refeita na prévia)
   const D = (LAUDO && LAUDO.declarado) || {};
   titulo(VASO.tag + ' · laudo anterior', PREP.os.numero + ' · ' + (PREP.os.cliente || ''));
   const cams = VASO.camaras || [];
@@ -1465,6 +1623,38 @@ function linhaValv(x){
   tr.querySelector('button').addEventListener('click', () => tr.remove());
   $('valvs').appendChild(tr);
 }
+/* S177 · issue 63: anexar um arquivo ou decidir o material de campo refaz a tela do vaso. O que estava digitado e ainda
+ * não foi gravado (o formulário do laudo, as linhas de componente e de válvula, os motivos) é guardado antes e devolvido
+ * depois, no mesmo vaso. */
+function fotoVaso(){
+  if (!VASO || !$('gravar')) return null;
+  const campos = {};
+  $('tela').querySelectorAll('input[id], select[id], textarea[id]').forEach(el => {
+    if (el.type === 'file' || el.id === 'un') return;
+    campos[el.id] = el.type === 'checkbox' ? { c: el.checked } : { v: el.value };
+  });
+  const linhas = sel => [...document.querySelectorAll(sel)].map(tr => { const o = {}; tr.querySelectorAll('[data-k]').forEach(i => { o[i.dataset.k] = i.value; }); return o; });
+  const det = document.querySelector('details.op');
+  guardarMotivos();
+  return { vaso: VASO.id, un: UN, campos, comps: linhas('#comps tr.lc'), valvs: linhas('#valvs tr.lv'), aberto: !!(det && det.open) };
+}
+function restaurarVaso(f){
+  if (!f || !VASO || VASO.id !== f.vaso || !$('gravar') || f.un !== UN) return;
+  Object.keys(f.campos).forEach(id => { const el = $(id); if (!el) return; const x = f.campos[id];
+    if ('c' in x) el.checked = x.c; else el.value = x.v; });
+  const refaz = (tab, cls, nova, rows) => { document.querySelectorAll('#' + tab + ' tr.' + cls).forEach(tr => tr.remove());
+    rows.forEach(o => { nova({}); const tr = $(tab).lastElementChild; tr.querySelectorAll('[data-k]').forEach(i => { if (o[i.dataset.k] != null) i.value = o[i.dataset.k]; }); }); };
+  refaz('comps', 'lc', linhaComp, f.comps);
+  refaz('valvs', 'lv', linhaValv, f.valvs);
+  const det = document.querySelector('details.op'); if (det && f.aberto) det.open = true;
+  if ($('volume') && $('vol_desc')) $('volume').disabled = $('vol_desc').checked;
+  if ($('s_mpa')) $('s_mpa').dispatchEvent(new Event('input'));
+}
+async function repintarVaso(){
+  const f = fotoVaso();
+  await pintar();
+  restaurarVaso(f);
+}
 const blobs = {};
 async function mostrarArquivo(a){
   const vis = $('visor'); if (!a) return;
@@ -1492,7 +1682,7 @@ $('arqPdf').addEventListener('change', async () => {
     await enviarArq(caminho, pdf ? new Blob([blob], { type:'application/pdf' }) : blob, pdf ? 'O PDF' : 'A foto');
     await rpc('tf_insp_foto_registrar', { p_id: fid, p_dados:{ inspecao_id: VASO.inspecao.id, storage_path: caminho, secao: 'laudo_anterior',
       legenda: pdf ? 'PDF do laudo' : 'Página do laudo', bytes: blob.size } });
-    U.toast('Anexado.', 'ok'); await carregarOS(PREP.os.id); pintar();
+    U.toast('Anexado.', 'ok'); await carregarOS(PREP.os.id); await repintarVaso();   // S177 · issue 63: sem perder o que estava digitado
   }catch(e){ erro(e); }
 });
 async function situacaoRapida(sit, motivo){
@@ -1504,13 +1694,25 @@ async function situacaoRapida(sit, motivo){
 }
 function lerForm(){
   const n = (id, mpa) => { const x = num($(id).value); if (Number.isNaN(x)) throw new Error('Número inválido em: ' + ($(id).closest('label').firstChild.textContent || id).trim()); return x == null ? null : (mpa ? paraMPa(x) : x); };
-  const comps = [...document.querySelectorAll('#comps tr.lc')].map(tr => {
-    const o = {}, nomeC = ((tr.querySelector('[data-k="nome"]') || {}).value || '').trim() || 'componente';
+  const comps = [...document.querySelectorAll('#comps tr.lc')].map((tr, k) => {
+    const o = {}, elNome = tr.querySelector('[data-k="nome"]'), nomeC = ((elNome || {}).value || '').trim() || 'componente';
+    // S177 · issue 63: linha com medida e sem nome não some calada: recusa e leva até a linha (a linha toda em branco é ignorada)
+    const temMedida = [...tr.querySelectorAll('input[data-k]')].some(i => i.dataset.k !== 'nome' && String(i.value || '').trim() !== '');
+    if (elNome) elNome.classList.remove('problema');
+    if (!nomeC.length || (elNome && !elNome.value.trim())){
+      if (!temMedida) return null;
+      if (elNome){ elNome.classList.add('problema'); elNome.scrollIntoView({ block:'center' }); elNome.focus(); }
+      throw new Error('O componente da linha ' + (k + 1) + ' tem medidas e não tem nome: dê um nome (ex.: Costado, Tampo direito) ou tire a linha (×). Nada foi gravado.');
+    }
     tr.querySelectorAll('[data-k]').forEach(i => { const k = i.dataset.k; if (k === 'tipo' || k === 'nome') o[k] = i.value.trim(); else { const x = numMedida(i, 'Componente “' + nomeC + '”'); if (x != null) o[k] = x; } });   // S172 · issue 55
-    return o; }).filter(o => o.nome);
+    return o; }).filter(o => o && o.nome);
   const valvs = [...document.querySelectorAll('#valvs tr.lv')].map(tr => { const t = tr.querySelector('[data-k="tag"]').value.trim(), x = num(tr.querySelector('[data-k="ajuste"]').value);
     if (Number.isNaN(x)) throw new Error('Número inválido no ajuste da válvula.'); return { tag: t || null, ajuste_mpa: x == null ? null : paraMPa(x) }; }).filter(x => x.ajuste_mpa != null);
-  const pmtas = [...document.querySelectorAll('.pmtaCam')].map(i => { const x = num(i.value); return { camara: i.dataset.cam, pmta_mpa: x == null || Number.isNaN(x) ? null : paraMPa(x) }; }).filter(x => x.pmta_mpa != null);
+  const pmtas = [...document.querySelectorAll('.pmtaCam')].map(i => { const x = num(i.value);
+    // S177 · issue 63: PMTA de câmara inválida avisa, como as outras pressões (antes era ignorada em silêncio)
+    if (Number.isNaN(x)){ i.classList.add('problema'); i.focus(); throw new Error('Número inválido em: ' + (i.closest('label').firstChild.textContent || 'PMTA da câmara').trim() + '. Nada foi gravado.'); }
+    i.classList.remove('problema');
+    return { camara: i.dataset.cam, pmta_mpa: x == null ? null : paraMPa(x) }; }).filter(x => x.pmta_mpa != null);
   let pmta = n('pmta', true);
   if (pmtas.length && pmta == null) pmta = Math.min(...pmtas.map(x => x.pmta_mpa));
   return {
@@ -1528,15 +1730,26 @@ function lerForm(){
 }
 /** PMTA recalculada com os dados do próprio laudo (motor da R00): a menor entre
  *  os componentes completos. null quando falta dado. */
-function pmtaRecalc(d){
-  if (!M || !d.s_mpa || !(d.componentes || []).length) return null;
+function pmtaRecalc(d){ return pmtaRecalcDet(d).valor; }
+/** S177 · issue 63: a mesma conta, dizendo quais componentes entraram e o que falta nos outros. */
+function pmtaRecalcDet(d){
+  d = d || {};
+  const r = { valor:null, entraram:[], faltam:[] };
+  if (!M) return r;
   let menor = null;
-  d.componentes.forEach(c => {
-    if (!c.t_min_mm || !c.eficiencia_junta) return;
+  (d.componentes || []).forEach(c => {
+    const nome = c.nome || TIPOS_COMP[c.tipo] || 'componente', f = [];
+    if (!c.t_min_mm) f.push('t mín');
+    if (!c.eficiencia_junta) f.push('E');
+    if (!d.s_mpa) f.push('o S do material');
+    if (f.length){ r.faltam.push(nome + ' (falta ' + f.join(', ') + ')'); return; }
     const g = { tipo: c.tipo, R: c.r_mm, L: c.l_mm, d: c.d_mm, C: c.fator_c, alfaGraus: c.alfa_graus };
-    try{ const p = M.pmta(g, c.t_min_mm, d.s_mpa, c.eficiencia_junta); if (p > 0 && (menor == null || p < menor)) menor = p; }catch(e){}
+    try{ const p = M.pmta(g, c.t_min_mm, d.s_mpa, c.eficiencia_junta);
+      if (p > 0){ r.entraram.push(nome); if (menor == null || p < menor) menor = p; } else r.faltam.push(nome + ' (a conta não fecha: confira as medidas)'); }
+    catch(e){ r.faltam.push(nome + ' (' + String((e && e.message) || e).replace(/^Valor inválido ou ausente para /, 'falta ').replace(/: (undefined|null|NaN|0)$/, '') + ')'); }
   });
-  return menor == null ? null : Math.round(menor * 1e4) / 1e4;
+  r.valor = menor == null ? null : Math.round(menor * 1e4) / 1e4;
+  return r;
 }
 let PMTA_RECALC = null;
 async function gravarEConferir(){
@@ -1545,18 +1758,28 @@ async function gravarEConferir(){
   if (dados.pmta_mpa != null && (dados.pmta_mpa <= 0 || dados.pmta_mpa >= 100)){ U.toast('PMTA fora do esperado: confira a unidade.', 'err'); return; }
   try{
     const id = await rpc('tf_insp_laudo_anterior_declarar', { p_equip: VASO.id, p_dados: dados });
-    LAUDO = Object.assign(LAUDO || {}, { id });
-    PMTA_RECALC = pmtaRecalc(dados.declarado);
+    LAUDO = Object.assign(LAUDO || {}, { id, declarado: dados.declarado });   // S177 · issue 54: a prévia refaz a conta com o que acabou de ser gravado
     await previa();
     U.toast('Gravado. Confira abaixo.', 'ok');
   }catch(e){ erro(e); }
 }
+// S177 · issue 63: os motivos escritos na conferência e ainda não concluídos (por laudo); refazer a conferência os mantém
+let MOT_RASC = { laudo:null, itens:{} };
+function guardarMotivos(){
+  const cx = $('cxConf'); if (!cx || !LAUDO || MOT_RASC.laudo !== LAUDO.id) return;
+  cx.querySelectorAll('.motivo').forEach(t => { MOT_RASC.itens[t.dataset.item] = t.value; });
+}
 async function previa(){
   if (!LAUDO || !LAUDO.id) return;
-  if (PMTA_RECALC == null && LAUDO.declarado) PMTA_RECALC = pmtaRecalc(LAUDO.declarado);
-  PREVIA = await rpc('tf_insp_laudo_anterior_conferir', { p_laudo: LAUDO.id, p_gravar: false, p_pmta_recalc: PMTA_RECALC, p_motivos: {} });
+  // S177 · issue 54: a conta é SEMPRE refeita com o laudo deste vaso (antes ficava a do vaso aberto antes, sem recarregar)
+  const lid = LAUDO.id, det = pmtaRecalcDet(LAUDO.declarado || {});
+  if (MOT_RASC.laudo !== lid) MOT_RASC = { laudo: lid, itens:{} }; else guardarMotivos();
+  PMTA_RECALC = det.valor;
+  const P = await rpc('tf_insp_laudo_anterior_conferir', { p_laudo: lid, p_gravar: false, p_pmta_recalc: det.valor, p_motivos: {} });
+  if (!LAUDO || LAUDO.id !== lid || !$('cxConf')) return;   // outro vaso foi aberto enquanto a prévia vinha
+  PREVIA = P;
   const conf = (LAUDO.conferencias || []);
-  const P = PREVIA, cx = $('cxConf');
+  const cx = $('cxConf');
   const RES = { confere:'confere', diverge:'diverge', grave:'GRAVE', informativo:'informativo', aviso:'aviso', nao_informado:'sem dado' };
   let h = '<h3>2 · Conferência</h3>';
   if ((P.falta || []).length) h += '<div class="alerta falta"><b>Falta para concluir:</b> ' + P.falta.map(esc).join(', ') + '.</div>';
@@ -1565,16 +1788,23 @@ async function previa(){
     + P.itens.map(i => { const ant = conf.find(c => c.item === i.item);
       return '<tr><td>' + esc(i.rotulo) + '</td><td>' + esc(i.declarado || '—') + '</td><td>' + esc(i.calculado || '—') + '</td><td class="r-' + esc(i.resultado) + '">' + RES[i.resultado]
         + (i.resultado === 'diverge' || i.resultado === 'grave' ? '<textarea class="instr motivo" data-item="' + esc(i.item) + '" placeholder="Motivo' + (i.resultado === 'diverge' ? ' (obrigatório)' : '') + '">'
-            + esc(ant && ant.motivo || '') + '</textarea>' : '') + '</td></tr>'; }).join('') + '</table>';
-  if (PMTA_RECALC == null) h += '<p class="muted">PMTA recalculada: preencha em "Opcional" o material (S) e, de cada componente, as dimensões, o E e a menor espessura.</p>';
+            + esc(MOT_RASC.itens[i.item] != null ? MOT_RASC.itens[i.item] : (ant && ant.motivo || '')) + '</textarea>' : '') + '</td></tr>'; }).join('') + '</table>';
+  // S177 · issue 63: quais componentes entraram na PMTA recalculada e o que falta nos outros
+  if (det.entraram.length) h += '<p class="muted">PMTA recalculada com: <b>' + det.entraram.map(esc).join(', ') + '</b>.</p>';
+  if (det.faltam.length) h += '<p class="alerta falta">Fora da PMTA recalculada (complete em "Opcional" e grave de novo): ' + det.faltam.map(esc).join('; ') + '.</p>';
+  if (det.valor == null) h += '<p class="muted">PMTA recalculada: preencha em "Opcional" o material (S) e, de cada componente, as dimensões, o E e a menor espessura.</p>';
   h += '<div class="linha" style="margin-top:12px"><button class="btn pri" id="concluirConf"' + ((P.falta || []).length ? ' disabled' : '') + '>Concluir a conferência</button>'
     + '<span class="muted">Conferido: a PMTA atribuída vira a PMTA vigente do vaso.</span></div>';
   cx.innerHTML = h;
   const b = $('concluirConf');
+  cx.querySelectorAll('.motivo').forEach(t => t.addEventListener('input', () => { MOT_RASC.itens[t.dataset.item] = t.value; }));
   b.addEventListener('click', () => N.util.semDuploEnvio(b, async () => {
     const mot = {}; cx.querySelectorAll('.motivo').forEach(t => { if (t.value.trim()) mot[t.dataset.item] = t.value.trim(); });
+    if (!LAUDO || LAUDO.id !== lid){ U.toast('Outro vaso foi aberto: confira de novo.', 'err'); return; }
     try{
-      const r = await rpc('tf_insp_laudo_anterior_conferir', { p_laudo: LAUDO.id, p_gravar: true, p_pmta_recalc: PMTA_RECALC, p_motivos: mot });
+      // S177 · issue 54: a conta de novo, na hora, com o laudo gravado DESTE vaso (nunca o número de outra tela)
+      const r = await rpc('tf_insp_laudo_anterior_conferir', { p_laudo: lid, p_gravar: true, p_pmta_recalc: pmtaRecalc(LAUDO.declarado || {}), p_motivos: mot });
+      MOT_RASC = { laudo:null, itens:{} };
       U.toast(r.grave ? 'Conferido, com divergência grave: foi para o PLH.' : 'Laudo conferido.', r.grave ? 'err' : 'ok');
       await carregarOS(PREP.os.id); ir({ os: PREP.os.id });
     }catch(e){ erro(e); }
