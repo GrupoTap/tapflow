@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S174';   // S174: issues 38, 39, 52, 82 e 83 — TapDoc escritório E43 (o CSV do medidor com leitura inválida entra com as boas) e celular 30 (441)
+const VERSAO = 'H16-S177';   // S177: issues 54, 63, 64 e 85 — TapDoc escritório E44 (a PMTA recalculada do vaso aberto; o laudo anterior sem perder o digitado; desativar com confirmação e reativar; "Nova calibração" e o certificado do dia de cada inspeção; 442)
+// const VERSAO = 'H16-S174';   // S174: issues 38, 39, 52, 82 e 83 — TapDoc escritório E43 (o CSV do medidor com leitura inválida entra com as boas) e celular 30 (441)
 // const VERSAO = 'H16-S173';   // S173: issues 43, 44, 45, 46, 47 e 57 — TapDoc escritório E42 (o prazo reduzido pelas datas aprovadas: laudo-pdf.js S173, documentos-pdf.js D5) e celular 29 (aferição, acessórios e prazo; 440)
 // const VERSAO = 'H16-S172';   // S172: issues 40, 42 e 55 — TapDoc escritório E41 e celular 28 (a leitura do número com ponto de milhar; sem SQL)
 // const VERSAO = 'H16-S171';   // S171: issues 35, 36, 37 e 41 — núcleo N11 (a fila avisa quando o aparelho está sem espaço) e TapDoc celular 27 (a base da coleta)
