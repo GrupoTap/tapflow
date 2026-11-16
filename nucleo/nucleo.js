@@ -1,13 +1,13 @@
 /* ============================================================================
- * TAPHUB · NÚCLEO COMUM — N7 (N6 + o celular da empresa: "Quem vai usar?", sem digital/ponto/assinatura, fila por quem fez)
+ * TAPHUB · NÚCLEO COMUM — N11 (N7: o celular da empresa; N11: a fila avisa quando o aparelho está sem espaço)
  * ----------------------------------------------------------------------------
  * Código que serve a mais de um módulo e por isso NÃO mora dentro de nenhum:
  * sessão, conexão com o banco, PIN e a trava. Regra de negócio nunca entra
  * aqui (fica no módulo e nas funções tf_*). Sem framework, sem build.
  *
  * COMO UM MÓDULO USA (duas linhas no <head> e uma no boot):
- *   <script src="../nucleo/config.js?v=N10"></script>
- *   <script src="../nucleo/nucleo.js?v=N10"></script>
+ *   <script src="../nucleo/config.js?v=N11"></script>
+ *   <script src="../nucleo/nucleo.js?v=N11"></script>
  *   ...
  *   const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
  *   if (g === 'hub') { irParaHub(Nucleo.recado); return; }     // ANTES do iniciar()
@@ -40,7 +40,8 @@
   'use strict';
   if (window.Nucleo && window.Nucleo.versao) return;
 
-  var VERSAO = 'N10';   // N10 (S160): issue 29 — confirmarPessoa({ soDigital:true }): sem o teclado do PIN (aprovar o laudo); Nucleo.temDigital()
+  var VERSAO = 'N11';   // N11 (S171): issue 35 — a fila avisa em vermelho quando o aparelho está sem espaço (nada some calado); quem tem dado guardado ajuda a liberar espaço (fila.aoFaltarEspaco)
+  // var VERSAO = 'N10';   // N10 (S160): issue 29 — confirmarPessoa({ soDigital:true }): sem o teclado do PIN (aprovar o laudo); Nucleo.temDigital()
   // var VERSAO = 'N9';   // N9 (S157): issue 10 — o acesso vencido ("exp" claim) é renovado antes de enviar a fila e no envio das fotos
   // var VERSAO = 'N8';   // N8 (S142): no Relatar, o print colado com Ctrl+V (item 37 da lista)
   // var VERSAO = 'N7';   // N7 (S136): o celular da empresa (210; desenho processos/aparelho-empresa-desenho.md, A1–A12)
@@ -1632,7 +1633,20 @@
    * ════════════════════════════════════════════════════════════════════════ */
   var K_FILA = 'tff_fila';
   function filaLer() { var f = jget(K_FILA); return Array.isArray(f) ? f : []; }
-  function filaGravar(f) { lsSet(K_FILA, JSON.stringify(f)); }
+  /* N11 (S171, issue 35): gravar a fila pode falhar por falta de espaço no aparelho (o localStorage é de uns 5 MB,
+   * dividido entre os módulos). Antes o erro era ignorado e o envio sumia calado. Agora: quem guarda dados no
+   * aparelho (o TapDoc, por exemplo) registra em `fila.aoFaltarEspaco` como liberar espaço; a fila chama, tenta de
+   * novo e devolve false se ainda não couber. O formato das entradas NÃO mudou (fila antiga continua sendo enviada). */
+  var liberadores = [];
+  function tentarGravar(k, txt) { try { localStorage.setItem(k, txt); return true; } catch (e) { return false; } }
+  function filaGravar(f) {
+    var txt = JSON.stringify(f);
+    if (tentarGravar(K_FILA, txt)) return true;
+    liberadores.slice().forEach(function (fn) { try { fn(); } catch (e) {} });
+    return tentarGravar(K_FILA, txt);
+  }
+  var MSG_SEM_ESPACO = 'O aparelho está sem espaço para o app guardar o que foi gravado agora: NÃO foi guardado para envio. '
+    + 'Nada do que já estava na fila se perdeu. Com sinal, envie o que está na fila (isso libera espaço) e grave de novo; se continuar, avise o escritório.';
   /** troca UMA entrada pela assinatura, sem mexer na posição das outras */
   function filaTrocar(assinatura, fn) {
     var f = filaLer(), i = -1;
@@ -1794,7 +1808,12 @@
       }
     }
     if (!achou) f.push(ent);
-    filaGravar(f);
+    if (!filaGravar(f)) {
+      // N11 (issue 35): não coube — avisa na hora, em vermelho, e devolve null (quem chamou não mostra "salvo")
+      avisar({ assinatura: ent.assinatura, tipo: ent.tipo, situacao: 'sem_espaco', erro: MSG_SEM_ESPACO });
+      try { toast(MSG_SEM_ESPACO, 'err'); } catch (e) {}
+      return null;
+    }
     avisar({ assinatura: ent.assinatura, tipo: ent.tipo, situacao: 'na_fila' });
     setTimeout(function () { filaEnviar().catch(function () {}); }, 0);
     return ent.assinatura;
@@ -2100,8 +2119,11 @@
       var chave = 'f2-' + uidNovo();
       return paraBlob(blob).then(function (b) { return IDB.put(chave, b); }).then(function () { return chave; });
     },
-    adicionar: filaAdicionar,
+    adicionar: filaAdicionar,   // N11: devolve null quando não coube no aparelho (o aviso vermelho já foi mostrado)
     enviarAgora: filaEnviar,
+    /** N11 (issue 35): fn() libera espaço no aparelho (apaga o que dá para baixar de novo); chamada quando a fila não cabe. */
+    aoFaltarEspaco: function (fn) { if (typeof fn === 'function') liberadores.push(fn); },
+    msgSemEspaco: MSG_SEM_ESPACO,
     listar: function (o) {
       o = o || {};
       return filaLer().filter(function (x) {

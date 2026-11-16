@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S170';   // S170: issues 76 a 80 — permissões do banco do TapDoc (213, 438 e 439; só SQL, nenhuma tela muda)
+const VERSAO = 'H16-S171';   // S171: issues 35, 36, 37 e 41 — núcleo N11 (a fila avisa quando o aparelho está sem espaço) e TapDoc celular 27 (a base da coleta)
+// const VERSAO = 'H16-S170';   // S170: issues 76 a 80 — permissões do banco do TapDoc (213, 438 e 439; só SQL, nenhuma tela muda)
 // const VERSAO = 'H16-S169';   // S169: issue 68 — TapDoc E40 (com a caixa "Reconstituir o prontuário" marcada, o Relatório de Inspeção sai com o conteúdo do relatório, não com o do Prontuário)
 // const VERSAO = 'H16-S168';   // S168: issue 34 — TapDoc E39 (na revisão, o link do TapWeb do vaso: o QR da placa e da lombada)
 // const VERSAO = 'H16-S167';   // S167: issue 30, Parte 4 — TapDoc E38 (o fichário: capa, folha de rosto e divisórias; as lombadas de 40 ou 60 mm; doc/documentos-pdf.js D4) e Cadastros CAD5 ("Imprime a pasta" no cliente) (212, 437)
@@ -78,9 +79,9 @@ const ESSENCIAIS = [
   // O núcleo comum. O endereço tem que ser IDÊNTICO ao do <script>, com o ?v=
   // (o cache compara a consulta inteira). Trocou o ?v= nas páginas? Troque aqui também.
   // S76: hub, Manager, Field e fin/ pedem todos ?v=N2 — saíram as linhas ?v=N1. S123: todos pedem ?v=N3 (Passkey 1). S124: ?v=N4. S131: ?v=N5 (IndexedDB do iPhone).
-  './nucleo/nucleo.js?v=N10',
-  './nucleo/nucleo.css?v=N10',
-  './nucleo/config.js?v=N10',
+  './nucleo/nucleo.js?v=N11',
+  './nucleo/nucleo.css?v=N11',
+  './nucleo/config.js?v=N11',
   // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo" (mesmo ?v= das páginas)
   './nucleo/modulos.js?v=M4',
   // S110 · o gerador de documentos (o Manager o pede com ?v=D1; o jszip e o pdfmake vêm sob demanda)

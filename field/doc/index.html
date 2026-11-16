@@ -6,9 +6,9 @@
 <meta name="theme-color" content="#1B6FA9">
 <title>TapDoc · Inspeção</title>
 <link rel="icon" href="../icons/favicon-32.png">
-<link rel="stylesheet" href="../../nucleo/nucleo.css?v=N10">
-<script src="../../nucleo/config.js?v=N10"></script>
-<script src="../../nucleo/nucleo.js?v=N10"></script>
+<link rel="stylesheet" href="../../nucleo/nucleo.css?v=N11">
+<script src="../../nucleo/config.js?v=N11"></script>
+<script src="../../nucleo/nucleo.js?v=N11"></script>
 <script src="../../nucleo/modulos.js?v=M4"></script>
 <script src="motor-calculo-nr13.js?v=R00.6"></script>
 <script src="recomendacoes.js?v=RC1"></script>
@@ -166,6 +166,9 @@ textarea.t{min-height:72px;resize:vertical}
 /* S162 · issue 15: a parte com problema (o "Falta para enviar" leva até ela) · issue 23: a leitura suspeita da aferição */
 .problema{outline:2px solid var(--crit) !important;outline-offset:2px;background:var(--crit-soft) !important;border-radius:5px}
 .alerta.crit{background:var(--crit-soft);color:var(--crit)}
+.chip.rec{background:var(--crit);color:#fff;border-color:transparent}
+.fl button.ir{background:none;border:0;padding:0 0 0 4px;color:var(--crit);font:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
+#barEspaco{background:var(--crit-soft);color:var(--crit);font-weight:600}
 .alerta button.ir{background:none;border:0;padding:0 0 0 4px;color:var(--crit);font:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
 input.t.suspeita{border-color:var(--crit);background:var(--crit-soft);color:var(--crit);font-weight:700}
 .btn.bloq{opacity:.55}
@@ -188,7 +191,8 @@ input.t.suspeita{border-color:var(--crit);background:var(--crit-soft);color:var(
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 26';   // S163 · issues 12, 20 e 21 (433): todas as recomendações do laudo no Fechamento (as da norma, as das respostas — que dá para desmarcar — e as a mais; recomendacoes.js RC1); a justificativa do prazo menor numa lista (A1, A2, B, Outros)
+const VERSAO = 'TapDoc 27';   // S171 · issues 35, 36, 37 e 41 (Revisão TapDoc · Rodada 1): sem espaço avisa em vermelho e as OS antigas sem nada pendente saem do aparelho; miniaturas no IndexedDB; o pacote que chega sozinho não troca o vaso em campo nem redesenha a tela; envio recusado depois do "Enviar" volta o vaso para "em campo" com o motivo; a correção toma o lugar do envio recusado; PMTA, PTH e PMTA externa maiores que zero
+// const VERSAO = 'TapDoc 26';   // S163 · issues 12, 20 e 21 (433): todas as recomendações do laudo no Fechamento (as da norma, as das respostas — que dá para desmarcar — e as a mais; recomendacoes.js RC1); a justificativa do prazo menor numa lista (A1, A2, B, Outros)
 // const VERSAO = 'TapDoc 25';   // S162 · issues 15, 19 e 23: o que falta para enviar leva até a parte com problema (marcada em vermelho, com o nome da tela); "substituir" × aferição conforme; a leitura suspeita da aferição em vermelho
 // const VERSAO = 'TapDoc 24';   // S154 · issue 9 (430): a foto da medição de espessura na tela Ultrassom (uma por vaso; a foto ou o motivo, obrigatória para enviar)
 // const VERSAO = 'TapDoc 23';   // S152 · issue 7, Parte 2 (429): a seção "Medidas do vaso" em Componentes — circunferência, comprimento do costado entre as soldas, altura de cada tampo e outras medidas (nome + valor), para o desenho do mapa dos pontos
@@ -342,17 +346,78 @@ const OS = PAR.os || (DEMO ? 'demo-os' : null);
 
 // ── estado do aparelho ─────────────────────────────────────────────────────
 const K_OS = 'tfd_os_' + OS, K_MINI = 'tfd_mini';
-let E = LS.get(K_OS, null);           // { os, vasos, fabricantes, materiais, baixado_em }
-let MINI = LS.get(K_MINI, {});        // miniaturas das fotos: id → dataURL (só para mostrar)
+let E = LS.get(K_OS, null);           // { os, vasos, fabricantes, materiais, baixado_em, _usadoEm }
+// S171 · issue 35: as miniaturas saíram do localStorage (uns 5 MB, divididos com o Field e os outros módulos) e
+// moram no IndexedDB do aparelho (tapdoc_mini), que tem muito mais espaço. Carregadas no boot (carregarMiniaturas).
+let MINI = {};                        // miniaturas das fotos: id → dataURL (só para mostrar)
 let telaAtual = { nome:'lista' };
+let SEM_ESPACO = false;
+const MSG_ESPACO = 'O aparelho está sem espaço: o que você gravou agora ficou só nesta tela e NÃO está guardado. '
+  + 'Com sinal, toque em "Tentar agora" na barra de envios (enviar a fila libera espaço) e grave de novo. Se continuar, avise o escritório.';
 function salvar(){
-  if (!LS.set(K_OS, E)){ U.toast('O aparelho está sem espaço para guardar. Envie o que está pendente.', 'err'); }
+  if (!E) return true;
+  E._usadoEm = Date.now();   // S171 · issue 35: a OS que não é aberta há 15 dias, sem nada a enviar, sai do aparelho
+  if (LS.set(K_OS, E) || (liberarEspaco() && LS.set(K_OS, E))){ if (SEM_ESPACO){ SEM_ESPACO = false; pintarEspaco(); } return true; }
+  SEM_ESPACO = true; pintarEspaco(); U.toast(MSG_ESPACO, 'err');
+  return false;
 }
-function salvarMini(){
+function pintarEspaco(){
+  let b = $('barEspaco');
+  if (!b){ const f = $('barFila'); if (!f) return; f.insertAdjacentHTML('beforebegin', '<div class="aviso" id="barEspaco" hidden></div>'); b = $('barEspaco'); }
+  b.textContent = 'Sem espaço no aparelho: o que você grava agora NÃO está sendo guardado. Com sinal, toque em "Tentar agora"; se continuar, avise o escritório.';
+  b.hidden = !SEM_ESPACO;
+}
+/** S171 · issue 35: libera espaço apagando do aparelho os pacotes de OUTRAS OS sem nada na fila (dá para baixar de novo com sinal).
+ *  Com `dias`, só as que não foram abertas há tantos dias (a limpeza do boot); sem `dias`, todas (falta de espaço). */
+function liberarEspaco(dias){
+  let pend; try{ pend = new Set(N.fila.listar({ tipo:'insp' }).map(e => e.grupo)); }catch(e){ return 0; }
+  const ks = []; let n = 0;
+  try{ for (let k = 0; k < localStorage.length; k++){ const x = localStorage.key(k); if (x && x.indexOf('tfd_os_') === 0 && x !== K_OS) ks.push(x); } }catch(e){}
+  ks.forEach(k => {
+    const o = LS.get(k, null), vs = (o && o.vasos) || [];
+    if (vs.some(v => pend.has('insp|' + v.id))) return;   // tem envio na fila: fica
+    if (dias != null){ const t = Number(o && o._usadoEm) || Date.parse((o && o.baixado_em) || '') || 0; if (Date.now() - t < dias * 864e5) return; }
+    try{ localStorage.removeItem(k); n++; }catch(e){}
+  });
+  if (dias == null){ try{ if (localStorage.getItem(K_MINI) != null){ localStorage.removeItem(K_MINI); n++; } }catch(e){} }   // as miniaturas antigas (até o TapDoc 26)
+  return n;
+}
+// o IndexedDB das miniaturas abre a cada uso e fecha logo: não guarda a ligação (o iPhone a fecha em segundo plano; regra do N5)
+function miniDB(modo, fn){
+  return new Promise((ok, err) => {
+    let r; try{ r = indexedDB.open('tapdoc_mini', 1); }catch(e){ err(e); return; }
+    r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('m')) r.result.createObjectStore('m'); };
+    r.onerror = () => err(r.error || new Error('IndexedDB indisponível'));
+    r.onsuccess = () => {
+      const db = r.result;
+      try{
+        const t = db.transaction('m', modo), q = fn(t.objectStore('m'));
+        t.oncomplete = () => { db.close(); ok(q ? q.result : undefined); };
+        t.onerror = t.onabort = () => { db.close(); err(t.error || new Error('IndexedDB: transação abortada')); };
+      }catch(e){ try{ db.close(); }catch(x){} err(e); }
+    };
+  });
+}
+const MINI_MAX = 1000;
+function gravarMinis(){
+  clearTimeout(salvarMini.t); salvarMini.t = null;
   const ks = Object.keys(MINI);
-  if (ks.length > 180) ks.slice(0, ks.length - 180).forEach(k => delete MINI[k]);
-  if (!LS.set(K_MINI, MINI)){ const ks2 = Object.keys(MINI); ks2.slice(0, Math.ceil(ks2.length / 2)).forEach(k => delete MINI[k]); LS.set(K_MINI, MINI); }
+  if (ks.length > MINI_MAX) ks.slice(0, ks.length - MINI_MAX).forEach(k => delete MINI[k]);
+  return miniDB('readwrite', st => st.put(MINI, 'mini')).then(() => true, () => false);
 }
+function salvarMini(){ clearTimeout(salvarMini.t); salvarMini.t = setTimeout(gravarMinis, 400); }
+async function carregarMiniaturas(){
+  try{
+    const m = await Promise.race([miniDB('readonly', st => st.get('mini')), new Promise(ok => setTimeout(() => ok(null), 2000))]);
+    if (m && typeof m === 'object') MINI = Object.assign({}, m, MINI);
+  }catch(e){}
+  const velho = LS.get(K_MINI, null);   // as do localStorage (até o TapDoc 26) passam para o IndexedDB e saem dele
+  if (velho && typeof velho === 'object'){
+    MINI = Object.assign({}, velho, MINI);
+    if (await gravarMinis()) try{ localStorage.removeItem(K_MINI); }catch(e){}
+  }
+}
+window.addEventListener('pagehide', () => { if (salvarMini.t) gravarMinis(); });
 const vaso = id => (E && E.vasos || []).find(v => v.id === id);
 
 function normVaso(sv){
@@ -380,18 +445,38 @@ function normVaso(sv){
   v._pv = {};
   return v;
 }
-/** Pacote novo do servidor: vaso com envio pendente fica com a versão do aparelho. */
-function mesclar(p, t0){
+/** Pacote novo do servidor: vaso com envio pendente fica com a versão do aparelho.
+ *  S171 · issue 36: no pacote que chega SOZINHO (`auto`), o vaso em campo NESTE aparelho (editado aqui) também fica
+ *  com a versão do aparelho — a resposta pela metade não sobe e sumiria; entra só o que é do escritório. */
+function mesclar(p, t0, auto){
   const pend = new Set(N.fila.listar({ tipo:'insp' }).map(e => e.grupo));
   const velhos = {}; ((E && E.vasos) || []).forEach(v => { velhos[v.id] = v; });
   // S140 · item 60: o pacote pedido ANTES da última gravação (que já saiu da fila) chega velho: o vaso fica com a versão do aparelho
   const manter = v => !!v && (pend.has('insp|' + v.id) || (!!t0 && !!v._gravadoEm && v._gravadoEm >= t0 - 3000));
-  const vasos = (p.vasos || []).map(sv => manter(velhos[sv.id]) ? velhos[sv.id] : normVaso(sv));
+  const emCampoAqui = (v, sv) => !!auto && !!v && !!v._gravadoEm && !!v.inspecao && v.inspecao.situacao === 'em_campo'
+    && !!sv.inspecao && sv.inspecao.id === v.inspecao.id && ['em_campo','em_preparo'].indexOf(sv.inspecao.situacao) >= 0;
+  const vasos = (p.vasos || []).map(sv => (manter(velhos[sv.id]) || emCampoAqui(velhos[sv.id], sv)) ? doEscritorio(velhos[sv.id], sv) : normVaso(sv));
   Object.values(velhos).forEach(v => {
     if (!vasos.some(x => x.id === v.id) && manter(v)) vasos.push(v);
   });
   E = { os:p.os, vasos, fabricantes:p.fabricantes || [], materiais:p.materiais || [], medidores:p.medidores || [], padroes:p.padroes || [], bancadas:p.bancadas || [], baixado_em:p.gerado_em || new Date().toISOString() };
   salvar();
+}
+/** S171 · issue 36: no vaso que fica com a versão do aparelho, entra o que só o escritório muda (não é editado em campo). */
+function doEscritorio(v, sv){
+  if (sv.acessorios_anteriores) v.acessorios_anteriores = sv.acessorios_anteriores;
+  if (v.inspecao && sv.inspecao && sv.inspecao.id === v.inspecao.id)
+    ['instrucoes_campo', 'coleta_anterior'].forEach(k => { if (sv.inspecao[k] !== undefined) v.inspecao[k] = sv.inspecao[k]; });
+  return v;
+}
+/** S171 · issue 36: o que está pela metade no aparelho (não sobe enquanto não fica completo). */
+function meiaResposta(v){
+  const i = (v && v.inspecao) || {}, r = [];
+  if (i.situacao !== 'em_campo') return r;
+  if ((i.visual || []).some(x => x.conforme === false && !(x.anomalia || '').trim())) r.push('exame visual (não conforme sem a descrição)');
+  if (i.boroscopia && i.boroscopia.realizada != null && !boroValida(i.boroscopia)) r.push('boroscopia incompleta');
+  if (i.teste && i.teste.realizado != null && !testeValido(i.teste)) r.push('teste de pressão incompleto');
+  return r;
 }
 
 // ── a fila ─────────────────────────────────────────────────────────────────
@@ -400,27 +485,61 @@ function mesclar(p, t0){
  *  uma ganha id próprio (a anterior pode estar a caminho). */
 function enfileirar(v, chave, rotulo, rpc, fotos, fixo){
   const grupo = 'insp|' + v.id;
-  let id = fixo ? chave : null;
+  let id = fixo ? chave : null, destravar = false;
+  if (!id){
+    // S171 · issue 41: a correção de um dado RECUSADO toma o lugar do envio recusado (os parados mais velhos do mesmo
+    // dado saem: a gravação nova já leva tudo) e a fila do vaso volta a andar sozinha
+    const mesmos = N.fila.listar({ tipo:'insp', grupo }).filter(e => e.id.indexOf(chave + '~') === 0);
+    const rec = mesmos.find(e => e.recusado);
+    if (rec){
+      id = rec.id; destravar = true;
+      mesmos.filter(e => e.parado && e.id !== rec.id && !(e.fotos && e.fotos.length)).forEach(e => N.fila.descartar(e.assinatura));
+    }
+  }
   if (!id && navigator.onLine === false){
     const ex = N.fila.listar({ tipo:'insp', grupo }).filter(e => e.id.indexOf(chave + '~') === 0 && !e.parado).pop();
     if (ex) id = ex.id;
   }
   if (!id) id = chave + '~' + uid();
-  N.fila.adicionar({ tipo:'insp', id, grupo, rotulo: v.tag + ' · ' + rotulo, rpc, fotos });
-  v._gravadoEm = Date.now(); salvar(); mostrarSalvo();   // S140 · item 60
+  const ok = N.fila.adicionar({ tipo:'insp', id, grupo, rotulo: v.tag + ' · ' + rotulo, rpc, fotos });
+  if (!ok){ SEM_ESPACO = true; pintarEspaco(); pintarFila(); return null; }   // S171 · issue 35: não coube (o aviso vermelho já saiu): nada de "salvo"
+  if (destravar) N.fila.retomar(grupo);
+  v._gravadoEm = Date.now();   // S140 · item 60
+  if (salvar()) mostrarSalvo();
   pintarFila();
   return id;
 }
 const CAM_OK = ['id','tipo','nome','ordem','fluido','classe_fluido','p_operacao_max_mpa','t_operacao_c','volume_m3',
   'volume_desconhecido','pmta_plaqueta_mpa','pth_mpa','pressao_externa','pmta_externa_plaqueta_mpa','unidade_campo','ativo'];
 function pegar(o, ks){ const r = {}; ks.forEach(k => { if (o[k] !== undefined) r[k] = o[k]; }); return r; }
+// S171 · issue 41: as faixas dos `check` do banco (lista da Fase 5, comentário da issue 41): [acima de, abaixo de, rótulo, aceita o máximo].
+// O que o banco recusaria não entra na fila (e a tela já recusa antes, campo a campo).
+const FAIXA_CAM = { p_operacao_max_mpa:[-0.1013, 100, 'pressão de operação'], t_operacao_c:[-273, 1500, 'temperatura'], volume_m3:[0, null, 'volume'],
+  pmta_plaqueta_mpa:[0, 100, 'PMTA da plaqueta'], pth_mpa:[0, 150, 'PTH'], pmta_externa_plaqueta_mpa:[0, 100, 'PMTA externa'] };
+const FAIXA_COMP = { r_mm:[0, null, 'R'], l_mm:[0, null, 'L'], d_mm:[0, null, 'd'], alfa_graus:[0, 90, 'α'], fator_c:[0, 1, 'C', true], eficiencia_junta:[0, 1, 'E', true] };
+function foraDaFaixa(o, F){
+  const r = [];
+  Object.keys(F).forEach(k => {
+    const x = o[k]; if (x == null || x === '') return;
+    const n = Number(x), f = F[k];
+    if (!isFinite(n) || n <= f[0] || (f[1] != null && (f[3] ? n > f[1] : n >= f[1]))) r.push(f[2]);
+  });
+  return r;
+}
 function gravarCamara(v, c){
-  enfileirar(v, 'cam-' + c.id, 'câmara ' + c.nome, { funcao:'tf_insp_camara_gravar', payload:{ p_equip:v.id, p_dados:pegar(c, CAM_OK) } });
+  const d = pegar(c, CAM_OK);
+  if (d.volume_desconhecido) d.volume_m3 = null;                          // o banco não aceita os dois juntos (ck_cam_volume)
+  if (d.pressao_externa === false) d.pmta_externa_plaqueta_mpa = null;    // nem PMTA externa sem vácuo (ck_cam_externa)
+  const fx = foraDaFaixa(d, FAIXA_CAM);
+  if (fx.length){ U.toast('Câmara ' + c.nome + ': ' + fx.join(', ') + ' fora do que o sistema aceita. Corrija na tela (deixe em branco se não souber); até lá, a câmara não é enviada.', 'err'); return; }
+  enfileirar(v, 'cam-' + c.id, 'câmara ' + c.nome, { funcao:'tf_insp_camara_gravar', payload:{ p_equip:v.id, p_dados:d } });
 }
 function gravarComp(v, c){
-  enfileirar(v, 'comp-' + c.id, 'componente ' + c.nome, { funcao:'tf_insp_componente_gravar',
-    payload:{ p_equip:v.id, p_dados:pegar(c, ['id','tipo','nome','posicao','camara_id','nao_medir','ordem','ativo',
-      'r_mm','l_mm','d_mm','alfa_graus','fator_c','aparafusada','eficiencia_junta','material_id','altura_medida_mm']) } });   // S152: a altura medida do tampo (429)
+  const d = pegar(c, ['id','tipo','nome','posicao','camara_id','nao_medir','ordem','ativo',
+      'r_mm','l_mm','d_mm','alfa_graus','fator_c','aparafusada','eficiencia_junta','material_id','altura_medida_mm']);   // S152: a altura medida do tampo (429)
+  const fx = foraDaFaixa(d, FAIXA_COMP);
+  if (fx.length){ U.toast(c.nome + ': ' + fx.join(', ') + ' fora do que o sistema aceita. Corrija na tela; até lá, o componente não é enviado.', 'err'); return; }
+  enfileirar(v, 'comp-' + c.id, 'componente ' + c.nome, { funcao:'tf_insp_componente_gravar', payload:{ p_equip:v.id, p_dados:d } });
 }
 function gravarVaso(v){
   enfileirar(v, 'vaso', 'dados do vaso', { funcao:'tf_insp_vaso_gravar', payload:{ p_equip:v.id, p_dados:Object.assign({}, v._pv) } });
@@ -442,24 +561,118 @@ function pintarFila(){
   b.hidden = !l.length;
   b.classList.toggle('so', !parados);
   $('filaTx').textContent = l.length === 1 ? '1 envio aguardando' : l.length + ' envios aguardando';
-  if (parados) $('filaTx').textContent += ' · ' + parados + ' parado' + (parados > 1 ? 's' : '');
+  const rec = l.filter(e => e.recusado).length;   // S171 · issue 37
+  if (rec) $('filaTx').textContent += ' · ' + rec + ' recusado' + (rec > 1 ? 's' : '') + ': toque em "Ver"';
+  else if (parados) $('filaTx').textContent += ' · ' + parados + ' parado' + (parados > 1 ? 's' : '');
+}
+// ── S171 · issues 37 e 41: o envio recusado em português, com o dado e a tela onde corrigir ──
+const COL_ROT = { pmta_plaqueta_mpa:['PMTA da plaqueta', 'plaqueta', 'tem de ser maior que zero e menor que 100 MPa; se não souber, deixe em branco', '#pPm_'],
+  pth_mpa:['PTH', 'plaqueta', 'tem de ser maior que zero e menor que 150 MPa; se não souber, deixe em branco', '#pPt_'],
+  pmta_externa_plaqueta_mpa:['PMTA externa', 'operacao', 'tem de ser maior que zero e menor que 100 MPa', '#oPe_'],
+  p_operacao_max_mpa:['Pressão máxima de operação', 'operacao', 'entre −0,1013 e 100 MPa', '#oP_'],
+  t_operacao_c:['Temperatura de operação', 'operacao', 'entre −273 e 1500 °C', '#oT_'], volume_m3:['Volume', 'operacao', 'maior que zero', '#oV_'],
+  r_mm:['R (raio)', 'componentes', 'maior que zero'], l_mm:['L', 'componentes', 'maior que zero'], d_mm:['d (diâmetro)', 'componentes', 'maior que zero'],
+  alfa_graus:['α (semiângulo)', 'componentes', 'entre 0 e 90°'], fator_c:['C', 'componentes', 'entre 0 e 1'], eficiencia_junta:['E (eficiência da junta)', 'componentes', 'entre 0 e 1'],
+  espessura_nominal_mm:['Espessura nominal', 'componentes', 'maior que zero'], valor_mm:['Leitura de espessura', 'ultrassom', 'maior que zero e até 300 mm'] };
+const CK_ROT = { ck_cam_volume:['Volume', 'operacao', 'volume preenchido com "não sei o volume" marcado: fique com um dos dois', '#oV_'],
+  ck_cam_externa:['PMTA externa', 'operacao', 'PMTA externa sem "opera com vácuo" marcado', '#oPe_'], ck_leit_ponto_1000:['Ponto da medição', 'ultrassom', 'de 1 a 1000'] };
+const TELA_DO_ENVIO = [[/^cam-/, 'operacao'], [/^comp-/, 'componentes'], [/^(vaso|fab)~/, 'plaqueta'], [/^visual~/, 'visual'], [/^boro~/, 'boroscopia'],
+  [/^teste~/, 'teste'], [/^(acess-|acessrm-|afer-|acconf~)/, 'acessorios'], [/^(leit-|us~)/, 'ultrassom'], [/^(amb|gps)~/, 'localizacao'], [/^laudo~/, 'laudo'],
+  [/^((fech|fechrec|recaj|prazo)~|enviar-|naoinsp-)/, 'fechamento']];
+const TELA_DA_SECAO = { plaqueta:'plaqueta', geral:'visual', visual:'visual', componentes:'ultrassom', localizacao:'localizacao', laudo_anterior:'laudo', capa:'fechamento',
+  acessorios:'acessorios', teste:'teste', boroscopia:'boroscopia' };
+function explicarRecusa(v, e){
+  const m = String(e.motivo || '').replace(/^Recusado pelo servidor:\s*/, '').trim();
+  let tela = null, texto = null, sel = null;
+  const ck = (m.match(/check constraint "([^"]+)"/) || [])[1];
+  if (ck){
+    const col = Object.keys(COL_ROT).sort((a, b) => b.length - a.length).find(c => ck.indexOf(c) >= 0);
+    const r = CK_ROT[ck] || (col && COL_ROT[col]);
+    if (r){
+      texto = r[0] + ': o sistema não aceitou o número (' + r[2] + ').'; tela = r[1];
+      const cam = (e.id.match(/^cam-([^~]+)~/) || [])[1];
+      if (r[3] && cam) sel = r[3] + cam;
+      if (tela === 'operacao' && /^(#pPm_|#pPt_)/.test(sel || '')) tela = 'plaqueta';
+    }
+  }
+  if (!tela && !/^(abrir|prov)-/.test(e.id)){
+    const t = TELA_DO_ENVIO.find(x => x[0].test(e.id)); tela = t ? t[1] : null;
+    const fid = (e.id.match(/^foto~(.+)$/) || [])[1];
+    if (fid){ const f = ((v && v.inspecao && v.inspecao.fotos) || []).find(x => x.id === fid); tela = f ? TELA_DA_SECAO[f.secao] || 'fechamento' : null; }
+    const lug = (e.id.match(/^semac-([^~]+)~/) || [])[1];
+    if (lug && v){ const l = lugaresDe(v).find(x => x.lugar === lug); tela = l ? ({ plaqueta:'plaqueta', geral:'visual', componentes:'ultrassom' })[l.secao] || 'fechamento' : null; }
+  }
+  if (!texto) texto = /\b(violates|invalid input|null value|duplicate key|out of range|too long|syntax)\b/i.test(m)
+    ? 'o sistema não aceitou o dado. Confira o que foi digitado nesta parte. (Resposta do sistema: ' + m + ')' : (m || 'o servidor recusou.');
+  return { rotulo:String(e.rotulo || '').replace(/^.*? · /, ''), texto, tela, sel, onde:tela ? (ROT_TELA[tela] || 'o vaso') : null, assinatura:e.assinatura };
+}
+const recusasDe = v => pendDoVaso(v).filter(e => e.recusado).map(e => explicarRecusa(v, e));
+function irRecusa(v, x){
+  MARCA = { vaso:v.id, tela:x.tela, sel:x.sel, texto:x.rotulo + ': ' + x.texto, rolar:true, assinatura:x.assinatura };
+  if (telaAtual.nome === x.tela && telaAtual.vaso === v.id) pintar(); else ir({ nome:x.tela, vaso:v.id });
+}
+/** O quadro vermelho do vaso com envio recusado (no painel e no Fechamento). */
+function alertaRecusa(v){
+  const r = recusasDe(v);
+  if (!r.length && !v._recusaEnvio) return '';
+  const so = !r.some(x => x.tela);
+  return '<div class="alerta crit" id="recAlerta"><b>O servidor recusou ' + (r.length > 1 ? r.length + ' envios' : 'um envio') + ' deste vaso</b><ul>'
+    + r.map((x, k) => '<li><b>' + esc(x.rotulo) + ':</b> ' + esc(x.texto) + (x.tela ? ' <button class="ir" data-rec="' + k + '">corrigir em ' + esc(x.onde) + ' ›</button>' : '') + '</li>').join('')
+    + (v._recusaEnvio ? '<li><b>Enviar:</b> ' + esc(v._recusaEnvio) + '</li>' : '') + '</ul>'
+    + (r.length ? (so ? 'Isso não se corrige na tela: peça ao escritório e depois toque em "Tentar agora" na barra de envios. Nada se perdeu.'
+                      : 'Corrija o dado: a correção toma o lugar do envio recusado e a fila do vaso anda sozinha. Depois, toque em "Enviar" de novo.')
+                : 'A inspeção voltou para "em campo" neste aparelho: corrija e toque em "Enviar" de novo.') + '</div>';
+}
+function ligarRecusa(v){
+  const r = recusasDe(v);
+  $('tela').querySelectorAll('[data-rec]').forEach(b => b.addEventListener('click', () => irRecusa(v, r[Number(b.dataset.rec)])));
+}
+/** S171 · issue 37: envio recusado DEPOIS do "Enviar": o vaso volta para "em campo" neste aparelho, o "Enviar" sai da fila
+ *  (vai de novo quando a pessoa tocar) e o motivo fica à vista. As fotos paradas não se perdem. */
+function conferirRecusas(){
+  if (!E) return;
+  let mudou = false, voltou = null;
+  (E.vasos || []).forEach(v => {
+    const i = v.inspecao; if (!i) return;
+    const l = pendDoVaso(v), rec = l.filter(e => e.recusado);
+    if (!rec.length) return;
+    const fim = l.filter(e => e.id === 'enviar-' + i.id || e.id === 'naoinsp-' + i.id);
+    if (i.situacao !== 'enviada' || !fim.length) return;   // o "Enviar" já foi aceito: o caminho é "Reabrir para corrigir"
+    const fr = fim.find(e => e.recusado);
+    v._recusaEnvio = fr ? String(fr.motivo || '').replace(/^Recusado pelo servidor:\s*/, '') : null;
+    i.situacao = 'em_campo'; i.pode_editar = true; i.nao_inspecionado_motivo = null;
+    fim.forEach(e => N.fila.descartar(e.assinatura));
+    mudou = true; voltou = v;
+  });
+  if (!mudou) return;
+  salvar();
+  U.toast(voltou.tag + ': o servidor recusou um envio. A inspeção voltou para "em campo" neste aparelho: veja o motivo em vermelho, corrija e envie de novo.', 'err');
+  if (['lista', 'vaso', 'fechamento'].indexOf(telaAtual.nome) >= 0) pintar();
 }
 $('filaJa').addEventListener('click', () => { N.fila.enviarAgora(); U.toast(navigator.onLine === false ? 'Sem sinal agora. Envia sozinho quando voltar.' : 'Enviando…'); });
 $('filaVer').addEventListener('click', verFila);
 function verFila(){
   const l = N.fila.listar({ tipo:'insp' }).filter(e => (E && E.vasos || []).some(v => e.grupo === 'insp|' + v.id));
   const grupos = [...new Set(l.filter(e => e.parado).map(e => e.grupo))];
-  const html = l.length ? l.map(e => '<div class="fl"><b>' + esc(e.rotulo) + '</b>' +
+  const vDe = e => E.vasos.find(v => e.grupo === 'insp|' + v.id);
+  const xs = l.map(e => e.recusado ? Object.assign(explicarRecusa(vDe(e), e), { v:vDe(e) }) : null);
+  const html = l.length ? l.map((e, k) => '<div class="fl"><b>' + esc(e.rotulo) + '</b>' +
       (e.fotos && e.fotos.length ? '<span class="muted">' + e.fotos.length + ' arquivo(s)</span>' : '') +
-      (e.motivo ? '<div class="mot">' + esc(e.motivo) + '</div>' : '') + '</div>').join('')
+      (xs[k] ? '<div class="mot"><b>Recusado:</b> ' + esc(xs[k].texto) + (xs[k].tela ? ' <button class="ir" data-irr="' + k + '">corrigir em ' + esc(xs[k].onde) + ' ›</button>' : '') + '</div>'
+             : e.motivo ? '<div class="mot">' + esc(e.motivo) + '</div>' : '') + '</div>').join('')
     : '<p class="muted">Nada pendente.</p>';
   const bts = [{ rotulo:'Fechar' }];
   if (grupos.length) bts.unshift({ rotulo:'Tentar de novo os parados', classe:'pri', acao:() => { grupos.forEach(g => N.fila.retomar(g)); N.janela.fechar(); setTimeout(pintarFila, 600); } });
-  janela('Envios desta OS', html + (grupos.length ? '<p class="muted" style="margin-top:10px">Parado = o servidor recusou. Corrija o dado na tela e tente de novo. As fotos continuam no aparelho.</p>' : ''), bts);
+  janela('Envios desta OS', html + (grupos.length ? '<p class="muted" style="margin-top:10px">Recusado = o servidor não aceitou esse dado. Toque em "corrigir em…" e acerte o dado: '
+    + 'a correção toma o lugar do envio recusado e a fila do vaso anda sozinha. Se o motivo não depende de você (por exemplo, te incluir na tarefa da OS), '
+    + 'peça ao escritório e toque em "Tentar de novo os parados". As fotos continuam no aparelho.</p>' : ''), bts);
+  document.querySelectorAll('[data-irr]').forEach(b => b.addEventListener('click', () => { const x = xs[Number(b.dataset.irr)]; N.janela.fechar(); if (x && x.v) irRecusa(x.v, x); }));
 }
 N.fila.aoMudar(ev => {
   pintarFila();
-  if (ev && ev.situacao === 'recusado') U.toast('Um envio foi recusado: ' + (ev.erro || ''), 'err');
+  if (ev && ev.situacao === 'sem_espaco'){ SEM_ESPACO = true; pintarEspaco(); }   // S171 · issue 35 (o aviso vermelho sai do núcleo)
+  if (ev && (ev.situacao === 'recusado' || ev.situacao === 'mudou')) conferirRecusas();   // S171 · issue 37
+  if (ev && ev.situacao === 'recusado') U.toast('Um envio foi recusado: ' + (ev.erro || '') + ' Toque em "Ver" na barra de envios.', 'err');
 });
 
 // ── conexão ────────────────────────────────────────────────────────────────
@@ -475,15 +688,26 @@ window.addEventListener('offline', pintarSinal);
 let baixando = false;
 async function baixar(silencioso){
   if (DEMO || baixando || navigator.onLine === false || !OS) return;
+  // S171 · issue 36: o "atualizar" tocado pela pessoa continua valendo, com aviso se há resposta pela metade que ainda não subiu
+  if (!silencioso && E){
+    const pend = new Set(N.fila.listar({ tipo:'insp' }).map(e => e.grupo));
+    const mr = (E.vasos || []).filter(v => !pend.has('insp|' + v.id)).map(v => ({ v, r:meiaResposta(v) })).filter(x => x.r.length);
+    if (mr.length && !(await N.janela.confirmar('Atualizar o pacote da OS?', '<p>Estas respostas estão <b>pela metade</b> e ainda não foram para o escritório. '
+      + 'Ao atualizar, o aparelho fica com o que está no servidor e elas somem:</p><ul>' + mr.map(x => '<li><b>' + esc(x.v.tag) + ':</b> ' + esc(x.r.join(', ')) + '</li>').join('')
+      + '</ul><p class="muted">Termine essas respostas antes, se puder.</p>', 'Atualizar mesmo assim', true))) return;
+  }
   baixando = true;
   try{
-    const t0 = Date.now();
+    const t0 = Date.now(), tinha = !!E, eraFora = FORA_T06, vAntes = telaAtual.vaso ? vaso(telaAtual.vaso) : null;
     const p = await N.api.rpc('tf_insp_pacote_os', { p_os_id: OS });
     FORA_T06 = false; ESCALA_T06 = null;
-    mesclar(p, t0);
+    mesclar(p, t0, !!silencioso);
     await baixarProntos();   // S146 · item 79
     if (!silencioso) U.toast('Pacote da OS atualizado.');
-    pintar();
+    conferirRecusas();
+    // S171 · issue 36: o pacote que chega sozinho não redesenha a tela em uso (o teclado fechava e o campo voltava ao valor antigo)
+    // (se o vaso da tela foi trocado pelo do servidor — por exemplo, outro celular já enviou —, a tela é refeita com ele)
+    if (!silencioso || !tinha || eraFora || ['lista', 'vaso'].indexOf(telaAtual.nome) >= 0 || (telaAtual.vaso && vaso(telaAtual.vaso) !== vAntes)) pintar(); else { pintarSinal(); pintarFila(); }
   }catch(e){
     // S142 · item 40: o servidor disse que a pessoa não está na T06 — o aviso no lugar da tela, mesmo com a OS
     // guardada no aparelho (quem saiu da T06 não continua vendo nem editando; o guardado fica, sem aparecer)
@@ -666,6 +890,7 @@ function telaLista(){
         : '<span class="chip">' + esc(sit.replace('_', ' ')) + '</span>');
     }
     if (v.provisorio) chips.push('<span class="chip prov">provisório</span>');
+    if (pend.some(e => e.recusado)) chips.push('<span class="chip rec">envio recusado</span>');   // S171 · issue 37
     if (pend.length) chips.push('<span class="chip pend">' + pend.length + ' a enviar</span>');
     return '<button class="card vaso' + (v.inspecao ? '' : ' fora') + '" data-v="' + esc(v.id) + '"><div style="min-width:0">' +
       '<div class="tg">' + esc(v.tag) + '</div>' + (v.nome ? '<div class="nm">' + esc(v.nome) + '</div>' : '') +
@@ -834,7 +1059,7 @@ function telaPainel(v){
   titulo(v.tag, (v.nome || '') + (v.provisorio ? ' · provisório' : ''));
   const ed = v.inspecao.pode_editar !== false && v.inspecao.situacao === 'em_campo';
   const al = alertas(v);
-  let h = '';
+  let h = alertaRecusa(v);   // S171 · issue 37
   if (!ed) h += '<div class="alerta"><b>' + (v.inspecao.nao_inspecionado_motivo ? 'Vaso não inspecionado' : 'Inspeção ' + esc(String(v.inspecao.situacao).replace('_', ' '))) + '</b>' +
     (v.inspecao.nao_inspecionado_motivo ? esc(v.inspecao.nao_inspecionado_motivo) + '<br>' : '') + 'O campo não grava mais neste vaso.</div>' +
     (v.inspecao.situacao === 'enviada' ? cartaoReabrir(v) : '');
@@ -865,6 +1090,7 @@ function telaPainel(v){
   h += '<h2>Cálculo</h2><button class="card secao" data-s="previa"><span class="sn">Prévia do cálculo<small>PMTA por câmara, categoria e prazos. Só informativa: o resultado oficial sai na revisão.</small></span><span class="est vazia">ver</span></button>';
   $('tela').innerHTML = h;
   $('tela').querySelectorAll('[data-s]').forEach(b => { if (b.dataset.s === 'previa') b.disabled = false; b.addEventListener('click', () => ir({ nome:b.dataset.s, vaso:v.id })); });
+  ligarRecusa(v);
   if (!ed && v.inspecao.situacao === 'enviada') ligarReabrir(v);
 }
 
@@ -890,14 +1116,22 @@ function campoPressao(rot, id, mpa, u, ajuda){
     '<input class="t" id="' + id + '" inputmode="decimal" value="' + esc(val) + '"' + SEM_AUTO + '></label><div class="conv" id="' + id + '_c">' +
     (mpa != null && u !== 'MPa' ? '= ' + fmt(mpa, 4) + ' MPa' : '') + '</div>';
 }
-function ligarPressao(id, u, fn, max){
+/** S171 · issue 41: `o.positivo` = o banco só aceita maior que zero (PMTA, PTH, PMTA externa); `o.rot` = o nome do campo na mensagem.
+ *  O que o banco recusaria fica marcado em vermelho, com o motivo embaixo, e NÃO é gravado (o que valia continua). */
+function ligarPressao(id, u, fn, max, o){
   const el = $(id); if (!el) return;
-  el.addEventListener('input', () => { const x = num(el.value); $(id + '_c').textContent = (x != null && !Number.isNaN(x) && u !== 'MPa') ? '= ' + fmt(paraMPa(x, u), 4) + ' MPa' : ''; });
+  o = o || {};
+  const rot = o.rot || 'Pressão', cv = () => $(id + '_c');
+  el.addEventListener('input', () => { const x = num(el.value), c = cv(); c.style.color = ''; c.textContent = (x != null && !Number.isNaN(x) && u !== 'MPa') ? '= ' + fmt(paraMPa(x, u), 4) + ' MPa' : ''; });
   el.addEventListener('change', () => {
-    const x = num(el.value);
-    if (Number.isNaN(x)){ U.toast('Pressão: número inválido.', 'err'); return; }
+    const x = num(el.value), c = cv();
+    const erro = t => { el.classList.add('problema'); if (c){ c.textContent = t; c.style.color = 'var(--crit)'; } U.toast(t, 'err'); };
+    el.classList.remove('problema'); if (c) c.style.color = '';
+    if (Number.isNaN(x)) return erro(rot + ': número inválido. Não foi gravado.');
     const m = paraMPa(x, u);
-    if (m != null && (m <= -0.1013 || m >= (max || 100))){ U.toast('Pressão fora do esperado: confira a unidade.', 'err'); return; }
+    if (m != null && o.positivo && m <= 0) return erro(rot + ': tem de ser maior que zero. Se não souber, deixe em branco. Não foi gravado.');
+    if (m != null && m <= -0.1013) return erro(rot + ': abaixo do vácuo total (−1 bar). Confira o número e a unidade. Não foi gravado.');
+    if (m != null && m >= (max || 100)) return erro(rot + ': acima do que o sistema aceita (tem de ser menor que ' + fmt(deMPa(max || 100, u), 1) + ' ' + UNID_ROT[u] + '). Confira a unidade. Não foi gravado.');
     fn(m);
   });
 }
@@ -1051,11 +1285,14 @@ async function registrarArquivo(v, secao, legenda, blob, ext, tipo, mini, item, 
   v.inspecao.fotos.push({ id:fid, secao, legenda, ordem, storage_path:caminho, item_ref:item, origem:gal ? 'galeria' : 'camera', tirada_em:gal ? extra.tirada_em : null });
   if (mini){ MINI[fid] = mini; salvarMini(); }
   salvar();
-  enfileirar(v, 'foto~' + fid, (secao === 'laudo_anterior' ? 'laudo anterior' : 'foto de ' + secao), {
+  const foi = enfileirar(v, 'foto~' + fid, (secao === 'laudo_anterior' ? 'laudo anterior' : 'foto de ' + secao), {
     funcao:'tf_insp_foto_registrar',
     payload:{ p_id:fid, p_dados:Object.assign({ inspecao_id:v.inspecao.id, storage_path:caminho, secao, legenda:legenda || null, ordem, bytes:blob.size, item_ref:item },
       gal ? { origem:'galeria', tirada_em:extra.tirada_em || null } : {}) }
   }, [{ chave, bucket:'inspecoes', caminho, tipo }], true);
+  if (!foi){   // S171 · issue 35: sem espaço, a foto não entrou na fila — sai da lista (não pode parecer enviada)
+    v.inspecao.fotos = v.inspecao.fotos.filter(f => f.id !== fid); delete MINI[fid]; salvar();
+  }
   pintar();
 }
 function tirarFotoDaLista(v, fid){
@@ -1169,8 +1406,8 @@ function telaPlaqueta(v){
     v._unid = b.dataset.u; ativas(v).forEach(c => mudouCam(v, c, 'unidade_campo', b.dataset.u)); salvar(); pintar();
   }));
   cs.forEach(c => {
-    ligarPressao('pPm_' + c.id, u, m => mudouCam(v, c, 'pmta_plaqueta_mpa', m));
-    ligarPressao('pPt_' + c.id, u, m => mudouCam(v, c, 'pth_mpa', m), 150);
+    ligarPressao('pPm_' + c.id, u, m => mudouCam(v, c, 'pmta_plaqueta_mpa', m), 100, { positivo:true, rot:'PMTA da plaqueta' });   // S171 · issue 41
+    ligarPressao('pPt_' + c.id, u, m => mudouCam(v, c, 'pth_mpa', m), 150, { positivo:true, rot:'PTH' });
   });
 }
 
@@ -1251,7 +1488,7 @@ function telaOperacao(v){
     ligar('fl_' + c.id, el => mudouCam(v, c, 'fluido', el.value.trim() || null));
     const seg = document.querySelector('[data-cls="' + c.id + '"]');
     if (seg) seg.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => { mudouCam(v, c, 'classe_fluido', b.dataset.c); pintar(); }));
-    ligarPressao('oP_' + c.id, u, m => mudouCam(v, c, 'p_operacao_max_mpa', m));
+    ligarPressao('oP_' + c.id, u, m => mudouCam(v, c, 'p_operacao_max_mpa', m), 100, { rot:'Pressão máxima de operação' });
     ligar('oQ_' + c.id, el => { c._quente = el.checked; if (!el.checked && c.t_operacao_c != null) mudouCam(v, c, 't_operacao_c', null); else salvar(); pintar(); });
     ligar('oT_' + c.id, el => { const x = numOuAviso(el, 200.1, 1499, 'Temperatura'); if (x !== undefined) mudouCam(v, c, 't_operacao_c', x); });
     const vl = $('oV_' + c.id);
@@ -1263,7 +1500,7 @@ function telaOperacao(v){
     });
     ligar('oVd_' + c.id, el => { mudouCam(v, c, 'volume_desconhecido', el.checked); if (el.checked) c.volume_m3 = null; pintar(); });
     ligar('oEx_' + c.id, el => { mudouCam(v, c, 'pressao_externa', el.checked); if (!el.checked) c.pmta_externa_plaqueta_mpa = null; pintar(); });
-    ligarPressao('oPe_' + c.id, u, m => mudouCam(v, c, 'pmta_externa_plaqueta_mpa', m));
+    ligarPressao('oPe_' + c.id, u, m => mudouCam(v, c, 'pmta_externa_plaqueta_mpa', m), 100, { positivo:true, rot:'PMTA externa' });   // S171 · issue 41
   });
   $('tela').querySelectorAll('[data-rmcam]').forEach(b => b.addEventListener('click', () => {
     const c = v.camaras.find(x => x.id === b.dataset.rmcam);
@@ -1830,7 +2067,7 @@ function faltasEnvio(v){
 }
 // S162 · issue 15: cada falta do envio leva até a tela e a parte com problema (o texto continua o mesmo do servidor)
 const ROT_TELA = { plaqueta:'Plaqueta', operacao:'Operação e câmaras', componentes:'Componentes', localizacao:'Localização', visual:'Exame visual', acessorios:'Acessórios',
-                   ultrassom:'Ultrassom', boroscopia:'Inspeção interna (boroscopia)', teste:'Teste de pressão', fechamento:'Fechamento e envio' };
+                   ultrassom:'Ultrassom', boroscopia:'Inspeção interna (boroscopia)', teste:'Teste de pressão', fechamento:'Fechamento e envio', laudo:'Laudo anterior' };
 function alvoFalta(v, t){
   const acPor = (nome, fn) => acessDe(v).find(a => fn(a) === nome);
   let m = t.match(/^Foto "(.+?)"/);
@@ -1860,9 +2097,11 @@ function irFalta(v, t){
 }
 function aplicarMarca(v){
   if (!MARCA || MARCA.vaso !== v.id || telaAtual.nome !== MARCA.tela) return;
-  if (faltasEnvio(v).indexOf(MARCA.texto) < 0){ MARCA = null; return; }   // a parte foi corrigida: a marca some
-  const T = $('tela'), el = (MARCA.sel && T.querySelector(MARCA.sel)) || T.querySelector('.chip.inc');
-  T.insertAdjacentHTML('afterbegin', '<div class="alerta crit" id="marcaMsg"><b>Falta para enviar</b>' + esc(MARCA.texto) + '</div>');
+  if (MARCA.assinatura){   // S171 · issue 37: a marca do envio recusado some quando a correção toma o lugar dele
+    if (!pendDoVaso(v).some(e => e.assinatura === MARCA.assinatura && e.recusado)){ MARCA = null; return; }
+  } else if (faltasEnvio(v).indexOf(MARCA.texto) < 0){ MARCA = null; return; }   // a parte foi corrigida: a marca some
+  const T = $('tela'), el = (MARCA.sel && T.querySelector(MARCA.sel)) || (MARCA.assinatura ? null : T.querySelector('.chip.inc'));
+  T.insertAdjacentHTML('afterbegin', '<div class="alerta crit" id="marcaMsg"><b>' + (MARCA.assinatura ? 'Envio recusado' : 'Falta para enviar') + '</b>' + esc(MARCA.texto) + '</div>');
   if (!el) return;
   const alvo = el.matches('input,select') ? (el.closest('label.f, .chk') || el) : el;
   alvo.classList.add('problema');
@@ -2552,7 +2791,7 @@ function cartaoReabrir(v){
 function ligarReabrir(v){
   ligar('reabrirCampo', () => {
     if (DEMO || navigator.onLine === false){ U.toast('Precisa de sinal para reabrir.', 'err'); return; }
-    if (pendDoVaso(v).length){ U.toast('Espere terminar de enviar o que está na fila.', 'err'); return; }
+    if (pendDoVaso(v).some(e => !e.parado)){ U.toast('Espere terminar de enviar o que está na fila.', 'err'); return; }   // S171 · issue 37: o envio parado (recusado) não prende mais
     janela('Reabrir para corrigir', '<p class="info">O vaso ' + esc(v.tag) + ' volta para o campo. Corrija e envie de novo.</p>' +
       '<label class="f">O que vai corrigir<textarea class="t" id="rbTx"></textarea></label>',
       [{ rotulo:'Cancelar' }, { rotulo:'Reabrir', classe:'pri', acao:() => {
@@ -2561,6 +2800,7 @@ function ligarReabrir(v){
         N.api.rpc('tf_insp_reabrir_campo', { p_id:v.inspecao.id, p_motivo:mot }).then(() => {
           const i = v.inspecao; i.situacao = 'em_campo'; i.pode_editar = true; i.nao_inspecionado_motivo = null; salvar();
           N.janela.fechar(); U.toast('Reaberta: pode corrigir.', 'ok'); baixar(true); ir({ nome:'vaso', vaso:v.id }, true);
+          if (pendDoVaso(v).length) N.fila.retomar('insp|' + v.id);
         }, e => U.toast(e.message || 'Não consegui reabrir.', 'err'));
         return false;
       } }]);
@@ -2655,7 +2895,7 @@ function telaFechamento(v){
     return;
   }
   const f = faltasEnvio(v), a = avisosEnvio(v);
-  let h = '';
+  let h = alertaRecusa(v);   // S171 · issue 37
   h += f.length ? '<div class="alerta crit" id="fFaltas"><b>Falta para enviar</b><ul>' + f.map((x, k) => '<li>' + esc(x) + ' <button class="ir" data-falta="' + k + '">ir para ' + esc(ROT_TELA[alvoFalta(v, x).tela] || 'a tela') + ' ›</button></li>').join('') + '</ul></div>'
                : '<div class="alerta" style="background:var(--ok-soft);color:var(--ok)"><b>Pronto para enviar</b>Tudo o que é obrigatório foi preenchido.</div>';
   if (a.length) h += '<div class="alerta"><b>Avisos</b><ul>' + a.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
@@ -2693,15 +2933,21 @@ function telaFechamento(v){
     i.situacao = 'enviada'; i.pode_editar = false; if (motivo) i.nao_inspecionado_motivo = motivo; salvar();
   };
   $('tela').querySelectorAll('[data-falta]').forEach(b => b.addEventListener('click', () => irFalta(v, f[Number(b.dataset.falta)])));   // S162 · issue 15
+  ligarRecusa(v);
   ligar('fEnviar', () => {
+    despejar();   // S171 · issue 37: o que está adiado (digitado há menos de um segundo) entra na fila ANTES do "enviar"
+    if (recusasDe(v).length){ const r = $('recAlerta'); if (r){ r.classList.add('problema'); r.scrollIntoView({ behavior:'smooth', block:'center' }); }
+      U.toast('Antes de enviar, corrija o envio recusado (em vermelho no alto).', 'err'); return; }
+    if (SEM_ESPACO){ U.toast(MSG_ESPACO, 'err'); return; }   // S171 · issue 35
     const fx = faltasEnvio(v);
     if (fx.length){ const cx = $('fFaltas'); if (cx){ cx.classList.add('problema'); cx.scrollIntoView({ behavior:'smooth', block:'center' }); }
       U.toast('Falta para enviar: ' + fx.length + ' item(ns). Toque em "ir para…" para chegar ao que falta.', 'err'); return; }
     const ap = avisoPrazo(v); if (ap){ const cp = $('przOn'); if (cp){ const c = cp.closest('.card') || cp; c.classList.add('problema'); c.scrollIntoView({ behavior:'smooth', block:'center' }); } U.toast(ap + ' (Fechamento › Prazo)', 'err'); return; }
     N.janela.confirmar('Enviar a inspeção do ' + v.tag + '?', '<p>Depois de enviar, você ainda pode reabrir para corrigir, até o escritório começar a revisão.</p>', 'Enviar').then(s => {
       if (!s) return;
+      despejar(); v._recusaEnvio = null;   // S171 · issue 37
       if (i.observacao !== undefined) enfileirar(v, 'fech', 'observações', { funcao:'tf_insp_fechamento_gravar', payload:{ p_id:i.id, p_dados:{ observacao:i.observacao || null } } });
-      enfileirar(v, 'enviar-' + i.id, 'enviar', { funcao:'tf_insp_enviar', payload:{ p_id:i.id } }, null, true);
+      if (!enfileirar(v, 'enviar-' + i.id, 'enviar', { funcao:'tf_insp_enviar', payload:{ p_id:i.id } }, null, true)) return;   // S171 · issue 35: sem espaço, não tranca
       fechar('enviada'); U.toast(navigator.onLine === false ? 'Guardado: vai quando o sinal voltar.' : 'Enviando…');
       ir({ nome:'lista' });
     });
@@ -2714,7 +2960,8 @@ function telaFechamento(v){
       const s = $('niSel').value, tx = ($('niTx').value || '').trim();
       const m = s && s !== '+' ? (tx ? s + ' ' + tx : s) : tx;
       if (!m){ U.toast('Informe o motivo.', 'err'); return false; }
-      enfileirar(v, 'naoinsp-' + i.id, 'vaso não inspecionado', { funcao:'tf_insp_nao_inspecionado', payload:{ p_id:i.id, p_motivo:m } }, null, true);
+      despejar(); v._recusaEnvio = null;   // S171 · issue 37
+      if (!enfileirar(v, 'naoinsp-' + i.id, 'vaso não inspecionado', { funcao:'tf_insp_nao_inspecionado', payload:{ p_id:i.id, p_motivo:m } }, null, true)) return;
       fechar('enviada', m); N.janela.fechar(); ir({ nome:'lista' });
     } }]) || ligar('niSel', el => { $('niSilo').hidden = el.value !== SEM_PRESSAO; }), 'click');
 }
@@ -3101,7 +3348,7 @@ function demo(){
     vasos:[{ id:'demo-v1', tag:'VP-01', nome:'Reservatório de ar', localizacao:'Casa de compressores', camaras:[], componentes:[], inspecao:null },
            { id:'demo-v2', tag:'VP-02', nome:'Pulmão de ar', camaras:[], componentes:[], inspecao:null }] };
 }
-(function boot(){
+(async function boot(){
   $('barDemo').hidden = !DEMO;
   if (!OS){ $('tela').innerHTML = '<div class="card vazio">Abra a inspeção pela tarefa T06 da OS, no Field.</div>'; titulo('Inspeção', VERSAO); return; }
   if (!DEMO && NO_SERVIDOR){
@@ -3112,6 +3359,12 @@ function demo(){
   } else { N.porteiro({ app:'doc', demo:true }); }
   try{ if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}   // não apagar foto pendente
   if (DEMO && !E) mesclar(demo());
+  // S171 · issue 35: sem espaço, a fila pede ajuda (sai o pacote das outras OS sem nada pendente); no boot, as não abertas há 15 dias
+  if (N.fila.aoFaltarEspaco) N.fila.aoFaltarEspaco(() => liberarEspaco());
+  try{ liberarEspaco(15); }catch(e){}
+  await carregarMiniaturas();
+  if (E) salvar();
+  conferirRecusas();   // S171 · issue 37: a recusa que chegou com o app fechado (o Field também envia a fila)
   try{ history.replaceState({ t:telaAtual }, '', location.href); }catch(e){}
   pintar();
   baixar(true);
