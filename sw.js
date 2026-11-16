@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S168';   // S168: issue 34 — TapDoc E39 (na revisão, o link do TapWeb do vaso: o QR da placa e da lombada)
+const VERSAO = 'H16-S169';   // S169: issue 68 — TapDoc E40 (com a caixa "Reconstituir o prontuário" marcada, o Relatório de Inspeção sai com o conteúdo do relatório, não com o do Prontuário)
+// const VERSAO = 'H16-S168';   // S168: issue 34 — TapDoc E39 (na revisão, o link do TapWeb do vaso: o QR da placa e da lombada)
 // const VERSAO = 'H16-S167';   // S167: issue 30, Parte 4 — TapDoc E38 (o fichário: capa, folha de rosto e divisórias; as lombadas de 40 ou 60 mm; doc/documentos-pdf.js D4) e Cadastros CAD5 ("Imprime a pasta" no cliente) (212, 437)
 // const VERSAO = 'H16-S166';   // S166: issue 30, Parte 3 — TapDoc E37 (o Prontuário (Reconstituído), com número P; a caixa "Reconstituir o prontuário"; doc/laudo-pdf.js S166; doc/documentos-pdf.js D3; 436)
 // const VERSAO = 'H16-S165';   // S165: issue 30, Parte 2 — TapDoc E36 (o Registro de Segurança, livro completo ou só a anotação; a caixa "já tem a pasta"; doc/documentos-pdf.js D2; 435)
