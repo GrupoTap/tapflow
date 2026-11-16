@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S172';   // S172: issues 40, 42 e 55 — TapDoc escritório E41 e celular 28 (a leitura do número com ponto de milhar; sem SQL)
+const VERSAO = 'H16-S173';   // S173: issues 43, 44, 45, 46, 47 e 57 — TapDoc escritório E42 (o prazo reduzido pelas datas aprovadas: laudo-pdf.js S173, documentos-pdf.js D5) e celular 29 (aferição, acessórios e prazo; 440)
+// const VERSAO = 'H16-S172';   // S172: issues 40, 42 e 55 — TapDoc escritório E41 e celular 28 (a leitura do número com ponto de milhar; sem SQL)
 // const VERSAO = 'H16-S171';   // S171: issues 35, 36, 37 e 41 — núcleo N11 (a fila avisa quando o aparelho está sem espaço) e TapDoc celular 27 (a base da coleta)
 // const VERSAO = 'H16-S170';   // S170: issues 76 a 80 — permissões do banco do TapDoc (213, 438 e 439; só SQL, nenhuma tela muda)
 // const VERSAO = 'H16-S169';   // S169: issue 68 — TapDoc E40 (com a caixa "Reconstituir o prontuário" marcada, o Relatório de Inspeção sai com o conteúdo do relatório, não com o do Prontuário)
@@ -93,7 +94,7 @@ const ESSENCIAIS = [
   './doc/',
   './doc/motor-calculo-nr13.js?v=R00.6',
   './doc/recomendacoes.js?v=RC1',   // S163: a lista das recomendações e do prazo (a revisão sem sinal precisa dela)
-  './doc/documentos-pdf.js?v=D4',   // S164: os nomes dos arquivos e o Resumo; S165: o Registro de Segurança; S166: os textos do Prontuário na minuta
+  './doc/documentos-pdf.js?v=D5',   // S164: os nomes dos arquivos e o Resumo; S165: o Registro de Segurança; S166: os textos do Prontuário na minuta; S173: o prazo reduzido pelas datas
   // S88 · Acessos P1: a tela do admin
   './acessos/',
   // S116 · TapSeg 1: a Segurança do Trabalho

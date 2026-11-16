@@ -191,7 +191,8 @@ input.t.suspeita{border-color:var(--crit);background:var(--crit-soft);color:var(
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 28';   // S172 · issues 40, 42 e 55 (Revisão TapDoc · Rodada 2): a leitura do número com ponto de milhar — vírgula é a decimal; "1.250" sem vírgula pergunta "1250 ou 1,25?" e não grava até escolher; volume abaixo de 20 litros e circunferência abaixo de 300 mm avisam; a mesma regra do escritório (E41)
+const VERSAO = 'TapDoc 29';   // S173 · issues 43, 44, 45, 46 e 47 (Revisão TapDoc · Rodada 3): a aferição reprovada põe "substituir" só ao sair do campo e a situação volta quando o resultado deixa de ser reprovado (o banco não troca mais: 440); "Cancelar esta aferição" (com o motivo) e trocar o tipo do acessório pede para cancelá-la; sem a PMTA vigente, a válvula é conferida (aviso) contra a menor entre a PMTA da plaqueta e a da prévia; "Gerar os pontos" pergunta antes de apagar leituras; o prazo menor não grava a cada letra, só aparece com a categoria e a escolha pela metade fica guardada
+// const VERSAO = 'TapDoc 28';   // S172 · issues 40, 42 e 55 (Revisão TapDoc · Rodada 2): a leitura do número com ponto de milhar — vírgula é a decimal; "1.250" sem vírgula pergunta "1250 ou 1,25?" e não grava até escolher; volume abaixo de 20 litros e circunferência abaixo de 300 mm avisam; a mesma regra do escritório (E41)
 // const VERSAO = 'TapDoc 27';   // S171 · issues 35, 36, 37 e 41 (Revisão TapDoc · Rodada 1): sem espaço avisa em vermelho e as OS antigas sem nada pendente saem do aparelho; miniaturas no IndexedDB; o pacote que chega sozinho não troca o vaso em campo nem redesenha a tela; envio recusado depois do "Enviar" volta o vaso para "em campo" com o motivo; a correção toma o lugar do envio recusado; PMTA, PTH e PMTA externa maiores que zero
 // const VERSAO = 'TapDoc 26';   // S163 · issues 12, 20 e 21 (433): todas as recomendações do laudo no Fechamento (as da norma, as das respostas — que dá para desmarcar — e as a mais; recomendacoes.js RC1); a justificativa do prazo menor numa lista (A1, A2, B, Outros)
 // const VERSAO = 'TapDoc 25';   // S162 · issues 15, 19 e 23: o que falta para enviar leva até a parte com problema (marcada em vermelho, com o nome da tela); "substituir" × aferição conforme; a leitura suspeita da aferição em vermelho
@@ -631,7 +632,7 @@ const COL_ROT = { pmta_plaqueta_mpa:['PMTA da plaqueta', 'plaqueta', 'tem de ser
 const CK_ROT = { ck_cam_volume:['Volume', 'operacao', 'volume preenchido com "não sei o volume" marcado: fique com um dos dois', '#oV_'],
   ck_cam_externa:['PMTA externa', 'operacao', 'PMTA externa sem "opera com vácuo" marcado', '#oPe_'], ck_leit_ponto_1000:['Ponto da medição', 'ultrassom', 'de 1 a 1000'] };
 const TELA_DO_ENVIO = [[/^cam-/, 'operacao'], [/^comp-/, 'componentes'], [/^(vaso|fab)~/, 'plaqueta'], [/^visual~/, 'visual'], [/^boro~/, 'boroscopia'],
-  [/^teste~/, 'teste'], [/^(acess-|acessrm-|afer-|acconf~)/, 'acessorios'], [/^(leit-|us~)/, 'ultrassom'], [/^(amb|gps)~/, 'localizacao'], [/^laudo~/, 'laudo'],
+  [/^teste~/, 'teste'], [/^(acess-|acessrm-|afer-|afercanc-|acconf~)/, 'acessorios'], [/^(leit-|us~)/, 'ultrassom'], [/^(amb|gps)~/, 'localizacao'], [/^laudo~/, 'laudo'],
   [/^((fech|fechrec|recaj|prazo)~|enviar-|naoinsp-)/, 'fechamento']];
 const TELA_DA_SECAO = { plaqueta:'plaqueta', geral:'visual', visual:'visual', componentes:'ultrassom', localizacao:'localizacao', laudo_anterior:'laudo', capa:'fechamento',
   acessorios:'acessorios', teste:'teste', boroscopia:'boroscopia' };
@@ -2271,6 +2272,19 @@ function pmtaVigenteCam(v, camId){
   if (c && c.pmta_vigente_mpa) return c.pmta_vigente_mpa;
   const la = v.laudo_anterior; return la && la.situacao === 'conferido' && cs.length <= 1 ? la.pmta_mpa : null;
 }
+/** S173 · issue 45: sem a PMTA vigente (vaso sem laudo anterior conferido), a referência em campo é a MENOR entre a PMTA da
+ *  plaqueta e a PMTA da prévia do cálculo — só para AVISO (não reprova): a decisão oficial é do escritório, contra a PMTA adotada. */
+function pmtaRefCampo(v, camId){
+  const cs = ativas(v), c = cs.find(x => x.id === camId) || (cs.length === 1 ? cs[0] : null);
+  if (!c) return null;
+  const xs = [];
+  if (Number(c.pmta_plaqueta_mpa) > 0) xs.push({ mpa:Number(c.pmta_plaqueta_mpa), de:'da plaqueta' });
+  try{
+    const ck = (previa(v).camaras || []).find(k => k.cam && k.cam.id === c.id);
+    if (ck && ck.governante && ck.governante.pmta > 0) xs.push({ mpa:Number(ck.governante.pmta), de:'da prévia do cálculo' });
+  }catch(e){}
+  return xs.length ? xs.reduce((x, y) => y.mpa < x.mpa ? y : x) : null;
+}
 // S150 · item 81: a pressão máxima de operação da câmara do acessório (V3: a válvula abre acima dela)
 function operCam(v, camId){
   const cs = ativas(v), c = cs.find(x => x.id === camId) || (cs.length === 1 ? cs[0] : null);
@@ -2295,6 +2309,11 @@ function avisosAcess(v){
     const p = pmtaVigenteCam(v, x.camara_id);
     if (p && x.pressao_ajuste_mpa > p + 1e-9) a.push((TIPOS_ACESS[x.tipo]) + (x.lacre_num ? ' lacre ' + x.lacre_num : '') + ': ajuste ' + fmt(x.pressao_ajuste_mpa, 3) +
       ' MPa acima da PMTA vigente (' + fmt(p, 3) + ' MPa). NR-13 13.5.1.2 "a".');
+    else if (!p){   // S173 · issue 45: sem a PMTA vigente, o aviso contra a da plaqueta ou a da prévia (a menor)
+      const ref = pmtaRefCampo(v, x.camara_id);
+      if (ref && x.pressao_ajuste_mpa > ref.mpa + 1e-9) a.push((TIPOS_ACESS[x.tipo]) + (x.lacre_num ? ' lacre ' + x.lacre_num : '') + ': abertura da plaqueta ' + fmt(x.pressao_ajuste_mpa, 3) +
+        ' MPa acima da PMTA ' + ref.de + ' (' + fmt(ref.mpa, 3) + ' MPa): confira e, se puder, reajuste agora. Sem laudo anterior, o escritório decide contra a PMTA adotada.');
+    }
   });
   // S144 · item 75: a conexão da válvula sai no 7.6 do laudo ("com conexão …")
   l.filter(x => VALVULAS.includes(x.tipo) && x.situacao !== 'ausente' && !(x.conexao || '').trim()).forEach(x => a.push(TIPOS_ACESS[x.tipo] + ': informe a conexão (bitola).'));
@@ -2349,6 +2368,16 @@ function resultadoAf(v, a, af){
   // S140 · item 33: vaso sem laudo anterior não tem PMTA vigente: a abertura é conferida no escritório, contra a PMTA adotada
   const laSit = v.laudo_anterior && v.laudo_anterior.situacao;
   if (laSit === 'sem_laudo' || laSit === 'cliente_nao_tem') r.avisos = (r.avisos || []).map(x => /^Sem a PMTA vigente/.test(x) ? 'Vaso sem laudo anterior: a abertura é conferida no escritório, contra a PMTA adotada nesta inspeção.' : x);
+  // S173 · issue 45: sem a PMTA vigente, o aviso em campo contra a menor entre a PMTA da plaqueta e a da prévia (não reprova)
+  r.acimaRef = null;
+  if (af.tipo === 'valvula' && pmtaVigenteCam(v, a.camara_id) == null){
+    const ref = pmtaRefCampo(v, a.camara_id), un = af.unidade || 'bar';
+    const abs = ((af.leituras || {}).aberturas || []).filter(x => x != null && x !== '' && !Number.isNaN(Number(x))).map(x => M.paraMPa(Number(x), un));
+    if (ref && abs.length && Math.max(...abs) > ref.mpa + 1e-9){
+      r.acimaRef = ref;
+      r.avisos = (r.avisos || []).concat(['Abre acima da PMTA ' + ref.de + ' (' + fmt(M.deMPa(ref.mpa, un), 2) + ' ' + UN_AF_ROT[un] + '): confira e, se puder, reajuste agora. A decisão oficial é do escritório.']);
+    }
+  }
   if (!af.padrao_id && !e1Reprovada(af)) r.faltas.push('Escolha o manômetro padrão.');   // S150: a etapa 1 reprovada não usa o padrão nem lacra
   if (!(af.lacre_colocado || '').trim() && !e1Reprovada(af)) r.faltas.push('Informe o lacre colocado.');
   r.completo = !r.faltas.length;
@@ -2410,6 +2439,7 @@ function blocoAfericao(v, a, pode){
       + '<p class="muted" style="margin:4px 0 0">' + (af.codigo ? esc(af.codigo) : 'Número ao enviar (o servidor numera).') + '</p>'
       + (r.grave ? '<p class="alerta" style="margin:6px 0 0">Abertura acima da PMTA vigente: grave.</p>' : '')
       + '<button class="btn sec" data-afabre="' + esc(a.id) + '" style="margin-top:6px">' + (pode ? 'Abrir a aferição' : 'Ver') + '</button>'
+      + (pode ? '<button class="btn sec" data-afcanc="' + esc(a.id) + '" style="margin-top:6px;margin-left:6px">Cancelar esta aferição</button>' : '')   // S173 · issue 44
       // S144 · item 69: a foto da aferição na bancada (sai como figura no 7.5/7.6 do laudo)
       // S149 · item 83: 3 fotos com nome (vão no laudo: a bancada em cima, o padrão e o instrumento embaixo)
       + '<p style="margin:10px 0 0;font-size:13px;font-weight:600;color:var(--ink-2)">Fotos da aferição <small class="muted" style="font-weight:400">(vão no laudo)</small></p>'
@@ -2429,6 +2459,9 @@ function blocoAfericao(v, a, pode){
 }
 function ligarBlocoAfericao(v, l, mudou){
   $('tela').querySelectorAll('[data-afabre]').forEach(b => b.addEventListener('click', () => ir({ nome:'afericao', vaso:v.id, ac:b.dataset.afabre })));
+  $('tela').querySelectorAll('[data-afcanc]').forEach(b => b.addEventListener('click', () => {   // S173 · issue 44
+    const a = l.find(x => x.id === b.dataset.afcanc), af = a && afDe(v, a); if (af) janelaCancelarAf(v, a, af, ok => { if (ok) pintar(); });
+  }));
   $('tela').querySelectorAll('[data-afnovo]').forEach(b => b.addEventListener('click', () => {
     const a = l.find(x => x.id === b.dataset.afnovo); novaAfericao(v, a); ir({ nome:'afericao', vaso:v.id, ac:a.id });
   }));
@@ -2446,6 +2479,7 @@ function ligarBlocoAfericao(v, l, mudou){
           a.afericao_caso = null; a.caso_campos = null; mudou(a, 'afericao_motivo', null);
           const af = novaAfericao(v, a), det = (campos && (campos.detalhe || campos.defeito)) || '';
           af.leituras.etapa1 = { ok:false, defeitos:[], obs:det }; salvar(); gravarAfericao(v, af);
+          aplicarSitAf(v, a, af);   // S173 · issue 43: o banco não põe mais em "substituir": o celular põe (e guarda que foi ele)
           return ir({ nome:'afericao', vaso:v.id, ac:a.id });
         }
         a.afericao_caso = k; a.caso_campos = campos; mudou(a, 'afericao_motivo', texto); pintar(); });
@@ -2474,11 +2508,59 @@ function gravarAfericao(v, af){
   const d = pegar(af, AF_OK); d.inspecao_id = v.inspecao.id;
   enfileirar(v, 'afer-' + af.id, (af.tipo === 'valvula' ? 'teste de válvula' : 'aferição de manômetro'), { funcao:'tf_insp_afericao_gravar', payload:{ p_id:af.id, p_dados:d } });
 }
-const adiarAf = debounce((v, a, af) => {
-  gravarAfericao(v, af);
-  const rr = resultadoAf(v, a, af);
-  if (rr.resultado === 'reprovado' && (a.situacao || 'ok') === 'ok'){ a.situacao = 'substituir'; salvar(); gravarAcess(v, a); }
-}, 700);
+// S173 · issue 43: a cada número só grava a aferição; a situação do acessório muda em aplicarSitAf (ao sair do campo)
+const adiarAf = debounce((v, a, af) => { if (!af.cancelada_em) gravarAfericao(v, af); }, 700);   // cancelada (issue 44): o banco recusaria
+function htmlSitAf(a, af){
+  const s = a.situacao || null, m = af && af.leituras && af.leituras.sit_auto;
+  return 'Situação do acessório: <b>' + esc(s ? SIT_ACESS[s] || s : 'não marcada') + '</b>'
+    + ((m === 'ok' || m === 'vazio') && s === 'substituir' ? ' (posta pela aferição reprovada; volta sozinha se o resultado mudar)' : '');
+}
+/** S173 · issue 44: cancelar a aferição começada por engano (o banco já tem tf_insp_afericao_cancelar, 407, que pede o motivo).
+ *  Depois dela o acessório volta a mostrar "Aferir" e "Não aferir…"; a situação posta pela aferição volta (issue 43).
+ *  Os envios dessa aferição parados ou recusados saem da fila: o cancelamento toma o lugar deles (e a fila do vaso anda). */
+function cancelarAfericao(v, a, af, motivo){
+  const L = af.leituras || {};
+  if ((L.sit_auto === 'ok' || L.sit_auto === 'vazio') && a.situacao === 'substituir'){ a.situacao = L.sit_auto === 'ok' ? 'ok' : null; gravarAcess(v, a); }
+  delete L.sit_auto;
+  af.cancelada_em = new Date().toISOString(); af.cancelada_motivo = motivo;
+  const grupo = 'insp|' + v.id;
+  const mortos = N.fila.listar({ tipo:'insp', grupo }).filter(e => e.id.indexOf('afer-' + af.id + '~') === 0 && (e.parado || e.recusado));
+  mortos.forEach(e => N.fila.descartar(e.assinatura));
+  salvar();
+  enfileirar(v, 'afercanc-' + af.id, 'cancelar a aferição', { funcao:'tf_insp_afericao_cancelar', payload:{ p_id:af.id, p_motivo:motivo } }, null, true);
+  if (mortos.length) N.fila.retomar(grupo);
+}
+function janelaCancelarAf(v, a, af, depois, aviso){
+  janela('Cancelar esta aferição', '<p class="info">' + esc(aviso || 'Use quando a aferição foi começada por engano.') + ' Ela sai do envio e do laudo; depois, toque em "Aferir" ou em "Não aferir…".</p>'
+    + '<label class="f">Por quê<textarea class="t" id="afCancMot" placeholder="Ex.: toquei em Aferir por engano"></textarea></label>',
+    [{ rotulo:'Voltar', acao:() => { if (depois) depois(false); } }, { rotulo:'Cancelar a aferição', classe:'pri', acao:() => {
+      const m = ($('afCancMot').value || '').trim(); if (m.length < 5){ U.toast('Diga por quê (5 letras ou mais).', 'err'); return false; }
+      cancelarAfericao(v, a, af, m); U.toast('Aferição cancelada.', 'ok'); if (depois) depois(true);
+    } }]);
+}
+/** S173 · issue 43: a aferição reprovada põe o acessório em "substituir" e guarda que foi o sistema
+ *  (`leituras.sit_auto` = a situação de antes: 'ok' ou 'vazio'); se o resultado deixar de ser reprovado, a situação volta.
+ *  Quem decide é o celular, só quando a pessoa sai do campo (o banco não troca mais: 440). Se a pessoa mexeu na situação
+ *  depois, vale o que ela marcou ('manual'): o sistema não troca mais. Devolve true quando mudou alguma coisa. */
+function aplicarSitAf(v, a, af){
+  if (!a || !af || af.cancelada_em) return false;
+  const L = af.leituras || (af.leituras = {}), m = L.sit_auto || null, s = a.situacao || null, auto = m === 'ok' || m === 'vazio';
+  const r = resultadoAf(v, a, af).resultado;
+  let ac = false, fe = false;
+  if (auto && s !== 'substituir'){ L.sit_auto = 'manual'; fe = true; }
+  else if (r === 'reprovado' && !m && (s || 'ok') === 'ok'){ L.sit_auto = s ? 'ok' : 'vazio'; a.situacao = 'substituir'; ac = fe = true; }
+  else if (r !== 'reprovado' && auto && s === 'substituir'){ a.situacao = m === 'ok' ? 'ok' : null; delete L.sit_auto; ac = fe = true; }
+  if (!fe) return false;
+  salvar(); adiarAf('af:' + af.id, v, a, af); adiarAf.agora();
+  if (ac) gravarAcess(v, a);
+  return true;
+}
+/** S173 · issue 43: a pessoa tocou na situação do acessório: o que ela marcou vale (o sistema não troca mais). */
+function sitManual(v, a){
+  const af = afDe(v, a), L = af && af.leituras;
+  if (!L || !(L.sit_auto === 'ok' || L.sit_auto === 'vazio')) return;
+  L.sit_auto = 'manual'; salvar(); gravarAfericao(v, af);
+}
 // S140 · itens 55 e 59: o resultado se atualiza a cada número digitado, sem redesenhar a tela (o campo não some, o teclado não fecha)
 function htmlResAf(r, vv){
   return '<b>Resultado</b>' + (r.faltas.length ? '<ul>' + r.faltas.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '')
@@ -2509,7 +2591,9 @@ function telaAfericao(v){
   titulo(vv ? 'Aferição da válvula' : 'Aferição do manômetro', v.tag + ' · ' + nomeAc(a));
   const r = resultadoAf(v, a, af);
   let h = '<div class="card"><div style="display:flex;gap:8px;align-items:center"><b style="flex:1">' + (af.codigo ? esc(af.codigo) : 'Número ao enviar') + '</b><span id="afChip">' + chipAf(r.resultado) + '</span></div>'
-    + '<p class="muted" style="margin:4px 0 0">PR-ENG-001 · ' + (vv ? 'desmontada até onde a construção permite, inspecionada, limpa e aferida' : '3 cargas e 3 descargas por ponto') + '</p></div>';
+    + '<p class="muted" style="margin:4px 0 0">PR-ENG-001 · ' + (vv ? 'desmontada até onde a construção permite, inspecionada, limpa e aferida' : '3 cargas e 3 descargas por ponto') + '</p>'
+    + '<p class="muted" id="afSit" style="margin:4px 0 0">' + htmlSitAf(a, af) + '</p>'   // S173 · issue 43
+    + (pode ? '<button class="btn peq sec" id="afCanc" style="margin-top:6px">Cancelar esta aferição</button>' : '') + '</div>';   // S173 · issue 44
   // S150 · item 81 (decisão 11): etapa 1 — inspeção visual e funcional (visor, ponteiro, retorno ao zero, escala, rosca, lacre)
   const E1 = (af.leituras || (af.leituras = {})).etapa1 || null, e1n = E1 && E1.ok === false;
   h += '<div class="card"><b>Etapa 1 · inspeção visual e funcional</b><div class="seg" id="afE1"><button data-e1="1" class="' + (!e1n ? 'on' : '') + '">Aprovado: seguir para a etapa 2</button>'
@@ -2570,6 +2654,11 @@ function telaAfericao(v){
   h += '<div class="card" id="afResultado">' + htmlResAf(r, vv) + '</div>';
   $('tela').innerHTML = h;
   if (!pode){ $('tela').querySelectorAll('input,select,button').forEach(el => { el.disabled = true; }); return; }
+  // S173 · issue 43: a situação do acessório só muda quando a pessoa sai do campo (o "change"; ao trocar de tela, guardarFocado o dispara)
+  // (depois dos outros "change" do mesmo campo, que atualizam a aferição: daí o setTimeout)
+  $('tela').querySelectorAll('input,textarea,select').forEach(el => el.addEventListener('change', () => setTimeout(() => { if (aplicarSitAf(v, a, af)) atualizarCabeca(); }, 0)));
+  const atualizarCabeca = () => { const c = $('afSit'); if (c) c.innerHTML = htmlSitAf(a, af); };
+  ligar('afCanc', () => janelaCancelarAf(v, a, af, ok => { if (ok) ir({ nome:'acessorios', vaso:v.id }, true); }), 'click');   // S173 · issue 44
   const atualizar = () => {
     const rr = resultadoAf(v, a, af);
     $('afChip').innerHTML = chipAf(rr.resultado); $('afResultado').innerHTML = htmlResAf(rr, vv);
@@ -2586,7 +2675,7 @@ function telaAfericao(v){
   // S150 · item 81: a etapa 1
   $('afE1').querySelectorAll('[data-e1]').forEach(b => b.addEventListener('click', () => {
     af.leituras.etapa1 = b.dataset.e1 === '1' ? { ok:true } : Object.assign({ defeitos:[], obs:'' }, af.leituras.etapa1 || {}, { ok:false });
-    if (b.dataset.e1 === '0' && (a.situacao || 'ok') === 'ok'){ a.situacao = 'substituir'; gravarAcess(v, a); }
+    salvar(); aplicarSitAf(v, a, af);   // S173 · issue 43: tocou em "Aprovado" depois do "Reprovado" por engano: a situação volta
     mudou(true);
   }));
   $('tela').querySelectorAll('[data-def]').forEach(el => el.addEventListener('change', () => {
@@ -2615,9 +2704,18 @@ function telaAfericao(v){
     aoDigitar('afUf', el => { es.uti_fim = n(el.value); mudou(false); });
     // item 54: o "Próximo" vai de "Indicado" em "Indicado", na ordem do ensaio (a coluna "Padrão" fica fora; toca-se nela para mudar)
     encadear(Array.from($('tela').querySelectorAll('[data-c="indicado"]')).concat([$('afLc')]).filter(Boolean));
-    const pts = lista => {
+    // S173 · issue 46: os pontos que saem levam as leituras deles: com leitura, pergunta antes ("Gerar mesmo assim?")
+    const pts = async lista => {
       const velhos = af.leituras.pontos || [];
-      af.leituras.pontos = lista.map(x => velhos.find(p => Number(p.nominal) === x) || { nominal:x, leituras:[] });
+      const saem = velhos.filter(p => lista.indexOf(Number(p.nominal)) < 0 && (p.leituras || []).some(l => l && l.indicado != null));
+      if (saem.length && !(await N.janela.confirmar('Gerar os pontos de novo?', '<p>Isso apaga as leituras de <b>' + saem.length + ' ponto' + (saem.length > 1 ? 's' : '')
+          + '</b> (' + esc(saem.map(p => fmt(p.nominal)).join(' · ')) + ' ' + esc(UN_AF_ROT[af.unidade || 'bar']) + '). Gerar mesmo assim?</p>', 'Gerar e apagar', true))) return;
+      const novos = lista.map(x => velhos.find(p => Number(p.nominal) === x) || { nominal:x, leituras:[] });
+      // as leituras conferidas ("Está certa", issue 23) usam a posição do ponto: acompanham o ponto que fica
+      const conf = af.leituras.conferidas;
+      if (conf && conf.length) af.leituras.conferidas = conf.map(ch => { const [k, ...r] = String(ch).split(':'), p = velhos[Number(k)], n = p ? novos.indexOf(p) : -1;
+        return n >= 0 ? [n].concat(r).join(':') : null; }).filter(Boolean);
+      af.leituras.pontos = novos;
       mudou(true);
     };
     // C4: "Gerar os pontos da aferição" — a quantidade de graduações divide a escala de utilização (início + k × passo, k = 1..graduações)
@@ -2715,11 +2813,18 @@ function telaAcessorios(v){
           const b = ($('acBit').value || '').trim(); if (!b){ U.toast('Escreva a bitola.', 'err'); return false; } mudou(a, 'conexao', b); N.janela.fechar(); pintar(); } }]);
         return;
       }
-      mudou(a, k, (el.value || '').trim() || null);
+      // S173 · issue 44: trocar o tipo com a aferição de outro formato (manômetro × válvula) prende o envio: pede para cancelá-la antes
+      const afT = k === 'tipo' ? afDe(v, a) : null, novo = (el.value || '').trim();
+      if (afT && (!AFERIVEIS.includes(novo) || tipoAf({ tipo:novo }) !== afT.tipo)){
+        el.value = a.tipo;
+        return janelaCancelarAf(v, a, afT, ok => { if (ok){ mudou(a, 'tipo', novo); } pintar(); },
+          'Este acessório tem ' + (afT.tipo === 'valvula' ? 'o teste de válvula' : 'a aferição de manômetro') + ': para virar ' + (TIPOS_ACESS[novo] || novo).toLowerCase() + ', ela precisa ser cancelada.');
+      }
+      mudou(a, k, novo || null);
       if (k === 'tipo') pintar();
     }));
     const seg = card.querySelector('[data-sit]');
-    seg.querySelectorAll('[data-s]').forEach(b => b.addEventListener('click', () => { mudou(a, 'situacao', b.dataset.s); pintar(); }));
+    seg.querySelectorAll('[data-s]').forEach(b => b.addEventListener('click', () => { sitManual(v, a); mudou(a, 'situacao', b.dataset.s); pintar(); }));   // S173 · issue 43
     ligarPressao('ac_p_' + a.id, a.unidade_campo || unidadeDe(v), m => { mudou(a, 'pressao_ajuste_mpa', m); pintar(); });
   });
   ligarBlocoAfericao(v, l, mudou);
@@ -2892,17 +2997,45 @@ function przJustLer(){
   const J = przJ(), marcas = ['A1', 'A2', 'B', 'O'].filter(k => $('przJ_' + k) && $('przJ_' + k).checked), outros = (($('przOutro') || {}).value || '').trim();
   return { J, marcas, outros, caso:J ? RecsNR13.casoDe(marcas) : null, just:marcas.indexOf('O') >= 0 || !J ? outros : RecsNR13.prazoResumo(marcas, outros, J) };
 }
+// S173 · issue 47: a escolha do prazo menor pela metade (sem o porquê) fica guardada no aparelho (IndexedDB, regra 49) até
+// ser completada ou desmarcada; ao voltar à tela, ela reaparece com o que falta. Uma chave só ('prz'), por inspeção.
+let PRZ_RASC = {};
+async function carregarRascPrazo(){
+  try{ const x = await Promise.race([miniDB('readonly', st => st.get('prz')), new Promise(ok => setTimeout(() => ok(null), 2000))]); if (x && typeof x === 'object') PRZ_RASC = Object.assign({}, x, PRZ_RASC); }catch(e){}
+}
+function gravarRascPrazo(insp, r){
+  if (r) PRZ_RASC[insp] = r; else if (PRZ_RASC[insp]) delete PRZ_RASC[insp]; else return;
+  miniDB('readwrite', st => st.put(PRZ_RASC, 'prz')).catch(() => {});
+}
+/** S173 · issue 47: o prazo da norma pela categoria da prévia; sem ela, o motivo (não se oferece a lista: o teto seria inventado). */
+function przNorma(v){
+  try{ const r = previa(v); return r.vaso && !r.vaso.erro ? { pz:r.vaso.prazos } : { erro:(r.vaso && r.vaso.erro) || 'Sem a categoria do vaso.' }; }
+  catch(e){ return { erro:e.message }; }
+}
 function cartaoPrazo(v){
-  const i = v.inspecao, PR = i.prazo_red || null;
-  let pz = null; try{ const r = previa(v); pz = r.vaso && !r.vaso.erro ? r.vaso.prazos : null; }catch(e){}
-  const opc = (max, val) => '<option value="">da norma</option>' + Array.from({ length:Math.max(0, (max || 10) - 1) }, (_, k) => k + 1)
+  const i = v.inspecao, RS = PRZ_RASC[i.id] || null, PR = RS ? { externo:RS.externo, interno:RS.interno, caso:RS.caso, just:RS.outros } : i.prazo_red || null;
+  const N13 = przNorma(v), pz = N13.pz || null;
+  const opc = (max, val) => '<option value="">da norma</option>' + Array.from({ length:Math.max(0, max - 1) }, (_, k) => k + 1)
     .map(n => '<option value="' + n + '"' + (Number(val) === n ? ' selected' : '') + '>' + n + (n === 1 ? ' ano' : ' anos') + '</option>').join('');
-  return '<div class="card"><div class="chk" style="margin-top:0"><input type="checkbox" id="przOn"' + (PR ? ' checked' : '') + '><label for="przOn">Prazo das próximas inspeções menor que o da norma</label></div>'
-    + '<div id="przCx"' + (PR ? '' : ' hidden') + '><p class="muted" style="margin:4px 0 0">' + (pz ? 'Pela NR-13: externo ' + pz.externo + ' ano(s), interno ' + (pz.interno == null ? 'a critério do PLH' : pz.interno + ' anos') + '. ' : '')
+  // S173 · issue 47 (e 57): o prazo já escolhido que não é menor que o da norma (a categoria mudou) aparece em vermelho
+  const naoMenor = PR && pz ? [PR.externo != null && PR.externo >= pz.externo ? 'externo ' + PR.externo + ' (norma: ' + pz.externo + ')' : null,
+    PR.interno != null && pz.interno != null && PR.interno >= pz.interno ? 'interno ' + PR.interno + ' (norma: ' + pz.interno + ')' : null].filter(Boolean) : [];
+  let h = '<div class="card"><div class="chk" style="margin-top:0"><input type="checkbox" id="przOn"' + (PR ? ' checked' : '') + '><label for="przOn">Prazo das próximas inspeções menor que o da norma</label></div>'
+    + '<div id="przCx"' + (PR ? '' : ' hidden') + '>';
+  if (!pz){
+    h += '<p class="alerta" style="margin:6px 0 0">Sem a categoria do vaso, não dá para escolher o prazo menor aqui: ' + esc(N13.erro) + ' Informe o volume e a pressão (Operação e câmaras), ou deixe o prazo para o escritório.</p>'
+      + (PR ? '<p class="muted" style="margin:6px 0 0">Escolhido antes: ' + esc([PR.externo != null ? 'externo ' + PR.externo + ' ano(s)' : null, PR.interno != null ? 'interno ' + PR.interno + ' ano(s)' : null].filter(Boolean).join(', ') || '—')
+        + '. O escritório confere com a norma quando a categoria sair; para tirar, desmarque a caixa.</p>' : '');
+    return h + '</div></div>';
+  }
+  h += '<p class="muted" style="margin:4px 0 0">Pela NR-13: externo ' + pz.externo + ' ano(s), interno ' + (pz.interno == null ? 'a critério do PLH' : pz.interno + ' anos') + '. '
     + 'Só menor, nunca maior. O escritório e o PLH veem antes de aprovar.</p>'
-    + '<div class="lin"><label class="f">Exame externo<select class="t" id="przExt">' + opc(pz && pz.externo, PR && PR.externo) + '</select></label>'
-    + '<label class="f">Exame interno<select class="t" id="przInt">' + opc(pz && pz.interno != null ? pz.interno : 10, PR && PR.interno) + '</select></label></div>'
-    + przJustCampo(v, PR) + '</div></div>';
+    + (naoMenor.length ? '<p class="alerta crit" style="margin:6px 0 0">Não é menor que o da norma: ' + esc(naoMenor.join('; ')) + '. Escolha de novo ou desmarque.</p>' : '')
+    + '<div class="lin"><label class="f">Exame externo<select class="t" id="przExt">' + opc(pz.externo, PR && PR.externo) + '</select></label>'
+    + '<label class="f">Exame interno<select class="t" id="przInt">' + opc(pz.interno != null ? pz.interno : 10, PR && PR.interno) + '</select></label></div>'
+    + przJustCampo(v, PR)
+    + '<p class="alerta" id="przFalta"' + (RS ? '' : ' hidden') + ' style="margin:8px 0 0"></p></div></div>';
+  return h;
 }
 function przJustCampo(v, PR){
   const J = przJ(), pp = PR ? RecsNR13.partes(PR.caso) : null, marc = k => !!(pp && pp.indexOf(k) >= 0);
@@ -2914,21 +3047,36 @@ function przJustCampo(v, PR){
     + '<label class="f" id="przOutroL"' + (oOn ? '' : ' hidden') + '>Outros<textarea class="t" id="przOutro">' + esc(oTx) + '</textarea></label>'
     + '<p class="alerta" id="przAvB" hidden>' + esc((J && J.aviso_b) || '') + '</p></div>';
 }
+const adiarPrz = debounce(f => f(), 1200);   // S173 · issue 47: o texto de "Outros" grava quando a pessoa para de digitar (ou sai do campo)
 function ligarPrazo(v){
-  const i = v.inspecao;
+  const i = v.inspecao, PRi = i.prazo_red;
+  // S173 · issue 47: só grava o que mudou (cada gravação vira um registro "prazo reduzido" no histórico da inspeção)
+  let ultimo = JSON.stringify(PRi ? [PRi.externo != null ? PRi.externo : null, PRi.interno != null ? PRi.interno : null, PRi.just || null, PRi.caso || null] : null);
+  const verFalta = () => { const f = $('przFalta'); if (!f) return; const t = avisoPrazo(v); f.textContent = t ? 'Falta: ' + t.replace(/^Prazo menor:\s*/, '') : ''; f.hidden = !t; };
   // S163 · issue 21: grava quando o prazo e a justificativa estão ditos (a lista: A1, A2, B, Outros)
   const gravar = () => {
-    const on = $('przOn').checked, ext = on ? Number($('przExt').value) || null : null, int = on ? Number($('przInt').value) || null : null, x = przJustLer();
-    if (on && (ext || int) && (!x.marcas.length || (x.marcas.indexOf('O') >= 0 && x.outros.length < 5) || x.just.length < 2)) return;
+    if (!$('przOn')) return;   // a tela já foi trocada
+    const on = $('przOn').checked, temLista = !!$('przExt');
+    if (on && !temLista) return;   // S173 · issue 47: sem a categoria, a escolha não se faz aqui (só desmarcar grava)
+    const ext = on ? Number($('przExt').value) || null : null, int = on ? Number($('przInt').value) || null : null, x = przJustLer();
+    // S173 · issue 47: pela metade (sem prazo ou sem o porquê) fica no aparelho, com o que falta à vista; nada vai ao banco
+    if (on && (!(ext || int) || !x.marcas.length || (x.marcas.indexOf('O') >= 0 && x.outros.length < 5) || x.just.length < 2)){
+      gravarRascPrazo(i.id, { externo:ext, interno:int, marcas:x.marcas, outros:x.outros, caso:x.caso, em:Date.now() }); verFalta(); return;
+    }
+    gravarRascPrazo(i.id, null);
     const caso = on ? x.caso : null, just = on ? x.just : null;
-    i.prazo_red = on && (ext || int) ? { externo:ext, interno:int, just, origem:'campo', caso } : null; salvar();
-    enfileirar(v, 'prazo', 'prazo das próximas inspeções', { funcao:'tf_insp_prazo_reduzir', payload:{ p_id:i.id, p_dados:{ externo:ext, interno:int, justificativa:on && (ext || int) ? just : null, caso:on && (ext || int) ? caso : null } } });
+    i.prazo_red = on ? { externo:ext, interno:int, just, origem:'campo', caso } : null; salvar(); verFalta();
+    const chave = JSON.stringify(on ? [ext, int, just || null, caso || null] : null);
+    if (chave === ultimo) return;
+    ultimo = chave;
+    enfileirar(v, 'prazo', 'prazo das próximas inspeções', { funcao:'tf_insp_prazo_reduzir', payload:{ p_id:i.id, p_dados:{ externo:ext, interno:int, justificativa:on ? just : null, caso:on ? caso : null } } });
   };
   const ver = () => {
+    if (!$('przOutroL')) return;
     const x = przJustLer(); $('przOutroL').hidden = x.marcas.indexOf('O') < 0;
     $('przAvB').hidden = !(x.marcas.indexOf('B') >= 0 && RecsNR13.codigoAdotado(v.codigo_construcao));   // o 13.5.1.6.1 com código adotado: confirme
   };
-  ligar('przOn', el => { $('przCx').hidden = !el.checked; if (!el.checked && i.prazo_red) gravar(); });
+  ligar('przOn', el => { $('przCx').hidden = !el.checked; if (!el.checked) gravar(); else if ($('przExt')) gravar(); });
   ligar('przExt', gravar); ligar('przInt', gravar);
   $('tela').querySelectorAll('[data-przj]').forEach(c => c.addEventListener('change', () => {
     const J = przJ();
@@ -2939,12 +3087,13 @@ function ligarPrazo(v){
     }
     ver(); gravar();
   }));
-  ligar('przOutro', gravar, 'input');
-  ver();
+  ligar('przOutro', () => adiarPrz('prz', gravar), 'input');   // S173 · issue 47: não grava a cada letra
+  ligar('przOutro', () => adiarPrz.agora(), 'change');
+  ver(); verFalta();
 }
 function avisoPrazo(v){
   const on = $('przOn') && $('przOn').checked;
-  if (!on) return null;
+  if (!on || !$('przExt')) return null;   // S173 · issue 47: sem a categoria, o prazo fica com o escritório
   const ext = Number($('przExt').value) || null, int = Number($('przInt').value) || null, x = przJustLer();
   if (!ext && !int) return 'Prazo menor: escolha o prazo do exame externo, do interno ou dos dois (ou desmarque).';
   if (!x.marcas.length) return 'Prazo menor: marque por quê.';
@@ -3431,6 +3580,7 @@ function demo(){
   if (N.fila.aoFaltarEspaco) N.fila.aoFaltarEspaco(() => liberarEspaco());
   try{ liberarEspaco(15); }catch(e){}
   await carregarMiniaturas();
+  await carregarRascPrazo();   // S173 · issue 47: a escolha do prazo menor pela metade
   if (E) salvar();
   conferirRecusas();   // S171 · issue 37: a recusa que chegou com o app fechado (o Field também envia a fila)
   try{ history.replaceState({ t:telaAtual }, '', location.href); }catch(e){}

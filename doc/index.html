@@ -192,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E41';   // E41 (S172 · issues 40, 42 e 55, Revisão TapDoc · Rodada 2): a leitura do número com ponto de milhar — vírgula é a decimal; "1.250" sem vírgula pergunta "1250 ou 1,25?" e não grava (componentes do laudo anterior, mapa, modelo de vaso, instrumentos, corrigir o volume, volume da revisão); a revisão avisa volume abaixo de 20 litros e circunferência abaixo de 300 mm; a mesma regra do celular (28); sem SQL
+const VERSAO = 'TapDoc E42';   // E42 (S173 · issue 57, Revisão TapDoc · Rodada 3): o prazo "reduzido" — a revisão mostra em vermelho a redução que não é menor que a da norma (ou sem a categoria para conferir) e a aprovação a ignora; "Gravar o prazo reduzido" pede a categoria e um prazo menor que o da norma; o laudo (laudo-pdf.js S173) e o Registro (documentos-pdf.js D5) escrevem o prazo que a data aprovada dá; sem SQL
+// const VERSAO = 'TapDoc E41';   // E41 (S172 · issues 40, 42 e 55, Revisão TapDoc · Rodada 2): a leitura do número com ponto de milhar — vírgula é a decimal; "1.250" sem vírgula pergunta "1250 ou 1,25?" e não grava (componentes do laudo anterior, mapa, modelo de vaso, instrumentos, corrigir o volume, volume da revisão); a revisão avisa volume abaixo de 20 litros e circunferência abaixo de 300 mm; a mesma regra do celular (28); sem SQL
 // const VERSAO = 'TapDoc E40';   // E40 (S169 · issue 68): com a caixa "Reconstituir o prontuário" marcada, o Relatório de Inspeção sai com o conteúdo do relatório (o gerarLaudo monta sempre com prontuario: null; só o gerarDocumentos monta o Prontuário); sem SQL
 // const VERSAO = 'TapDoc E39';   // E39 (S168 · issue 34): na revisão, o quadro do link do TapWeb do vaso (o QR code da placa e da lombada): o aviso do que falta e o campo para colar o link ali mesmo (tf_placa_link_gravar, 431; sem SQL)
 // const VERSAO = 'TapDoc E38';   // E38 (S167 · 212 e 437): issue 30, Parte 4 — o fichário (capa, folha de rosto e divisórias; kit completo ou de inserção, pela caixa "já tem a pasta") e as lombadas (40 ou 60 mm, escolhidas ao baixar), gerados na hora (documentos-pdf.js D4); só para cliente com "Imprime a pasta" = sim
@@ -2206,9 +2207,10 @@ function pintarRevisao(){
 function revDatasHtml(prz){
   const base = dataSP(REV.R.inspecao.termino || REV.R.inspecao.inicio); if (!base) return '';
   const nExt = somaAnos(base, prz.externo), nInt = prz.interno == null ? null : somaAnos(base, prz.interno), obrig = prz.interno == null;
-  const PR = REV.R.inspecao.prazo_red;   // S144 · item 70: o prazo reduzido vira as datas (o PLH vê e pode mudar)
-  const D = REV.datas = REV.datas || (PR ? { ativo:true, ext:PR.externo != null && PR.externo < prz.externo ? somaAnos(base, PR.externo) : nExt,
-      int:PR.interno != null && (prz.interno == null || PR.interno < prz.interno) ? somaAnos(base, PR.interno) : nInt, just:PR.just || '', red:true }
+  // S144 · item 70: o prazo reduzido vira as datas (o PLH vê e pode mudar)
+  // S173 · issue 57: só o que é MENOR que o da norma é redução; o resto a aprovação ignora (sai o prazo e o texto da norma)
+  const PR = REV.R.inspecao.prazo_red, rE = !!PR && PR.externo != null && PR.externo < prz.externo, rI = !!PR && PR.interno != null && (prz.interno == null || PR.interno < prz.interno);
+  const D = REV.datas = REV.datas || (rE || rI ? { ativo:true, ext:rE ? somaAnos(base, PR.externo) : nExt, int:rI ? somaAnos(base, PR.interno) : nInt, just:PR.just || '', red:true }
     : { ativo: obrig, ext: nExt, int: nInt, just: '' });
   if (obrig) D.ativo = true;
   return '<div style="margin-top:10px;border-top:1px solid var(--rule-2);padding-top:8px"><b>Próximas inspeções</b>'
@@ -2287,6 +2289,12 @@ function revPrazoHtml(prev, pode){
     + 'Pode ser menor, nunca maior. Quem reduziu fica só no controle interno; o laudo diz os prazos e o motivo.</p>';
   if (PR) h += '<p class="alerta" style="margin:0 0 8px"><b>Reduzido ' + (PR.origem === 'campo' ? 'em campo' : 'na revisão') + (PR.por ? ' por ' + esc(PR.por) : '') + (PR.em ? ' (' + quandoBR(PR.em) + ')' : '') + ':</b> '
     + [PR.externo != null ? 'externo ' + PR.externo + ' ano(s)' : null, PR.interno != null ? 'interno ' + PR.interno + ' ano(s)' : null].filter(Boolean).join(', ') + '. Motivo: ' + esc(PR.just || '') + '</p>';
+  // S173 · issue 57: a redução que não é menor que a da norma (ou sem a categoria para conferir) em vermelho; a aprovação a ignora
+  const naoRed = PR && prz ? [PR.externo != null && PR.externo >= prz.externo ? 'externo ' + PR.externo + ' ano(s), e a norma dá ' + prz.externo : null,
+    PR.interno != null && prz.interno != null && PR.interno >= prz.interno ? 'interno ' + PR.interno + ' ano(s), e a norma dá ' + prz.interno : null].filter(Boolean) : [];
+  if (PR && !prz) h += '<p class="alerta crit" style="margin:0 0 8px">Sem a categoria do vaso, o prazo reduzido não pode ser conferido com a NR-13: resolva a categoria (volume, pressão e fluido) antes de aprovar.</p>';
+  else if (naoRed.length) h += '<p class="alerta crit" style="margin:0 0 8px">Não é redução: ' + esc(naoRed.join('; ')) + ' (não é menor que o prazo da norma). A aprovação usa o prazo da norma'
+    + (naoRed.length === [PR.externo, PR.interno].filter(x => x != null).length ? ' e o laudo não diz "reduzido"' : ' nessa parte') + '. Corrija o prazo abaixo ou volte ao prazo da norma.</p>';
   if (sug != null) h += '<p class="alerta falta" style="margin:0 0 8px">Sugestão: a vida remanescente do ' + esc(menor.nome) + ' (' + esc(menor.vidaTxt) + ') é menor que o prazo da norma. Avalie reduzir o prazo do exame interno para ' + sug + ' ano(s).</p>';
   if (pode) h += '<div class="g3"><label class="f">Externo (anos)<input class="t" id="przExt" inputmode="numeric" value="' + esc(PR && PR.externo != null ? PR.externo : '') + '" placeholder="' + (prz ? 'norma: ' + prz.externo : '') + '"></label>'
     + '<label class="f">Interno (anos)<input class="t" id="przInt" inputmode="numeric" value="' + esc(PR && PR.interno != null ? PR.interno : (sug != null && !PR ? sug : '')) + '" placeholder="' + (prz && prz.interno != null ? 'norma: ' + prz.interno : '') + '"></label>'
@@ -2933,8 +2941,10 @@ function ligarRevisao(){
     const n = id => { const x = ($(id).value || '').trim(); if (!x) return null; const y = Number(x); if (!Number.isInteger(y) || y < 1) throw new Error('Prazo em anos inteiros (1 ou mais).'); return y; };
     let ext, int; try{ ext = n('przExt'); int = n('przInt'); }catch(e){ erro(e); return; }
     const pz = REV.prev.vaso && !REV.prev.vaso.erro ? REV.prev.vaso.prazos : null;
-    if (pz && ext != null && ext > pz.externo){ U.toast('O externo não pode passar de ' + pz.externo + ' ano(s) (NR-13).', 'err'); return; }
-    if (pz && int != null && pz.interno != null && int > pz.interno){ U.toast('O interno não pode passar de ' + pz.interno + ' anos (NR-13).', 'err'); return; }
+    // S173 · issue 57: sem a categoria não há com o que comparar (resolver antes); reduzir é ficar MENOR que a norma (NR-13, 13.5.4.5, Tabela 2: prazos máximos)
+    if (!pz){ U.toast('Sem a categoria do vaso (' + ((REV.prev.vaso && REV.prev.vaso.erro) || 'falta o cálculo') + '), não dá para conferir o prazo com a NR-13: resolva a categoria antes.', 'err'); return; }
+    if (ext != null && ext >= pz.externo){ U.toast('O externo reduzido precisa ser menor que o da norma (' + pz.externo + ' ano(s), NR-13).', 'err'); return; }
+    if (int != null && pz.interno != null && int >= pz.interno){ U.toast('O interno reduzido precisa ser menor que o da norma (' + pz.interno + ' anos, NR-13).', 'err'); return; }
     if (ext == null && int == null){ U.toast('Informe o prazo reduzido (externo, interno ou os dois).', 'err'); return; }
     const x = przJustLer();   // E34 · issue 21
     if (!x.marcas.length){ marcarProblema($('przJ'), 'Marque a justificativa do prazo menor (Prazo das próximas inspeções).'); return; }
@@ -3172,8 +3182,8 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S166');
-    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D4');   // E35 · issue 30: o Resumo e os nomes dos arquivos
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S173');
+    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D5');   // E35 · issue 30: o Resumo e os nomes dos arquivos
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S158');
     return true;
   })().catch(e => { LIBS = null; throw e; });
@@ -3461,7 +3471,7 @@ function ligarDesenho(){
 }
 // A4/A5: o pacote para o token (Assinador SERPRO, em lote) e a devolução dos assinados
 // E35 · issue 30 (DP4): o pacote leva todos os documentos técnicos (o relatório, o Resumo e os certificados), cada um num PDF
-function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D4').then(() => true, () => false); }
+function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D5').then(() => true, () => false); }
 /** O que falta assinar: os relatórios (tf_laudo_para_assinar) e os outros documentos (tf_insp_docs_para_assinar). insps: só dessas inspeções. */
 async function pacoteParaAssinar(insps){
   const [L, D] = await Promise.all([rpc('tf_laudo_para_assinar').catch(() => []), rpc('tf_insp_docs_para_assinar').catch(() => []), libDocs()]);

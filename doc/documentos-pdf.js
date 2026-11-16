@@ -18,7 +18,7 @@
  */
 (function (raiz) {
 'use strict';
-const VERSAO = 'D4-S167-2026-11-15';
+const VERSAO = 'D5-S173-2026-11-16';   // D5 (S173 · issue 57): o prazo reduzido do Registro pelas datas aprovadas (LaudoPDF.prazoReduzido)
 const AZUL = '#1B6FA9', CINZA = '#515252', FAIXA = '#5B6770', VERDE = '#1E6B3A', VERM = '#A62D18';
 
 // ── o nome dos arquivos (DP5) ────────────────────────────────────────────────
@@ -231,7 +231,9 @@ function fatosRegistro(d) {
   if (TE.realizado) teste = { caso: 'feito', tipo: TESTE_TIPO[TE.tipo] || TE.tipo || 'de pressão', pressao: barMPa(TE.pressao_mpa), reprovado: TE.resultado === 'reprovado' };
   else if (M.teste_nao_cond && visOk && !abaixo) teste = { caso: TE.th_fabricacao_comprovado ? 'desaconselhado_th' : 'desaconselhado' };
   else teste = { caso: 'nao', motivo: TE.motivo_nao || 'motivo não informado' };
-  const RED = I.prazo_red && R.datas_pelo_plh && R.justificativa_datas === I.prazo_red.just ? I.prazo_red : null;
+  // S173 · issue 57: a frase do prazo reduzido sai das DATAS aprovadas (a mesma conta do laudo: LaudoPDF.prazoReduzido); sem o
+  // gerador do laudo carregado, não se afirma redução nenhuma (antes: os anos digitados, que podiam não bater com a data)
+  const RED = raiz.LaudoPDF && raiz.LaudoPDF.prazoReduzido ? raiz.LaudoPDF.prazoReduzido(d) : null;
   // condição operacional: o teste reprovado deixa o vaso inapto (o parecer do laudo); recomendação além das fixas do modelo = "com recomendações"
   let comRec = false;
   if (raiz.RecsNR13 && I.rec_ajustes !== undefined) {
@@ -325,8 +327,8 @@ function registro(d, opc) {
   else par(txt(X.teste_nao, { motivo: String(T.motivo).replace(/[.\s]+$/, '').replace(/^./, c => c.toLowerCase()) }));
   par(F.nc.length ? txt(X.nao_conservado, { itens: eLista(F.nc.map(x => String(x.item || '').toLowerCase())) }) : X.conservado);
   if (F.RED) {
-    const anos = n => n + (Number(n) === 1 ? ' ano' : ' anos');
-    par(txt(X.prazo_reduzido, { prazos: eLista([F.RED.externo != null ? anos(F.RED.externo) + ' (exame externo)' : null, F.RED.interno != null ? anos(F.RED.interno) + ' (exame interno)' : null]) }));
+    const rot = raiz.LaudoPDF.prazoRotulo;   // S173 · issue 57: o prazo que a data aprovada dá ("2 anos", "18 meses" ou "até 10/05/2027")
+    par(txt(X.prazo_reduzido, { prazos: eLista([F.RED.externo ? rot(F.RED.externo) + ' (exame externo)' : null, F.RED.interno ? rot(F.RED.interno) + ' (exame interno)' : null]) }));
   }
   const COND = { liberado: X.condicao_liberado, recomendacoes: X.condicao_recomendacoes, nao_liberado: X.condicao_nao_liberado };
   if (!vazio(COND[F.condicao])) C.push({ text: [{ text: 'Condição operacional: ', bold: true }, { text: COND[F.condicao] }], style: 'par' });

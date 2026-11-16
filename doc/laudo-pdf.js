@@ -11,6 +11,8 @@
  * A conta da espessura mínima e da PMTA é a do motor (motor-calculo-nr13.js);
  * aqui ela só é ESCRITA com os números (a memória de cálculo do laudo).
  *
+ * S173 · issue 57 (16/11/2026): o "reduzido" da seção 13 e o prazo do quadro saem das DATAS aprovadas pelo PLH (prazoReduzido):
+ *   só é reduzido o exame com a data antes da da norma, e o prazo escrito é o que a data dá; "definido pelo PLH" só com a data diferente da norma.
  * S166 · issue 30, Parte 3 (15/11/2026): o Prontuário (Reconstituído) sai deste mesmo gerador — montar(d, { prontuario: { numero, textos } }):
  *   só as seções do sumário de 12 (DP11), renumeradas, com a capa "RECONSTITUIÇÃO DE PRONTUÁRIO" e "Prontuário Nº P…" no cabeçalho; o relatório não muda.
  * S164 · issue 30, Parte 1 (13/11/2026): o logo da Engetap e a grafia da cidade exportados (logoEngetap, cidadeLaudo) para o documentos-pdf.js (o Resumo); o relatório
@@ -48,6 +50,38 @@ function dataBR(x) {
 }
 const dataSP = x => x ? new Date(x).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }) : null;
 function txt(t, v) { return String(t == null ? '' : t).replace(/\{\{(\w+)\}\}/g, (m, k) => v && v[k] != null ? String(v[k]) : ''); }
+// ── S173 · issue 57: o prazo das próximas inspeções sai das DATAS aprovadas pelo PLH ──
+// A NR-13 dá os prazos MÁXIMOS (13.5.4.5, Tabela 2); o relatório traz a data prevista da próxima inspeção (13.5.4.11 "l") e o
+// Registro anota a alteração dos prazos (13.5.1.7 "a"). Então só é "reduzido" o exame cuja data aprovada é ANTERIOR à da norma,
+// e o prazo escrito é o que essa data dá — não o número digitado em campo ou na revisão. A mesma conta serve ao Registro
+// (documentos-pdf.js chama LaudoPDF.prazoReduzido). A base é a da revisão: o término da inspeção (ou o início), no fuso de SP.
+const somaAnosISO = (b, n) => { const [y, m, dd] = b.split('-').map(Number); return new Date(Date.UTC(y + n, m - 1, dd)).toISOString().slice(0, 10); };
+const diaISO = x => x ? String(x).slice(0, 10) : null;
+function prazosNorma(d) {
+  const I = (d && d.inspecao) || {}, R = (d && d.resultado) || {}, base = dataSP(I.termino || I.inicio);
+  const nE = base && R.prazo_externo_anos != null ? somaAnosISO(base, Number(R.prazo_externo_anos)) : null;
+  const nI = base && R.prazo_interno_anos != null ? somaAnosISO(base, Number(R.prazo_interno_anos)) : null;
+  const pE = diaISO(R.proxima_externa), pI = diaISO(R.proxima_interna), plh = !!R.datas_pelo_plh;
+  const plhExt = plh && (!nE || pE !== nE), plhInt = plh && (nI ? pI !== nI : !!pI);
+  return { base, nE, nI, pE, pI, plhExt, plhInt, plhMudou: plhExt || plhInt };
+}
+function prazoEntre(base, data) {
+  for (let n = 1; n <= 20; n++) if (somaAnosISO(base, n) === data) return { anos: n };
+  const [y1, m1, d1] = base.split('-').map(Number), [y2, m2, d2] = data.split('-').map(Number), meses = (y2 - y1) * 12 + (m2 - m1);
+  return d1 === d2 && meses > 0 ? { meses } : { ate: data };
+}
+/** O prazo reduzido de verdade: o motivo das datas é o da redução (em campo ou na revisão) e a data aprovada fica antes da norma.
+ *  null = não há redução (sai o texto da norma ou o das datas do PLH). Cada exame: { anos } | { meses } | { ate: 'AAAA-MM-DD' }. */
+function prazoReduzido(d) {
+  const I = (d && d.inspecao) || {}, R = (d && d.resultado) || {}, P = I.prazo_red;
+  if (!P || !R.datas_pelo_plh || R.justificativa_datas !== P.just) return null;
+  const Z = prazosNorma(d); if (!Z.base) return null;
+  const externo = Z.nE && Z.pE && Z.pE < Z.nE ? prazoEntre(Z.base, Z.pE) : null;
+  const interno = Z.nI && Z.pI && Z.pI < Z.nI ? prazoEntre(Z.base, Z.pI) : null;
+  return externo || interno ? { externo, interno, just: P.just, caso: P.caso } : null;
+}
+const prazoRotulo = p => p.anos != null ? p.anos + (p.anos === 1 ? ' ano' : ' anos') : p.meses != null ? p.meses + (p.meses === 1 ? ' mês' : ' meses') : 'até ' + dataBR(p.ate);
+const prazosRedTxt = (RED, liga) => [RED.externo ? prazoRotulo(RED.externo) + ' (exame externo)' : null, RED.interno ? prazoRotulo(RED.interno) + ' (exame interno)' : null].filter(Boolean).join(liga);
 const maiusc1 = s => s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : s;
 // S143 · item 68: o texto justificado do pdfmake parte a palavra no hífen e na barra ("Conclui- se", "kgf/ cm²");
 // o hífen que não quebra (U+2011, que a Roboto tem) e a barra presa à letra seguinte (U+FEFF) resolvem
@@ -998,7 +1032,8 @@ function montar(d, opc) {
   // ── 13 · próximas inspeções ─────────────────────────────────────────────
   sec('13', T.proximas || 'PRÓXIMAS INSPEÇÕES');
   // S144 · item 70: o prazo reduzido em campo ou na revisão (o PLH aprovou com as datas desse prazo)
-  const RED = I.prazo_red && R.datas_pelo_plh && R.justificativa_datas === I.prazo_red.just ? I.prazo_red : null;
+  // S173 · issue 57: o "reduzido" e o prazo escrito saem das DATAS aprovadas (prazoReduzido), não do número digitado antes
+  const RED = prazoReduzido(d), PZ = prazosNorma(d);
   const anosTxt = n => n + (Number(n) === 1 ? ' ano' : ' anos');
   // S163 · issue 21: a justificativa da lista (A1, A2, B, Outros), montada e fechada pela frase fixa do modelo
   const pRED = RED && raiz.RecsNR13 && M.prazo_just ? raiz.RecsNR13.partes(RED.caso) : null;
@@ -1006,16 +1041,16 @@ function montar(d, opc) {
   if (tRED) par(tRED);
   else if (RED && RED.caso && PR[RED.caso]) par(PR[RED.caso].texto);   // S146 · item 79 (P1)
   else if (RED) par(txt(M.proximas_reduzido || 'Os prazos foram reduzidos para {{prazos}}, a critério do PLH, em razão de: {{justificativa}}.',
-    { prazos: [RED.externo != null ? anosTxt(RED.externo) + ' (exame externo)' : null, RED.interno != null ? anosTxt(RED.interno) + ' (exame interno)' : null].filter(Boolean).join(' e '),
-      justificativa: String(RED.just || '').replace(/[.\s]+$/, '').replace(/^./, x => x.toLowerCase()) }));
-  else if (R.datas_pelo_plh && R.justificativa_datas) par(txt(M.proximas_plh, { justificativa: R.justificativa_datas }));
+    { prazos: prazosRedTxt(RED, ' e '), justificativa: String(RED.just || '').replace(/[.\s]+$/, '').replace(/^./, x => x.toLowerCase()) }));
+  else if (PZ.plhMudou && R.justificativa_datas) par(txt(M.proximas_plh, { justificativa: R.justificativa_datas }));   // S173: datas iguais às da norma = o texto da norma
   else if (V.sem_codigo_construcao) par(M.proximas_sem_codigo);
   else if (V.abaixo_zero_sem_deterioracao) par(M.proximas_abaixo_zero);
   else par(txt(M.proximas_tabela, { categoria: R.categoria || '—' }));
-  const prazoTxt = (n, plh, red) => red != null ? anosTxt(red) : plh ? 'definido pelo PLH' : n == null ? 'a critério do PLH' : anosTxt(n);
+  // S173 · issue 57 (Fase 4): "definido pelo PLH" só quando a data dele é outra que a da norma
+  const prazoTxt = (n, plh, red) => red ? prazoRotulo(red) : plh ? 'definido pelo PLH' : n == null ? 'a critério do PLH' : anosTxt(n);
   tabela(['Exame', 'Prazo', 'Data limite'], [
-    ['Externo', prazoTxt(R.prazo_externo_anos, R.datas_pelo_plh, RED && RED.externo != null && RED.externo < R.prazo_externo_anos ? RED.externo : null), { text: dataBR(R.proxima_externa), style: 'td', bold: true }],
-    ['Interno', prazoTxt(R.prazo_interno_anos, R.datas_pelo_plh, RED && RED.interno != null && (R.prazo_interno_anos == null || RED.interno < R.prazo_interno_anos) ? RED.interno : null),
+    ['Externo', prazoTxt(R.prazo_externo_anos, PZ.plhExt, RED && RED.externo), { text: dataBR(R.proxima_externa), style: 'td', bold: true }],
+    ['Interno', prazoTxt(R.prazo_interno_anos, PZ.plhInt, RED && RED.interno),
       { text: R.proxima_interna ? dataBR(R.proxima_interna) : '—', style: 'td', bold: true }]], [120, '*', 120]);
 
   // ── 14 · responsáveis ───────────────────────────────────────────────────
@@ -1134,6 +1169,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, versao: 'R06a-S166-2026-11-15' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, prazoReduzido, prazosNorma, prazoRotulo, prazosRedTxt, versao: 'R06a-S173-2026-11-16' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
