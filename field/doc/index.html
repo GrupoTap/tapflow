@@ -191,7 +191,8 @@ input.t.suspeita{border-color:var(--crit);background:var(--crit-soft);color:var(
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 29';   // S173 · issues 43, 44, 45, 46 e 47 (Revisão TapDoc · Rodada 3): a aferição reprovada põe "substituir" só ao sair do campo e a situação volta quando o resultado deixa de ser reprovado (o banco não troca mais: 440); "Cancelar esta aferição" (com o motivo) e trocar o tipo do acessório pede para cancelá-la; sem a PMTA vigente, a válvula é conferida (aviso) contra a menor entre a PMTA da plaqueta e a da prévia; "Gerar os pontos" pergunta antes de apagar leituras; o prazo menor não grava a cada letra, só aparece com a categoria e a escolha pela metade fica guardada
+const VERSAO = 'TapDoc 30';   // S174 · issues 38, 39, 52, 82 e 83 (Revisão TapDoc · Rodada 4a): o CSV do medidor com uma leitura inválida entra com as boas e diz quais ficaram de fora; o PDF do laudo anterior que não coube avisa; a miniatura renova o acesso antes de baixar; depois de a câmera fechar o app, volta para a mesma tela e avisa que a foto não chegou; PDF até 50 MB (441); o GPS do vaso volta no pacote da OS (441)
+// const VERSAO = 'TapDoc 29';   // S173 · issues 43, 44, 45, 46 e 47 (Revisão TapDoc · Rodada 3): a aferição reprovada põe "substituir" só ao sair do campo e a situação volta quando o resultado deixa de ser reprovado (o banco não troca mais: 440); "Cancelar esta aferição" (com o motivo) e trocar o tipo do acessório pede para cancelá-la; sem a PMTA vigente, a válvula é conferida (aviso) contra a menor entre a PMTA da plaqueta e a da prévia; "Gerar os pontos" pergunta antes de apagar leituras; o prazo menor não grava a cada letra, só aparece com a categoria e a escolha pela metade fica guardada
 // const VERSAO = 'TapDoc 28';   // S172 · issues 40, 42 e 55 (Revisão TapDoc · Rodada 2): a leitura do número com ponto de milhar — vírgula é a decimal; "1.250" sem vírgula pergunta "1250 ou 1,25?" e não grava até escolher; volume abaixo de 20 litros e circunferência abaixo de 300 mm avisam; a mesma regra do escritório (E41)
 // const VERSAO = 'TapDoc 27';   // S171 · issues 35, 36, 37 e 41 (Revisão TapDoc · Rodada 1): sem espaço avisa em vermelho e as OS antigas sem nada pendente saem do aparelho; miniaturas no IndexedDB; o pacote que chega sozinho não troca o vaso em campo nem redesenha a tela; envio recusado depois do "Enviar" volta o vaso para "em campo" com o motivo; a correção toma o lugar do envio recusado; PMTA, PTH e PMTA externa maiores que zero
 // const VERSAO = 'TapDoc 26';   // S163 · issues 12, 20 e 21 (433): todas as recomendações do laudo no Fechamento (as da norma, as das respostas — que dá para desmarcar — e as a mais; recomendacoes.js RC1); a justificativa do prazo menor numa lista (A1, A2, B, Outros)
@@ -1244,36 +1245,83 @@ function ondeNoLaudo(secao, item, seguir){
       N.janela.fechar(); seguir(leg);
     } }]);
 }
+// S174 · issue 52: em celular com pouca memória, o Android fecha o app enquanto a câmera (ou a galeria, ou a escolha do
+// PDF) está aberta, e a página recarrega na lista de vasos, sem a foto e sem aviso. Antes de abrir, a tela e o lugar
+// da foto ficam guardados no IndexedDB (regra 49: chave `cam` de `tapdoc_mini`); o boot volta para a mesma tela e
+// avisa que não chegou. Voltou normal (com a foto ou cancelado), a marca sai.
+const CAM_VALE = 30 * 60000;   // marca mais velha que 30 minutos é sobra: não volta para a tela
+function marcarCamera(tipo, alvo){
+  const m = { os:OS, tipo, tela:telaAtual, alvo, em:Date.now() };
+  marcarCamera.ativa = m;
+  miniDB('readwrite', st => st.put(m, 'cam')).catch(() => {});
+}
+function limparCamera(){
+  if (!marcarCamera.ativa) return;
+  marcarCamera.ativa = null;
+  miniDB('readwrite', st => st.delete('cam')).catch(() => {});
+}
+// voltou ao app sem escolher nada (o "change" não dispara ao cancelar): a marca sai depois de um tempo
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !marcarCamera.ativa) return;
+  const m = marcarCamera.ativa;
+  setTimeout(() => { if (marcarCamera.ativa === m && !marcarCamera.processando) limparCamera(); }, 4000);
+});
+['arqFoto', 'arqPdf', 'arqGal'].forEach(id => $(id).addEventListener('cancel', limparCamera));
+/** No boot: a câmera fechou o app? Volta para a tela de antes e avisa. */
+async function voltarDaCamera(){
+  let m = null;
+  try{ m = await Promise.race([miniDB('readonly', st => st.get('cam')), new Promise(ok => setTimeout(() => ok(null), 2000))]); }catch(e){}
+  if (!m) return;
+  miniDB('readwrite', st => st.delete('cam')).catch(() => {});
+  if (m.os !== OS || !m.em || Date.now() - m.em > CAM_VALE) return;
+  const v = m.tela && m.tela.vaso ? vaso(m.tela.vaso) : null;
+  if (v && m.tela.nome) telaAtual = m.tela;
+  const o = m.tipo === 'pdf' ? 'O PDF do laudo não chegou' : m.tipo === 'galeria' ? 'A foto da galeria não chegou' : 'A foto não chegou';
+  setTimeout(() => U.toast(o + ': o celular fechou o app enquanto ' + (m.tipo === 'camera' ? 'a câmera estava aberta' : 'escolhia o arquivo')
+    + '. ' + (m.tipo === 'pdf' ? 'Escolha o PDF de novo.' : 'Tire de novo') + (m.alvo && m.alvo.legenda ? ' (' + m.alvo.legenda + ').' : '.')
+    + ' Se acontecer sempre, feche os outros apps antes de abrir a câmera.', 'err'), 600);
+}
 function tirarFoto(v, secao, legenda, item){
   ondeNoLaudo(secao, item, leg => {
     alvoFoto = { v:v.id, secao, legenda:leg || legenda, item:item == null ? null : item };
+    marcarCamera('camera', alvoFoto);
     const a = $('arqFoto'); a.value = ''; a.click();
   });
 }
 $('arqFoto').addEventListener('change', async () => {
   const arq = $('arqFoto').files && $('arqFoto').files[0];
-  if (!arq || !alvoFoto) return;
-  const v = vaso(alvoFoto.v); if (!v || !v.inspecao) return;
+  if (!arq || !alvoFoto){ limparCamera(); return; }
+  const v = vaso(alvoFoto.v); if (!v || !v.inspecao){ limparCamera(); return; }
+  marcarCamera.processando = true;
   try{
     const blob = await N.foto.reduzir(arq, { lado:1600, qualidade:0.85 });   // decisão 12
     const mini = await miniatura(blob);
     await registrarArquivo(v, alvoFoto.secao, alvoFoto.legenda, blob, 'jpg', 'image/jpeg', mini, alvoFoto.item);
   }catch(e){ U.toast(e.message || 'Não consegui usar a foto.', 'err'); }
+  marcarCamera.processando = false; limparCamera();
   alvoFoto = null;
 });
+// S174 · issue 82: o PDF vai até 50 MB, o mesmo limite do banco (441) e do armazenamento (423); a foto, até 5 MB.
+const PDF_MAX = 52428800;
 $('arqPdf').addEventListener('change', async () => {
   const arq = $('arqPdf').files && $('arqPdf').files[0];
-  if (!arq || !alvoFoto) return;
-  const v = vaso(alvoFoto.v); if (!v) return;
-  if (arq.size > 52428800){ U.toast('PDF acima de 50 MB. Fotografe as páginas.', 'err'); return; }   // S150: o limite do armazenamento das inspeções subiu para 50 MB (S147, item 86; revisor do #15)
-  await registrarArquivo(v, 'laudo_anterior', 'PDF do laudo', arq, 'pdf', 'application/pdf', null);
-  laudoColetado(v, 'pdf');
-  alvoFoto = null; pintar();
+  if (!arq || !alvoFoto){ limparCamera(); return; }
+  const v = vaso(alvoFoto.v); if (!v || !v.inspecao){ limparCamera(); return; }
+  alvoFoto = null; limparCamera();
+  if (arq.size > PDF_MAX){ U.toast('PDF acima de 50 MB. Fotografe as páginas.', 'err'); return; }
+  // S174 · issue 39: o PDF que o aparelho não conseguiu guardar avisava nada (parecia anexado). Agora diz, como na foto,
+  // e o laudo só fica como coletado quando o PDF entrou na fila.
+  let foi = false;
+  try{ foi = await registrarArquivo(v, 'laudo_anterior', 'PDF do laudo', arq, 'pdf', 'application/pdf', null); }
+  catch(e){ U.toast('Não consegui guardar o PDF no aparelho: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Nada foi anexado. Tente de novo ou fotografe as páginas.', 'err'); }
+  if (foi) laudoColetado(v, 'pdf');
+  pintar();
 });
 let alvoGal = null;
 function escolherGaleria(v, secao, legenda, item, resta){
   ondeNoLaudo(secao, item, leg => {
     alvoGal = { v:v.id, secao, legenda:leg || legenda, item:item == null ? null : item, resta };
+    marcarCamera('galeria', alvoGal);
     const a = $('arqGal'); a.value = ''; a.multiple = resta > 1; a.click();
   });
 }
@@ -1306,6 +1354,7 @@ async function dataDaFoto(arq){
 }
 $('arqGal').addEventListener('change', async () => {
   const arqs = Array.from($('arqGal').files || []), g = alvoGal; alvoGal = null;
+  limparCamera();
   if (!arqs.length || !g) return;
   const v = vaso(g.v); if (!v || !v.inspecao) return;
   const usar = arqs.slice(0, g.resta);
@@ -1357,6 +1406,7 @@ async function registrarArquivo(v, secao, legenda, blob, ext, tipo, mini, item, 
     v.inspecao.fotos = v.inspecao.fotos.filter(f => f.id !== fid); delete MINI[fid]; salvar();
   }
   pintar();
+  return !!foi;   // S174 · issue 39: quem chama sabe se entrou
 }
 function tirarFotoDaLista(v, fid){
   N.janela.confirmar('Tirar esta foto?', '<p>Ela sai da inspeção.</p>', 'Tirar', true).then(sim => {
@@ -1370,18 +1420,38 @@ function tirarFotoDaLista(v, fid){
 }
 /** Foto que já está no servidor e não tem miniatura aqui: baixa com o login. */
 const carregando = {};
+// S174 · issue 39: o login vale 1 hora e o armazenamento recusa o vencido com 400 (não 401), então o núcleo não renovava
+// e a miniatura ficava "foto enviada". Como no escritório (S148, lerArmazem): antes de ler, renova se falta menos de
+// 1 minuto; se o armazenamento recusar, renova e tenta mais uma vez. A renovação passa por uma chamada ao banco (o
+// núcleo renova no 401 e tenta de novo).
+function vencimentoDoLogin(){
+  try{ const p = String(N.sessao().token || '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/'); return (JSON.parse(atob(p)).exp || 0) * 1000; }catch(e){ return 0; }
+}
+let renovando = null;
+function renovarLogin(forcar){
+  if (!forcar && vencimentoDoLogin() - Date.now() > 60000) return Promise.resolve();
+  if (!renovando) renovando = N.api.rpc('tf_tem_poder', { p_poder:'plh' }).catch(() => {}).then(() => { renovando = null; });
+  return renovando;
+}
+async function lerArmazem(path){
+  const url = SUPA_URL + '/storage/v1/object/authenticated/inspecoes/' + String(path).split('/').map(encodeURIComponent).join('/');
+  const pedir = () => fetch(url, { headers:{ apikey:SUPA_ANON, Authorization:'Bearer ' + N.sessao().token } });
+  await renovarLogin(false);
+  let r = await pedir();
+  if (!r.ok && [400, 401, 403].indexOf(r.status) >= 0){ await renovarLogin(true); r = await pedir(); }
+  return r;
+}
 function carregarMinis(v){
   if (DEMO || navigator.onLine === false) return;
-  const s = N.sessao();
   ((v.inspecao && v.inspecao.fotos) || []).forEach(f => {
     if (MINI[f.id] || carregando[f.id] || !f.storage_path || /\.pdf$/i.test(f.storage_path)) return;
     carregando[f.id] = true;
-    fetch(SUPA_URL + '/storage/v1/object/authenticated/inspecoes/' + f.storage_path.split('/').map(encodeURIComponent).join('/'),
-      { headers:{ apikey:SUPA_ANON, Authorization:'Bearer ' + s.token } })
+    lerArmazem(f.storage_path)
       .then(r => r.ok ? r.blob() : null).then(b => b && miniatura(b)).then(m => {
         if (m){ MINI[f.id] = m; salvarMini(); const el = document.querySelector('[data-f="' + f.id + '"]');
           if (el && !el.querySelector('img')){ el.insertAdjacentHTML('afterbegin', '<img alt="" src="' + m + '">'); } }
-      }).catch(() => {});
+        else delete carregando[f.id];   // não veio: tenta de novo na próxima vez que a tela abrir
+      }).catch(() => { delete carregando[f.id]; });
   });
 }
 
@@ -1929,10 +1999,11 @@ function telaLaudo(v){
   $('tela').querySelectorAll('[data-pg]').forEach(b => b.addEventListener('click', () => {
     const r = ROTEIRO_LAUDO[Number(b.dataset.pg)];
     alvoFoto = { v:v.id, secao:'laudo_anterior', legenda:r, laudo:true };
+    marcarCamera('camera', alvoFoto);
     const a = $('arqFoto'); a.value = ''; a.click();
   }));
   ligarFotos(v, 'laudo_anterior', () => 'Página do laudo');
-  ligar('lzPdf', () => { alvoFoto = { v:v.id, secao:'laudo_anterior' }; const a = $('arqPdf'); a.value = ''; a.click(); }, 'click');
+  ligar('lzPdf', () => { alvoFoto = { v:v.id, secao:'laudo_anterior' }; marcarCamera('pdf', alvoFoto); const a = $('arqPdf'); a.value = ''; a.click(); }, 'click');
   const semLaudo = (s, tit) => janela(tit, '<label class="f">Motivo<small>Obrigatório. Ex.: o cliente comprou o vaso usado, sem documentos.</small><textarea class="t" id="lzMot"></textarea></label>',
     [{ rotulo:'Cancelar' }, { rotulo:'Confirmar', classe:'pri', acao:() => {
       const m = ($('lzMot').value || '').trim(); if (!m){ U.toast('Escreva o motivo.', 'err'); return false; }
@@ -1952,8 +2023,9 @@ function telaLaudo(v){
 // a foto de uma página do laudo marca o laudo como coletado
 const _reg = registrarArquivo;
 registrarArquivo = async function(v, secao, legenda, blob, ext, tipo, mini, item, extra){
-  await _reg(v, secao, legenda, blob, ext, tipo, mini, item, extra);
-  if (secao === 'laudo_anterior' && ext !== 'pdf'){ laudoColetado(v, 'fotos_campo'); pintar(); }
+  const foi = await _reg(v, secao, legenda, blob, ext, tipo, mini, item, extra);
+  if (foi && secao === 'laudo_anterior' && ext !== 'pdf'){ laudoColetado(v, 'fotos_campo'); pintar(); }
+  return foi;
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -3374,18 +3446,30 @@ function lerCsv(txt){
   const cab = linhas[0].split(sep).map(x => x.trim().replace(/^"|"$/g, '').toLowerCase());
   const iS = cab.indexOf('spot_no'), iN = cab.indexOf('reading_no'), iR = cab.indexOf('reading');
   if (iS < 0 || iR < 0) throw new Error('O arquivo não tem as colunas Spot_No e Reading.');
-  const spots = [], por = {};
+  // S174 · issue 38: a leitura inválida (zero ou vazia: o medidor perdeu o acoplamento) fica de fora e as outras entram.
+  // O ponto continua na lista mesmo sem leitura boa, para a ordem do arquivo (1 a n) não mudar; `fora` diz o que saiu.
+  const spots = [], por = {}, fora = [];
   linhas.slice(1).forEach((ln, n) => {
     const c = ln.split(sep).map(x => x.trim().replace(/^"|"$/g, ''));
     const sp = c[iS], val = num(c[iR]);
     if (!sp) return;
-    if (val == null || Number.isNaN(val) || val <= 0 || val > 300) throw new Error('Linha ' + (n + 2) + ': leitura inválida (' + (c[iR] || 'vazia') + ').');
     if (!por[sp]){ por[sp] = []; spots.push(sp); }
+    if (val == null || Number.isNaN(val) || val <= 0 || val > 300){ fora.push({ linha:n + 2, ponto:sp, txt:c[iR] || 'vazia' }); return; }
     por[sp].push({ n: iN >= 0 ? Number(c[iN]) || por[sp].length + 1 : por[sp].length + 1, val });
   });
   if (!spots.length) throw new Error('Nenhuma leitura no arquivo.');
+  if (!spots.some(sp => por[sp].length)) throw new Error('Nenhuma leitura válida no arquivo (todas zero, vazias ou acima de 300 mm). Meça de novo.');
   spots.forEach(sp => por[sp].sort((a, b) => a.n - b.n));
-  return { spots, por };
+  return { spots, por, fora };
+}
+/** S174 · issue 38: o aviso das leituras que ficaram de fora (a mesma frase no celular e no escritório). */
+function csvForaHtml(d, classe){
+  const f = d.fora || [];
+  if (!f.length) return '';
+  const pts = []; f.forEach(x => { if (pts.indexOf(x.ponto) < 0) pts.push(x.ponto); });
+  const vazios = pts.filter(sp => !d.por[sp].length);
+  return '<p class="' + classe + '">' + f.length + ' leitura' + (f.length > 1 ? 's ficaram' : ' ficou') + ' de fora (zero, vazia ou acima de 300 mm), no' + (pts.length > 1 ? 's pontos ' : ' ponto ')
+    + esc(pts.join(', ')) + ' do arquivo.' + (vazios.length ? ' Sem nenhuma leitura válida: ' + esc(vazios.join(', ')) + '.' : '') + '</p>';
 }
 function importarCsv(v){
   const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.csv,text/csv,text/plain';
@@ -3404,7 +3488,7 @@ function distribuirCsv(v, d){
   const passo = Math.max(1, Math.floor(n / Math.max(1, cs.length)));
   let h = '<p class="info" style="margin-top:0">O arquivo tem <b>' + n + ' ponto' + (n > 1 ? 's' : '') + '</b> (do ' + esc(d.spots[0]) + ' ao ' + esc(d.spots[n - 1]) +
     '). Diga quais pontos (pela ordem no arquivo, 1 a ' + n + ') vão para cada componente. Componente em branco fica como está.</p>';
-  h += '<p class="muted">Substitui as leituras já digitadas do componente.</p>';
+  h += csvForaHtml(d, 'alerta') + '<p class="muted">Substitui as leituras já digitadas do componente.</p>';
   cs.forEach((c, k) => {
     const de = k * passo + 1, ate = k === cs.length - 1 ? n : Math.min(n, (k + 1) * passo);
     h += '<div class="lin" style="align-items:flex-end"><div style="flex:2;font-weight:600;padding-bottom:12px">' + esc(c.nome) + '</div>' +
@@ -3434,13 +3518,20 @@ function conferirCsv(v, d, plano){
       if (rs.length > 4) corte++;
       rs.slice(0, 4).forEach((r, k) => l.push({ componente_id:c.id, ponto:p - de + 1, leitura:k + 1, valor_mm:Math.round(r.val * 100) / 100, origem:'csv' }));
     }
-    return { c, l };
+    return { c, l, de, ate };
   });
-  const h = novo.map(({ c, l }) => {
+  // S174 · issue 38: o ponto sem nenhuma leitura válida fica sem leitura (o número do ponto não muda)
+  const semNada = novo.filter(({ l }) => !l.length).map(({ c }) => c.nome);
+  const h = novo.map(({ c, l, de, ate }) => {
     const mn = MotorNR13.minimaLeituras(l.map(x => x.valor_mm));
-    return '<div class="fl"><b>' + esc(c.nome) + '</b>' + (l.length ? new Set(l.map(x => x.ponto)).size + ' pontos, ' + l.length + ' leituras · mínima ' + fmt(mn, 2) + ' mm' : '') + '</div>';
-  }).join('') + (corte ? '<p class="alerta" style="margin-top:8px">' + corte + ' ponto(s) com mais de 4 leituras: ficaram as 4 primeiras.</p>' : '');
+    const vaz = []; for (let p = de; p <= ate; p++) if (!d.por[d.spots[p - 1]].length) vaz.push(p - de + 1);
+    return '<div class="fl"><b>' + esc(c.nome) + '</b>' + (l.length ? new Set(l.map(x => x.ponto)).size + ' pontos, ' + l.length + ' leituras · mínima ' + fmt(mn, 2) + ' mm' : 'nenhuma leitura válida')
+      + (vaz.length && l.length ? ' · <span style="color:var(--crit)">sem leitura no ponto ' + vaz.join(', ') + '</span>' : '') + '</div>';
+  }).join('') + (corte ? '<p class="alerta" style="margin-top:8px">' + corte + ' ponto(s) com mais de 4 leituras: ficaram as 4 primeiras.</p>' : '')
+    + csvForaHtml(d, 'alerta')
+    + (semNada.length ? '<p class="alerta crit">' + esc(semNada.join(', ')) + ': sem nenhuma leitura válida na faixa escolhida. Volte e mude a faixa, ou deixe em branco.</p>' : '');
   janela('Conferir antes de gravar', h, [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
+    if (semNada.length){ U.toast(semNada.join(', ') + ': sem leitura válida. Nada foi gravado.', 'err'); return false; }
     const i = v.inspecao;
     novo.forEach(({ c, l }) => {
       i.leituras = (i.leituras || []).filter(x => x.componente_id !== c.id).concat(l);
@@ -3581,6 +3672,7 @@ function demo(){
   try{ liberarEspaco(15); }catch(e){}
   await carregarMiniaturas();
   await carregarRascPrazo();   // S173 · issue 47: a escolha do prazo menor pela metade
+  await voltarDaCamera();      // S174 · issue 52: a câmera fechou o app? volta para a tela de antes e avisa
   if (E) salvar();
   conferirRecusas();   // S171 · issue 37: a recusa que chegou com o app fechado (o Field também envia a fila)
   try{ history.replaceState({ t:telaAtual }, '', location.href); }catch(e){}

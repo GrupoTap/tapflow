@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S59-T41';   // S173: TapDoc 29 (issues 43 a 47: a aferição reprovada põe "substituir" ao sair do campo e volta atrás; cancelar a aferição; a válvula contra a PMTA da plaqueta; "Gerar os pontos" pergunta; o prazo menor sem gravar a cada letra; 440)
+const VERSAO = 'S59-T42';   // S174: TapDoc 30 (issues 38, 39, 52, 82 e 83: o CSV com leitura inválida entra com as boas; o PDF que não coube avisa; a miniatura renova o acesso; a câmera que fechou o app volta para a mesma tela e avisa; PDF até 50 MB e o GPS de volta no pacote: 441)
+// const VERSAO = 'S59-T41';   // S173: TapDoc 29 (issues 43 a 47: a aferição reprovada põe "substituir" ao sair do campo e volta atrás; cancelar a aferição; a válvula contra a PMTA da plaqueta; "Gerar os pontos" pergunta; o prazo menor sem gravar a cada letra; 440)
 // const VERSAO = 'S59-T40';   // S172: TapDoc 28 (issues 40, 42 e 55: "1.250" sem vírgula pergunta "1250 ou 1,25?" e não grava; volume abaixo de 20 litros e circunferência abaixo de 300 mm avisam)
 // const VERSAO = 'S59-T39';   // S171: Field S59, núcleo N11 e TapDoc 27 (issues 35, 36, 37 e 41: sem espaço avisa, o pacote não apaga a resposta pela metade, envio recusado não prende o vaso, PMTA/PTH maiores que zero)
 // const VERSAO = 'S58-T38';   // S163: TapDoc 26 (issues 12, 20 e 21: as recomendações do laudo no Fechamento e a justificativa do prazo numa lista; recomendacoes.js RC1; 433)
