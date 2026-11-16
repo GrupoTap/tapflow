@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S171';   // S171: issues 35, 36, 37 e 41 — núcleo N11 (a fila avisa quando o aparelho está sem espaço) e TapDoc celular 27 (a base da coleta)
+const VERSAO = 'H16-S172';   // S172: issues 40, 42 e 55 — TapDoc escritório E41 e celular 28 (a leitura do número com ponto de milhar; sem SQL)
+// const VERSAO = 'H16-S171';   // S171: issues 35, 36, 37 e 41 — núcleo N11 (a fila avisa quando o aparelho está sem espaço) e TapDoc celular 27 (a base da coleta)
 // const VERSAO = 'H16-S170';   // S170: issues 76 a 80 — permissões do banco do TapDoc (213, 438 e 439; só SQL, nenhuma tela muda)
 // const VERSAO = 'H16-S169';   // S169: issue 68 — TapDoc E40 (com a caixa "Reconstituir o prontuário" marcada, o Relatório de Inspeção sai com o conteúdo do relatório, não com o do Prontuário)
 // const VERSAO = 'H16-S168';   // S168: issue 34 — TapDoc E39 (na revisão, o link do TapWeb do vaso: o QR da placa e da lombada)
