@@ -612,6 +612,19 @@ function pintarTextos(h){
 
 // ── E2 (S80) · instrumentos e materiais ────────────────────────────────────
 const TIPOS_INST = { medidor_espessura:'Medidor de espessura', manometro_padrao:'Manômetro padrão', bancada:'Bancada', outro:'Outro' };
+/** S177 · issue 64: confirmar DENTRO da mesma janela. A janela do núcleo é uma só: abrir outra por cima apagaria o que está
+ *  digitado no formulário. 1º toque: o aviso aparece no corpo da janela e o botão muda de nome; 2º toque: segue.
+ *  A chave muda com o dado (ex.: outro nº de série avisa de novo). */
+function segundoToque(chave, de, para, html){
+  const corpo = $('mBody'); if (!corpo) return true;
+  if (corpo.querySelector('.av2toque[data-k="' + CSS.escape(chave) + '"]')) return true;
+  corpo.querySelectorAll('.av2toque').forEach(x => x.remove());
+  const av = document.createElement('div'); av.className = 'alerta falta av2toque'; av.dataset.k = chave; av.innerHTML = html;
+  corpo.appendChild(av); av.scrollIntoView({ block:'nearest' });
+  // o botão está "Processando…" enquanto a ação roda (semDuploEnvio) e volta ao nome ao terminar: o novo nome vai depois
+  setTimeout(() => { const bt = [...document.querySelectorAll('#mFoot .btn')].find(b => b.textContent === de); if (bt) bt.textContent = para; }, 0);
+  return false;
+}
 // S177 · issue 64: a lista pode mostrar os desativados (com "Reativar"); guardada para o aviso de nº de série repetido
 let INST_DESAT = false, INST_LISTA = [];
 async function telaInstrumentos(){
@@ -688,11 +701,10 @@ function editarInstrumento(x){
     + '<input class="t" id="in_cert" type="file" accept="application/pdf,image/*"></label>' + htmlCalibs,
     // S177 · issue 64: "Desativar" pergunta antes e diz o que acontece; issue 85: "Nova calibração" guarda a anterior
     (x.id ? [{ rotulo:'Desativar', acao:async () => {
-        const ok = await N.janela.confirmar('Desativar ' + (x.descricao || 'o instrumento') + '?',
-          '<p>Ele sai da lista e <b>deixa de ser oferecido ao celular</b>.</p>'
-          + (x.em_uso ? '<p class="alerta falta">Está em ' + x.em_uso + ' inspeção(ões) aberta(s): elas continuam com ele, mas o celular passa a mostrá-lo como "desativado".</p>' : '')
-          + '<p class="muted">Dá para reativar depois: Instrumentos › "Mostrar os desativados" › Reativar.</p>', 'Desativar', true);
-        if (!ok) return false;
+        if (!segundoToque('desativar', 'Desativar', 'Confirmar: desativar',
+          '<b>Desativar ' + esc(x.descricao || 'o instrumento') + '?</b> Ele sai da lista e <b>deixa de ser oferecido ao celular</b>.'
+          + (x.em_uso ? ' Está em ' + x.em_uso + ' inspeção(ões) aberta(s): elas continuam com ele, mas o celular passa a mostrá-lo como "desativado".' : '')
+          + ' Dá para reativar depois (Instrumentos › "Mostrar os desativados" › Reativar). Toque em "Confirmar: desativar" para seguir, ou em "Cancelar".')) return false;
         try{ await rpc('tf_insp_instrumento_gravar', { p_dados:{ id:x.id, ativo:false } }); U.toast('Desativado. Para reativar: "Mostrar os desativados".', 'ok'); pintar(); }catch(e){ erro(e); return false; } } },
       { rotulo:'Nova calibração', acao:() => { setTimeout(() => novaCalibracao(x), 0); } }] : [])
     .concat([{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
@@ -713,11 +725,11 @@ function editarInstrumento(x){
       }
       const arq = $('in_cert').files && $('in_cert').files[0];
       if (arq && arq.size > ARQ_MAX_MB * 1048576){ U.toast('O certificado tem ' + mbDe(arq) + ' MB; o máximo é ' + ARQ_MAX_MB + ' MB.', 'err'); return false; }
-      // S177 · issue 64 (depois de ler tudo: a pergunta usa a mesma janela): o mesmo nº de série num instrumento do mesmo tipo (ativo ou desativado) é o mesmo instrumento
+      // S177 · issue 64 (o aviso fica na própria janela, sem apagar o que foi digitado): o mesmo nº de série num instrumento do mesmo tipo (ativo ou desativado) é o mesmo instrumento
       if (d.numero_serie){
         const igual = (INST_LISTA || []).find(y => y.id !== x.id && y.tipo === (x.id ? x.tipo : d.tipo) && String(y.numero_serie || '').trim().toUpperCase() === d.numero_serie.toUpperCase());
-        if (igual && !await N.janela.confirmar('Nº de série repetido', '<p>Já existe <b>' + esc(igual.descricao || '') + '</b> com o nº de série ' + esc(d.numero_serie) + (igual.ativo === false ? ' (desativado)' : '')
-          + '.</p><p>Se for o mesmo instrumento, cancele e ' + (igual.ativo === false ? 'reative o que existe' : 'edite o que existe') + '. Gravar outro assim mesmo?</p>', 'Gravar outro')) return false;
+        if (igual && !segundoToque('serie:' + d.numero_serie.toUpperCase(), 'Gravar', 'Gravar outro assim mesmo', 'Já existe <b>' + esc(igual.descricao || '') + '</b> com o nº de série ' + esc(d.numero_serie) + (igual.ativo === false ? ' (desativado)' : '')
+          + '. Se for o mesmo instrumento, cancele e ' + (igual.ativo === false ? 'reative o que existe' : 'edite o que existe') + '; para cadastrar outro mesmo assim, toque em "Gravar outro assim mesmo".')) return false;
       }
       const subir = async () => {
         const pdf = /pdf/i.test(arq.type) || /\.pdf$/i.test(arq.name);
@@ -905,10 +917,9 @@ function editarMaterial(x){
     + '<p class="muted">Mudar o S ou a faixa apaga a conferência: o número novo ainda não foi visto pelo PLH.</p>',
     // S177 · issue 64: "Desativar" pergunta antes e diz o que acontece
     (x.id ? [{ rotulo:'Desativar', acao:async () => {
-        const ok = await N.janela.confirmar('Desativar ' + (x.especificacao || 'o material') + '?',
-          '<p>Ele sai da lista e <b>deixa de ser oferecido</b> na preparação, no laudo anterior e no celular. Os vasos e laudos que já usam este material continuam com ele.</p>'
-          + '<p class="muted">Dá para reativar depois: Materiais › "Mostrar os desativados" › Reativar.</p>', 'Desativar', true);
-        if (!ok) return false;
+        if (!segundoToque('desativar', 'Desativar', 'Confirmar: desativar',
+          '<b>Desativar ' + esc(x.especificacao || 'o material') + '?</b> Ele sai da lista e <b>deixa de ser oferecido</b> na preparação, no laudo anterior e no celular. Os vasos e laudos que já usam este material continuam com ele.'
+          + ' Dá para reativar depois (Materiais › "Mostrar os desativados" › Reativar). Toque em "Confirmar: desativar" para seguir, ou em "Cancelar".')) return false;
         try{ await rpc('tf_insp_material_gravar', { p_dados:{ id:x.id, ativo:false } }); U.toast('Desativado. Para reativar: "Mostrar os desativados".', 'ok'); pintar(); }catch(e){ erro(e); return false; } } }] : [])
     .concat([{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
       const s = num($('mt_s').value), t = num($('mt_t').value);
@@ -918,11 +929,11 @@ function editarMaterial(x){
       const d = { especificacao:$('mt_esp').value.trim(), forma:$('mt_forma').value.trim() || null, s_mpa:s, t_max_c:t || 200, fonte:$('mt_f').value.trim() || null, tabela_asme:'UCS-23',
                   resist_min_mpa:rmin, resist_max_mpa:rmax, escoamento_min_mpa:resc };
       if (x.id) d.id = x.id;
-      // S177 · issue 64 (depois de ler tudo: a pergunta usa a mesma janela): a mesma especificação e forma já cadastrada (ativa ou desativada) é o mesmo material
+      // S177 · issue 64 (o aviso fica na própria janela, sem apagar o que foi digitado): a mesma especificação e forma já cadastrada (ativa ou desativada) é o mesmo material
       const chave = v => String(v || '').trim().toUpperCase().replace(/\s+/g, ' ');
       const igual = (MAT_LISTA || []).find(y => y.id !== x.id && chave(y.especificacao) === chave(d.especificacao) && chave(y.forma) === chave(d.forma));
-      if (igual && !await N.janela.confirmar('Material repetido', '<p>Já existe <b>' + esc(igual.especificacao) + (igual.forma ? ' (' + esc(igual.forma) + ')' : '') + '</b>' + (igual.ativo === false ? ' (desativado)' : '')
-        + '.</p><p>Se for o mesmo, cancele e ' + (igual.ativo === false ? 'reative o que existe' : 'edite o que existe') + '. Gravar outro assim mesmo?</p>', 'Gravar outro')) return false;
+      if (igual && !segundoToque('mat:' + chave(d.especificacao) + '|' + chave(d.forma), 'Gravar', 'Gravar outro assim mesmo', 'Já existe <b>' + esc(igual.especificacao) + (igual.forma ? ' (' + esc(igual.forma) + ')' : '') + '</b>' + (igual.ativo === false ? ' (desativado)' : '')
+        + '. Se for o mesmo, cancele e ' + (igual.ativo === false ? 'reative o que existe' : 'edite o que existe') + '; para cadastrar outro mesmo assim, toque em "Gravar outro assim mesmo".')) return false;
       try{ await rpc('tf_insp_material_gravar', { p_dados:d }); U.toast('Gravado.', 'ok'); pintar(); }catch(e){ erro(e); return false; }
     } }]));
 }
