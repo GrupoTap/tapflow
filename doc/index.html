@@ -192,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E42';   // E42 (S173 · issue 57, Revisão TapDoc · Rodada 3): o prazo "reduzido" — a revisão mostra em vermelho a redução que não é menor que a da norma (ou sem a categoria para conferir) e a aprovação a ignora; "Gravar o prazo reduzido" pede a categoria e um prazo menor que o da norma; o laudo (laudo-pdf.js S173) e o Registro (documentos-pdf.js D5) escrevem o prazo que a data aprovada dá; sem SQL
+const VERSAO = 'TapDoc E43';   // E43 (S174 · issue 38, Revisão TapDoc · Rodada 4a): o CSV do medidor com uma leitura inválida (zero ou vazia) não é mais recusado inteiro — as boas entram e a janela diz quais ficaram de fora; sem SQL
+// const VERSAO = 'TapDoc E42';   // E42 (S173 · issue 57, Revisão TapDoc · Rodada 3): o prazo "reduzido" — a revisão mostra em vermelho a redução que não é menor que a da norma (ou sem a categoria para conferir) e a aprovação a ignora; "Gravar o prazo reduzido" pede a categoria e um prazo menor que o da norma; o laudo (laudo-pdf.js S173) e o Registro (documentos-pdf.js D5) escrevem o prazo que a data aprovada dá; sem SQL
 // const VERSAO = 'TapDoc E41';   // E41 (S172 · issues 40, 42 e 55, Revisão TapDoc · Rodada 2): a leitura do número com ponto de milhar — vírgula é a decimal; "1.250" sem vírgula pergunta "1250 ou 1,25?" e não grava (componentes do laudo anterior, mapa, modelo de vaso, instrumentos, corrigir o volume, volume da revisão); a revisão avisa volume abaixo de 20 litros e circunferência abaixo de 300 mm; a mesma regra do celular (28); sem SQL
 // const VERSAO = 'TapDoc E40';   // E40 (S169 · issue 68): com a caixa "Reconstituir o prontuário" marcada, o Relatório de Inspeção sai com o conteúdo do relatório (o gerarLaudo monta sempre com prontuario: null; só o gerarDocumentos monta o Prontuário); sem SQL
 // const VERSAO = 'TapDoc E39';   // E39 (S168 · issue 34): na revisão, o quadro do link do TapWeb do vaso (o QR code da placa e da lombada): o aviso do que falta e o campo para colar o link ali mesmo (tf_placa_link_gravar, 431; sem SQL)
@@ -3067,18 +3068,30 @@ function espLerCsv(txt){
   const cab = linhas[0].split(sep).map(x => x.trim().replace(/^"|"$/g, '').toLowerCase());
   const iS = cab.indexOf('spot_no'), iN = cab.indexOf('reading_no'), iR = cab.indexOf('reading');
   if (iS < 0 || iR < 0) throw new Error('O arquivo não tem as colunas Spot_No e Reading (o padrão do medidor).');
-  const spots = [], por = {};
+  // S174 · issue 38 (E43): a leitura inválida (zero ou vazia: o medidor perdeu o acoplamento) fica de fora e as outras entram.
+  // O ponto continua na lista mesmo sem leitura boa, para a ordem do arquivo (1 a n) não mudar; `fora` diz o que saiu.
+  const spots = [], por = {}, fora = [];
   linhas.slice(1).forEach((ln, n) => {
     const c = ln.split(sep).map(x => x.trim().replace(/^"|"$/g, ''));
     const sp = c[iS], val = num(c[iR]);
     if (!sp) return;
-    if (val == null || Number.isNaN(val) || val <= 0 || val > 300) throw new Error('Linha ' + (n + 2) + ': leitura inválida (' + (c[iR] || 'vazia') + ').');
     if (!por[sp]){ por[sp] = []; spots.push(sp); }
+    if (val == null || Number.isNaN(val) || val <= 0 || val > 300){ fora.push({ linha:n + 2, ponto:sp, txt:c[iR] || 'vazia' }); return; }
     por[sp].push({ n: iN >= 0 ? Number(c[iN]) || por[sp].length + 1 : por[sp].length + 1, val });
   });
   if (!spots.length) throw new Error('Nenhuma leitura no arquivo.');
+  if (!spots.some(sp => por[sp].length)) throw new Error('Nenhuma leitura válida no arquivo (todas zero, vazias ou acima de 300 mm).');
   spots.forEach(sp => por[sp].sort((a, b) => a.n - b.n));
-  return { spots, por };
+  return { spots, por, fora };
+}
+/** S174 · issue 38: o aviso das leituras que ficaram de fora (a mesma frase no celular e no escritório). */
+function csvForaHtml(d, classe){
+  const f = d.fora || [];
+  if (!f.length) return '';
+  const pts = []; f.forEach(x => { if (pts.indexOf(x.ponto) < 0) pts.push(x.ponto); });
+  const vazios = pts.filter(sp => !d.por[sp].length);
+  return '<p class="' + classe + '">' + f.length + ' leitura' + (f.length > 1 ? 's ficaram' : ' ficou') + ' de fora (zero, vazia ou acima de 300 mm), no' + (pts.length > 1 ? 's pontos ' : ' ponto ')
+    + esc(pts.join(', ')) + ' do arquivo.' + (vazios.length ? ' Sem nenhuma leitura válida: ' + esc(vazios.join(', ')) + '.' : '') + '</p>';
 }
 function espDistribuir(d, nome, recarregar){
   // S148 · item 85: um ponto do arquivo por componente, já preenchido na ordem do medidor (1, 2, 3…)
@@ -3086,7 +3099,7 @@ function espDistribuir(d, nome, recarregar){
   if (!cs.length){ U.toast('Todos os componentes estão como "não deu para medir".', 'err'); return; }
   let h = '<p style="margin-top:0">O arquivo <b>' + esc(nome) + '</b> tem <b>' + n + ' ponto' + (n > 1 ? 's' : '') + '</b> (do ' + esc(d.spots[0]) + ' ao ' + esc(d.spots[n - 1])
     + '). Cada componente é um ponto do arquivo (pela ordem no arquivo, 1 a ' + n + '), na ordem em que o medidor grava. Componente em branco fica como está.</p>'
-    + '<p class="muted">Substitui as leituras que o componente já tinha.</p><table><tr><th>Componente</th><th>Ponto no arquivo</th></tr>';
+    + csvForaHtml(d, 'alerta falta') + '<p class="muted">Substitui as leituras que o componente já tinha.</p><table><tr><th>Componente</th><th>Ponto no arquivo</th></tr>';
   cs.forEach((c, k) => {
     h += '<tr><td><b>' + esc(c.nome) + '</b>' + (espLeit(v, c.id).length ? '<div class="muted">já tem ' + espLeit(v, c.id).length + ' leitura(s)</div>' : '') + '</td>'
       + '<td><input class="t" style="width:80px" inputmode="numeric" id="ep_' + esc(c.id) + '" value="' + (k + 1 <= n ? k + 1 : '') + '"></td></tr>';
@@ -3099,6 +3112,7 @@ function espDistribuir(d, nome, recarregar){
       if (p == null) continue;
       if (!(Number.isInteger(p) && p >= 1 && p <= n)){ U.toast(c.nome + ': ponto inválido (1 a ' + n + ').', 'err'); return false; }
       if (usados.has(p)){ U.toast('O ponto ' + p + ' do arquivo está em dois componentes.', 'err'); return false; }
+      if (!d.por[d.spots[p - 1]].length){ U.toast(c.nome + ': o ponto ' + p + ' do arquivo (' + d.spots[p - 1] + ') não tem leitura válida. Escolha outro ou deixe em branco.', 'err'); return false; }   // S174 · issue 38
       usados.add(p); plano.push({ c, de:p, ate:p });
     }
     if (!plano.length){ U.toast('Nenhum ponto preenchido.', 'err'); return false; }
@@ -3122,7 +3136,7 @@ function espConferir(d, nome, plano, recarregar){
     h += '<tr' + (baixo ? ' style="background:var(--crit-soft)"' : '') + '><td><b>' + esc(c.nome) + '</b></td><td>' + esc(d.spots[pl.de - 1]) + (pl.ate > pl.de ? ' a ' + esc(d.spots[pl.ate - 1]) : '') + '</td><td>' + l.length
       + '</td><td><b' + (baixo ? ' style="color:var(--crit)"' : '') + '>' + fmt(mn, 2) + ' mm</b></td><td>' + (req.valor != null ? fmt(req.valor, 2) + ' mm' : '<span class="muted">' + esc(req.erro || '—') + '</span>') + '</td></tr>';
   });
-  h += '</table>' + (corte ? '<p class="alerta falta" style="margin-top:8px">' + corte + ' ponto(s) com mais de 4 leituras: ficaram as 4 primeiras.</p>' : '')
+  h += '</table>' + (corte ? '<p class="alerta falta" style="margin-top:8px">' + corte + ' ponto(s) com mais de 4 leituras: ficaram as 4 primeiras.</p>' : '') + csvForaHtml(d, 'alerta falta')
     + (lotes.some(({ c, l }) => { const r = CALC.eMinDe(v, c); return r.valor != null && MotorNR13.minimaLeituras(l.map(x => x.valor)) < r.valor; })
         ? '<p class="alerta crit" style="margin-top:8px">Há componente abaixo da espessura requerida. Confira se a faixa está certa antes de gravar.</p>' : '')
     + '<p class="muted">Gravar derruba os "conferido" de PMTA e de Espessuras desta etapa: quem revisa olha de novo.</p>';
