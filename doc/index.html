@@ -192,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E40';   // E40 (S169 · issue 68): com a caixa "Reconstituir o prontuário" marcada, o Relatório de Inspeção sai com o conteúdo do relatório (o gerarLaudo monta sempre com prontuario: null; só o gerarDocumentos monta o Prontuário); sem SQL
+const VERSAO = 'TapDoc E41';   // E41 (S172 · issues 40, 42 e 55, Revisão TapDoc · Rodada 2): a leitura do número com ponto de milhar — vírgula é a decimal; "1.250" sem vírgula pergunta "1250 ou 1,25?" e não grava (componentes do laudo anterior, mapa, modelo de vaso, instrumentos, corrigir o volume, volume da revisão); a revisão avisa volume abaixo de 20 litros e circunferência abaixo de 300 mm; a mesma regra do celular (28); sem SQL
+// const VERSAO = 'TapDoc E40';   // E40 (S169 · issue 68): com a caixa "Reconstituir o prontuário" marcada, o Relatório de Inspeção sai com o conteúdo do relatório (o gerarLaudo monta sempre com prontuario: null; só o gerarDocumentos monta o Prontuário); sem SQL
 // const VERSAO = 'TapDoc E39';   // E39 (S168 · issue 34): na revisão, o quadro do link do TapWeb do vaso (o QR code da placa e da lombada): o aviso do que falta e o campo para colar o link ali mesmo (tf_placa_link_gravar, 431; sem SQL)
 // const VERSAO = 'TapDoc E38';   // E38 (S167 · 212 e 437): issue 30, Parte 4 — o fichário (capa, folha de rosto e divisórias; kit completo ou de inserção, pela caixa "já tem a pasta") e as lombadas (40 ou 60 mm, escolhidas ao baixar), gerados na hora (documentos-pdf.js D4); só para cliente com "Imprime a pasta" = sim
 // const VERSAO = 'TapDoc E37';   // E37 (S166 · 436): issue 30, Parte 3 — o Prontuário (Reconstituído) (laudo-pdf.js S166: as seções do próprio relatório, sumário de 12, capa "RECONSTITUIÇÃO DE PRONTUÁRIO" e "Prontuário Nº P…" no cabeçalho), com número P próprio, num PDF assinado com o token; a caixa "Reconstituir o prontuário nesta inspeção" na revisão e na tela do laudo; a coluna no quadro "Documentos da inspeção"; os textos pela proposta "Prontuário (Reconstituído)" em Textos do laudo; o próximo P do mês em Laudos › Configurar
@@ -284,8 +285,77 @@ let PLH = false;
 // ── utilitários ────────────────────────────────────────────────────────────
 function uid(){ try{ if (crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c === 'x' ? r : (r&3|8)).toString(16); }); }
-function num(s){ if (s == null) return null; let t = String(s).trim().replace(/\s/g, ''); if (!t) return null;
-  if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.'); const v = Number(t); return isFinite(v) ? v : NaN; }
+/* S172 · issues 40, 42 e 55 (Revisão TapDoc · Rodada 2) — A LEITURA DO NÚMERO DIGITADO. É a MESMA regra no celular
+ * (field/doc/index.html) e no escritório (doc/index.html): mudou num arquivo, mude no outro (o teste_s172.py confere os dois).
+ *  · a vírgula é sempre a decimal: "1,25" = 1,25 · "0,8" = 0,8;
+ *  · com vírgula, o ponto é o separador de milhar, em grupos de 3: "1.000,5" = 1000,5 · "12.345,67" = 12345,67;
+ *  · sem vírgula, dois pontos ou mais em grupos de 3 também são milhar: "1.250.000" = 1250000;
+ *  · sem vírgula, UM ponto seguido de exatamente 3 algarismos ("1.000", "1.250") é AMBÍGUO (mil… ou um vírgula…?):
+ *    o campo pergunta ao lado ("1250 ou 1,25?") e NADA é gravado até a pessoa escolher (perguntarMilhar);
+ *  · os outros pontos sozinhos são decimais, como antes: "1.5" = 1,5 · "0.250" = 0,25 (zero na frente não é milhar);
+ *  · o resto (duas vírgulas, letra, ponto fora do lugar) é "número inválido".
+ * num() continua lendo o ambíguo como decimal: as pressões (issue 49, Rodada 4) e o CSV do medidor (que usa ponto decimal)
+ * não mudaram. Os campos de medida, volume e instrumento perguntam (celular: numOuAviso; escritório: numMedida). */
+function lerNum(s){
+  if (s == null) return { v:null };
+  let t = String(s).trim().replace(/\s/g, '').replace(/^−/, '-');
+  if (!t) return { v:null };
+  let sinal = 1;
+  if (t[0] === '-' || t[0] === '+'){ if (t[0] === '-') sinal = -1; t = t.slice(1); }
+  const MIL = /^\d{1,3}(\.\d{3})+$/, mal = { v:NaN };
+  if (!t) return mal;
+  if (t.indexOf(',') >= 0){
+    const p = t.split(',');
+    if (p.length !== 2 || !/^\d*$/.test(p[1]) || (!p[0] && !p[1])) return mal;
+    let i = p[0];
+    if (i.indexOf('.') >= 0){ if (!MIL.test(i)) return mal; i = i.replace(/\./g, ''); }
+    else if (!/^\d*$/.test(i)) return mal;
+    return { v: sinal * Number((i || '0') + '.' + (p[1] || '0')) };
+  }
+  const pontos = (t.match(/\./g) || []).length;
+  if (pontos > 1) return MIL.test(t) ? { v: sinal * Number(t.replace(/\./g, '')) } : mal;
+  if (t === '.' || !/^\d*\.?\d*$/.test(t)) return mal;
+  if (/^[1-9]\d{0,2}\.\d{3}$/.test(t)){
+    const dec = sinal * Number(t), mil = sinal * Number(t.replace('.', ''));
+    return { v: dec, ambiguo:true, milhar: mil, decimal: dec, texto: (sinal < 0 ? '-' : '') + t };
+  }
+  return { v: sinal * Number(t) };
+}
+function num(s){ return lerNum(s).v; }
+/** O número ambíguo: a pergunta fica logo abaixo do campo, com os dois botões; escolher reescreve o campo sem a dúvida
+ *  ("1250" ou "1,25") e dispara o "change" de novo (no celular grava; no escritório, é só gravar outra vez). */
+function tirarPergunta(el){ const d = el && el._pergMilhar; if (!d) return; if (d.parentNode) d.parentNode.removeChild(d); el._pergMilhar = null; el.classList.remove('problema'); }
+function perguntarMilhar(el, r, rot){
+  if (el._pergMilhar && el._pergMilhar.dataset.texto === r.texto) return;   // a mesma pergunta já está na tela (sair do campo para tocar no botão dispara o "change" de novo)
+  tirarPergunta(el);
+  const ond = el.closest('label') || el, d = document.createElement('div');
+  const vm = String(r.milhar), vd = String(r.decimal).replace('.', ',');
+  d.className = 'pergMilhar'; d.setAttribute('role', 'alert'); d.dataset.texto = r.texto;
+  d.style.cssText = 'flex-basis:100%;margin:4px 0 8px;padding:8px 10px;border:1px solid var(--warn,#8A5A12);background:var(--warn-soft,#FBF1DE);border-radius:6px;font-size:13px;line-height:1.35;color:var(--ink,#14181B)';
+  d.innerHTML = '<b>' + esc(rot) + ': “' + esc(r.texto) + '” é ' + esc(vm) + ' ou ' + esc(vd) + '?</b> O ponto pode ser de milhar ou de decimal. Nada foi gravado: toque no número certo.'
+    + '<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><button type="button" class="btn peq mini" data-milhar="m">' + esc(vm) + '</button>'
+    + '<button type="button" class="btn peq mini" data-milhar="d">' + esc(vd) + '</button></div>';
+  ond.insertAdjacentElement('afterend', d);
+  el._pergMilhar = d; el.classList.add('problema');
+  d.querySelectorAll('[data-milhar]').forEach(b => b.addEventListener('click', ev => {
+    ev.preventDefault(); ev.stopPropagation();
+    el.value = b.dataset.milhar === 'm' ? vm : vd;
+    tirarPergunta(el);
+    el.dispatchEvent(new Event('input', { bubbles:true }));
+    el.dispatchEvent(new Event('change', { bubbles:true }));
+  }));
+  el.addEventListener('input', function fora(){ if (lerNum(el.value).ambiguo) return; el.removeEventListener('input', fora); tirarPergunta(el); });
+  U.toast(rot + ': “' + r.texto + '” é ' + vm + ' ou ' + vd + '? Escolha abaixo do campo. Nada foi gravado.', 'err');
+}
+/** S172 · issue 55: lê um campo de medida, volume ou instrumento na hora de gravar. Inválido ou ambíguo ("1.250") lança o erro
+ *  (quem chama mostra e NÃO grava); o ambíguo deixa a pergunta abaixo do campo. Vazio = null. */
+function numMedida(el, rot){
+  if (!el) return null;
+  const r = lerNum(el.value); if (!r.ambiguo) tirarPergunta(el);
+  if (Number.isNaN(r.v)){ el.classList.add('problema'); throw new Error(rot + ': número inválido. Use a vírgula para os decimais (ex.: 1,25) e, se quiser, o ponto para o milhar (ex.: 1.250,5). Nada foi gravado.'); }
+  if (r.ambiguo){ perguntarMilhar(el, r, rot); throw new Error(rot + ': “' + r.texto + '” é ' + r.milhar + ' ou ' + String(r.decimal).replace('.', ',') + '? Escolha abaixo do campo e grave de novo. Nada foi gravado.'); }
+  return r.v;
+}
 function fmt(v, c){ if (v == null || v === '' || !isFinite(Number(v))) return ''; return String(Number(Number(v).toFixed(c == null ? 4 : c))).replace('.', ','); }
 // S147 · item 86: o armazenamento das inspeções aceita até 50 MB por arquivo (423; antes, 5 MB). Passou disso, a
 // mensagem diz o tamanho, em português, e não fala em "foto" quando o arquivo é o laudo ou um PDF.
@@ -596,8 +666,10 @@ function editarInstrumento(x){
       if (d.marca && d.modelo && d.marca.toUpperCase() === d.modelo.toUpperCase()) d.modelo = null;
       if (x.id) d.id = x.id; else d.tipo = $('in_tipo').value;
       if ((x.id ? x.tipo : d.tipo) === 'manometro_padrao'){
-        const nn = id => { const v = num($(id).value); return v == null || Number.isNaN(v) ? null : v; };
-        d.u_expandida = nn('in_u'); d.k = nn('in_k') || 2; d.unidade = $('in_un').value; d.faixa_max = nn('in_fx'); d.resolucao = nn('in_res');
+        try{   // S172 · issue 55: "1.000" na faixa máxima pergunta; número inválido não vira "em branco" calado
+          d.u_expandida = numMedida($('in_u'), 'U expandida'); d.k = numMedida($('in_k'), 'Fator k') || 2; d.unidade = $('in_un').value;
+          d.faixa_max = numMedida($('in_fx'), 'Faixa máxima'); d.resolucao = numMedida($('in_res'), 'Resolução');
+        }catch(e){ U.toast(e.message, 'err'); return false; }
         if (d.u_expandida == null){ U.toast('O padrão precisa da U do certificado.', 'err'); return false; }
       }
       const arq = $('in_cert').files && $('in_cert').files[0];
@@ -1431,7 +1503,8 @@ async function situacaoRapida(sit, motivo){
 function lerForm(){
   const n = (id, mpa) => { const x = num($(id).value); if (Number.isNaN(x)) throw new Error('Número inválido em: ' + ($(id).closest('label').firstChild.textContent || id).trim()); return x == null ? null : (mpa ? paraMPa(x) : x); };
   const comps = [...document.querySelectorAll('#comps tr.lc')].map(tr => {
-    const o = {}; tr.querySelectorAll('[data-k]').forEach(i => { const k = i.dataset.k; if (k === 'tipo' || k === 'nome') o[k] = i.value.trim(); else { const x = num(i.value); if (Number.isNaN(x)) throw new Error('Número inválido num componente.'); if (x != null) o[k] = x; } });
+    const o = {}, nomeC = ((tr.querySelector('[data-k="nome"]') || {}).value || '').trim() || 'componente';
+    tr.querySelectorAll('[data-k]').forEach(i => { const k = i.dataset.k; if (k === 'tipo' || k === 'nome') o[k] = i.value.trim(); else { const x = numMedida(i, 'Componente “' + nomeC + '”'); if (x != null) o[k] = x; } });   // S172 · issue 55
     return o; }).filter(o => o.nome);
   const valvs = [...document.querySelectorAll('#valvs tr.lv')].map(tr => { const t = tr.querySelector('[data-k="tag"]').value.trim(), x = num(tr.querySelector('[data-k="ajuste"]').value);
     if (Number.isNaN(x)) throw new Error('Número inválido no ajuste da válvula.'); return { tag: t || null, ajuste_mpa: x == null ? null : paraMPa(x) }; }).filter(x => x.ajuste_mpa != null);
@@ -1950,9 +2023,15 @@ function pintarRevisao(){
     const nm = CALC.ativas(v).length > 1 ? ' (' + k.nome + ')' : '';
     if (Number(k.volume_m3) > 50) conf.push({ chave:'volume', nivel:'amarelo', texto:'Volume de ' + fmt(k.volume_m3, 3) + ' m³ (' + Math.round(Number(k.volume_m3) * 1000).toLocaleString('pt-BR') + ' litros)' + nm + ': confira',
       detalhe:'Fora do comum. Se o campo lançou litros como m³, corrija o volume antes de aprovar: a categoria e os prazos dependem dele.' });
+    // S172 · issues 40 e 55: abaixo de 20 litros é pouco para um vaso de pressão (pode ser "1.000" lido como 1 litro)
+    if (Number(k.volume_m3) > 0 && Number(k.volume_m3) < 0.02) conf.push({ chave:'volume', nivel:'amarelo', texto:'Volume de ' + fmt(Number(k.volume_m3) * 1000, 1) + ' litros' + nm + ': confira',
+      detalhe:'Muito pouco para um vaso de pressão. Se o campo digitou "1.000" querendo dizer mil litros, corrija o volume antes de aprovar: a categoria e os prazos dependem dele.' });
     if (Number(k.t_operacao_c) > 200) conf.push({ chave:'temperatura', nivel:'amarelo', texto:'Opera a ' + fmt(k.t_operacao_c, 0) + ' °C' + nm + ': o engenheiro confere o cálculo',
       detalhe:'Acima de 200 °C a resistência do aço cai e a PMTA calculada muda (o S do material vale até a temperatura da tabela).' });
   });
+  // S172 · issue 42: circunferência abaixo de 300 mm (Ø menor que ~95 mm) é pequena demais para um vaso de pressão
+  if (Number(v.circunferencia_mm) > 0 && Number(v.circunferencia_mm) < 300) conf.push({ chave:'circ', nivel:'amarelo', texto:'Circunferência de ' + fmt(v.circunferencia_mm, 1) + ' mm (Ø ' + fmt(v.circunferencia_mm / Math.PI, 0) + ' mm): confira',
+    detalhe:'Pequena demais para um vaso de pressão. Se o campo digitou "1.250" querendo dizer mil duzentos e cinquenta, corrija antes de aprovar: o raio entra na espessura mínima e na PMTA.' });
   // S144 · item 78: tampos iguais (mesmo tipo, mesma câmara) com eficiência de solda (E) diferente; região do costado com o nome e a posição em desacordo
   CALC.ativas(v).forEach(k => {
     const tps = (v.componentes || []).filter(c => c.ativo !== false && ['eliptico','torisferico','hemisferico','conico','plano'].indexOf(c.tipo) >= 0 && (!c.camara_id || c.camara_id === k.id));
@@ -2070,7 +2149,7 @@ function pintarRevisao(){
     + (prev.vaso && !prev.vaso.erro ? '<p class="muted" style="margin:8px 0 0">V = ' + fmt(prev.vaso.V, 3) + ' m³ (' + Math.round(prev.vaso.V * 1000).toLocaleString('pt-BR') + ' litros) · P·V = ' + fmt(prev.vaso.pv, 3) + ' · grupo ' + prev.vaso.grupo + ' · <b>categoria ' + prev.vaso.categoria + '</b> · próximas: externa em ' + prev.vaso.prazos.externo
         + ' ano(s), interna ' + (prev.vaso.prazos.interno == null ? 'a critério do PLH' : 'em ' + prev.vaso.prazos.interno + ' anos') + '</p>' : '')
     + (plhAprova && prev.vaso && !prev.vaso.erro ? revDatasHtml(prev.vaso.prazos) : '')   // E9 (410): as datas do PLH
-    + (prev.vaso && prev.vaso.erro && /[Vv]olume/.test(prev.vaso.erro) && plhAprova ? '<label class="f" style="max-width:260px">Volume total do vaso (m³)<input class="t" id="revVol" inputmode="decimal" value="' + (REV.volume != null ? fmt(REV.volume, 3) : '') + '"></label>' : '')
+    + (prev.vaso && prev.vaso.erro && /[Vv]olume/.test(prev.vaso.erro) && plhAprova ? '<label class="f" style="max-width:260px">Volume total do vaso (m³)<input class="t" id="revVol" inputmode="decimal" value="' + (REV.volumeTxt != null ? esc(REV.volumeTxt) : REV.volume != null ? fmt(REV.volume, 3) : '') + '"></label>' : '')
     + (prev.detalhes.length ? '<ul class="muted" style="margin:8px 0 0;padding-left:18px">' + prev.detalhes.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '') + '</div>';
   // 4 · espessuras × anterior
   REV.vidas = revVidas();
@@ -2328,9 +2407,11 @@ function janelaModelo(x, depois){
     + '<label class="f">Observação <small>(de onde vieram as medidas)</small><textarea class="t" id="mdObs" rows="2">' + esc(x.observacao || '') + '</textarea></label>'
     + (x.id ? '<p class="muted" style="margin-top:8px">' + (x.vasos || 0) + ' vaso(s) usam este modelo. Corrigir aqui muda o desenho deles nas próximas revisões; laudo já emitido não muda.</p>' : ''),
     [{ rotulo:'Cancelar' }, { rotulo:'Gravar o modelo', classe:'pri', acao:async () => {
-      const nn = id => num($(id).value), p = { id: x.id || null, nome: $('mdNome').value, posicao: $('mdPos').value, diametro_mm: nn('mdDiam'), costado_comprimento_mm: nn('mdCost'),
+      const ROT = { mdDiam:'Diâmetro', mdCost:'Comprimento do costado', mdHb:'Altura do tampo superior / direito', mdHa:'Altura do tampo inferior / esquerdo', mdAlfa:'Semiângulo do cone', mdSaida:'Saída do cone' };
+      const nn = id => numMedida($(id), ROT[id]);   // S172 · issue 55: "Ø 2.500 × 3.000" pergunta
+      let p; try{ p = { id: x.id || null, nome: $('mdNome').value, posicao: $('mdPos').value, diametro_mm: nn('mdDiam'), costado_comprimento_mm: nn('mdCost'),
         tampo_b_tipo: $('mdTb').value, tampo_b_altura_mm: nn('mdHb'), tampo_a_tipo: $('mdTa').value, tampo_a_altura_mm: nn('mdHa'), alfa_graus: nn('mdAlfa'), cone_saida_mm: nn('mdSaida'),
-        cor_mapa: $('mdCor').value || null, pes: $('mdPes').checked, janela: $('mdJv').checked, observacao: $('mdObs').value };
+        cor_mapa: $('mdCor').value || null, pes: $('mdPes').checked, janela: $('mdJv').checked, observacao: $('mdObs').value }; }catch(e){ U.toast(e.message, 'err'); return false; }
       if (Object.values(p).some(v => typeof v === 'number' && isNaN(v))){ U.toast('Há um número que não entendi. Use só algarismos e vírgula.', 'err'); return false; }
       try{ await rpc('tf_vaso_modelo_gravar', { p_dados: p }); U.toast('Modelo gravado.', 'ok'); if (depois) await depois(); }catch(e){ erro(e); return false; } } }]);
 }
@@ -2354,8 +2435,7 @@ async function cartaoMapaVaso(vid){
     + '<div class="linha" style="margin-top:10px"><button class="btn mini pri" id="vmGravar">Gravar o desenho do vaso</button>'
     + (C.pode_modelo ? '<button class="btn mini" id="vmModEditar"' + (C.modelo_id ? '' : ' hidden') + '>Corrigir o modelo</button><button class="btn mini" id="vmModNovo">Novo modelo</button>' : '') + '</div></div>';
   const bg = $('vmGravar'); bg.addEventListener('click', () => U.semDuploEnvio(bg, async () => {
-    const co = num($('vmCostado').value), sa = num($('vmSaida').value);
-    if ((co !== null && isNaN(co)) || (sa !== null && isNaN(sa))){ U.toast('Há um número que não entendi. Use só algarismos e vírgula.', 'err'); return; }
+    let co, sa; try{ co = numMedida($('vmCostado'), 'Comprimento do costado'); sa = numMedida($('vmSaida'), 'Saída do cone'); }catch(e){ U.toast(e.message, 'err'); return; }   // S172 · issue 55
     try{ await rpc('tf_insp_vaso_gravar', { p_equip: vid, p_dados: { modelo_id: $('vmModelo').value || null, cor_mapa: $('vmCor').value || null, costado_comprimento_mm: co, cone_saida_mm: sa, pes: $('vmPes').checked } });
       U.toast('Desenho do vaso gravado.', 'ok'); await cartaoMapaVaso(vid); }catch(e){ erro(e); }
   }));
@@ -2407,14 +2487,16 @@ async function ligarMapa(){
   cx.innerHTML = h;
   const aviso = t => { const a = $('mpAviso'); if (a) a.textContent = t || ''; };
   const vivo = () => REV && REV.id === id && $('revMapa') === cx;
-  const form = () => {
+  // S172 · issue 55: na prévia, o número ambíguo ("2.500") fica de fora (sem desenhar errado); no "Gravar", pergunta e não grava
+  const form = gravando => {
     const f = { tampos:{} }, T = k => (f.tampos[k] = f.tampos[k] || {});
-    f.costado = num($('mpCostado').value); f.cor = $('mpCor').value || null;
+    const lr = (el, rot) => { if (gravando) return numMedida(el, rot); const r = lerNum(el.value); return r.ambiguo ? null : r.v; };
+    f.costado = lr($('mpCostado'), 'Comprimento do costado'); f.cor = $('mpCor').value || null;
     if ($('mpModelo')) f.modelo_id = $('mpModelo').value || null;
     if ($('mpPes')) f.pes = $('mpPes').checked;
-    if ($('mpSaida')) f.saida = num($('mpSaida').value);
-    cx.querySelectorAll('[data-mpmed]').forEach(el => { T(el.dataset.mpmed).altura_medida_mm = num(el.value); });
-    cx.querySelectorAll('[data-mpdes]').forEach(el => { T(el.dataset.mpdes).altura_desenho_mm = num(el.value); });
+    if ($('mpSaida')) f.saida = lr($('mpSaida'), 'Saída do cone');
+    cx.querySelectorAll('[data-mpmed]').forEach(el => { T(el.dataset.mpmed).altura_medida_mm = lr(el, 'Altura medida do tampo'); });
+    cx.querySelectorAll('[data-mpdes]').forEach(el => { T(el.dataset.mpdes).altura_desenho_mm = lr(el, 'Altura do tampo no desenho'); });
     return f;
   };
   const quadro = O => {   // as células que mudam com o que se digita (sem redesenhar os campos)
@@ -2472,7 +2554,8 @@ async function ligarMapa(){
   const sm = $('mpModelo'); if (sm && be) sm.addEventListener('change', () => { be.hidden = !sm.value; });
   if (pode) cx.querySelectorAll('input.t, select.t, #mpPes').forEach(el => { if (!el.disabled) el.addEventListener(el.tagName === 'SELECT' || el.type === 'checkbox' ? 'change' : 'input', previa); });
   const bg = $('mpGravar'); if (bg) bg.addEventListener('click', () => U.semDuploEnvio(bg, async () => {
-    const f = form(), ruim = [f.costado, f.saida].concat(Object.values(f.tampos).map(t => [t.altura_medida_mm, t.altura_desenho_mm]).flat()).some(x => x !== null && x !== undefined && isNaN(x));
+    let f; try{ f = form(true); }catch(e){ U.toast(e.message, 'err'); return; }
+    const ruim = [f.costado, f.saida].concat(Object.values(f.tampos).map(t => [t.altura_medida_mm, t.altura_desenho_mm]).flat()).some(x => x !== null && x !== undefined && isNaN(x));
     if (ruim){ U.toast('Há um número que não entendi. Use só algarismos e vírgula.', 'err'); return; }
     const p = { costado_comprimento_mm: f.costado, cor_mapa: f.cor, tampos: Object.keys(f.tampos).map(k => Object.assign({ id:k }, f.tampos[k])) };
     if ('pes' in f) p.pes = f.pes;
@@ -2595,7 +2678,7 @@ function revMontarResultado(){
   let vaso = prev.vaso;
   if (vaso && vaso.erro){
     if (!/[Vv]olume/.test(vaso.erro)) throw new Error('Categoria: ' + vaso.erro);
-    const V = num(($('revVol') || {}).value || '');
+    const V = $('revVol') ? numMedida($('revVol'), 'Volume total do vaso') : null;   // S172 · issue 55
     if (!(V > 0)) throw new Error('Informe o volume total do vaso (m³).');
     const cs = CALC.ativas(v), kP = cs.reduce((a, b) => Math.abs(b.p_operacao_max_mpa) > Math.abs(a.p_operacao_max_mpa) ? b : a);
     const RIS = { A:4, B:3, C:2, D:1 }, classe = cs.map(k => String(k.classe_fluido).toUpperCase()).reduce((a, b) => RIS[b] > RIS[a] ? b : a);
@@ -2737,7 +2820,9 @@ function ligarRevisao(){
           + '<select class="t" id="rkU" style="width:110px"><option value="l">litros</option><option value="m3">m³</option></select></div></label>')
       + '<label class="f">Motivo<input class="t" id="rkMot" placeholder="ex.: conforme a foto da plaqueta"></label><p class="muted">Fica registrado o antes, o depois e o seu nome. O P·V, a categoria e os prazos se refazem.</p>',
       [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
-        const x = num($('rkV').value); if (x == null || Number.isNaN(x) || x <= 0){ U.toast('Informe o valor.', 'err'); return false; }
+        let x; try{ x = pres ? num($('rkV').value) : numMedida($('rkV'), 'Volume'); }catch(e){ U.toast(e.message, 'err'); return false; }   // S172 · issue 55: o volume pergunta (a pressão não mudou: issue 49)
+        if (x == null || Number.isNaN(x) || x <= 0){ U.toast('Informe o valor.', 'err'); return false; }
+        if (!pres && ($('rkU').value === 'l' ? x : x * 1000) < 20) U.toast('Confira: ' + fmt($('rkU').value === 'l' ? x : x * 1000, 1) + ' litros é muito pouco para um vaso de pressão. Gravado assim mesmo; a revisão mostra o aviso.');
         const val = pres ? Math.round(x * ({ 'bar':0.1, 'kgf/cm2':0.0980665, 'MPa':1, 'psi':0.00689476 })[uR] * 1e5) / 1e5 : ($('rkU').value === 'l' ? x / 1000 : x);
         rpc('tf_insp_revisao_corrigir', { p_id:id, p_alvo:'camara', p_ref:kid, p_campo:campo, p_valor:String(val), p_motivo:$('rkMot').value })
           .then(r => { U.toast(r && r.mudou ? 'Corrigido.' : 'Era o mesmo valor.', 'ok'); N.janela.fechar(); recarregar(); }, erro);
@@ -2877,7 +2962,8 @@ function ligarRevisao(){
     REV.pmta[k].valor = x; guardarPmta(); manterLugar(async () => pintarRevisao());
   }));
   T.querySelectorAll('[data-pjust]').forEach(i => i.addEventListener('input', () => { REV.pmta[i.dataset.pjust].just = i.value; guardarPmta(); }));
-  const rv = $('revVol'); if (rv) rv.addEventListener('input', () => { REV.volume = num(rv.value); });
+  // S172 · issue 55 (revisor automático do #40): guarda o texto como foi digitado, para o redesenho não trocar "1.000" por "1" e pular a pergunta
+  const rv = $('revVol'); if (rv) rv.addEventListener('input', () => { REV.volumeTxt = rv.value; REV.volume = num(rv.value); });
   // E9 (410): as datas do PLH
   const rd = $('revDatas'); if (rd) rd.addEventListener('change', () => { REV.datas.ativo = rd.checked; $('revDatasCx').hidden = !rd.checked; });
   [['revExt', 'ext'], ['revInt', 'int'], ['revJust', 'just']].forEach(([id, k]) => { const el = $(id); if (el) el.addEventListener('input', () => { REV.datas[k] = el.value || null; }); });

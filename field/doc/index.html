@@ -191,7 +191,8 @@ input.t.suspeita{border-color:var(--crit);background:var(--crit-soft);color:var(
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 27';   // S171 · issues 35, 36, 37 e 41 (Revisão TapDoc · Rodada 1): sem espaço avisa em vermelho e as OS antigas sem nada pendente saem do aparelho; miniaturas no IndexedDB; o pacote que chega sozinho não troca o vaso em campo nem redesenha a tela; envio recusado depois do "Enviar" volta o vaso para "em campo" com o motivo; a correção toma o lugar do envio recusado; PMTA, PTH e PMTA externa maiores que zero
+const VERSAO = 'TapDoc 28';   // S172 · issues 40, 42 e 55 (Revisão TapDoc · Rodada 2): a leitura do número com ponto de milhar — vírgula é a decimal; "1.250" sem vírgula pergunta "1250 ou 1,25?" e não grava até escolher; volume abaixo de 20 litros e circunferência abaixo de 300 mm avisam; a mesma regra do escritório (E41)
+// const VERSAO = 'TapDoc 27';   // S171 · issues 35, 36, 37 e 41 (Revisão TapDoc · Rodada 1): sem espaço avisa em vermelho e as OS antigas sem nada pendente saem do aparelho; miniaturas no IndexedDB; o pacote que chega sozinho não troca o vaso em campo nem redesenha a tela; envio recusado depois do "Enviar" volta o vaso para "em campo" com o motivo; a correção toma o lugar do envio recusado; PMTA, PTH e PMTA externa maiores que zero
 // const VERSAO = 'TapDoc 26';   // S163 · issues 12, 20 e 21 (433): todas as recomendações do laudo no Fechamento (as da norma, as das respostas — que dá para desmarcar — e as a mais; recomendacoes.js RC1); a justificativa do prazo menor numa lista (A1, A2, B, Outros)
 // const VERSAO = 'TapDoc 25';   // S162 · issues 15, 19 e 23: o que falta para enviar leva até a parte com problema (marcada em vermelho, com o nome da tela); "substituir" × aferição conforme; a leitura suspeita da aferição em vermelho
 // const VERSAO = 'TapDoc 24';   // S154 · issue 9 (430): a foto da medição de espessura na tela Ultrassom (uma por vaso; a foto ou o motivo, obrigatória para enviar)
@@ -237,14 +238,67 @@ function uid(){
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); });
 }
-/** "1,5" ou "1.5" → 1.5; vazio → null */
-function num(s){
-  if (s == null) return null;
-  let t = String(s).trim().replace(/\s/g, '');
-  if (!t) return null;
-  if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
-  const v = Number(t);
-  return isFinite(v) ? v : NaN;
+/* S172 · issues 40, 42 e 55 (Revisão TapDoc · Rodada 2) — A LEITURA DO NÚMERO DIGITADO. É a MESMA regra no celular
+ * (field/doc/index.html) e no escritório (doc/index.html): mudou num arquivo, mude no outro (o teste_s172.py confere os dois).
+ *  · a vírgula é sempre a decimal: "1,25" = 1,25 · "0,8" = 0,8;
+ *  · com vírgula, o ponto é o separador de milhar, em grupos de 3: "1.000,5" = 1000,5 · "12.345,67" = 12345,67;
+ *  · sem vírgula, dois pontos ou mais em grupos de 3 também são milhar: "1.250.000" = 1250000;
+ *  · sem vírgula, UM ponto seguido de exatamente 3 algarismos ("1.000", "1.250") é AMBÍGUO (mil… ou um vírgula…?):
+ *    o campo pergunta ao lado ("1250 ou 1,25?") e NADA é gravado até a pessoa escolher (perguntarMilhar);
+ *  · os outros pontos sozinhos são decimais, como antes: "1.5" = 1,5 · "0.250" = 0,25 (zero na frente não é milhar);
+ *  · o resto (duas vírgulas, letra, ponto fora do lugar) é "número inválido".
+ * num() continua lendo o ambíguo como decimal: as pressões (issue 49, Rodada 4) e o CSV do medidor (que usa ponto decimal)
+ * não mudaram. Os campos de medida, volume e instrumento perguntam (celular: numOuAviso; escritório: numMedida). */
+function lerNum(s){
+  if (s == null) return { v:null };
+  let t = String(s).trim().replace(/\s/g, '').replace(/^−/, '-');
+  if (!t) return { v:null };
+  let sinal = 1;
+  if (t[0] === '-' || t[0] === '+'){ if (t[0] === '-') sinal = -1; t = t.slice(1); }
+  const MIL = /^\d{1,3}(\.\d{3})+$/, mal = { v:NaN };
+  if (!t) return mal;
+  if (t.indexOf(',') >= 0){
+    const p = t.split(',');
+    if (p.length !== 2 || !/^\d*$/.test(p[1]) || (!p[0] && !p[1])) return mal;
+    let i = p[0];
+    if (i.indexOf('.') >= 0){ if (!MIL.test(i)) return mal; i = i.replace(/\./g, ''); }
+    else if (!/^\d*$/.test(i)) return mal;
+    return { v: sinal * Number((i || '0') + '.' + (p[1] || '0')) };
+  }
+  const pontos = (t.match(/\./g) || []).length;
+  if (pontos > 1) return MIL.test(t) ? { v: sinal * Number(t.replace(/\./g, '')) } : mal;
+  if (t === '.' || !/^\d*\.?\d*$/.test(t)) return mal;
+  if (/^[1-9]\d{0,2}\.\d{3}$/.test(t)){
+    const dec = sinal * Number(t), mil = sinal * Number(t.replace('.', ''));
+    return { v: dec, ambiguo:true, milhar: mil, decimal: dec, texto: (sinal < 0 ? '-' : '') + t };
+  }
+  return { v: sinal * Number(t) };
+}
+function num(s){ return lerNum(s).v; }
+/** O número ambíguo: a pergunta fica logo abaixo do campo, com os dois botões; escolher reescreve o campo sem a dúvida
+ *  ("1250" ou "1,25") e dispara o "change" de novo (no celular grava; no escritório, é só gravar outra vez). */
+function tirarPergunta(el){ const d = el && el._pergMilhar; if (!d) return; if (d.parentNode) d.parentNode.removeChild(d); el._pergMilhar = null; el.classList.remove('problema'); }
+function perguntarMilhar(el, r, rot){
+  if (el._pergMilhar && el._pergMilhar.dataset.texto === r.texto) return;   // a mesma pergunta já está na tela (sair do campo para tocar no botão dispara o "change" de novo)
+  tirarPergunta(el);
+  const ond = el.closest('label') || el, d = document.createElement('div');
+  const vm = String(r.milhar), vd = String(r.decimal).replace('.', ',');
+  d.className = 'pergMilhar'; d.setAttribute('role', 'alert'); d.dataset.texto = r.texto;
+  d.style.cssText = 'flex-basis:100%;margin:4px 0 8px;padding:8px 10px;border:1px solid var(--warn,#8A5A12);background:var(--warn-soft,#FBF1DE);border-radius:6px;font-size:13px;line-height:1.35;color:var(--ink,#14181B)';
+  d.innerHTML = '<b>' + esc(rot) + ': “' + esc(r.texto) + '” é ' + esc(vm) + ' ou ' + esc(vd) + '?</b> O ponto pode ser de milhar ou de decimal. Nada foi gravado: toque no número certo.'
+    + '<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><button type="button" class="btn peq mini" data-milhar="m">' + esc(vm) + '</button>'
+    + '<button type="button" class="btn peq mini" data-milhar="d">' + esc(vd) + '</button></div>';
+  ond.insertAdjacentElement('afterend', d);
+  el._pergMilhar = d; el.classList.add('problema');
+  d.querySelectorAll('[data-milhar]').forEach(b => b.addEventListener('click', ev => {
+    ev.preventDefault(); ev.stopPropagation();
+    el.value = b.dataset.milhar === 'm' ? vm : vd;
+    tirarPergunta(el);
+    el.dispatchEvent(new Event('input', { bubbles:true }));
+    el.dispatchEvent(new Event('change', { bubbles:true }));
+  }));
+  el.addEventListener('input', function fora(){ if (lerNum(el.value).ambiguo) return; el.removeEventListener('input', fora); tirarPergunta(el); });
+  U.toast(rot + ': “' + r.texto + '” é ' + vm + ' ou ' + vd + '? Escolha abaixo do campo. Nada foi gravado.', 'err');
 }
 function fmt(v, casas){
   if (v == null || v === '' || !isFinite(Number(v))) return '';
@@ -1103,12 +1157,20 @@ function campoNum(rot, id, valor, ajuda, extra){
     '<input class="t" id="' + id + '" inputmode="decimal" value="' + esc(valor == null ? '' : fmt(valor)) + '"' + SEM_AUTO + ' ' + (extra || '') + '></label>';
 }
 function ligar(id, fn, ev){ const el = $(id); if (el) el.addEventListener(ev || 'change', () => fn(el)); return el; }
-function numOuAviso(el, min, max, rot){
-  const v = num(el.value);
-  if (Number.isNaN(v)){ U.toast(rot + ': número inválido.', 'err'); el.focus(); return undefined; }
-  if (v != null && ((min != null && v < min) || (max != null && v > max))){ U.toast(rot + ': fora do esperado (' + min + ' a ' + max + ').', 'err'); el.focus(); return undefined; }
+/** S172 · issues 40 e 42: o número ambíguo ("1.250") pergunta e não grava (lerNum); `fora` = o motivo, quando passa da faixa
+ *  (sem ele: "fora do esperado (mín a máx)"). undefined = não grava; o que valia continua. */
+function numOuAviso(el, min, max, rot, fora){
+  const r = lerNum(el.value), v = r.v;
+  if (!r.ambiguo) tirarPergunta(el);
+  if (Number.isNaN(v)){ U.toast(rot + ': número inválido. Use a vírgula para os decimais (ex.: 1,25) e, se quiser, o ponto para o milhar (ex.: 1.250,5). Não foi gravado.', 'err'); el.focus(); return undefined; }
+  if (r.ambiguo){ perguntarMilhar(el, r, rot); return undefined; }
+  if (v != null && ((min != null && v < min) || (max != null && v > max))){
+    U.toast(rot + ': ' + (fora || 'fora do esperado (' + String(min).replace('.', ',') + ' a ' + Number(max).toLocaleString('pt-BR') + ')') + '. Não foi gravado.', 'err'); el.focus(); return undefined; }
   return v;
 }
+/** S172 · issue 42: circunferência pequena demais para um vaso de pressão (abaixo de 300 mm = Ø menor que ~95 mm): só avisa, grava. */
+const CIRC_MIN_AVISO = 300, VOL_MIN_AVISO = 20;
+function avisarCirc(x){ if (x != null && x > 0 && x < CIRC_MIN_AVISO) U.toast('Confira: circunferência de ' + fmt(x, 1) + ' mm dá um vaso de Ø ' + fmt(x / Math.PI, 0) + ' mm, pequeno demais para um vaso de pressão. A medida é em mm, com a trena por fora do costado (mil e duzentos = 1200).'); }
 function unidadeDe(v){ const c = ativas(v)[0]; return (c && c.unidade_campo) || v._unid || 'bar'; }
 function campoPressao(rot, id, mpa, u, ajuda){
   const val = mpa == null ? '' : fmt(deMPa(mpa, u), 4);
@@ -1457,7 +1519,7 @@ function telaOperacao(v){
   $('tela').innerHTML = h;
 
   $('oPos').querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => { aplicarPosicao(v, b.dataset.p); pintar(); }));
-  ligar('oCirc', el => { const x = numOuAviso(el, 1, 100000, 'Circunferência'); if (x !== undefined) mudouVaso(v, 'circunferencia_mm', x); });
+  ligar('oCirc', el => { const x = numOuAviso(el, 1, 100000, 'Circunferência'); if (x !== undefined){ avisarCirc(x); mudouVaso(v, 'circunferencia_mm', x); } });
   ligar('oMat', el => {
     const novo = el.value || null;
     const aplica = motivo => {
@@ -1492,10 +1554,16 @@ function telaOperacao(v){
     ligar('oQ_' + c.id, el => { c._quente = el.checked; if (!el.checked && c.t_operacao_c != null) mudouCam(v, c, 't_operacao_c', null); else salvar(); pintar(); });
     ligar('oT_' + c.id, el => { const x = numOuAviso(el, 200.1, 1499, 'Temperatura'); if (x !== undefined) mudouCam(v, c, 't_operacao_c', x); });
     const vl = $('oV_' + c.id);
-    if (vl) vl.addEventListener('input', () => { const x = num(vl.value); $('oV_' + c.id + '_c').textContent = x != null && !Number.isNaN(x) && x > 0 ? '= ' + fmt(x / 1000, 4) + ' m³' : ''; });
+    if (vl) vl.addEventListener('input', () => {   // S172 · issue 40: a linha de conferência diz a dúvida e o volume pequeno
+      const r = lerNum(vl.value), x = r.v, cv = $('oV_' + c.id + '_c');
+      cv.style.color = r.ambiguo || (x > 0 && x < VOL_MIN_AVISO) ? 'var(--warn)' : '';
+      cv.textContent = r.ambiguo ? '“' + r.texto + '”: ' + r.milhar + ' litros ou ' + String(r.decimal).replace('.', ',') + ' litro? Ao sair do campo, escolha.'
+        : x != null && !Number.isNaN(x) && x > 0 ? '= ' + fmt(x / 1000, 4) + ' m³' + (x < VOL_MIN_AVISO ? ' · muito pouco para um vaso de pressão: confira' : '') : '';
+    });
     ligar('oV_' + c.id, el => {
-      const x = numOuAviso(el, 1, 100000000, 'Volume (litros)'); if (x === undefined) return;
+      const x = numOuAviso(el, 1, 100000000, 'Volume (litros)', 'abaixo de 1 litro não é volume de vaso; o volume é em litros (mil litros = 1000)'); if (x === undefined) return;
       if (x != null && x > 50000) U.toast('Confira: ' + Math.round(x).toLocaleString('pt-BR') + ' litros (' + fmt(x / 1000, 1) + ' m³) é um vaso muito grande. O volume é em litros.');
+      if (x != null && x < VOL_MIN_AVISO) U.toast('Confira: ' + fmt(x, 1) + ' litro' + (x >= 2 ? 's' : '') + ' é muito pouco para um vaso de pressão. O volume é em litros (mil litros = 1000).');   // S172 · issue 40
       mudouCam(v, c, 'volume_m3', x == null ? null : Math.round(x * 10) / 10000);
     });
     ligar('oVd_' + c.id, el => { mudouCam(v, c, 'volume_desconhecido', el.checked); if (el.checked) c.volume_m3 = null; pintar(); });
@@ -1621,8 +1689,8 @@ function medidasVasoHtml(v, pode){
   return h + '</div>';
 }
 function ligarMedidasVaso(v){
-  ligar('mvCirc', el => { const x = numOuAviso(el, 1, 100000, 'Circunferência'); if (x !== undefined) mudouVaso(v, 'circunferencia_mm', x); });
-  ligar('mvCostado', el => { const x = numOuAviso(el, 50, 100000, 'Comprimento do costado'); if (x !== undefined) mudouVaso(v, 'costado_comprimento_mm', x); });
+  ligar('mvCirc', el => { const x = numOuAviso(el, 1, 100000, 'Circunferência'); if (x !== undefined){ avisarCirc(x); mudouVaso(v, 'circunferencia_mm', x); } });
+  ligar('mvCostado', el => { const x = numOuAviso(el, 50, 100000, 'Comprimento do costado', 'abaixo de 50 mm não é o comprimento de um costado; a medida é em mm, entre as soldas (dois metros = 2000)'); if (x !== undefined) mudouVaso(v, 'costado_comprimento_mm', x); });   // S172 · issue 42: a mensagem diz o motivo
   compsAtivos(v).filter(c => tampo(c.tipo)).forEach(c => ligar('mvAlt_' + c.id, el => { const x = numOuAviso(el, 1, 50000, 'Altura do tampo'); if (x !== undefined) mudouComp(v, c, 'altura_medida_mm', x); }));
   // as outras medidas: a lista inteira fica no aparelho; para o escritório vão as linhas completas (nome + valor)
   const guardar = lista => { v.medidas_outras = lista; v._pv.medidas_outras = outrasCompletas(lista); salvar(); adiar('vaso:' + v.id, 'vaso', v); };
