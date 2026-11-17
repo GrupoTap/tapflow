@@ -192,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E51';   // E51 (S185 · issues 70 e 73, Revisão TapDoc · Rodada 10b): o laudo emitido antes da última reabertura da inspeção não entra mais em "Para assinar com o token" (aparece "Falta emitir a revisão"); na devolução do PDF assinado, o certificado vencido na data da assinatura é recusado, o tipo da assinatura é gravado pelo emissor (ICP-Brasil = qualificada; gov.br = avançada; os outros = não identificada) e a tela mostra de quem é o certificado, quem emitiu e até quando vale; o nome do certificado fica sem o CPF (assinatura-pdf.js S174; 447)
+const VERSAO = 'TapDoc E52';   // E52 (S186 · issues 74 e 75, Revisão TapDoc · Rodada 11): ajustes do que o laudo e os documentos escrevem (o volume da categoria, a data de quando a aferição terminou, "+N" no 7.3, o Resumo sem o quadro do acessório ausente — laudo-pdf.js S177, documentos-pdf.js D8) e das telas (os avisos do cálculo na tela do laudo e na revisão; campo entre chaves desconhecido na proposta de texto; ART protegida; recomendação sem "Que…"; o link do QR atualiza os documentos; os avisos da placa ao baixar; a foto da capa tentada de novo; o envio lento sem "travou" e o "Tentar de novo" esperando o anterior; busca e "ver mais" na aba Laudos; "faltam N documentos por assinar"; a placa a conferir depois de reabrir; a memória dos rascunhos liberada)
+// const VERSAO = 'TapDoc E51';   // E51 (S185 · issues 70 e 73, Revisão TapDoc · Rodada 10b): o laudo emitido antes da última reabertura da inspeção não entra mais em "Para assinar com o token" (aparece "Falta emitir a revisão"); na devolução do PDF assinado, o certificado vencido na data da assinatura é recusado, o tipo da assinatura é gravado pelo emissor (ICP-Brasil = qualificada; gov.br = avançada; os outros = não identificada) e a tela mostra de quem é o certificado, quem emitiu e até quando vale; o nome do certificado fica sem o CPF (assinatura-pdf.js S174; 447)
 // const VERSAO = 'TapDoc E50';   // E50 (S183 · issues 69 e 84, Revisão TapDoc · Rodada 10a): na revisão, a válvula aprovada em campo que abre acima da PMTA adotada é pendência (vermelha sem a recomendação; com ela, amarela: o laudo sai com a válvula NÃO CONFORME e a recomendação de reajustar ou substituir); em 3 · PMTA, de onde veio a PMTA anterior (qual laudo, qual data) e o aviso quando ela espera a conferência do laudo anterior; laudo-pdf.js S176, documentos-pdf.js D7 (446)
 // const VERSAO = 'TapDoc E49';   // E49 (S182 · issues 71, 72 e 33, Revisão TapDoc · Rodada 9): a emissão não sai sem uma foto que devia estar no laudo (tenta de novo e, se faltar, para dizendo qual); a tela do laudo não mostra os documentos de outro vaso (TELA_VEZ e as consultas juntas); aceitar o desenho da assinatura só com a digital (sem o PIN)
 // const VERSAO = 'TapDoc E48';   // E48 (S181 · issues 65 e 67, Revisão TapDoc · Rodada 8): a revisão grava mais rápido (as consultas ao mesmo tempo; ao gravar, só o que a gravação muda); ajustes da preparação e da revisão — a pressão com as casas da unidade, "pegar no cliente" e regravar um laudo conferido perguntam, tirar o vaso guarda as instruções, "Reabrir para o campo" volta para "A revisar", sem gravar duas vezes no toque duplo, a PMTA "outro valor" inválida avisa, a pressão de operação negativa (vácuo), a vida remanescente abaixo de 1 ano, o laudo sem páginas, a tela antiga não pinta por cima da nova
@@ -607,8 +608,16 @@ function pintarTextos(h){
         const novo = ($('txNovo').value || '').trim(), mot = ($('txMot').value || '').trim();
         if (novo === atual.trim()){ U.toast('O texto novo é igual ao de hoje.', 'err'); return false; }
         if (mot.length < 5){ U.toast('Diga por que mudar.', 'err'); return false; }
-        const fa = (atual.match(/\{\{\w+\}\}/g) || []).filter(c => novo.indexOf(c) < 0);
-        if (fa.length && !await N.janela.confirmar('Faltam campos no texto novo', '<p>O texto de hoje tem ' + esc(fa.join(', ')) + ', que o sistema preenche. Enviar assim mesmo?</p>', 'Enviar')) return false;
+        // E52 · issue 74, item 6: o campo entre chaves escrito errado ({{presao}}) sumia do laudo sem aviso. O sistema conhece os
+        // campos que aparecem em algum texto da versão em uso; o que não aparece em nenhum é avisado antes de enviar.
+        // O aviso fica na própria janela (segundoToque): N.janela.confirmar aberto de dentro de uma janela apaga o formulário (regra 54).
+        const fa = [...new Set(atual.match(/\{\{\w+\}\}/g) || [])].filter(c => novo.indexOf(c) < 0);
+        const conhecidos = new Set(L.map(y => y[1]).join(' ').match(/\{\{\w+\}\}/g) || []);
+        const novos = [...new Set(novo.match(/\{\{[^{}]*\}\}/g) || [])].filter(c => !conhecidos.has(c));
+        if ((fa.length || novos.length) && !segundoToque('tx:' + fa.join() + '|' + novos.join(), 'Enviar ao PLH', 'Enviar assim mesmo',
+          (novos.length ? '<p style="margin:0 0 4px"><b>Campo que o sistema não conhece:</b> ' + esc(novos.join(', ')) + '. Ele sairia no laudo em branco. Confira se está escrito certo (sem acento e sem espaço, como nos outros textos).</p>' : '')
+          + (fa.length ? '<p style="margin:0 0 4px"><b>Faltam campos do texto de hoje:</b> ' + esc(fa.join(', ')) + ', que o sistema preenche.</p>' : '')
+          + '<p style="margin:0">Para enviar assim mesmo, toque de novo no botão.</p>')) return false;
         try{ await rpc('tf_laudo_texto_propor', { p_dados:{ chave:ch, texto:novo, motivo:mot, titulo:rotTexto(ch, B) } }); U.toast('Proposta enviada: o PLH recebeu o aviso.', 'ok'); abaTextos(h); }
         catch(e){ erro(e); return false; }
       } }]);
@@ -1079,6 +1088,13 @@ async function telaOS(os){
     catch(e){ erro(e); }
   }));
 }
+/** E52 · issue 74, item 7: o PDF tem o dicionário de criptografia (/Encrypt no trailer): protegido por senha ou com bloqueio de cópia. */
+function pdfProtegido(b){
+  if (!b || !b.length) return false;
+  const pedaco = (de, ate) => { let t = ''; for (let i = de; i < ate; i++) t += String.fromCharCode(b[i]); return t; };
+  const n = b.length, fim = pedaco(Math.max(0, n - 65536), n), ini = pedaco(0, Math.min(n, 65536));   // o trailer fica no fim (ou no começo, no PDF "linearizado")
+  return /\/Encrypt\s*\d+\s+\d+\s+R|\/Encrypt\s*<</.test(fim + ' ' + ini);
+}
 // E9 (R06a): gravar a ART da OS (número e PDF, pasta art/<OS>/)
 function ligarArt(os, P){
   const art = P.art || null;
@@ -1090,6 +1106,10 @@ function ligarArt(os, P){
     const f = $('artArq').files && $('artArq').files[0]; if (!f) return;
     if (!/pdf/i.test(f.type) && !/\.pdf$/i.test(f.name)){ U.toast('A ART vai em PDF.', 'err'); return; }
     if (f.size > ARQ_MAX_MB * 1048576){ U.toast('A ART tem ' + mbDe(f) + ' MB; o máximo é ' + ARQ_MAX_MB + ' MB.', 'err'); return; }
+    // E52 · issue 74, item 7: a ART protegida por senha (o PDF do CREA às vezes vem assim) pode sair com as páginas em branco no fim do relatório
+    let protegida = false; try{ protegida = pdfProtegido(new Uint8Array(await f.arrayBuffer())); }catch(e){}
+    if (protegida && !await N.janela.confirmar('A ART está protegida por senha', '<p>Este PDF tem proteção (senha ou bloqueio de cópia). No fim do relatório, as páginas dele podem sair <b>em branco</b>.</p>'
+        + '<p>O melhor: baixar de novo no site do CREA a versão sem proteção, ou abrir o PDF e "Imprimir › Salvar como PDF", e anexar esse arquivo.</p>', 'Anexar assim mesmo')) return;
     const caminho = 'art/' + os + '/' + uid() + '.pdf';
     try{ U.toast('Enviando…'); await enviarArq(caminho, new Blob([f], { type:'application/pdf' }), 'A ART');
       await rpc('tf_insp_art_gravar', { p_os: os, p_numero: $('artNum').value, p_path: caminho }); U.toast('ART anexada.', 'ok'); pintar(); }
@@ -1175,16 +1195,25 @@ async function quadroPlacas(os){
       + '<td class="acoes" style="text-align:right;white-space:nowrap">' + (l.pronta ? '<button class="btn mini" data-plbaixa="' + esc(v.inspecao_id) + '">Baixar a placa</button>' : '') + '</td></tr>';
   }).join('') + '</table>';
   cx.innerHTML = h;
-  const gerar = (l) => { const r = PlacaPDF.gerar(l.v, ctx); return { nome: r.nome, bytes: r.bytes }; };
+  // E52 · issue 75, item 2: a letra que a placa não tem (sai trocada) e o texto comprido que saiu apertado só se sabem ao montar
+  // a placa: aparecem na linha do vaso e num aviso, ao baixar
+  const novosAvisos = (l, r) => (r.avisos || []).filter(a => l.avisos.indexOf(a) < 0);
+  const gerar = (l) => { const r = PlacaPDF.gerar(l.v, ctx), extra = novosAvisos(l, r);
+    if (extra.length){ const td = cx.querySelector('tr[data-pl="' + CSS.escape(l.v.equipamento_id) + '"] td:nth-child(2)');
+      if (td && !td.querySelector('[data-plav]')){ const x = document.createElement('div'); x.className = 'muted'; x.dataset.plav = '1'; x.style.color = 'var(--crit)'; x.textContent = extra.join(' '); td.appendChild(x); } }
+    return { nome: r.nome, bytes: r.bytes, tag: l.v.tag, extra }; };
+  const avisarPlacas = arqs => { const c = arqs.filter(a => a.extra.length);
+    if (c.length) U.toast('Confira antes de mandar à gráfica: ' + c.map(a => a.tag + ': ' + a.extra.join(' ')).join(' · '), 'err'); return c.length; };
   cx.querySelectorAll('[data-plgrava]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
     const link = (b.closest('tr').querySelector('[data-pllink]').value || '').trim();   // o campo da própria linha (o mesmo vaso pode ter duas inspeções na OS)
     if (link && !/^https:\/\/\S+$/i.test(link)){ U.toast('O link precisa começar com https:// e não pode ter espaço.', 'err'); return; }
     try{ await rpc('tf_placa_link_gravar', { p_equip: b.dataset.plgrava, p_link: link });
-      U.toast(link ? (/tapweb/i.test(link) ? 'Link gravado.' : 'Link gravado. Confira: ele não parece ser do TapWeb.') : 'Link apagado.', 'ok'); await quadroPlacas(os); }
+      U.toast(link ? (/tapweb/i.test(link) ? 'Link gravado.' : 'Link gravado. Confira: ele não parece ser do TapWeb.') : 'Link apagado.', 'ok'); await quadroPlacas(os);
+      if ($('cxDocs')) quadroDocumentos(os); }   // E52 · issue 75, item 1: o quadro dos documentos (a lombada com o QR) também lê o link novo
     catch(e){ erro(e); }
   })));
   cx.querySelectorAll('[data-plbaixa]').forEach(b => b.addEventListener('click', () => {
-    try{ const a = gerar(linhas.find(l => l.v.inspecao_id === b.dataset.plbaixa)); baixarBytes(a.nome, new Blob([a.bytes], { type:'application/pdf' })); }
+    try{ const a = gerar(linhas.find(l => l.v.inspecao_id === b.dataset.plbaixa)); baixarBytes(a.nome, new Blob([a.bytes], { type:'application/pdf' })); avisarPlacas([a]); }
     catch(e){ erro(e); }
   }));
   $('plTodas').addEventListener('click', () => {
@@ -1193,7 +1222,7 @@ async function quadroPlacas(os){
       arqs.forEach(a => { if (nomes[a.nome]){ nomes[a.nome]++; a.nome = a.nome.replace(/\.pdf$/, ' (' + nomes[a.nome] + ').pdf'); } else nomes[a.nome] = 1; });   // duas inspeções do mesmo vaso na OS
       if (arqs.length === 1) baixarBytes(arqs[0].nome, new Blob([arqs[0].bytes], { type:'application/pdf' }));
       else baixarBytes('Placas ' + String(D.os && D.os.numero || 'OS').replace(/[\\/:*?"<>|]+/g, '-') + '.zip', zipar(arqs));
-      U.toast(arqs.length + ' placa(s) baixada(s).', 'ok');
+      if (!avisarPlacas(arqs)) U.toast(arqs.length + ' placa(s) baixada(s).', 'ok');
     }catch(e){ erro(e); }
   });
 }
@@ -1270,6 +1299,11 @@ function itensZipOS(D, larguras){
 }
 function chipDoc(sit){ const s = SIT_DOC[sit]; return s ? '<span class="chip ' + s[1] + '">' + s[0] + '</span>' : ''; }
 const btDl = x => '<button class="btn mini sec" data-dl="' + esc(x.path) + '" data-dlnome="' + esc(x.nome) + '">baixar</button>';
+// E52 · issue 75, item 7: o .zip com documento ainda sem a assinatura do token avisa (vai com "(para assinar)" no nome)
+function avisarParaAssinar(itens){
+  const n = (itens || []).filter(x => x.situacao === 'aprovado').length;
+  if (n) setTimeout(() => U.toast('No .zip, ' + n + ' documento(s) ainda sem a assinatura do token: vão com "(para assinar)" no nome.', 'err'), 1200);
+}
 /** Liga os botões "baixar" e os .zip de um pedaço da tela. */
 function ligarDownloads(cx, D, aviso){
   cx.querySelectorAll('[data-dl]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
@@ -1277,12 +1311,12 @@ function ligarDownloads(cx, D, aviso){
   })));
   cx.querySelectorAll('[data-zipv]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
     const v = (D.vasos || []).find(w => w.inspecao_id === b.dataset.zipv); if (!v) return;
-    try{ await baixarZip(nomeVasoZip(D, v) + ' - ' + (D.cliente || '') + '.zip', itensZipVaso(D, v), aviso); }catch(e){ erro(e); }
+    try{ await baixarZip(nomeVasoZip(D, v) + ' - ' + (D.cliente || '') + '.zip', itensZipVaso(D, v), aviso); avisarParaAssinar(itensZipVaso(D, v)); }catch(e){ erro(e); }
   })));
   cx.querySelectorAll('[data-zipos]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
     const itens = itensZipOS(D, () => largurasDoQuadro(cx)), lb = itens.find(x => x.tipo === 'lombadas');
     try{ await baixarZip((window.DocumentosPDF ? DocumentosPDF.osRot((D.os || {}).numero) : 'OS ' + ((D.os || {}).numero || '')) + ' - ' + (D.cliente || '') + '.zip', itens, aviso);
-      if (lb && lb.avisos.length) setTimeout(() => U.toast('As lombadas do .zip: ' + lb.avisos.join(' · ') + '.', 'err'), 2500); }catch(e){ erro(e); }
+      if (lb && lb.avisos.length) setTimeout(() => U.toast('As lombadas do .zip: ' + lb.avisos.join(' · ') + '.', 'err'), 2500); else avisarParaAssinar(itens); }catch(e){ erro(e); }
   })));
   // E38 · issue 30, Parte 4: o fichário do vaso e as lombadas (da OS inteira, ou só a deste vaso na tela do laudo), gerados na hora
   cx.querySelectorAll('[data-fich]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
@@ -1305,11 +1339,16 @@ function ligarDownloads(cx, D, aviso){
 // A largura da lombada (40 mm, ou 60 mm no fichário maior) é escolhida aqui, vaso a vaso, na hora de baixar: nada é gravado.
 const FOTOG = {}, FOTO_CAPA = {};
 async function fotografiaDoLaudo(L){ if (!FOTOG[L.id]) FOTOG[L.id] = (await rpc('tf_laudo_ver', { p_laudo: L.id })).dados; return FOTOG[L.id]; }
+// E52 · issue 75, item 3: a foto da capa que falhou não fica guardada como "sem foto" (antes, o fichário e as lombadas saíam sem
+// ela até recarregar a página): só a que baixou fica guardada; a que falhou é tentada de novo na próxima vez (baixarFoto, 3 tentativas).
+// FALTOU_CAPA[path] = a foto existe e não baixou desta vez (quem gera o fichário avisa).
+const FALTOU_CAPA = {};
 async function fotoCapaDe(d){
   const f = (d.fotos || []).find(x => x.secao === 'capa'); if (!f) return null;
-  if (FOTO_CAPA[f.path] === undefined){ try{ FOTO_CAPA[f.path] = dataURLDe(await baixar(f.path)); }catch(e){ FOTO_CAPA[f.path] = null; } }
+  if (!FOTO_CAPA[f.path]){ try{ FOTO_CAPA[f.path] = dataURLDe(await baixarFoto(f.path)); delete FALTOU_CAPA[f.path]; }catch(e){ FALTOU_CAPA[f.path] = true; return null; } }
   return FOTO_CAPA[f.path];
 }
+const capaFaltou = d => { const f = (d.fotos || []).find(x => x.secao === 'capa'); return !!(f && FALTOU_CAPA[f.path]); };
 const temLaudo = v => !!(v && v.laudo && v.laudo.situacao !== 'emitindo' && v.laudo.pdf_path);
 const kitDe = (D, v) => temLaudo(v) && window.DocumentosPDF && DocumentosPDF.kit ? DocumentosPDF.kit(D.imprime_pasta !== false, !!v.ja_tem_pasta) : null;
 /** As divisórias que o vaso tem: a do Prontuário só com ele emitido; a dos certificados só com certificado (laudo antigo, com tudo dentro: pela fotografia). */
@@ -1321,8 +1360,9 @@ function divisoriasDe(v){
 async function libsFichario(){ await libsLaudo(); await libsPlaca(); }
 async function gerarFichario(D, v){
   await libsFichario();
-  const d = await fotografiaDoLaudo(v.laudo);
-  return new Uint8Array(await pdfBytes(DocumentosPDF.fichario(d, Object.assign({ foto: await fotoCapaDe(d) }, divisoriasDe(v)))));
+  const d = await fotografiaDoLaudo(v.laudo), foto = await fotoCapaDe(d);
+  if (!foto && capaFaltou(d)) setTimeout(() => U.toast('O fichário de ' + (v.tag || 'um vaso') + ' saiu sem a foto da capa: ela não abriu. Confira o sinal e baixe de novo.', 'err'), 1500);   // E52 · issue 75, item 3
+  return new Uint8Array(await pdfBytes(DocumentosPDF.fichario(d, Object.assign({ foto }, divisoriasDe(v)))));
 }
 const nomeFichario = (D, v) => nomeArq('fichario', { tag:v.tag, tap:v.numero_tap, duplicada:(D.vasos || []).filter(w => w.tag === v.tag).length > 1, cliente:D.cliente });
 const fichArquivo = (D, v) => kitDe(D, v) === 'completo' ? { tipo:'fichario', nome:nomeFichario(D, v), gerar:() => gerarFichario(D, v) } : null;
@@ -1388,7 +1428,9 @@ async function quadroDocumentos(os){
     + '<button class="btn pri" data-zipos="1"' + (comLaudo.length ? '' : ' disabled') + '>Baixar tudo da OS (.zip)</button></div>';
   h += '<table class="tv cartoes" id="docsTab"><tr><th>Vaso</th><th>Relatório (+ ART no fim)</th><th>Resumo</th><th>Registro de Segurança</th><th>Cert. manômetro</th><th>Cert. válvula</th><th>Prontuário</th><th>Fichário</th><th></th></tr>' + (D.vasos || []).map(v => {
     const A = arquivosVaso(D, v), L = v.laudo, so = t => A.filter(x => x.tipo === t), juntos = !!(L && L.docs_juntos);
-    return '<tr data-docv="' + esc(v.inspecao_id) + '"><td><b>' + esc(v.tag) + '</b>' + (v.numero_tap ? '<div class="muted">Nº TAP ' + esc(v.numero_tap) + '</div>' : '') + '</td>'
+    const fa = faltaAssinarDe(D, v);   // E52 · issue 75, item 7
+    return '<tr data-docv="' + esc(v.inspecao_id) + '"><td><b>' + esc(v.tag) + '</b>' + (v.numero_tap ? '<div class="muted">Nº TAP ' + esc(v.numero_tap) + '</div>' : '')
+      + (fa.length ? '<div><span class="chip s-grave" data-faltaass="' + fa.length + '" title="' + esc(fa.map(x => x.rot).join(', ')) + '">' + (fa.length === 1 ? 'falta assinar 1' : 'faltam ' + fa.length + ' por assinar') + '</span></div>' : '') + '</td>'
       + (A.length ? '<td data-r="Relatório">' + cel(so('relatorio')) + '</td><td data-r="Resumo">' + cel(so('resumo'), juntos) + '</td><td data-r="Registro de Segurança">' + celReg(v, so('registro'), juntos) + '</td><td data-r="Cert. manômetro">' + cel(so('cert_manometro'), juntos)
           + '</td><td data-r="Cert. válvula">' + cel(so('cert_valvula'), juntos) + '</td><td data-r="Prontuário">' + (so('prontuario').length ? cel(so('prontuario')) : '<span class="muted">não reconstituído</span>')   // E37 · DP10
           + '</td><td data-r="Fichário">' + celFichario(D, v)   // E38 · DP12, DP13
@@ -1411,13 +1453,22 @@ async function quadroDocumentos(os){
   ligarDownloads(cx, D, t => { const a = $('docsAviso'); if (a) a.textContent = t || ''; });
   ligarPacote(P);
 }
+// E52 · issue 75, item 7: o relatório assinado (a inspeção "assinada") com o Resumo, o Registro, os certificados ou o Prontuário
+// ainda por assinar: nada avisava, e o "Baixar tudo" levava esses com "(para assinar)".
+function faltaAssinarDe(D, v){
+  const A = arquivosVaso(D, v), rel = A.find(x => x.tipo === 'relatorio');
+  return rel && rel.situacao === 'assinado' ? A.filter(x => x.tipo !== 'relatorio' && x.situacao !== 'assinado') : [];
+}
+const faltaAssinarHtml = (xs, id) => xs.length ? '<div class="alerta crit"' + (id ? ' id="' + id + '"' : '') + '><b>' + (xs.length === 1 ? 'Falta 1 documento por assinar' : 'Faltam ' + xs.length + ' documentos por assinar')
+  + '</b> (o relatório já está assinado): ' + esc(xs.map(x => x.rot).join(', ')) + '. Assine com o token (aba Laudos › "Para assinar com o token"); até lá, o "Baixar tudo" leva esses com "(para assinar)".</div>' : '';
 /** A lista "Documentos deste vaso" na tela do laudo (DP14 b). */
 function cartaoDocsVaso(D){
   const v = D && (D.vasos || [])[0]; if (!v) return '';
   const A = arquivosVaso(D, v);
   if (!A.length) return '';
+  const fa = faltaAssinarDe(D, v);
   const linhas = A.concat([artArquivo(D)].filter(Boolean), instrumentosArquivos(D, v));   // E44 · issue 85: o certificado do dia
-  return '<h2>Documentos deste vaso</h2><div class="card" id="cxDocsVaso"><div class="linha" style="justify-content:space-between;margin-bottom:6px"><span class="muted" id="docsAviso">'
+  return '<h2>Documentos deste vaso</h2><div class="card" id="cxDocsVaso">' + faltaAssinarHtml(fa, 'ldFaltaAssinar') + '<div class="linha" style="justify-content:space-between;margin-bottom:6px"><span class="muted" id="docsAviso">'
     + (v.laudo.docs_juntos ? 'Laudo emitido antes da separação dos documentos: os certificados estão dentro do relatório.' : 'Cada documento num arquivo; o oficial é o assinado com o token.') + '</span>'
     + '<button class="btn pri" data-zipv="' + esc(v.inspecao_id) + '">Baixar tudo do vaso (.zip)</button></div>'
     + '<table class="cartoes"><tr><th>Documento</th><th>Número</th><th>Nome do arquivo</th><th>Situação</th><th></th></tr>' + linhas.map(x => '<tr><td>' + esc(x.rot) + '</td><td data-r="Número">' + esc(x.numero || '—')
@@ -2431,6 +2482,15 @@ function pintarRevisao(){
   { const cv = revCircVolume(v); if (cv) conf.push({ chave:'circ_vol', nivel:'amarelo', texto:cv.texto, detalhe:cv.detalhe }); }
   revAjustesAltos(v, R.acessorios, pr).forEach(x => conf.push(x));
   revForaAvisos(v).forEach(x => conf.push(x));   // E47 · issue 59: costado ou tampo inteiro fora da conta
+  // E52 · issue 74, item 2: os avisos do cálculo (material da lista provisória, temperatura acima da faixa do S) na lista do sistema;
+  // os da PMTA abaixo da operação e da espessura abaixo da mínima já são pendências próprias (revPendPmta). Depois da aprovação,
+  // os gravados no cálculo oficial (resultado.avisos), que a tela do laudo também mostra.
+  [...new Set([].concat(prev.avisos || [], avisosCalculo(R)))].filter(a => !/abaixo da (pressão de operação|mínima)|passa da PMTA adotada|^Prévia:/.test(a))
+    .forEach(a => conf.push({ chave:'calc_aviso', nivel:'amarelo', texto:'Aviso do cálculo: ' + a, detalhe:'O laudo não escreve este aviso sozinho: o PLH confere e decide se entra no texto (uma recomendação ou a justificativa).' }));
+  // E52 · issue 74, item 8: a recomendação antiga (escrita antes do S163) sem "Que…" sai no laudo como foi escrita, no meio das outras
+  try{ revRecLista().filter(x => x.marcada && !comecaComQue(x.texto)).forEach(x => conf.push({ chave:'rec_que', nivel:'amarelo',
+    texto:'Recomendação sem "Que…": ' + String(x.texto || '').slice(0, 90) + (String(x.texto || '').length > 90 ? '…' : ''),
+    detalhe:'Toda recomendação do laudo começa com "Que…". Edite em "2 · Anomalias e recomendações" (seção 11) antes de aprovar.' })); }catch(e){}
   // S144 · item 78: tampos iguais (mesmo tipo, mesma câmara) com eficiência de solda (E) diferente; região do costado com o nome e a posição em desacordo
   CALC.ativas(v).forEach(k => {
     const tps = (v.componentes || []).filter(c => c.ativo !== false && ['eliptico','torisferico','hemisferico','conico','plano'].indexOf(c.tipo) >= 0 && (!c.camara_id || c.camara_id === k.id));
@@ -3867,8 +3927,8 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S176');
-    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D7');   // E35 · issue 30: o Resumo e os nomes dos arquivos
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S177');
+    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D8');   // E35 · issue 30: o Resumo e os nomes dos arquivos
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S174');
     return true;
   })().catch(e => { LIBS = null; throw e; });
@@ -4031,9 +4091,15 @@ function nomeLaudo(d, o){
   const n = nomeArq('relatorio', { tag:d.vaso.tag, tap:d.vaso.numero_tap, cliente:clienteCurto(d), revisao:o.revisao, paraAssinar:o.paraAssinar });
   return o.extra ? n.replace(/\.pdf$/, ' (' + o.extra + ').pdf') : n;
 }
+// E52 · issue 75, item 9: cada rascunho aberto criava endereços (URL.createObjectURL) que só saíam da memória ao fechar a página;
+// agora o visor guarda os seus e os libera quando outro PDF é aberto nele.
+let URLS_VISOR = [];
+function urlVisor(blob){ const u = URL.createObjectURL(blob); URLS_VISOR.push(u); return u; }
+function liberarVisor(){ const us = URLS_VISOR; URLS_VISOR = []; us.forEach(u => { try{ URL.revokeObjectURL(u); }catch(e){} }); }
 function mostrarPdf(bytes, nome){
   const cx = $('ldVisor'); if (!cx) return;
-  const url = URL.createObjectURL(new Blob([bytes], { type:'application/pdf' }));
+  liberarVisor();
+  const url = urlVisor(new Blob([bytes], { type:'application/pdf' }));
   cx.innerHTML = '<div class="linha" style="margin-bottom:6px"><a class="btn sec" id="ldBaixar">Baixar ' + esc(nome) + '</a></div><iframe title="Laudo" style="width:100%;height:78vh;border:1px solid var(--rule);border-radius:6px;background:#fff"></iframe>';
   $('ldBaixar').href = url; $('ldBaixar').download = nome; cx.querySelector('iframe').src = url;
 }
@@ -4045,7 +4111,7 @@ function mostrarDocs(docs, d, o){
   docs.forEach(x => {
     const a = document.createElement('a'); a.className = 'btn mini sec';
     a.download = nomeArq(x.tipo, { tag:d.vaso.tag, tap:d.vaso.numero_tap, cliente:clienteCurto(d), ordem:x.ordem, total:x.total }).replace(/\.pdf$/, o && o.extra ? ' (' + o.extra + ').pdf' : '.pdf');
-    a.href = URL.createObjectURL(new Blob([x.bytes], { type:'application/pdf' })); a.textContent = a.download.replace(/\.pdf$/, '');
+    a.href = urlVisor(new Blob([x.bytes], { type:'application/pdf' })); a.textContent = a.download.replace(/\.pdf$/, '');   // E52 · issue 75, item 9
     div.appendChild(a);
   });
   cx.insertBefore(div, cx.querySelector('iframe'));
@@ -4054,6 +4120,39 @@ function mostrarDocs(docs, d, o){
 // ── a aba Laudos ───────────────────────────────────────────────────────────
 const SIT_LAUDO = { emitindo:['número reservado, PDF pendente','s-em_conferencia'], emitido:['emitido, falta a assinatura','s-pegar_cliente'],
                     assinado:['assinado','s-pronto'], substituido:['substituído','s-sem_laudo'] };
+// E52 · issue 75, item 6: a lista tinha só as 300 mais recentes (o limite do tf_laudo_lista), sem busca. Agora: a busca por TAG, cliente,
+// OS ou número do laudo (sem acento; o estado fora do DOM, regra de front-end) e "ver mais" de 50 em 50. Passar das 300 pede o banco.
+let LD_BUSCA = '', LD_MOSTRA = 50;
+const LD_PASSO = 50, LD_LIMITE_BANCO = 300;
+const semAcento = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function buscaLaudo(x){
+  if (x._tfBusca == null) x._tfBusca = semAcento([x.tag, x.cliente, x.os, x.laudo && x.laudo.numero, x.laudo && x.laudo.revisao ? 'rev ' + x.laudo.revisao : ''].filter(Boolean).join(' '));
+  return x._tfBusca;
+}
+function laudosListaHtml(L){
+  const q = semAcento(LD_BUSCA).trim(), ps = q ? q.split(/\s+/) : [];
+  const F = ps.length ? L.filter(x => ps.every(p => buscaLaudo(x).indexOf(p) >= 0)) : L, V = F.slice(0, LD_MOSTRA);
+  if (!F.length) return '<p class="vazio" id="ldNada">Nada encontrado para "' + esc(LD_BUSCA) + '".' + (L.length >= LD_LIMITE_BANCO ? ' A busca olha as ' + LD_LIMITE_BANCO + ' inspeções mais recentes; para uma mais antiga, abra pela OS (aba Preparação).' : '') + '</p>';
+  return '<table class="cartoes" id="ldTab"><tr><th>Vaso</th><th>Cliente</th><th>OS</th><th>Laudo</th><th>Antes de emitir</th></tr>'   // E31 · issue 31: no celular, cartões
+    + V.map(x => '<tr class="lin" data-ld="' + esc(x.id) + '"><td><b>' + esc(x.tag) + '</b><div class="muted">' + esc(x.situacao) + '</div></td><td data-r="Cliente">' + esc(x.cliente || '') + '</td><td data-r="OS">' + esc(x.os || '—') + '</td><td data-r="Laudo">'
+      + (x.laudo ? '<b>' + esc(x.laudo.numero) + (x.laudo.revisao ? ' Rev. ' + x.laudo.revisao : '') + '</b><div><span class="chip ' + (SIT_LAUDO[x.laudo.situacao] || ['', ''])[1] + '">' + esc((SIT_LAUDO[x.laudo.situacao] || [x.laudo.situacao])[0]) + '</span></div>'
+         : '<span class="muted">não emitido</span>') + '</td><td data-r="Antes de emitir">'
+      + (x.faltas ? '<span class="chip s-precisa_laudo">' + x.faltas + ' pendência(s)</span>' : '<span class="chip s-pronto">ok</span>') + '</td></tr>').join('') + '</table>'
+    + '<div class="linha" style="margin-top:6px"><span class="muted" id="ldConta">' + V.length + ' de ' + F.length + (ps.length ? ' encontrada(s)' : '') + '</span>'
+    + (F.length > V.length ? '<button class="btn mini sec" id="ldMais">Ver mais ' + Math.min(LD_PASSO, F.length - V.length) + '</button>' : '')
+    + (L.length >= LD_LIMITE_BANCO && V.length === F.length ? '<span class="muted">A lista traz as ' + LD_LIMITE_BANCO + ' inspeções mais recentes; para uma mais antiga, abra pela OS (aba Preparação).</span>' : '') + '</div>';
+}
+function ligarLaudosLista(L){
+  const cx = $('ldLista'); if (!cx) return;
+  const ligarLinhas = () => {
+    cx.querySelectorAll('[data-ld]').forEach(t => t.addEventListener('click', () => { location.hash = 'laudo=' + t.dataset.ld; }));
+    const m = $('ldMais'); if (m) m.addEventListener('click', () => { LD_MOSTRA += LD_PASSO; cx.innerHTML = laudosListaHtml(L); ligarLinhas(); });
+  };
+  ligarLinhas();
+  const b = $('ldBusca'); if (!b) return;
+  let t = null;
+  b.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { LD_BUSCA = b.value; LD_MOSTRA = LD_PASSO; cx.innerHTML = laudosListaHtml(L); ligarLinhas(); }, 140); });
+}
 async function abaLaudos(h){
   const vez = TELA_VEZ;   // E48 · issue 65, item 11
   const [L, cfg, DES, PAC, NP] = await Promise.all([rpc('tf_laudo_lista'), rpc('tf_laudo_config_ver'),
@@ -4066,15 +4165,12 @@ async function abaLaudos(h){
     + (NP ? ' · prontuários: próximo <b>' + esc(NP.proximo_codigo) + '</b>' + (NP.proximo ? '' : ' (não informado: começa do 001)') : '') + '.</div></div>'
     + (cfg.admin ? '<button class="btn" id="ldCfg">Configurar</button>' : '') + '</div></div>';
   h += cartaoDesenho(DES) + cartaoPacote(PAC);
-  h += '<div class="card"><h3>Inspeções liberadas e laudos</h3>' + (L.length ? '<table class="cartoes"><tr><th>Vaso</th><th>Cliente</th><th>OS</th><th>Laudo</th><th>Antes de emitir</th></tr>'   // E31 · issue 31: no celular, cartões
-    + L.map(x => '<tr class="lin" data-ld="' + esc(x.id) + '"><td><b>' + esc(x.tag) + '</b><div class="muted">' + esc(x.situacao) + '</div></td><td data-r="Cliente">' + esc(x.cliente || '') + '</td><td data-r="OS">' + esc(x.os || '—') + '</td><td data-r="Laudo">'
-      + (x.laudo ? '<b>' + esc(x.laudo.numero) + (x.laudo.revisao ? ' Rev. ' + x.laudo.revisao : '') + '</b><div><span class="chip ' + (SIT_LAUDO[x.laudo.situacao] || ['', ''])[1] + '">' + esc((SIT_LAUDO[x.laudo.situacao] || [x.laudo.situacao])[0]) + '</span></div>'
-         : '<span class="muted">não emitido</span>') + '</td><td data-r="Antes de emitir">'
-      + (x.faltas ? '<span class="chip s-precisa_laudo">' + x.faltas + ' pendência(s)</span>' : '<span class="chip s-pronto">ok</span>') + '</td></tr>').join('') + '</table>'
+  h += '<div class="card"><h3>Inspeções liberadas e laudos</h3>' + (L.length ? '<input class="t" id="ldBusca" type="search" autocomplete="off" name="ldbusca_nofill" data-lpignore="true" data-1p-ignore readonly onfocus="this.removeAttribute(\'readonly\')"'
+      + ' placeholder="Procurar por TAG, cliente, OS ou número do laudo" value="' + esc(LD_BUSCA) + '" style="max-width:420px"><div id="ldLista">' + laudosListaHtml(L) + '</div>'
     : '<p class="vazio">Nenhuma inspeção liberada ainda. A inspeção chega aqui depois da aprovação do PLH (aba A revisar).</p>') + '</div>';
   $('tela').innerHTML = h;
   ligarAbas();
-  $('tela').querySelectorAll('[data-ld]').forEach(t => t.addEventListener('click', () => { location.hash = 'laudo=' + t.dataset.ld; }));
+  ligarLaudosLista(L);
   ligarDesenho(); ligarPacote(PAC);
   const bc = $('ldCfg'); if (bc) bc.addEventListener('click', () => {
     janela('Emissão do laudo', '<label class="okrev"><input type="checkbox" id="cfgOf"' + (cfg.oficial ? ' checked' : '') + '> o TapHub emite os laudos oficiais (fim do piloto)</label>'
@@ -4187,7 +4283,7 @@ function ligarDesenho(){
 }
 // A4/A5: o pacote para o token (Assinador SERPRO, em lote) e a devolução dos assinados
 // E35 · issue 30 (DP4): o pacote leva todos os documentos técnicos (o relatório, o Resumo e os certificados), cada um num PDF
-function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D7').then(() => true, () => false); }
+function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D8').then(() => true, () => false); }
 /** O que falta assinar: os relatórios (tf_laudo_para_assinar) e os outros documentos (tf_insp_docs_para_assinar). insps: só dessas inspeções. */
 async function pacoteParaAssinar(insps){
   // E51 · issue 70: R = os laudos de inspeção reaberta e aprovada de novo, que esperam a revisão (não se assinam)
@@ -4306,18 +4402,36 @@ const PASSOS_EMITIR = [
 let VEZ_LD = 0;   // cada andamento ganha um número; "Tentar de novo" pula para o seguinte
 const TRAVOU_MS = 120000;   // 2 minutos sem andar = "Parece que travou" (o teste encurta por window.TF_TRAVOU_MS)
 /** Liga o andamento no quadro das ações. Devolve A(texto, fase, fração) e A.fim(). Um "Tentar de novo" invalida a rodada antiga (A lança { refeito }). */
+// E52 · issue 75, item 4: o envio lento (arquivo grande, sinal fraco) não é "travou": enquanto um envio está em curso (A.envio), a
+// barra diz o que está sendo enviado e há quanto tempo; só depois de LENTO_MS sem terminar aparece o "Tentar de novo". E o "Tentar
+// de novo" espera o envio da rodada anterior parar antes de começar outra (antes, as duas corriam juntas e a segunda dava erro).
+const LENTO_MS = 600000;   // 10 minutos num envio só (o teste encurta por window.TF_LENTO_MS)
 function andamento(passos, refazer){
   const card = $('ldAcoes'), box = $('ldAnd'), vez = ++VEZ_LD;
-  let ult = Date.now(), parado = false, pct = 0, travou = false;
+  let ult = Date.now(), parado = false, pct = 0, travou = false, ocupado = 0, desde = 0, oQue = '', rotAtual = '';
   const pintarA = txt => { box.innerHTML = '<div class="barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><i style="width:' + pct + '%"></i></div><div class="txt" id="ldAndTxt">' + esc(txt) + '</div>'; };
   if (card){ card.classList.add('rodando'); box.hidden = false; box.classList.remove('travou'); pintarA('Começando… · 0%'); }
   const relogio = setInterval(() => {
     if (VEZ_LD !== vez || !box || !document.body.contains(box)){ clearInterval(relogio); return; }
-    if (parado || travou || Date.now() - ult <= (window.TF_TRAVOU_MS || TRAVOU_MS)) return;
+    if (parado || travou) return;
+    if (ocupado > 0 && Date.now() - desde <= (window.TF_LENTO_MS || LENTO_MS)){
+      const seg = Math.round((Date.now() - desde) / 1000);
+      if (seg >= 5) pintarA(rotAtual + ' · ' + oQue + ' · há ' + (seg < 60 ? seg + ' s' : Math.floor(seg / 60) + ' min ' + (seg % 60) + ' s') + ' (sinal lento: aguarde, não feche a página) · ' + pct + '%');
+      return;
+    }
+    if (ocupado <= 0 && Date.now() - ult <= (window.TF_TRAVOU_MS || TRAVOU_MS)) return;
     travou = true; box.classList.add('travou');
     box.innerHTML = '<div class="barra"><i style="width:' + pct + '%"></i></div><div class="txt" id="ldAndTxt">Parece que travou. Tente de novo.</div>'
       + '<button class="btn pri" id="ldDeNovo" style="margin-top:8px">Tentar de novo</button>';
-    $('ldDeNovo').addEventListener('click', () => { VEZ_LD++; clearInterval(relogio); refazer(); });
+    $('ldDeNovo').addEventListener('click', async () => {
+      VEZ_LD++; clearInterval(relogio);   // a rodada antiga para no próximo passo (A lança { refeito })
+      if (ocupado > 0){   // um envio dela ainda em curso: espera ele terminar (ou falhar) antes de começar de novo
+        const bt = $('ldDeNovo'), tx = $('ldAndTxt'); if (bt) bt.disabled = true;
+        if (tx) tx.textContent = 'Esperando o envio anterior parar antes de começar de novo…';
+        await new Promise(ok => { const t = setInterval(() => { if (ocupado <= 0){ clearInterval(t); ok(); } }, 300); });
+      }
+      refazer();
+    });
   }, 1000);
   const A = (t, fase, frac) => {
     if (VEZ_LD !== vez) throw Object.assign(new Error('Refeito.'), { refeito:true });   // a rodada que travou não continua
@@ -4327,8 +4441,12 @@ function andamento(passos, refazer){
     pct = Math.max(pct, Math.min(100, Math.round(P.de + (P.ate - P.de) * (a + (b - a) * f))));
     parado = !!P.espera; ult = Date.now();
     if (travou){ travou = false; box.classList.remove('travou'); }
-    pintarA('Passo ' + (i + 1) + ' de ' + passos.length + ' · ' + P.rot + (t ? ' · ' + t : '') + ' · ' + pct + '%');
+    rotAtual = 'Passo ' + (i + 1) + ' de ' + passos.length + ' · ' + P.rot;
+    pintarA(rotAtual + (t ? ' · ' + t : '') + ' · ' + pct + '%');
   };
+  /** Um envio (ou outra espera longa) em curso: a barra mostra o tempo, sem "travou"; o "Tentar de novo" espera ele parar. */
+  A.envio = (p, texto) => { ocupado++; desde = Date.now(); oQue = texto || 'enviando';
+    return Promise.resolve(p).finally(() => { ocupado--; ult = Date.now(); }); };
   A.fim = () => { clearInterval(relogio); if (VEZ_LD === vez && card){ card.classList.remove('rodando'); box.hidden = true; box.innerHTML = ''; } };
   return A;
 }
@@ -4383,6 +4501,12 @@ function certLaudoHtml(l){
     + (nome ? '<br>certificado de ' + esc(nome) : '') + (c.emissor ? '<br>emitido por ' + esc(c.emissor) + (c.emissor_org ? ' (' + esc(c.emissor_org) + ')' : '') : '')
     + (v.ate ? '<br>válido até ' + dataBR(dataSP(v.ate)) : '') + '</div>';
 }
+/** E52 · issue 74, item 2: os avisos do cálculo oficial (o do vaso e os de cada câmara), sem repetir. */
+function avisosCalculo(d){
+  const a = [].concat(((d && d.resultado) || {}).avisos || []);
+  ((d && d.resultado_camaras) || []).forEach(k => (k.avisos || []).forEach(x => a.push(x)));
+  return [...new Set(a.map(x => String(x || '').trim()).filter(Boolean))];
+}
 function laudoAtual(d){ return (d.laudos || []).filter(l => l.situacao !== 'substituido').pop() || null; }
 function pintarLaudo(){
   const d = LD.d, I = d.inspecao, eu = d.eu || {}, cfg = d.config || {}, atual = laudoAtual(d), fal = d.faltas || [];
@@ -4395,8 +4519,16 @@ function pintarLaudo(){
   // E51 · issue 70: reaberta depois da emissão, o laudo de antes não se assina; sai a revisão
   if (reaberta && cfg.oficial) h += '<div class="alerta falta" id="ldReaberta"><b>A inspeção foi reaberta depois que o ' + esc(atual.numero) + (atual.revisao ? ' Rev. ' + atual.revisao : '') + ' foi emitido'
     + (d.reabertura.motivo ? ' (' + esc(d.reabertura.motivo) + ')' : '') + '.</b> Este laudo não se assina mais. '
-    + (I.situacao === 'liberada' ? 'A inspeção já foi aprovada de novo: emita a revisão (Rev. ' + (atual.revisao + 1) + ') e assine os PDFs dela.' : 'Depois de a inspeção ser aprovada de novo, emita a revisão (Rev. ' + (atual.revisao + 1) + ').') + '</div>';
+    + (I.situacao === 'liberada' ? 'A inspeção já foi aprovada de novo: emita a revisão (Rev. ' + (atual.revisao + 1) + ') e assine os PDFs dela.' : 'Depois de a inspeção ser aprovada de novo, emita a revisão (Rev. ' + (atual.revisao + 1) + ').')
+    + ' Se a placa do vaso já foi baixada, baixe de novo e confira a PMTA.</div>';   // E52 · issue 75, item 8
+  // E52 · issue 75, item 8: reaberta antes do laudo (a placa já podia ser baixada com a inspeção aprovada)
+  if (!atual && d.reabertura && d.reabertura.em) h += '<div class="alerta falta" id="ldPlacaRev"><b>A inspeção foi reaberta em ' + quandoBR(d.reabertura.em) + '.</b> Se a placa deste vaso foi baixada antes, baixe de novo (quadro "Placas" da OS) e confira a PMTA antes de mandar à gráfica.</div>';
   if (!cfg.oficial) h += '<div class="alerta falta"><b>Piloto:</b> o TapHub ainda não emite o laudo oficial. Gere o rascunho e compare com o PDF do TapDoc antigo. Quem liga a emissão é o admin (aba Laudos › Configurar).</div>';
+  // E52 · issue 74, item 2: os avisos do cálculo oficial (gravados na aprovação: temperatura acima da faixa do material, operação acima da
+  // PMTA adotada…) ficavam só no banco. Aparecem aqui para o PLH decidir se algum vai para o texto (o laudo não os escreve sozinho).
+  const avCalc = avisosCalculo(d);
+  if (avCalc.length) h += '<div class="alerta falta" id="ldAvisosCalc"><b>Avisos do cálculo (gravados na aprovação):</b><ul>' + avCalc.map(a => '<li>' + esc(a) + '</li>').join('')
+    + '</ul><span class="muted">O laudo não os escreve sozinho: o PLH decide se algum entra no texto (uma recomendação ou a justificativa na revisão).</span></div>';
   // E45 · issue 60: aprovada pelo PLH com a PMTA adotada abaixo da pressão de operação
   if (pressaoAbaixoDe(d).length) h += '<div class="alerta falta" id="ldPressao"><b>PMTA adotada abaixo da pressão de operação:</b> o relatório e o Registro de Segurança deste vaso saem <b>"' + POP_FRASE + '"</b>, com as duas pressões e a justificativa do PLH ('
     + pressaoAbaixoDe(d).map(k => esc(k.justificativa_operacao || '—')).join('; ') + '). Confira no rascunho.</div>';
@@ -4482,12 +4614,14 @@ function ligarLaudo(){
     A('', 'enviar', 0.05);
     const pre = L.inspecao_id + '/', suf = '-' + String(L.numero).replace(/[^\w-]+/g, '-') + (L.revisao ? '-rev' + L.revisao : '');
     const caminho = pre + 'laudo' + suf + '-' + uid().slice(0, 8) + '.pdf';
-    await enviarArq(caminho, new Blob([g.bytes], { type:'application/pdf' }), 'O laudo');
+    const bl = new Blob([g.bytes], { type:'application/pdf' });
+    await A.envio(enviarArq(caminho, bl, 'O laudo'), 'enviando o relatório (' + mbDe(bl) + ' MB)');   // E52 · issue 75, item 4
     const lista = [];
     for (let k = 0; k < docs.length; k++){
       const x = docs[k], cam = pre + x.tipo + suf + '-' + x.ordem + '-' + uid().slice(0, 8) + '.pdf';
       A('documento ' + (k + 1) + ' de ' + docs.length, 'enviar', 0.1 + 0.65 * k / docs.length);
-      await enviarArq(cam, new Blob([x.bytes], { type:'application/pdf' }), 'O documento');
+      const bx = new Blob([x.bytes], { type:'application/pdf' });
+      await A.envio(enviarArq(cam, bx, 'O documento'), 'enviando o documento ' + (k + 1) + ' de ' + docs.length + ' (' + mbDe(bx) + ' MB)');
       lista.push({ tipo: x.tipo, ordem: x.ordem, numero: x.numero, acessorio_id: x.acessorio_id, path: cam, sha: x.sha, paginas: x.paginas, variante: x.variante || null });
     }
     A('', 'enviar', 0.8);
@@ -4563,7 +4697,9 @@ function ligarLaudo(){
     janela('Reabrir a inspeção', '<label class="f">Para onde<select class="t" id="rbPara"><option value="em_revisao">Aprovação do PLH (o cálculo, a PMTA e as datas)</option>'
       + '<option value="em_campo">O campo (a equipe corrige a coleta; a revisão recomeça)</option></select></label>'
       + '<label class="f">Motivo <small>(vai na revisão do laudo)</small><textarea class="t" id="rbMot" rows="3"></textarea></label>'
-      + (laudoAtual(d) ? '<p class="muted">Esta inspeção já tem laudo: a próxima emissão sai como revisão, com o mesmo número.</p>' : ''),
+      + (laudoAtual(d) ? '<p class="muted">Esta inspeção já tem laudo: a próxima emissão sai como revisão, com o mesmo número.</p>' : '')
+      // E52 · issue 75, item 8: a placa sai com a inspeção aprovada (antes do laudo assinado); se a reabertura mudar a PMTA, a que já foi baixada fica errada
+      + '<p class="alerta falta" id="rbPlaca" style="margin-top:6px">Se a placa deste vaso já foi baixada (quadro "Placas" da OS), ela pode ficar errada: depois da nova aprovação, baixe a placa de novo e confira a PMTA antes de mandar à gráfica.</p>',
       [{ rotulo:'Cancelar' }, { rotulo:'Reabrir', classe:'pri', acao:async () => {
         try{ await rpc('tf_insp_reabrir', { p_id: LD.id, p_para: $('rbPara').value, p_motivo: $('rbMot').value }); U.toast('Reaberta.', 'ok');
           location.hash = $('rbPara').value === 'em_revisao' ? 'rev=' + LD.id : 'aba=laudos'; }

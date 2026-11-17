@@ -18,7 +18,8 @@
  */
 (function (raiz) {
 'use strict';
-const VERSAO = 'D7-S183-2026-11-17';   // D7 (S183 · issue 69): a válvula aprovada em campo que abre acima da PMTA adotada conta como recomendação (rec_regra.valvula_pmta) e sai "não conforme" no Registro (a fotografia já a traz "reprovado")
+const VERSAO = 'D8-S186-2026-11-17';   // D8 (S186 · issue 74): o volume do Resumo e do Registro é o da categoria; o Resumo sem o quadro do acessório ausente ou retirado (sem aferição) e mais compacto com 3 ou mais acessórios; a data do teste é a de quando a aferição terminou
+// const VERSAO = 'D7-S183-2026-11-17';   // D7 (S183 · issue 69): a válvula aprovada em campo que abre acima da PMTA adotada conta como recomendação (rec_regra.valvula_pmta) e sai "não conforme" no Registro (a fotografia já a traz "reprovado")
 // const VERSAO = 'D6-S178-2026-11-16';   // D6 (S178 · issue 60): a condição operacional "não liberado para operar nessa pressão" no Registro (PMTA adotada abaixo da pressão de operação; LaudoPDF.pressaoAbaixo)
 // const VERSAO = 'D5-S173-2026-11-16';   // D5 (S173 · issue 57): o prazo reduzido do Registro pelas datas aprovadas (LaudoPDF.prazoReduzido)
 const AZUL = '#1B6FA9', CINZA = '#515252', FAIXA = '#5B6770', VERDE = '#1E6B3A', VERM = '#A62D18';
@@ -92,6 +93,7 @@ function cidadeUf(emp) {
  * cada válvula e cada manômetro (com o resultado da aferição). opc: { numero, revisao, carimbo, plh, marca, logoEngetap }.
  * O carimbo (desenho + "Aprovado eletronicamente por …") vai no rodapé, como no relatório (DP4); sem número, o nome do PLH.
  */
+const aferido = a => !!(a.afericao && (a.afericao.resultado === 'aprovado' || a.afericao.resultado === 'reprovado'));
 function resumo(d, opc) {
   opc = opc || {};
   const emp = d.empresa || {}, V = d.vaso || {}, I = d.inspecao || {}, R = d.resultado || {}, M = (d.modelo && d.modelo.blocos) || {};
@@ -107,7 +109,7 @@ function resumo(d, opc) {
   const pOper = oper.length ? Math.max(...oper.map(Math.abs)) : (R.p_operacao_mpa != null ? Math.abs(Number(R.p_operacao_mpa)) : null);
   const pmta = rcams.length ? Math.min(...rcams.map(k => Number(k.pmta_adotada_mpa))) : (R.pmta_adotada_mpa != null ? Number(R.pmta_adotada_mpa) : null);
   const pth = (cams[0] && cams[0].pth_mpa != null) ? cams[0].pth_mpa : V.pth_mpa;
-  const volume = cams.reduce((a, k) => a + (Number(k.volume_m3) || 0), 0) || (R.volume_m3 != null ? Number(R.volume_m3) : null);
+  const volume = (R.volume_m3 != null ? Number(R.volume_m3) : cams.reduce((a, k) => a + (Number(k.volume_m3) || 0), 0) || null);
   const fluido = [...new Set(cams.map(k => k.fluido).filter(Boolean))].join(' / ') || null;
   const exames = [I.exame_interno ? 'interna' : null, I.exame_externo ? 'externa' : null].filter(Boolean);
   const tipo = [TIPO_INSP[I.tipo] || I.tipo, exames.length ? exames.join(' e ') : null].filter(Boolean).join(', ');
@@ -125,8 +127,12 @@ function resumo(d, opc) {
   C.push({ text: 'RELATÓRIO RESUMO DA INSPEÇÃO', style: 'titulo', margin: [0, 18, 0, 2] });
   if (V.numero_tap) C.push({ text: 'Nº TAP: ' + V.numero_tap, style: 'subtitulo' });
   // uma faixa cinza e os campos em 3 colunas; campo vazio sai com o traço
+  // D8 · issue 74, item 3: o acessório ausente ou retirado, sem aferição, não ganha quadro ("Não aferido" não diz nada dele);
+  // com 3 ou mais quadros de acessório, as faixas ficam mais juntas, para o Resumo caber numa página (conferido com 4)
+  const acs = (d.acessorios || []).filter(a => TITULO_AC[a.tipo] && !((a.situacao === 'ausente' || a.situacao === 'retirado') && !aferido(a)));
+  const junto = acs.length >= 3;
   const faixa = t => C.push({ table: { widths: ['*'], body: [[{ text: t, style: 'faixa' }]] }, layout: { hLineWidth: () => 0, vLineWidth: () => 0, fillColor: () => FAIXA,
-    paddingLeft: () => 8, paddingTop: () => 4, paddingBottom: () => 4 }, margin: [0, 12, 0, 6] });
+    paddingLeft: () => 8, paddingTop: () => junto ? 3 : 4, paddingBottom: () => junto ? 3 : 4 }, margin: junto ? [0, 7, 0, 3] : [0, 12, 0, 6] });
   const grade = campos => {
     const cel = campos.map(([r, v, larg, extra]) => ({ c: { text: [{ text: r + ': ', bold: true }, Object.assign({ text: vazio(v) ? '—' : String(v) }, extra || {})], style: 'campo' }, larg: larg || 1 }));
     const linhas = []; let atual = [], usadas = 0;
@@ -146,13 +152,12 @@ function resumo(d, opc) {
     ['TIPO', tipo || null], ['ART', (d.art || {}).numero, 2],
     ['PRÓXIMA INSPEÇÃO EXTERNA', dataBR(R.proxima_externa), 2], ['PRÓXIMA INTERNA', dataBR(R.proxima_interna)]]);
   // uma faixa por válvula e por manômetro (dois do mesmo tipo: "1", "2")
-  const acs = (d.acessorios || []).filter(a => TITULO_AC[a.tipo]);
   const nTipo = {}; acs.forEach(a => { nTipo[a.tipo] = (nTipo[a.tipo] || 0) + 1; });
   const visto = {};
   acs.forEach(a => {
     visto[a.tipo] = (visto[a.tipo] || 0) + 1;
     faixa(TITULO_AC[a.tipo] + (nTipo[a.tipo] > 1 ? ' ' + visto[a.tipo] : ''));
-    const f = a.afericao && (a.afericao.resultado === 'aprovado' || a.afericao.resultado === 'reprovado') ? a.afericao : null;
+    const f = aferido(a) ? a.afericao : null;
     const L = (f && f.leituras) || {}, un = f ? f.unidade : 'bar';
     const res = f ? RESULTADO[f.resultado] : null;
     const resultado = ['RESULTADO', res ? res[0] : 'Não aferido', 0, res ? { color: res[1], bold: true } : {}];
@@ -162,7 +167,7 @@ function resumo(d, opc) {
       const as = (L.assentamentos || []).filter(x => x != null && x !== '').map(x => emBar(x, un));
       const ajuste = a.pressao_ajuste_mpa != null ? Number(a.pressao_ajuste_mpa) * 10 : null;
       grade([['FABRICANTE', fab], ['CONEXÃO', a.conexao], ['PRESSÃO DE ABERTURA', ab.length ? fmt(Math.max(...ab), 2) + ' bar' : (ajuste != null ? fmt(ajuste, 2) + ' bar' : null)],
-        ['ASSENTAMENTO', as.length ? fmt(Math.min(...as), 2) + ' bar' : null], ['DATA DO TESTE', f ? dataBR(f.realizada_em || I.termino || I.inicio) : null], ['CERTIFICADO', f ? f.codigo : null],
+        ['ASSENTAMENTO', as.length ? fmt(Math.min(...as), 2) + ' bar' : null], ['DATA DO TESTE', f ? dataBR(raiz.LaudoPDF && raiz.LaudoPDF.dataAfericao ? raiz.LaudoPDF.dataAfericao(f, I) : f.updated_at || f.realizada_em || I.termino || I.inicio) : null], ['CERTIFICADO', f ? f.codigo : null],
         ['LACRE', lacre], resultado.slice(0, 2).concat([2, resultado[3]])]);
     } else {
       const ini = f ? emBar(f.faixa_ini || 0, un) : null, fimE = f ? emBar(f.faixa_fim, un) : null;
@@ -302,7 +307,7 @@ function registro(d, opc) {
     const pmta = rcams.length ? Math.min(...rcams.map(k => Number(k.pmta_adotada_mpa))) : (R.pmta_adotada_mpa != null ? Number(R.pmta_adotada_mpa) : null);
     const pth = (cams[0] && cams[0].pth_mpa != null) ? cams[0].pth_mpa : V.pth_mpa;
     const ambos = mpa => mpa == null || !isFinite(Number(mpa)) ? null : barMPa(mpa) + ' (' + fmt(mpa, 2) + ' MPa)';
-    const volume = cams.reduce((a, k) => a + (Number(k.volume_m3) || 0), 0) || (R.volume_m3 != null ? Number(R.volume_m3) : null);
+    const volume = (R.volume_m3 != null ? Number(R.volume_m3) : cams.reduce((a, k) => a + (Number(k.volume_m3) || 0), 0) || null);
     const fluido = [...new Set(cams.map(k => k.fluido).filter(Boolean))].join(' / ') || null;
     const classe = [...new Set(cams.map(k => k.classe_fluido).filter(Boolean))].join(' / ') || R.classe || null;
     const codigo = V.sem_codigo_construcao ? 'Sem código de construção' : [V.codigo_construcao, V.codigo_edicao].filter(x => !vazio(x)).join(' – ') || null;
