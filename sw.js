@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S181';   // S181: issues 65 e 67 — TapDoc escritório E48 (a revisão grava mais rápido; ajustes pequenos da preparação e da revisão; sem SQL)
+const VERSAO = 'H16-S182';   // S182: issues 71, 72 e 33 — TapDoc escritório E49 (a emissão para quando falta uma foto do laudo; a tela do laudo não mostra os documentos de outro vaso; aceitar o desenho da assinatura só com a digital; sem SQL)
+// const VERSAO = 'H16-S181';   // S181: issues 65 e 67 — TapDoc escritório E48 (a revisão grava mais rápido; ajustes pequenos da preparação e da revisão; sem SQL)
 // const VERSAO = 'H16-S180';   // S180: issues 59, 66 e 32 — TapDoc escritório E47 ("Não deu para medir" tira o componente da conta e o PLH aprova; os componentes fora da conta aparecem com o motivo; na revisão, tirar do laudo uma foto do campo e pôr de volta; a foto do estado geral do 7.4: laudo-pdf.js S175; 445)
 // const VERSAO = 'H16-S179';   // S179: issues 56, 61 e 81 — TapDoc escritório E46 (na revisão, corrigir o ano de fabricação e o ajuste da válvula grava, o ajuste na unidade da inspeção; a circunferência, a situação do acessório e o E e a geometria dos componentes se corrigem; a correção desmarca o "conferido" do quadro; 444)
 // const VERSAO = 'H16-S178';   // S178: issues 58, 60 e 62 — TapDoc escritório E45 (na aprovação, o que o PLH digitou fica ao gravar outra parte; a PMTA adotada abaixo da pressão de operação com a justificativa do PLH: o laudo e o Registro saem "não liberado para operar nessa pressão", laudo-pdf.js S174 e documentos-pdf.js D6; o aviso da vida remanescente na lista do sistema; 443)

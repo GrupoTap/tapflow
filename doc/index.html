@@ -192,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E48';   // E48 (S181 · issues 65 e 67, Revisão TapDoc · Rodada 8): a revisão grava mais rápido (as consultas ao mesmo tempo; ao gravar, só o que a gravação muda); ajustes da preparação e da revisão — a pressão com as casas da unidade, "pegar no cliente" e regravar um laudo conferido perguntam, tirar o vaso guarda as instruções, "Reabrir para o campo" volta para "A revisar", sem gravar duas vezes no toque duplo, a PMTA "outro valor" inválida avisa, a pressão de operação negativa (vácuo), a vida remanescente abaixo de 1 ano, o laudo sem páginas, a tela antiga não pinta por cima da nova
+const VERSAO = 'TapDoc E49';   // E49 (S182 · issues 71, 72 e 33, Revisão TapDoc · Rodada 9): a emissão não sai sem uma foto que devia estar no laudo (tenta de novo e, se faltar, para dizendo qual); a tela do laudo não mostra os documentos de outro vaso (TELA_VEZ e as consultas juntas); aceitar o desenho da assinatura só com a digital (sem o PIN)
+// const VERSAO = 'TapDoc E48';   // E48 (S181 · issues 65 e 67, Revisão TapDoc · Rodada 8): a revisão grava mais rápido (as consultas ao mesmo tempo; ao gravar, só o que a gravação muda); ajustes da preparação e da revisão — a pressão com as casas da unidade, "pegar no cliente" e regravar um laudo conferido perguntam, tirar o vaso guarda as instruções, "Reabrir para o campo" volta para "A revisar", sem gravar duas vezes no toque duplo, a PMTA "outro valor" inválida avisa, a pressão de operação negativa (vácuo), a vida remanescente abaixo de 1 ano, o laudo sem páginas, a tela antiga não pinta por cima da nova
 // const VERSAO = 'TapDoc E47';   // E47 (S180 · issues 59, 66 e 32, Revisão TapDoc · Rodada 7b): "Não deu para medir" tira o componente da conta (como o "Não medir" do celular) e o PLH aprova; os componentes fora da conta aparecem com o motivo nas Espessuras e na PMTA, com aviso quando um costado ou tampo inteiro fica fora; na revisão, tirar do laudo uma foto do campo (com o motivo) e pôr de volta; escolher a foto do estado geral (7.4); laudo-pdf.js S175 (445)
 // const VERSAO = 'TapDoc E46';   // E46 (S179 · issues 56, 61 e 81, Revisão TapDoc · Rodada 7a): na revisão, corrigir o ano de fabricação e o ajuste da válvula grava (o ajuste na unidade da inspeção, convertido para MPa pela tela); a circunferência aparece em "Dados contra as fotos" e se corrige; a situação do acessório se corrige; o E e a geometria de cada componente no quadro da PMTA (só o PLH); o número digitado é lido pela regra 50 antes de ir ao banco; a correção desmarca o "conferido" do quadro (444)
 // const VERSAO = 'TapDoc E45';   // E45 (S178 · issues 58, 60 e 62, Revisão TapDoc · Rodada 6): na aprovação, o que o PLH digitou (datas menores e motivo, volume, PMTA externa) fica ao gravar outra parte; a PMTA adotada abaixo da pressão de operação vira pendência que o PLH resolve com justificativa escrita (o laudo e o Registro saem "não liberado para operar nessa pressão"; laudo-pdf.js S174, documentos-pdf.js D6; 443); o aviso da vida remanescente curta aparece na lista do sistema
@@ -1364,15 +1365,17 @@ function linhasFichario(D, v){
     + '<tr><td>Lombada deste vaso</td><td data-r="Largura">' + seletorLombada(v) + '</td><td data-r="Arquivo" class="muted">' + esc(nomeArq('lombadas', { cliente:D.cliente, os:(D.os || {}).numero }))
       + '</td><td data-r="Situação"><span class="muted">gerada na hora · as da OS inteira ficam na tela da OS</span></td><td><button class="btn mini sec" data-lombos="' + esc(v.inspecao_id) + '">baixar</button></td></tr>';
 }
+let VEZ_DOCS = 0;
 /** O quadro "Documentos da inspeção" na tela da OS (DP14 a). */
 async function quadroDocumentos(os){
   const cx = $('cxDocs'); if (!cx) return;
+  const vez = TELA_VEZ, meu = ++VEZ_DOCS, vale = () => vigente(vez) && meu === VEZ_DOCS && $('cxDocs') === cx;   // E49 · issue 72: a resposta de outra OS não entra
   let D, P = [];
   try{
     await libDocs(); D = await rpc('tf_insp_documentos', { p_os: os });
-    if (PLH) P = await pacoteParaAssinar((D.vasos || []).map(v => v.inspecao_id));
-  }catch(e){ cx.innerHTML = '<p class="muted" style="color:var(--crit)">Não deu para carregar os documentos: ' + esc(e && e.message ? e.message : String(e)) + '</p>'; return; }
-  if (!$('cxDocs')) return;                               // a tela mudou enquanto carregava
+    if (PLH && vale()) P = await pacoteParaAssinar((D.vasos || []).map(v => v.inspecao_id));
+  }catch(e){ if (vale()) cx.innerHTML = '<p class="muted" style="color:var(--crit)">Não deu para carregar os documentos: ' + esc(e && e.message ? e.message : String(e)) + '</p>'; return; }
+  if (!vale()) return;                               // a tela mudou (ou outra leitura do quadro chegou) enquanto carregava
   const comLaudo = (D.vasos || []).filter(v => arquivosVaso(D, v).length);
   // E36 · issue 30, Parte 2: o Registro mostra como saiu (livro completo ou só a anotação); sem ele, o porquê
   const celReg = (v, xs, juntos) => xs.length ? xs.map(x => '<div class="muted">' + esc(x.variante === 'anotacao' ? 'só a anotação' : 'livro completo') + '</div>').join('') + cel(xs, juntos)
@@ -3801,6 +3804,7 @@ function ligarEsp(recarregar){
 // Durante o piloto (emissão oficial desligada pelo admin) só sai o rascunho.
 // ════════════════════════════════════════════════════════════════════════════
 let LIBS = null, LD = null;
+const LD_ATUAL = () => LD;   // E49 · issue 72: o ligarLaudo guarda o LD da pintura dele
 function carregarScript(src){
   return new Promise((ok, falha) => { const s = document.createElement('script'); s.src = src; s.onload = ok;
     s.onerror = () => falha(new Error('Não carregou ' + src.split('?')[0] + '. Confira o sinal e tente de novo.')); document.head.appendChild(s); });
@@ -3838,8 +3842,32 @@ async function lerArmazem(path){
 }
 async function baixar(path){
   const r = await lerArmazem(path);
-  if (!r.ok) throw new Error('Não abriu o arquivo ' + path.split('/').pop() + ' (HTTP ' + r.status + ').');
+  if (!r.ok) throw Object.assign(new Error('Não abriu o arquivo ' + path.split('/').pop() + ' (HTTP ' + r.status + ').'), { status: r.status });
   return new Uint8Array(await r.arrayBuffer());
+}
+// E49 · issue 71 (Revisão TapDoc · Rodada 9): a foto do laudo que não baixou tenta de novo (sinal ruim, erro do servidor) antes
+// de desistir; o arquivo que não existe (404) não adianta repetir. window.TF_ESPERA_FOTO_MS encurta a espera no teste.
+const FOTO_TENTATIVAS = 3;
+async function baixarFoto(path){
+  for (let t = 1; ; t++){
+    try{ return await baixar(path); }
+    catch(e){ if (t >= FOTO_TENTATIVAS || e.status === 404) throw e; await new Promise(ok => setTimeout(ok, (window.TF_ESPERA_FOTO_MS != null ? window.TF_ESPERA_FOTO_MS : 1500) * t)); }
+  }
+}
+/** E49 · issue 71: o nome da foto para o aviso (a legenda; sem ela, a seção); o desenho 3D do mapa pelo nome. */
+const SECAO_FOTO = { capa:'capa', localizacao:'localização', plaqueta:'placa', acessorios:'acessórios', visual:'exame visual', boroscopia:'boroscopia', componentes:'componentes', teste:'teste de pressão', geral:'geral' };
+function nomeFotoLaudo(d, path){
+  const mp = (d.inspecao || {}).mapa;
+  if (mp && mp.path === path) return 'o desenho do mapa dos pontos';
+  const f = (d.fotos || []).find(x => x.path === path);
+  if (!f) return String(path).split('/').pop();
+  return '"' + (f.legenda || 'foto') + '"' + (SECAO_FOTO[f.secao] ? ' (' + SECAO_FOTO[f.secao] + ')' : '');
+}
+/** E49 · issue 71: na emissão, nenhuma foto que devia estar no laudo pode faltar. O número reservado continua o mesmo. */
+function pararSemFoto(d, sem, oQue){
+  if (!sem.length) return;
+  throw new Error(sem.length + ' foto(s) ' + (oQue || 'do laudo') + ' não abriram, mesmo tentando de novo: ' + sem.map(p => nomeFotoLaudo(d, p)).join('; ')
+    + '. Nada foi gravado. Confira o sinal e toque em "Gerar e gravar o PDF" de novo: o número reservado continua o mesmo.');
 }
 const ehPdf = b => b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46;
 function dataURLDe(b){   // o tipo pelo conteúdo (o Storage pode devolver octet-stream)
@@ -3875,7 +3903,8 @@ async function gerarLaudo(d, opc, aviso){
   await libsLaudo();
   aviso('Baixando as fotos…', 'fotos', 0);
   const imagens = {}, semFoto = [], FT = LaudoPDF.fotosDoLaudo(d);   // E31 · issue 27: o andamento foto a foto
-  for (let i = 0; i < FT.length; i++){ const p = FT[i]; aviso('foto ' + (i + 1) + ' de ' + FT.length, 'fotos', i / FT.length); try{ imagens[p] = dataURLDe(await baixar(p)); }catch(e){ semFoto.push(p); } }
+  for (let i = 0; i < FT.length; i++){ const p = FT[i]; aviso('foto ' + (i + 1) + ' de ' + FT.length, 'fotos', i / FT.length); try{ imagens[p] = dataURLDe(await baixarFoto(p)); }catch(e){ semFoto.push(p); } }   // E49 · issue 71: tenta de novo
+  if (opc.exigirAnexos) pararSemFoto(d, semFoto);   // E49 · issue 71: o oficial não sai sem a foto (o rascunho avisa e sai)
   aviso('', 'montar', 0);
   const def = LaudoPDF.montar(d, Object.assign({ imagens }, opc, { prontuario: null }));   // E40 · issue 68: o relatório nunca recebe o pedido do Prontuário (só o gerarDocumentos o monta)
   const base = await pdfBytes(def);
@@ -3931,7 +3960,8 @@ async function gerarDocumentos(d, opc, aviso){
   if (opc.prontuario){
     aviso('o Prontuário', 'documentos', 0.95);
     let imagens = opc.imagens;
-    if (!imagens){ imagens = {}; for (const p of LaudoPDF.fotosDoLaudo(d)){ try{ imagens[p] = dataURLDe(await baixar(p)); }catch(e){} } }
+    if (!imagens){ imagens = {}; const sem = []; for (const p of LaudoPDF.fotosDoLaudo(d)){ try{ imagens[p] = dataURLDe(await baixarFoto(p)); }catch(e){ sem.push(p); } }
+      if (opc.exigirAnexos) pararSemFoto(d, sem, 'do Prontuário'); }   // E49 · issue 71
     await fim({ tipo:'prontuario', ordem:1, total:1, numero: opc.prontuario.numero || null, acessorio_id:null }, LaudoPDF.montar(d, Object.assign({}, opc, { imagens, prontuario: opc.prontuario })), false);
   }
   aviso('', 'documentos', 1);
@@ -4092,8 +4122,11 @@ function ligarDesenho(){
         + '<p>Este desenho vai em todas as páginas dos laudos que você aprovar.</p><button class="btn pri" id="desAceito">Aceito este desenho como minha assinatura · digital</button></div>';
       v.querySelector('img').src = img;
       $('desAceito').addEventListener('click', ev => U.semDuploEnvio(ev.currentTarget, async () => {
-        const c = await N.confirmarPessoa({ modo:'servidor', finalidade:'laudo_desenho', referencia:'desenho da assinatura', titulo:'Aceitar o desenho da assinatura', sub:'com a sua digital' });
-        if (!c || !c.ok){ if (c && c.semSinal) U.toast('Sem sinal.', 'err'); return; }
+        // E49 · issue 33: como a aprovação (S160, issue 29): sem digital neste aparelho, avisa ANTES; com ela, só a digital (sem "Usar PIN")
+        if (!await temDigitalAqui()){ avisoSemDigital(SEM_DIGITAL_DESENHO); return; }
+        const c = await N.confirmarPessoa({ modo:'servidor', finalidade:'laudo_desenho', referencia:'desenho da assinatura', titulo:'Aceitar o desenho da assinatura', sub:'com a sua digital', soDigital:true });
+        if (c && c.semDigital){ avisoSemDigital(SEM_DIGITAL_DESENHO); return; }
+        if (!c || !c.ok){ if (c && c.semSinal) U.toast('Sem sinal: o aceite precisa de internet.', 'err'); return; }
         if (c.metodo !== 'digital'){ U.toast('Aceite com a digital (o PIN não vale para a assinatura do laudo).', 'err'); return; }
         try{ await rpc('tf_laudo_desenho_confirmar', { p_confirmacao: c.confirmacao }); U.toast('Desenho aceito.', 'ok'); pintar(); }catch(e){ erro(e); }
       }));
@@ -4232,35 +4265,45 @@ function andamento(passos, refazer){
 }
 /** "Tentar de novo": pinta a tela de novo (o que está no banco agora) e aperta o botão que existir (emitir retoma o mesmo número). */
 async function refazerLaudo(...ids){
-  try{ await telaLaudo(LD.id); }catch(e){ erro(e); return; }
+  const id = LD.id, vez = TELA_VEZ;   // E49 · issue 72: só aperta o botão se a tela ainda é a deste laudo
+  try{ await telaLaudo(id); }catch(e){ erro(e); return; }
+  if (!vigente(vez) || !LD || LD.id !== id) return;
   const b = ids.map(x => $(x)).find(Boolean); if (b && !b.disabled) b.click();
 }
 // ── E31 · issue 29: aprovar o laudo é só com a digital ──────────────────────
 async function temDigitalAqui(){
   try{ return N.temDigital ? await N.temDigital() : true; }catch(e){ return false; }   // núcleo antigo (sem temDigital): segue como antes
 }
-function avisoSemDigital(){
+// E49 · issue 33: o mesmo aviso no aceite do desenho da assinatura (o = { titulo, verbo, regra })
+function avisoSemDigital(o){
+  o = o || { titulo:'Aprovar o laudo', verbo:'aprove', Verbo:'Aprove', regra:'A aprovação do laudo é só com a digital (o PIN não vale).' };
   const cel = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '') || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  janela('Aprovar o laudo', '<p id="ldSemDig">' + (cel
-      ? 'Este celular não tem digital cadastrada. Cadastre a digital deste celular na aba Eu, ou aprove por outro aparelho que tenha a sua digital.'
-      : 'Este computador não tem digital cadastrada. Aprove pelo celular, ou cadastre a digital deste computador (Windows Hello) na aba Eu.') + '</p>'
-    + '<p class="muted">A aprovação do laudo é só com a digital (o PIN não vale).</p>', [{ rotulo:'Entendi', classe:'pri' }]);
+  janela(o.titulo, '<p id="ldSemDig">' + (cel
+      ? 'Este celular não tem digital cadastrada. Cadastre a digital deste celular na aba Eu, ou ' + o.verbo + ' por outro aparelho que tenha a sua digital.'
+      : 'Este computador não tem digital cadastrada. ' + o.Verbo + ' pelo celular, ou cadastre a digital deste computador (Windows Hello) na aba Eu.') + '</p>'
+    + '<p class="muted">' + o.regra + '</p>', [{ rotulo:'Entendi', classe:'pri' }]);
 }
+const SEM_DIGITAL_DESENHO = { titulo:'Aceitar o desenho da assinatura', verbo:'aceite', Verbo:'Aceite', regra:'O aceite do desenho da assinatura é só com a digital (o PIN não vale).' };
 
 // ── a tela do laudo de uma inspeção ────────────────────────────────────────
 async function telaLaudo(id){
+  // E49 · issue 72 (Revisão TapDoc · Rodada 9): a resposta atrasada de um laudo não pinta na tela de outro (regra 58: TELA_VEZ).
+  // Uma vez por tela (VEZ_TELA_LD): o "Tentar de novo" e o recarregar depois de gravar não trocam o TELA_VEZ, mas a leitura
+  // mais nova é a que vale. As 5 consultas saem juntas (antes, em fila); o LD só é trocado quando tudo chegou e a tela é a mesma.
+  const vez = TELA_VEZ, meu = ++VEZ_TELA_LD;
   titulo('Laudo', 'carregando…');
   $('tela').innerHTML = '<p class="muted">Carregando…</p>';
-  LD = { id, d: await rpc('tf_laudo_dados', { p_id:id }), docs:null, pac:[] };
+  const pd = rpc('tf_laudo_dados', { p_id:id });
+  const pDocs = (async () => { try{ await libDocs(); return await rpc('tf_insp_documentos', { p_os: null, p_insp: id }); }catch(e){ return null; } })();   // E35 · issue 30: os documentos deste vaso (DP14 b)
+  const pPac = pd.then(d => (d && (d.eu || {}).plh) ? pacoteParaAssinar([id]).catch(() => []) : [], () => []);   // o que falta assinar dele (DP4)
+  const [d, docs, pac, pasta, pront] = await Promise.all([pd, pDocs, pPac, pastaVer(id), prontVer(id)]);   // E36 (DP8) · E37 (DP10)
+  if (!vigente(vez) || meu !== VEZ_TELA_LD) return;   // outra tela (ou outra leitura deste laudo) chegou depois
   // E47 · issue 66 (445): a foto tirada do laudo na revisão fica guardada, mas não vai no laudo nem nos documentos
-  if (LD.d && Array.isArray(LD.d.fotos)) LD.d.fotos = LD.d.fotos.filter(f => !f.fora_laudo);
-  // E35 · issue 30: os documentos deste vaso (DP14 b) e o que falta assinar dele (DP4)
-  try{ await libDocs(); LD.docs = await rpc('tf_insp_documentos', { p_os: null, p_insp: id }); }catch(e){ LD.docs = null; }
-  if ((LD.d.eu || {}).plh) LD.pac = await pacoteParaAssinar([id]).catch(() => []);
-  LD.pasta = await pastaVer(id);   // E36 · issue 30, Parte 2 (DP8)
-  LD.pront = await prontVer(id);   // E37 · issue 30, Parte 3 (DP10)
+  if (d && Array.isArray(d.fotos)) d.fotos = d.fotos.filter(f => !f.fora_laudo);
+  LD = { id, d, docs, pac: pac || [], pasta, pront };
   pintarLaudo();
 }
+let VEZ_TELA_LD = 0;
 function laudoAtual(d){ return (d.laudos || []).filter(l => l.situacao !== 'substituido').pop() || null; }
 function pintarLaudo(){
   const d = LD.d, I = d.inspecao, eu = d.eu || {}, cfg = d.config || {}, atual = laudoAtual(d), fal = d.faltas || [];
@@ -4313,8 +4356,10 @@ function pintarLaudo(){
   ligarLaudo();
 }
 function ligarLaudo(){
+  const LD = LD_ATUAL();   // E49 · issue 72: os botões desta tela usam o laudo desta tela, mesmo se outra abrir no meio
   const d = LD.d, T = $('tela'), aviso = t => { const a = $('ldAviso'); if (a) a.textContent = t || ''; };
-  const recarregar = async () => { const m = rolador(), y = m.scrollTop; await telaLaudo(LD.id); m.scrollTop = y; };   // S148 · item 89: quem rola é o <main>
+  const vezTela = TELA_VEZ;   // E49 · issue 72: depois de gravar, só redesenha se a pessoa continua neste laudo
+  const recarregar = async () => { if (!vigente(vezTela)) return; const m = rolador(), y = m.scrollTop; await telaLaudo(LD.id); m.scrollTop = y; };   // S148 · item 89: quem rola é o <main>
   const ba = $('ldAmbGravar'); if (ba) ba.addEventListener('click', () => U.semDuploEnvio(ba, async () => {
     if (!$('ldAmb').value){ U.toast('Escolha o ambiente.', 'err'); return; }
     try{ await rpc('tf_insp_ambiente_gravar', { p_id: LD.id, p_ambiente: $('ldAmb').value }); U.toast('Ambiente gravado.', 'ok'); recarregar(); }catch(e){ erro(e); }
