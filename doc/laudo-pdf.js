@@ -11,6 +11,8 @@
  * A conta da espessura mínima e da PMTA é a do motor (motor-calculo-nr13.js);
  * aqui ela só é ESCRITA com os números (a memória de cálculo do laudo).
  *
+ * S174 · S178 · issue 60 (16/11/2026): PMTA adotada abaixo da pressão de operação, aprovada pelo PLH com justificativa (443): o parecer da seção 12 sai
+ *   "NÃO está liberado para operar nessa pressão" (blocos.parecer_pressao, com as pressões e a justificativa), nunca "apto" (pressaoAbaixo, pressaoVars).
  * S173 · issue 57 (16/11/2026): o "reduzido" da seção 13 e o prazo do quadro saem das DATAS aprovadas pelo PLH (prazoReduzido):
  *   só é reduzido o exame com a data antes da da norma, e o prazo escrito é o que a data dá; "definido pelo PLH" só com a data diferente da norma.
  * S166 · issue 30, Parte 3 (15/11/2026): o Prontuário (Reconstituído) sai deste mesmo gerador — montar(d, { prontuario: { numero, textos } }):
@@ -50,6 +52,23 @@ function dataBR(x) {
 }
 const dataSP = x => x ? new Date(x).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }) : null;
 function txt(t, v) { return String(t == null ? '' : t).replace(/\{\{(\w+)\}\}/g, (m, k) => v && v[k] != null ? String(v[k]) : ''); }
+// ── S174 · S178 · issue 60: a PMTA adotada abaixo da pressão máxima de operação ──
+// Decisão do Bruno (opção B): o PLH aprova com justificativa escrita (443: resultado_camaras[].justificativa_operacao) e o
+// relatório e o Registro de Segurança saem "não liberado para operar nessa pressão". A mesma conta do banco (tf_insp_avancar):
+// |pressão de operação| > PMTA adotada + 0,0005 MPa. NR-13: glossário (PMTA), 13.5.1.2 "a", 13.5.4.11 "k", 13.3.1 "e".
+function pressaoAbaixo(d) {
+  return ((d && d.resultado_camaras) || []).filter(k => k.p_operacao_mpa != null && k.pmta_adotada_mpa != null
+      && Math.abs(Number(k.p_operacao_mpa)) > Number(k.pmta_adotada_mpa) + 0.0005)
+    .map(k => ({ nome: k.nome || '', operacao: Math.abs(Number(k.p_operacao_mpa)), pmta: Number(k.pmta_adotada_mpa), justificativa: String(k.justificativa_operacao || '').trim() }));
+}
+/** O que os textos pedem: {{pressoes}} (a operação e a PMTA de cada câmara nessa situação) e {{justificativa}} (a do PLH, sem o ponto final). */
+function pressaoVars(d) {
+  const L = pressaoAbaixo(d), varias = ((d && d.resultado_camaras) || []).length > 1;
+  const semPonto = t => String(t || '').replace(/[.\s]+$/, '');
+  const just = [...new Set(L.map(x => semPonto(x.justificativa)).filter(Boolean))];
+  return { pressoes: L.map(x => (varias && x.nome ? 'câmara ' + x.nome + ': ' : '') + 'pressão máxima de operação de ' + bar(x.operacao) + ' e PMTA adotada de ' + bar(x.pmta)).join('; '),
+    justificativa: just.length ? (just.length > 1 ? L.filter(x => x.justificativa).map(x => (x.nome ? x.nome + ': ' : '') + semPonto(x.justificativa)).join('; ') : just[0]) : 'não informada' };
+}
 // ── S173 · issue 57: o prazo das próximas inspeções sai das DATAS aprovadas pelo PLH ──
 // A NR-13 dá os prazos MÁXIMOS (13.5.4.5, Tabela 2); o relatório traz a data prevista da próxima inspeção (13.5.4.11 "l") e o
 // Registro anota a alteração dos prazos (13.5.1.7 "a"). Então só é "reduzido" o exame cuja data aprovada é ANTERIOR à da norma,
@@ -1027,7 +1046,11 @@ function montar(d, opc) {
       : (M.teste_nao_cond && visOk && !abaixoAlgum ? txt(K.teste_desaconselhado, { tipo: tituloTesteMin }) : txt(K.teste_nao, { tipo: tituloTesteMin, motivo: motivoCurto(TE.motivo_nao) }))]
     .concat(conc.man).concat(conc.valv).map((x, i, a) => x ? String(x).replace(/[;.]\s*$/, i === a.length - 1 ? '.' : ';') : x));
   const inapto = TE.realizado && TE.resultado === 'reprovado';
-  par(txt(inapto ? M.parecer_inapto : M.parecer_apto, { pmta: bar(pmtaVaso) }), M.parecer_destaque ? { style: 'destaque' } : null);
+  // S174 · issue 60: com a PMTA adotada abaixo da pressão de operação o parecer nunca é o "apto": sai o texto aprovado pelo PLH
+  // (blocos.parecer_pressao; na minuta, o da proposta: opc.textosPressao) e, sem ele, o parecer de inaptidão (o banco não deixa emitir sem o texto)
+  const abaixoOp = pressaoAbaixo(d), TP = opc.textosPressao || {};
+  if (!inapto && abaixoOp.length) par(M.parecer_pressao || TP.parecer_pressao ? txt(M.parecer_pressao || TP.parecer_pressao, pressaoVars(d)) : txt(M.parecer_inapto, { pmta: bar(pmtaVaso) }), M.parecer_destaque ? { style: 'destaque' } : null);
+  else par(txt(inapto ? M.parecer_inapto : M.parecer_apto, { pmta: bar(pmtaVaso) }), M.parecer_destaque ? { style: 'destaque' } : null);
 
   // ── 13 · próximas inspeções ─────────────────────────────────────────────
   sec('13', T.proximas || 'PRÓXIMAS INSPEÇÕES');
@@ -1169,6 +1192,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, prazoReduzido, prazosNorma, prazoRotulo, prazosRedTxt, versao: 'R06a-S173-2026-11-16' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, prazoReduzido, prazosNorma, prazoRotulo, prazosRedTxt, pressaoAbaixo, pressaoVars, versao: 'R06a-S174-2026-11-16' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);

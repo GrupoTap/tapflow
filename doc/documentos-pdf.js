@@ -18,7 +18,8 @@
  */
 (function (raiz) {
 'use strict';
-const VERSAO = 'D5-S173-2026-11-16';   // D5 (S173 · issue 57): o prazo reduzido do Registro pelas datas aprovadas (LaudoPDF.prazoReduzido)
+const VERSAO = 'D6-S178-2026-11-16';   // D6 (S178 · issue 60): a condição operacional "não liberado para operar nessa pressão" no Registro (PMTA adotada abaixo da pressão de operação; LaudoPDF.pressaoAbaixo)
+// const VERSAO = 'D5-S173-2026-11-16';   // D5 (S173 · issue 57): o prazo reduzido do Registro pelas datas aprovadas (LaudoPDF.prazoReduzido)
 const AZUL = '#1B6FA9', CINZA = '#515252', FAIXA = '#5B6770', VERDE = '#1E6B3A', VERM = '#A62D18';
 
 // ── o nome dos arquivos (DP5) ────────────────────────────────────────────────
@@ -243,7 +244,11 @@ function fatosRegistro(d) {
           grave: a.afericao && a.afericao.grave, caso_campos: a.caso_campos })) }).some(x => x.marcada && !x.fixa);
     } catch (e) { comRec = true; }
   } else comRec = (d.recomendacoes || []).length > 0 || (I.rec_casos || []).length > 0 || nc.length > 0 || afs.some(a => a.afericao.resultado === 'reprovado');
-  const condicao = TE.realizado && TE.resultado === 'reprovado' ? 'nao_liberado' : comRec ? 'recomendacoes' : 'liberado';
+  // D6 · S178 · issue 60: a PMTA adotada abaixo da pressão de operação (aprovada pelo PLH com justificativa) nunca sai "liberado":
+  // a mesma conta do laudo (LaudoPDF.pressaoAbaixo); sem o gerador do laudo carregado, a conta é refeita aqui
+  const PA = raiz.LaudoPDF && raiz.LaudoPDF.pressaoAbaixo ? raiz.LaudoPDF.pressaoAbaixo(d)
+    : (d.resultado_camaras || []).filter(k => k.p_operacao_mpa != null && k.pmta_adotada_mpa != null && Math.abs(Number(k.p_operacao_mpa)) > Number(k.pmta_adotada_mpa) + 0.0005);
+  const condicao = TE.realizado && TE.resultado === 'reprovado' ? 'nao_liberado' : PA.length ? 'pressao' : comRec ? 'recomendacoes' : 'liberado';
   return { nc, visOk, abaixo, afs, teste, RED, condicao };
 }
 
@@ -330,7 +335,10 @@ function registro(d, opc) {
     const rot = raiz.LaudoPDF.prazoRotulo;   // S173 · issue 57: o prazo que a data aprovada dá ("2 anos", "18 meses" ou "até 10/05/2027")
     par(txt(X.prazo_reduzido, { prazos: eLista([F.RED.externo ? rot(F.RED.externo) + ' (exame externo)' : null, F.RED.interno ? rot(F.RED.interno) + ' (exame interno)' : null]) }));
   }
-  const COND = { liberado: X.condicao_liberado, recomendacoes: X.condicao_recomendacoes, nao_liberado: X.condicao_nao_liberado };
+  // D6 · issue 60: o texto aprovado pelo PLH (blocos.registro_condicao_pressao; na minuta, o da proposta: opc.textosPressao); sem ele, "não liberado"
+  const TPR = M.registro_condicao_pressao || (opc.textosPressao || {}).registro_condicao_pressao;
+  const COND = { liberado: X.condicao_liberado, recomendacoes: X.condicao_recomendacoes, nao_liberado: X.condicao_nao_liberado,
+    pressao: TPR && raiz.LaudoPDF && raiz.LaudoPDF.pressaoVars ? txt(TPR, raiz.LaudoPDF.pressaoVars(d)) : X.condicao_nao_liberado };
   if (!vazio(COND[F.condicao])) C.push({ text: [{ text: 'Condição operacional: ', bold: true }, { text: COND[F.condicao] }], style: 'par' });
   if (R.proxima_externa || R.proxima_interna) C.push({ text: [{ text: 'Próximas inspeções: ', bold: true },
     { text: txt(X.proximas, { externa: dataBR(R.proxima_externa) || '—', interna: R.proxima_interna ? ' · interna até ' + dataBR(R.proxima_interna) : '' }) }], style: 'par' });

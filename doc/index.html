@@ -192,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E44';   // E44 (S177 · issues 54, 63, 64 e 85, Revisão TapDoc · Rodada 5): a PMTA recalculada é sempre a do vaso aberto; o laudo anterior não perde o que foi digitado; desativar instrumento ou material pergunta e dá para reativar; "Nova calibração" guarda o certificado anterior e cada inspeção baixa o do dia dela (442)
+const VERSAO = 'TapDoc E45';   // E45 (S178 · issues 58, 60 e 62, Revisão TapDoc · Rodada 6): na aprovação, o que o PLH digitou (datas menores e motivo, volume, PMTA externa) fica ao gravar outra parte; a PMTA adotada abaixo da pressão de operação vira pendência que o PLH resolve com justificativa escrita (o laudo e o Registro saem "não liberado para operar nessa pressão"; laudo-pdf.js S174, documentos-pdf.js D6; 443); o aviso da vida remanescente curta aparece na lista do sistema
+// const VERSAO = 'TapDoc E44';   // E44 (S177 · issues 54, 63, 64 e 85, Revisão TapDoc · Rodada 5): a PMTA recalculada é sempre a do vaso aberto; o laudo anterior não perde o que foi digitado; desativar instrumento ou material pergunta e dá para reativar; "Nova calibração" guarda o certificado anterior e cada inspeção baixa o do dia dela (442)
 // const VERSAO = 'TapDoc E43';   // E43 (S174 · issue 38, Revisão TapDoc · Rodada 4a): o CSV do medidor com uma leitura inválida (zero ou vazia) não é mais recusado inteiro — as boas entram e a janela diz quais ficaram de fora; sem SQL
 // const VERSAO = 'TapDoc E42';   // E42 (S173 · issue 57, Revisão TapDoc · Rodada 3): o prazo "reduzido" — a revisão mostra em vermelho a redução que não é menor que a da norma (ou sem a categoria para conferir) e a aprovação a ignora; "Gravar o prazo reduzido" pede a categoria e um prazo menor que o da norma; o laudo (laudo-pdf.js S173) e o Registro (documentos-pdf.js D5) escrevem o prazo que a data aprovada dá; sem SQL
 // const VERSAO = 'TapDoc E41';   // E41 (S172 · issues 40, 42 e 55, Revisão TapDoc · Rodada 2): a leitura do número com ponto de milhar — vírgula é a decimal; "1.250" sem vírgula pergunta "1250 ou 1,25?" e não grava (componentes do laudo anterior, mapa, modelo de vaso, instrumentos, corrigir o volume, volume da revisão); a revisão avisa volume abaixo de 20 litros e circunferência abaixo de 300 mm; a mesma regra do celular (28); sem SQL
@@ -1474,6 +1475,17 @@ async function prontuarioMinuta(d, R){
   const tem = !!(d.modelo && d.modelo.blocos && d.modelo.blocos.prontuario), textos = tem ? null : await textosProntuarioMinuta(d);
   return tem || textos ? { numero: null, textos } : null;
 }
+/** E45 · issue 60: PMTA adotada abaixo da pressão de operação — os dois textos novos para a minuta, antes de o PLH aprovar: a
+ *  proposta "s178" que espera (só para ver; a emissão usa os da fotografia do laudo, e o banco não deixa emitir sem eles). */
+function pressaoAbaixoDe(d){
+  return (d.resultado_camaras || []).filter(k => k.p_operacao_mpa != null && k.pmta_adotada_mpa != null && Math.abs(Number(k.p_operacao_mpa)) > Number(k.pmta_adotada_mpa) + 0.0005);
+}
+async function textosPressaoMinuta(d){
+  const B = (d.modelo && d.modelo.blocos) || {};
+  if ((B.parecer_pressao && B.registro_condicao_pressao) || !pressaoAbaixoDe(d).length) return null;
+  try{ const T = await rpc('tf_laudo_textos_ver'), x = ((T && T.propostas) || []).find(p => p.origem === 's178' && p.situacao === 'pendente'); if (!x) return null;
+    const o = {}; (x.mudancas || []).forEach(m => { o[m.chave] = m.depois; }); return o; }catch(e){ return null; }
+}
 /** A minuta do Registro antes de o PLH aprovar os textos: usa a proposta "s165" que espera (só para ver; a emissão não usa). */
 async function textosRegistroMinuta(d){
   if (d.modelo && d.modelo.blocos && d.modelo.blocos.registro) return null;
@@ -2146,7 +2158,12 @@ async function telaRevisao(id, manter){
   if (!v) throw new Error('O vaso desta inspeção não veio no pacote da OS.');
   CALC.usar(P);
   let prev; try{ prev = CALC.previa(v); }catch(e){ prev = { camaras:[], vaso:{ erro:e.message }, avisos:[e.message], detalhes:[] }; }
-  REV = { id, R, P, v, prev, volume:null, pmta:{}, abertos:(REV && REV.id === id && REV.abertos) || {} };   // E33 · issue 13: o quadro aberto à mão continua aberto ao gravar
+  // E45 · issue 58: ao gravar outra parte da tela, a revisão é lida de novo; o que o PLH digitou na aprovação e ainda não está no
+  // banco (as datas menores e o motivo, o volume total, a PMTA externa e a justificativa dela, a justificativa da operação) fica
+  const ant = REV && REV.id === id ? REV : null;
+  REV = { id, R, P, v, prev, volume:ant ? ant.volume : null, pmta:{}, abertos:(ant && ant.abertos) || {},   // E33 · issue 13: o quadro aberto à mão continua aberto ao gravar
+    datas:(ant && ant.datas) || null, pext:(ant && ant.pext) || {}, justOp:(ant && ant.justOp) || {} };
+  if (ant && ant.volumeTxt != null) REV.volumeTxt = ant.volumeTxt;
   try{ REV.afs = ((await rpc('tf_insp_afericoes_lista', { p_inspecao:id })) || []).filter(x => !x.cancelada_em); }catch(e){ REV.afs = []; }   // E33 · issue 23: o cálculo de cada aferição (U e tolerância por ponto)
   try{ REV.M = await rpc('tf_insp_mapa_ver', { p_id:id }); }catch(e){ REV.M = null; }   // S151 · issue 7 (428): as medidas e a imagem do mapa
   try{ REV_TEXTOS = (await rpc('tf_laudo_textos_prontos')) || {}; REV_PRONTOS = REV_TEXTOS.prontos || null; }catch(e){ REV_TEXTOS = {}; REV_PRONTOS = null; }   // S146 · item 79 · E34
@@ -2240,13 +2257,16 @@ function pintarRevisao(){
 
   h += espHtml();   // E10 (S107 · 412): as espessuras do medidor (o CSV)
 
+  // E45 · issue 62: a vida remanescente é calculada ANTES da lista (a lista lia REV.vidas, que só era preenchido lá embaixo)
+  REV.vidas = revVidas();
   // Parte 1 · o que o sistema confere
   const conf = (R.conferencias || []).slice();
   prev.camaras.forEach(ck => {
     const nm = prev.camaras.length > 1 ? ' (' + ck.cam.nome + ')' : '';
     if (ck.erro) conf.push({ chave:'calc', nivel:'vermelho', texto:'Cálculo' + nm, detalhe:ck.erro });
-    else if (ck.governante && ck.governante.pmta < ck.cam.p_operacao_max_mpa) conf.push({ chave:'pmta_op', nivel:'vermelho', texto:'PMTA calculada abaixo da pressão de operação' + nm, detalhe:'O PLH decide a PMTA (com justificativa) ou a redução da pressão.' });
-    ck.comps.filter(x => x.abaixo).forEach(x => conf.push({ chave:'abaixo', nivel:'vermelho', texto:x.c.nome + ': espessura abaixo da mínima requerida', detalhe:'O PLH decide a PMTA da câmara com justificativa, e entra uma recomendação de segurança.' }));
+    // E45 · issue 60 (opção B): a PMTA ADOTADA (qualquer regra) abaixo da pressão de operação, e a espessura abaixo da mínima,
+    // são pendências que o PLH resolve na própria tela (revPendPmta); resolvidas, passam a amarelo e não travam a aprovação
+    else revPendPmta(ck, nm).forEach(x => conf.push(x));
     ck.comps.filter(x => x.erro).forEach(x => conf.push({ chave:'calc', nivel:'vermelho', texto:x.c.nome + ': sem cálculo', detalhe:x.erro }));
   });
   // S140 · item 44: até o TapDoc 13 o volume era em m³ no celular e a equipe digitava litros; acima de 50 m³ o revisor confere
@@ -2291,8 +2311,8 @@ function pintarRevisao(){
   const ico = n => n === 'ok' ? '<span class="cf ok">✓</span>' : n === 'amarelo' ? '<span class="cf am">!</span>' : '<span class="cf vm">✗</span>';
   const nV = conf.filter(x => x.nivel === 'vermelho').length;
   h += '<h2>1 · O que o sistema confere</h2><div class="card"><table class="conf">' + conf.sort((a, b) => ({ vermelho:0, amarelo:1, ok:2 }[a.nivel] - { vermelho:0, amarelo:1, ok:2 }[b.nivel]))
-    .map(x => '<tr class="n-' + x.nivel + '"><td style="width:26px">' + ico(x.nivel) + '</td><td><b>' + esc(x.texto) + '</b>' + (x.detalhe ? '<div class="muted">' + esc(x.detalhe) + '</div>' : '') + '</td></tr>').join('') + '</table>'
-    + '<p class="muted" style="margin:8px 0 0">' + (nV ? '<b style="color:var(--crit)">' + nV + ' pendência(s) em vermelho travam a aprovação.</b> ' : 'Nada em vermelho. ') + 'O amarelo só avisa.</p></div>';
+    .map(x => '<tr class="n-' + x.nivel + '"' + (x.pk ? ' data-pk="' + esc(x.pk) + '"' : '') + '><td style="width:26px">' + ico(x.nivel) + '</td><td><b>' + esc(x.texto) + '</b>' + (x.detalhe ? '<div class="muted">' + esc(x.detalhe) + '</div>' : '') + '</td></tr>').join('') + '</table>'
+    + '<p class="muted" id="confResumo" style="margin:8px 0 0">' + revConfResumo(nV) + '</p></div>';
 
   // Parte 2 · as 4 conferências humanas
   h += '<h2>2 · As 4 conferências' + (podeMarcar ? ' <span class="muted" style="text-transform:none;letter-spacing:0">· marque cada uma depois de olhar</span>' : '') + '</h2>';
@@ -2359,10 +2379,8 @@ function pintarRevisao(){
   const plhAprova = e === 3 && eu.pode;
   h += cardConf('pmta') + cab('pmta', '3 · PMTA') + '<table><tr><th>Câmara</th><th>Operação</th><th>Calculada</th><th>Anterior</th><th>Plaqueta</th><th>Adotada</th></tr>'
     + prev.camaras.map(ck => {
-        const k = ck.cam, calc = ck.governante ? ck.governante.pmta : null, ant = k.pmta_vigente_mpa, sug = revRegra(ck);
-        const guard = (R.inspecao.rev_pmta || {})[k.id];
-        const esc0 = REV.pmta[k.id] || (guard ? Object.assign({}, guard) : { regra:sug.regra, valor:sug.valor, just:'' });
-        REV.pmta[k.id] = esc0;
+        const k = ck.cam, calc = ck.governante ? ck.governante.pmta : null, ant = k.pmta_vigente_mpa;
+        const esc0 = revEscolha(ck), px = REV.pext[k.id] || {};   // E45: a escolha num lugar só (revEscolha); a PMTA externa digitada fica (issue 58)
         const adot = revAdotada(ck, esc0), placa = k.pmta_plaqueta_mpa != null ? Number(k.pmta_plaqueta_mpa) : null;
         return '<tr><td><b>' + esc(k.nome) + '</b>' + (ck.governante ? '<div class="muted">governante: ' + esc(nomeGov(ck)) + '</div>' : '') + '</td><td>' + pr(k.p_operacao_max_mpa) + '</td><td>'
           + (calc == null ? '<span style="color:var(--crit)">' + esc(ck.erro || 'sem cálculo') + '</span>' : '<b>' + pr(calc) + '</b>') + '</td><td>' + pr(ant) + '</td><td>' + pr(k.pmta_plaqueta_mpa) + '</td><td>'
@@ -2374,17 +2392,17 @@ function pintarRevisao(){
               + '<div data-pjv="' + esc(k.id) + '"' + (esc0.regra === 'outro' || esc0.regra === 'plaqueta' ? '' : ' hidden') + '><input class="t" data-pjust="' + esc(k.id) + '" placeholder="justificativa curta" value="' + esc(esc0.just || '') + '"></div>'
               + (adot != null && adot > calc + 1e-4 ? '<div style="color:var(--crit);font-size:12px">Acima da calculada: não é aceita.</div>' : '')
               + (adot != null && placa != null && Math.abs(adot - placa) > 1e-4 ? '<div style="color:var(--warn);font-size:12px">Diferente da plaqueta: a plaqueta precisa ser refeita.</div>' : '')
-              + (plhAprova && k.pressao_externa ? '<div><input class="t" data-pext="' + esc(k.id) + '" placeholder="PMTA externa (vácuo), ' + CALC.UNID_ROT[u] + '"><input class="t" data-pextj="' + esc(k.id) + '" placeholder="justificativa da externa"></div>' : '')
+              + (plhAprova && k.pressao_externa ? '<div><input class="t" data-pext="' + esc(k.id) + '" placeholder="PMTA externa (vácuo), ' + CALC.UNID_ROT[u] + '" value="' + esc(px.v || '') + '"><input class="t" data-pextj="' + esc(k.id) + '" placeholder="justificativa da externa" value="' + esc(px.j || '') + '"></div>' : '')
             : '<span class="muted">' + (adot != null ? '<b>' + pr(adot) + '</b> · ' : '') + ({ mantida_anterior:'a anterior', calculada:'a calculada', plaqueta:'a de plaqueta', outro:'outro valor' }[esc0.regra] || 'o PLH decide') + '</span>')
           + '</td></tr>';
       }).join('') + '</table>'
+    + prev.camaras.map(ck => revPopHtml(ck, plhAprova, eu.pode, pr)).join('')   // E45 · issue 60: a PMTA adotada abaixo da pressão de operação
     + (prev.vaso && !prev.vaso.erro ? '<p class="muted" style="margin:8px 0 0">V = ' + fmt(prev.vaso.V, 3) + ' m³ (' + Math.round(prev.vaso.V * 1000).toLocaleString('pt-BR') + ' litros) · P·V = ' + fmt(prev.vaso.pv, 3) + ' · grupo ' + prev.vaso.grupo + ' · <b>categoria ' + prev.vaso.categoria + '</b> · próximas: externa em ' + prev.vaso.prazos.externo
         + ' ano(s), interna ' + (prev.vaso.prazos.interno == null ? 'a critério do PLH' : 'em ' + prev.vaso.prazos.interno + ' anos') + '</p>' : '')
     + (plhAprova && prev.vaso && !prev.vaso.erro ? revDatasHtml(prev.vaso.prazos) : '')   // E9 (410): as datas do PLH
     + (prev.vaso && prev.vaso.erro && /[Vv]olume/.test(prev.vaso.erro) && plhAprova ? '<label class="f" style="max-width:260px">Volume total do vaso (m³)<input class="t" id="revVol" inputmode="decimal" value="' + (REV.volumeTxt != null ? esc(REV.volumeTxt) : REV.volume != null ? fmt(REV.volume, 3) : '') + '"></label>' : '')
     + (prev.detalhes.length ? '<ul class="muted" style="margin:8px 0 0;padding-left:18px">' + prev.detalhes.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '') + '</div>';
-  // 4 · espessuras × anterior
-  REV.vidas = revVidas();
+  // 4 · espessuras × anterior (REV.vidas: calculado no começo, E45 · issue 62)
   h += cardConf('espessuras') + cab('espessuras', '4 · Espessuras contra o laudo anterior')
     + (REV.vidas.length ? '<table><tr><th>Componente</th><th>Anterior</th><th>Atual</th><th>Requerida</th><th>Perda</th><th>Taxa</th><th>Vida remanescente</th></tr>'
       + REV.vidas.map(x => '<tr' + (x.cor === 'vermelho' ? ' style="background:var(--crit-soft)"' : x.cor === 'amarelo' ? ' style="background:var(--warn-soft)"' : '') + '><td>'
@@ -2444,6 +2462,9 @@ function revDatasHtml(prz){
   const D = REV.datas = REV.datas || (rE || rI ? { ativo:true, ext:rE ? somaAnos(base, PR.externo) : nExt, int:rI ? somaAnos(base, PR.interno) : nInt, just:PR.just || '', red:true }
     : { ativo: obrig, ext: nExt, int: nInt, just: '' });
   if (obrig) D.ativo = true;
+  // E45 · issue 58: as datas ficam guardadas entre as gravações; se uma correção mudou a categoria, elas não passam das da norma de hoje
+  if (!D.ativo){ D.ext = nExt; D.int = nInt; }
+  else { if (D.ext && D.ext > nExt) D.ext = nExt; if (nInt && D.int && D.int > nInt) D.int = nInt; }
   return '<div style="margin-top:10px;border-top:1px solid var(--rule-2);padding-top:8px"><b>Próximas inspeções</b>'
     + '<div class="muted">Pela NR-13: externa até <b>' + dataBR(nExt) + '</b>, interna ' + (nInt ? 'até <b>' + dataBR(nInt) + '</b>' : '<b>a critério do PLH</b> (abaixo de 0 °C)') + '.</div>'
     + '<label class="okrev" style="margin-top:6px"><input type="checkbox" id="revDatas"' + (D.ativo ? ' checked' : '') + (obrig ? ' disabled' : '') + '> o PLH reduz os prazos (datas mais curtas, com o motivo)</label>'
@@ -2860,6 +2881,68 @@ async function revMostrarPaginas(path, cx){
     }));
   }catch(e){ cx.innerHTML = '<p class="alerta crit"></p>'; cx.firstChild.textContent = e.message; }
 }
+// ── E45 · S178 · issue 60 (opção B, Bruno 15/11): a PMTA adotada abaixo da pressão de operação ──
+// A escolha da PMTA de cada câmara (a guardada no banco, rev_pmta, ou a sugestão), num lugar só.
+function revEscolha(ck){
+  const k = ck.cam;
+  if (!REV.pmta[k.id]){ const guard = (REV.R.inspecao.rev_pmta || {})[k.id], sug = revRegra(ck); REV.pmta[k.id] = guard ? Object.assign({}, guard) : { regra:sug.regra, valor:sug.valor, just:'' }; }
+  return REV.pmta[k.id];
+}
+// A mesma conta do banco (tf_insp_avancar): |pressão de operação| > PMTA adotada + 0,0005 MPa
+function revAbaixoOp(ck){
+  if (ck.erro || !ck.governante) return null;
+  const adot = revAdotada(ck, revEscolha(ck)), p = Math.abs(Number(ck.cam.p_operacao_max_mpa));
+  return adot != null && adot > 0 && p > Number(adot) + 0.0005 ? { adot:Number(adot), p } : null;
+}
+const POP_MIN = 10;   // letras da justificativa (o banco pede o mesmo)
+const revJustOp = kid => String(REV.justOp[kid] != null ? REV.justOp[kid] : ((REV.pmta[kid] || {}).just_op || '')).trim();
+const POP_FRASE = 'não liberado para operar nessa pressão';
+// As pendências da câmara na lista "1 · O que o sistema confere": vermelho trava a aprovação; resolvida pelo PLH, fica amarelo
+function revPendPmta(ck, nm){
+  const out = [], k = ck.cam, u = CALC.unidadeDe(REV.v), pr = x => fmt(CALC.deMPa(x, u), 2) + ' ' + CALC.UNID_ROT[u];
+  const A = revAbaixoOp(ck);
+  if (A){
+    const ok = revJustOp(k.id).length >= POP_MIN;
+    out.push({ chave:'pmta_op', pk:'pmta_op|' + k.id, nivel:ok ? 'amarelo' : 'vermelho',
+      texto:'PMTA adotada (' + pr(A.adot) + ') abaixo da pressão de operação (' + pr(A.p) + ')' + nm + (ok ? ': o PLH aprova com justificativa' : ''),
+      detalhe:ok ? 'O laudo e o Registro de Segurança saem "' + POP_FRASE + '", com as duas pressões e a justificativa do PLH.'
+        : 'Dois caminhos, em 3 · PMTA: corrigir (reduzir) a pressão máxima de operação, com o motivo; ou o PLH escreve a justificativa e aprova assim, e o laudo sai "' + POP_FRASE + '".' });
+  }
+  const e = revEscolha(ck), plh = (e.regra === 'outro' && String(e.just || '').trim()) || e.regra === 'plaqueta', seg = (REV.R.recomendacoes || []).some(r => r.tipo === 'seguranca');
+  ck.comps.filter(x => x.abaixo).forEach(x => {
+    const ok = plh && seg;
+    out.push({ chave:'abaixo', pk:'abaixo|' + x.c.id, nivel:ok ? 'amarelo' : 'vermelho', texto:x.c.nome + ': espessura abaixo da mínima requerida' + (ok ? ' (decidida pelo PLH)' : ''),
+      detalhe:ok ? 'A PMTA da câmara foi escolhida pelo PLH, com justificativa, e há recomendação de segurança.'
+        : 'Falta: ' + [plh ? '' : 'o PLH escolher a PMTA da câmara (3 · PMTA › "outro valor…" ou "a de plaqueta"), com a justificativa', seg ? '' : 'uma recomendação de segurança (2 · Anomalias e recomendações)'].filter(Boolean).join('; e ') + '.' });
+  });
+  return out;
+}
+const revConfResumo = nV => (nV ? '<b style="color:var(--crit)">' + nV + ' pendência(s) em vermelho travam a aprovação.</b> ' : 'Nada em vermelho. ') + 'O amarelo só avisa.';
+// O quadro da câmara, dentro de "3 · PMTA": o que fazer, o atalho para corrigir a pressão e a justificativa do PLH
+function revPopHtml(ck, plhAprova, pode, pr){
+  const A = revAbaixoOp(ck); if (!A) return '';
+  const k = ck.cam, j = revJustOp(k.id);
+  return '<div class="alerta falta" data-popcx="' + esc(k.id) + '" style="margin:10px 0 0"><b>' + esc(k.nome) + ': a PMTA adotada (' + pr(A.adot) + ') está abaixo da pressão máxima de operação (' + pr(A.p) + ').</b>'
+    + '<div style="margin-top:4px">1) Se a pressão de operação está errada ou vai ser reduzida, corrija-a, com o motivo'
+    + (pode ? ': <button class="btn mini" data-corc="' + esc(k.id) + '|p_operacao_max_mpa">Corrigir a pressão de operação</button>' : '.') + '</div>'
+    + '<div style="margin-top:4px">2) Ou o PLH aprova assim, com a justificativa escrita: o laudo e o Registro de Segurança saem <b>"' + POP_FRASE + '"</b>, com as duas pressões e a justificativa.</div>'
+    + (plhAprova ? '<label class="f" style="margin-top:6px">Justificativa do PLH (obrigatória para aprovar assim; ' + POP_MIN + ' letras ou mais)'
+        + '<textarea class="t" data-pop="' + esc(k.id) + '" rows="2" placeholder="ex.: o cliente foi orientado a regular o compressor abaixo da PMTA até a troca do vaso">' + esc(REV.justOp[k.id] != null ? REV.justOp[k.id] : ((REV.pmta[k.id] || {}).just_op || '')) + '</textarea></label>'
+      : '<div class="muted" style="margin-top:4px">' + (j ? 'Justificativa do PLH: ' + esc(j) : 'A justificativa é do PLH, na aprovação.') + '</div>') + '</div>';
+}
+// Refaz, sem redesenhar a tela (quem digita não perde o foco nem o clique), as linhas dessas pendências e a contagem
+function revAtualizarPend(){
+  const T = $('tela'), tb = T.querySelector('table.conf'); if (!tb || !REV) return;
+  const ico = n => n === 'amarelo' ? '<span class="cf am">!</span>' : '<span class="cf vm">✗</span>';
+  REV.prev.camaras.forEach(ck => revPendPmta(ck, REV.prev.camaras.length > 1 ? ' (' + ck.cam.nome + ')' : '').forEach(x => {
+    const tr = Array.from(tb.querySelectorAll('tr[data-pk]')).find(r => r.dataset.pk === x.pk); if (!tr) return;
+    tr.className = 'n-' + x.nivel; tr.cells[0].innerHTML = ico(x.nivel);
+    tr.cells[1].innerHTML = '<b>' + esc(x.texto) + '</b>' + (x.detalhe ? '<div class="muted">' + esc(x.detalhe) + '</div>' : '');
+  }));
+  const nV = tb.querySelectorAll('tr.n-vermelho').length, rs = $('confResumo'), ba = $('revAprovar');
+  if (rs) rs.innerHTML = revConfResumo(nV);
+  if (ba){ ba.classList.toggle('bloq', !!nV); if (nV) ba.title = 'Há pendência em vermelho'; else ba.removeAttribute('title'); }
+}
 // a regra sugerida: mantém a anterior quando ela cabe na calculada; senão, a calculada
 // S141 · item 43 (decisão do Bruno, 10/11: A): a sugestão é a menor entre a calculada, a de plaqueta e a anterior (nenhuma acima da calculada)
 function revRegra(ck){
@@ -2934,7 +3017,7 @@ function revMontarResultado(){
       if (x.tMin == null) throw new Error(x.c.nome + ': sem leitura de espessura.');
       comps.push({ componente_id:x.c.id, t_min_mm:x.tMin, e_min_mm:x.eMin, pmta_mpa:x.pmta });
     });
-    const k = ck.cam, esc0 = REV.pmta[k.id] || revRegra(ck), calc = ck.governante ? ck.governante.pmta : null;
+    const k = ck.cam, esc0 = revEscolha(ck), calc = ck.governante ? ck.governante.pmta : null;
     const adot = revAdotada(ck, esc0);
     if (adot == null || !(adot > 0)) throw new Error(k.nome + ': informe a PMTA adotada.');
     if (calc != null && adot > calc + 1e-4) throw new Error(k.nome + ': a PMTA adotada não pode passar da calculada.');
@@ -2947,9 +3030,16 @@ function revMontarResultado(){
       c.justificativa_pmta = esc0.regra === 'plaqueta' && (esc0.just || '').trim() ? 'PMTA de plaqueta. ' + j : j;
     }
     if (k.pressao_externa){
-      const ex = num(($('tela').querySelector('[data-pext="' + k.id + '"]') || {}).value || ''), ej = (($('tela').querySelector('[data-pextj="' + k.id + '"]') || {}).value || '').trim();
+      const px = REV.pext[k.id] || {};   // E45 · issue 58: o digitado fica guardado (a tela pode ter sido refeita)
+      const ex = num(($('tela').querySelector('[data-pext="' + k.id + '"]') || {}).value || px.v || ''), ej = (($('tela').querySelector('[data-pextj="' + k.id + '"]') || {}).value || px.j || '').trim();
       if (!(ex > 0) || !ej) throw new Error(k.nome + ': informe a PMTA externa (vácuo) e a justificativa.');
       c.pmta_externa_mpa = Math.round(ex * ({ 'bar':0.1, 'kgf/cm2':0.0980665, 'MPa':1, 'psi':0.00689476 })[u] * 1e4) / 1e4; c.justificativa_externa = ej;
+    }
+    // E45 · issue 60 (opção B): a PMTA adotada abaixo da pressão de operação só com a justificativa escrita do PLH (o banco confere de novo)
+    if (revAbaixoOp(ck)){
+      const jo = revJustOp(k.id);
+      if (jo.length < POP_MIN) throw new Error(k.nome + ': a PMTA adotada está abaixo da pressão de operação. Corrija a pressão de operação ou escreva a justificativa do PLH (' + POP_MIN + ' letras ou mais).');
+      c.justificativa_operacao = jo;
     }
     cams.push(c);
   });
@@ -3202,7 +3292,13 @@ function ligarRevisao(){
     if (x != null && calc != null && x > calc + 1e-4){ U.toast('Acima da calculada: não é aceita.', 'err'); i.value = ''; REV.pmta[k].valor = null; return; }
     REV.pmta[k].valor = x; guardarPmta(); manterLugar(async () => pintarRevisao());
   }));
-  T.querySelectorAll('[data-pjust]').forEach(i => i.addEventListener('input', () => { REV.pmta[i.dataset.pjust].just = i.value; guardarPmta(); }));
+  T.querySelectorAll('[data-pjust]').forEach(i => i.addEventListener('input', () => { REV.pmta[i.dataset.pjust].just = i.value; guardarPmta(); revAtualizarPend(); }));
+  // E45 · issue 60: a justificativa do PLH para aprovar com a PMTA adotada abaixo da pressão de operação (fica guardada com a escolha da PMTA)
+  T.querySelectorAll('[data-pop]').forEach(i => i.addEventListener('input', () => {
+    const k = i.dataset.pop; REV.justOp[k] = i.value; REV.pmta[k] = REV.pmta[k] || {}; REV.pmta[k].just_op = i.value; guardarPmta(); revAtualizarPend(); }));
+  // E45 · issue 58: a PMTA externa (vácuo) e a justificativa dela ficam guardadas enquanto esta revisão estiver aberta
+  T.querySelectorAll('[data-pext]').forEach(i => i.addEventListener('input', () => { (REV.pext[i.dataset.pext] = REV.pext[i.dataset.pext] || {}).v = i.value; }));
+  T.querySelectorAll('[data-pextj]').forEach(i => i.addEventListener('input', () => { (REV.pext[i.dataset.pextj] = REV.pext[i.dataset.pextj] || {}).j = i.value; }));
   // S172 · issue 55 (revisor automático do #40): guarda o texto como foi digitado, para o redesenho não trocar "1.000" por "1" e pular a pergunta
   const rv = $('revVol'); if (rv) rv.addEventListener('input', () => { REV.volumeTxt = rv.value; REV.volume = num(rv.value); });
   // E9 (410): as datas do PLH
@@ -3221,11 +3317,29 @@ function ligarRevisao(){
       return false; } }]);
   });
   const ba = $('revAprovar'); if (ba) ba.addEventListener('click', () => U.semDuploEnvio(ba, async () => {
+    revAtualizarPend();   // E45: as pendências da PMTA com o que está digitado agora
     const verm = Array.from(T.querySelectorAll('table.conf tr.n-vermelho'));   // E33 · issue 15: a pendência em vermelho, marcada
-    if (verm.length){ marcarProblema(verm, 'Falta resolver: 1 · O que o sistema confere (' + verm.length + ' em vermelho).'); return; }
+    if (verm.length){
+      // E45 · issue 60: a pendência da PMTA abaixo da operação leva ao quadro onde o PLH decide (3 · PMTA)
+      const pop = verm.map(tr => (tr.dataset.pk || '').split('|')).find(x => x[0] === 'pmta_op'), cx = pop && T.querySelector('[data-popcx="' + pop[1] + '"]');
+      if (cx && verm.length === 1){ REV.abertos.pmta = true; marcarProblema(cx, 'Falta resolver em 3 · PMTA: corrija a pressão de operação ou escreva a justificativa do PLH.'); const ta = cx.querySelector('[data-pop]'); if (ta) ta.focus({ preventScroll:true }); return; }
+      marcarProblema(verm, 'Falta resolver: 1 · O que o sistema confere (' + verm.length + ' em vermelho).'); return;
+    }
     let r; try{ r = revMontarResultado(); }catch(e){ problemaRev(e); return; }
-    if (!await N.janela.confirmar('Aprovar e liberar', '<p>Grava o cálculo oficial (categoria ' + esc(r.categoria) + ', próxima externa em ' + dataBR(r.proxima_externa)
-      + (r.datas_pelo_plh ? ', datas definidas pelo PLH' : '') + ') e libera a inspeção para o laudo.</p>'
+    // E45 · issue 60: quem aprova assim vê o que sai no laudo (e se o texto novo ainda espera a aprovação dele)
+    const pops = r.camaras.filter(c => c.justificativa_operacao); let popTxt = '';
+    if (pops.length){
+      let espera = false;
+      try{ const TX = await rpc('tf_laudo_textos_ver'), B = (TX && TX.modelo && TX.modelo.blocos) || {}; espera = !(B.parecer_pressao && B.registro_condicao_pressao); }catch(e){ espera = false; }
+      popTxt = '<p class="alerta crit" style="margin:8px 0"><b>PMTA adotada abaixo da pressão de operação' + (pops.length > 1 ? ' em ' + pops.length + ' câmaras' : '') + '.</b> O laudo e o Registro de Segurança saem <b>"' + POP_FRASE + '"</b>, com as duas pressões e a sua justificativa: '
+        + pops.map(c => '"' + esc(c.justificativa_operacao) + '"').join('; ') + '.'
+        + (espera ? ' O texto novo ainda espera a sua aprovação em TapDoc › Textos do laudo ("PMTA abaixo da pressão de operação (issue 60)"): até lá, o laudo deste vaso não é emitido.' : '') + '</p>';
+    }
+    if (!await N.janela.confirmar('Aprovar e liberar', '<p>Grava o cálculo oficial (categoria ' + esc(r.categoria) + ') e libera a inspeção para o laudo.</p>'
+      // E45 · issue 58: as duas datas, e se são as da norma ou as menores
+      + '<p>Próxima inspeção externa: <b>' + dataBR(r.proxima_externa) + '</b> · interna: <b>' + (r.proxima_interna ? dataBR(r.proxima_interna) : '—') + '</b><br>'
+      + (r.datas_pelo_plh ? '<b>Datas definidas pelo PLH</b> (mais curtas que as da NR-13). Motivo: ' + esc(r.justificativa_datas || '') : 'São as datas <b>da NR-13</b> (sem redução de prazo).') + '</p>'
+      + popTxt
       + (REV.pasta ? '<p>O cliente ' + (REV.pasta.valor ? '<b>já tem</b>' : '<b>ainda não tem</b>') + ' a pasta deste vaso: o Registro de Segurança sai '
           + (REV.pasta.valor ? 'só com a anotação' : 'em livro completo') + '. Depois de aprovar, isso não muda (só reabrindo).</p>' : '')   // E36 · DP8
       + (REV.pront ? '<p>Reconstituir o prontuário: <b>' + (REV.pront.valor ? 'sim' : 'não') + '</b>' + (REV.pront.valor ? ' — sai o Prontuário (Reconstituído), com número P, junto com o relatório'
@@ -3426,8 +3540,8 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S173');
-    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D5');   // E35 · issue 30: o Resumo e os nomes dos arquivos
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S174');
+    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D6');   // E35 · issue 30: o Resumo e os nomes dos arquivos
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S158');
     return true;
   })().catch(e => { LIBS = null; throw e; });
@@ -3715,7 +3829,7 @@ function ligarDesenho(){
 }
 // A4/A5: o pacote para o token (Assinador SERPRO, em lote) e a devolução dos assinados
 // E35 · issue 30 (DP4): o pacote leva todos os documentos técnicos (o relatório, o Resumo e os certificados), cada um num PDF
-function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D5').then(() => true, () => false); }
+function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D6').then(() => true, () => false); }
 /** O que falta assinar: os relatórios (tf_laudo_para_assinar) e os outros documentos (tf_insp_docs_para_assinar). insps: só dessas inspeções. */
 async function pacoteParaAssinar(insps){
   const [L, D] = await Promise.all([rpc('tf_laudo_para_assinar').catch(() => []), rpc('tf_insp_docs_para_assinar').catch(() => []), libDocs()]);
@@ -3882,6 +3996,9 @@ function pintarLaudo(){
     + (I.aprovado && I.aprovado.nome ? ' · aprovada por ' + esc(I.aprovado.nome) + ' (' + quandoBR(I.aprovado.em) + ')' : '') + '</div></div>'
     + '<span class="chip ' + (I.situacao === 'assinada' ? 's-pronto' : 's-em_conferencia') + '">' + esc(I.situacao) + '</span></div></div>';
   if (!cfg.oficial) h += '<div class="alerta falta"><b>Piloto:</b> o TapHub ainda não emite o laudo oficial. Gere o rascunho e compare com o PDF do TapDoc antigo. Quem liga a emissão é o admin (aba Laudos › Configurar).</div>';
+  // E45 · issue 60: aprovada pelo PLH com a PMTA adotada abaixo da pressão de operação
+  if (pressaoAbaixoDe(d).length) h += '<div class="alerta falta" id="ldPressao"><b>PMTA adotada abaixo da pressão de operação:</b> o relatório e o Registro de Segurança deste vaso saem <b>"' + POP_FRASE + '"</b>, com as duas pressões e a justificativa do PLH ('
+    + pressaoAbaixoDe(d).map(k => esc(k.justificativa_operacao || '—')).join('; ') + '). Confira no rascunho.</div>';
   if (fal.length){
     h += '<div class="alerta crit" id="ldFaltas"><b>Antes de emitir:</b><ul>' + fal.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul>';
     if (!I.ambiente && I.situacao === 'liberada') h += '<div class="linha" style="margin-top:6px">O vaso fica em <select id="ldAmb" class="t" style="width:auto;margin:0"><option value="">—</option><option value="fechado">local fechado</option><option value="aberto">céu aberto</option></select>'
@@ -3936,7 +4053,8 @@ function ligarLaudo(){
       await mapaLaudo(d, A, false);   // S151 · issue 7: a imagem do mapa (sem 3D, o rascunho sai com o 2D)
       const opcR = { marca: oficial ? 'MINUTA — NÃO VALE COMO LAUDO' : 'PILOTO — NÃO VALE COMO LAUDO',
         variante: regVarianteDe(LD.pasta), textosRegistro: await textosRegistroMinuta(d),   // E36 · issue 30, Parte 2
-        prontuario: await prontuarioMinuta(d, LD.pront) };   // E37 · issue 30, Parte 3: a minuta do Prontuário (sem número)
+        prontuario: await prontuarioMinuta(d, LD.pront),   // E37 · issue 30, Parte 3: a minuta do Prontuário (sem número)
+        textosPressao: await textosPressaoMinuta(d) };   // E45 · issue 60: a minuta do "não liberado para operar nessa pressão"
       const g = await gerarLaudo(d, opcR, A);
       A('', 'anexos', 1);
       const docs = await gerarDocumentos(d, Object.assign({}, opcR, { imagens: g.imagens }), A); A.fim();   // E35 · issue 30 (DP3): a minuta de cada documento
