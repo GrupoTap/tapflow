@@ -11,6 +11,9 @@
  * A conta da espessura mínima e da PMTA é a do motor (motor-calculo-nr13.js);
  * aqui ela só é ESCRITA com os números (a memória de cálculo do laudo).
  *
+ * S175 · S180 · issues 32 e 66 (17/11/2026): a foto do estado geral do vaso no 7.4 (teste não feito) é a escolhida na revisão
+ *   (`estado_geral`, 445); sem escolha, a regra do S161 (a foto do teste ou a da capa). A foto tirada do laudo na revisão
+ *   (`fora_laudo`) não entra (a página já as tira de `d.fotos`; aqui também, por garantia).
  * S174 · S178 · issue 60 (16/11/2026): PMTA adotada abaixo da pressão de operação, aprovada pelo PLH com justificativa (443): o parecer da seção 12 sai
  *   "NÃO está liberado para operar nessa pressão" (blocos.parecer_pressao, com as pressões e a justificativa), nunca "apto" (pressaoAbaixo, pressaoVars).
  * S173 · issue 57 (16/11/2026): o "reduzido" da seção 13 e o prazo do quadro saem das DATAS aprovadas pelo PLH (prazoReduzido):
@@ -404,8 +407,10 @@ function mapaSvg(posicao, siglas) {
 function fotosDoLaudo(d) {
   const ordem = ['capa', 'localizacao', 'plaqueta', 'acessorios', 'visual', 'boroscopia', 'componentes', 'teste', 'geral'];
   const mp = (d.inspecao || {}).mapa;   // S151 · issue 7: a imagem do mapa dos pontos (o desenho 3D gravado na revisão, ou o desenho próprio)
-  return (d.fotos || []).filter(f => ordem.indexOf(f.secao) >= 0)
+  const eg = (d.fotos || []).find(f => f.estado_geral && !f.fora_laudo && ordem.indexOf(f.secao) < 0);   // S175 · issue 32: a do 7.4, de qualquer seção
+  return (d.fotos || []).filter(f => ordem.indexOf(f.secao) >= 0 && !f.fora_laudo)
     .sort((a, b) => ordem.indexOf(a.secao) - ordem.indexOf(b.secao)).map(f => f.path)
+    .concat(eg ? [eg.path] : [])
     .concat(mp && mp.modo !== '2d' && mp.path ? [mp.path] : []);
 }
 
@@ -780,7 +785,8 @@ function montar(d, opc) {
     if (fTeste.length === 1) figura([img[fTeste[0].path]], leg, null, FOTO_74);
     else pares(fTeste.map(f => ({ stack: [{ image: img[f.path], fit: [235, 175], alignment: 'center' }, { text: 'Figura ' + (++fig) + ' – ' + presos(leg) + '.', style: 'legenda' }] })));
   } else if (!TE.realizado) {
-    const fGeral = fTeste[0] || (d.fotos || []).find(f => f.secao === 'capa' && img[f.path]);
+    // S175 · issue 32: a foto escolhida na revisão; sem ela, a do teste ou a da capa
+    const fGeral = (d.fotos || []).find(f => f.estado_geral && !f.fora_laudo && img[f.path]) || fTeste[0] || (d.fotos || []).find(f => f.secao === 'capa' && img[f.path]);
     if (fGeral) figura([img[fGeral.path]], T.fig_estado_geral || 'Estado geral do vaso de pressão', null, FOTO_74);
   }
   calar(true);   // S166: as aferições ficam no relatório e nos certificados (o Prontuário cita os certificados nos anexos)
@@ -1192,6 +1198,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, prazoReduzido, prazosNorma, prazoRotulo, prazosRedTxt, pressaoAbaixo, pressaoVars, versao: 'R06a-S174-2026-11-16' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, prazoReduzido, prazosNorma, prazoRotulo, prazosRedTxt, pressaoAbaixo, pressaoVars, versao: 'R06a-S175-2026-11-17' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
