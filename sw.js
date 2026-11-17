@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S178';   // S178: issues 58, 60 e 62 — TapDoc escritório E45 (na aprovação, o que o PLH digitou fica ao gravar outra parte; a PMTA adotada abaixo da pressão de operação com a justificativa do PLH: o laudo e o Registro saem "não liberado para operar nessa pressão", laudo-pdf.js S174 e documentos-pdf.js D6; o aviso da vida remanescente na lista do sistema; 443)
+const VERSAO = 'H16-S179';   // S179: issues 56, 61 e 81 — TapDoc escritório E46 (na revisão, corrigir o ano de fabricação e o ajuste da válvula grava, o ajuste na unidade da inspeção; a circunferência, a situação do acessório e o E e a geometria dos componentes se corrigem; a correção desmarca o "conferido" do quadro; 444)
+// const VERSAO = 'H16-S178';   // S178: issues 58, 60 e 62 — TapDoc escritório E45 (na aprovação, o que o PLH digitou fica ao gravar outra parte; a PMTA adotada abaixo da pressão de operação com a justificativa do PLH: o laudo e o Registro saem "não liberado para operar nessa pressão", laudo-pdf.js S174 e documentos-pdf.js D6; o aviso da vida remanescente na lista do sistema; 443)
 // const VERSAO = 'H16-S177';   // S177: issues 54, 63, 64 e 85 — TapDoc escritório E44 (a PMTA recalculada do vaso aberto; o laudo anterior sem perder o digitado; desativar com confirmação e reativar; "Nova calibração" e o certificado do dia de cada inspeção; 442)
 // const VERSAO = 'H16-S174';   // S174: issues 38, 39, 52, 82 e 83 — TapDoc escritório E43 (o CSV do medidor com leitura inválida entra com as boas) e celular 30 (441)
 // const VERSAO = 'H16-S173';   // S173: issues 43, 44, 45, 46, 47 e 57 — TapDoc escritório E42 (o prazo reduzido pelas datas aprovadas: laudo-pdf.js S173, documentos-pdf.js D5) e celular 29 (aferição, acessórios e prazo; 440)

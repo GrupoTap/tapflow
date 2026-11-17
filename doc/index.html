@@ -192,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E45';   // E45 (S178 · issues 58, 60 e 62, Revisão TapDoc · Rodada 6): na aprovação, o que o PLH digitou (datas menores e motivo, volume, PMTA externa) fica ao gravar outra parte; a PMTA adotada abaixo da pressão de operação vira pendência que o PLH resolve com justificativa escrita (o laudo e o Registro saem "não liberado para operar nessa pressão"; laudo-pdf.js S174, documentos-pdf.js D6; 443); o aviso da vida remanescente curta aparece na lista do sistema
+const VERSAO = 'TapDoc E46';   // E46 (S179 · issues 56, 61 e 81, Revisão TapDoc · Rodada 7a): na revisão, corrigir o ano de fabricação e o ajuste da válvula grava (o ajuste na unidade da inspeção, convertido para MPa pela tela); a circunferência aparece em "Dados contra as fotos" e se corrige; a situação do acessório se corrige; o E e a geometria de cada componente no quadro da PMTA (só o PLH); o número digitado é lido pela regra 50 antes de ir ao banco; a correção desmarca o "conferido" do quadro (444)
+// const VERSAO = 'TapDoc E45';   // E45 (S178 · issues 58, 60 e 62, Revisão TapDoc · Rodada 6): na aprovação, o que o PLH digitou (datas menores e motivo, volume, PMTA externa) fica ao gravar outra parte; a PMTA adotada abaixo da pressão de operação vira pendência que o PLH resolve com justificativa escrita (o laudo e o Registro saem "não liberado para operar nessa pressão"; laudo-pdf.js S174, documentos-pdf.js D6; 443); o aviso da vida remanescente curta aparece na lista do sistema
 // const VERSAO = 'TapDoc E44';   // E44 (S177 · issues 54, 63, 64 e 85, Revisão TapDoc · Rodada 5): a PMTA recalculada é sempre a do vaso aberto; o laudo anterior não perde o que foi digitado; desativar instrumento ou material pergunta e dá para reativar; "Nova calibração" guarda o certificado anterior e cada inspeção baixa o do dia dela (442)
 // const VERSAO = 'TapDoc E43';   // E43 (S174 · issue 38, Revisão TapDoc · Rodada 4a): o CSV do medidor com uma leitura inválida (zero ou vazia) não é mais recusado inteiro — as boas entram e a janela diz quais ficaram de fora; sem SQL
 // const VERSAO = 'TapDoc E42';   // E42 (S173 · issue 57, Revisão TapDoc · Rodada 3): o prazo "reduzido" — a revisão mostra em vermelho a redução que não é menor que a da norma (ou sem a categoria para conferir) e a aprovação a ignora; "Gravar o prazo reduzido" pede a categoria e um prazo menor que o da norma; o laudo (laudo-pdf.js S173) e o Registro (documentos-pdf.js D5) escrevem o prazo que a data aprovada dá; sem SQL
@@ -2005,14 +2006,14 @@ function previa(v){
   }catch(e){ r.vaso = { erro:e.message }; }
   return r;
 }
-  return { usar:p => { E = p || { materiais:[] }; }, previa, minimaDe, eMinDe, compsMedir, ativas, materialDe, unidadeDe, deMPa, UNID_ROT, geoDe };
+  return { usar:p => { E = p || { materiais:[] }; }, previa, minimaDe, eMinDe, compsMedir, ativas, materialDe, unidadeDe, deMPa, UNID, UNID_ROT, geoDe, GEO_CAMPOS, GEO_COL, GEO_ROT };
 })();
 
 const REV_ITENS = [['dados','Dados contra as fotos'], ['recomendacoes','Anomalias e recomendações'], ['pmta','PMTA'], ['espessuras','Espessuras contra o laudo anterior']];
 const REV_ETAPA = { 1:'Revisão 1 · equipe', 2:'Revisão 2 · outra equipe', 3:'Aprovação do PLH' };
 const REV_CAMPOS_VASO = [['numero_tap','Número TAP'], ['funcao','Função do vaso'], ['placa_situacao','Placa de identificação'], ['numero_serie','Nº de série'], ['modelo','Modelo'], ['ano_fabricacao','Ano de fabricação'], ['codigo_construcao','Código de construção'],
-                         ['codigo_edicao','Edição do código']];   // S144 · itens 63 e 78: Número TAP (nº do cliente + TAG sem prefixo), função e "sem placa"   // S141 · item 31: a PMTA e a PTH de plaqueta são da câmara (quadro abaixo)
-const REV_CAMPOS_AC = [['tag','TAG'], ['marca','Marca'], ['conexao','Conexão'], ['escala','Escala'], ['lacre_num','Lacre'], ['pressao_ajuste_mpa','Ajuste (MPa)']];   // S144 · itens 72 e 75: sem "modelo"; a conexão
+                         ['codigo_edicao','Edição do código'], ['circunferencia_mm','Circunferência']];   // E46 · issue 61: a circunferência (dela sai o raio da conta)   // S144 · itens 63 e 78: Número TAP (nº do cliente + TAG sem prefixo), função e "sem placa"   // S141 · item 31: a PMTA e a PTH de plaqueta são da câmara (quadro abaixo)
+const REV_CAMPOS_AC = [['tag','TAG'], ['marca','Marca'], ['conexao','Conexão'], ['escala','Escala'], ['lacre_num','Lacre'], ['pressao_ajuste_mpa','Ajuste'], ['situacao','Situação']];   // E46 · issues 56 e 61: o ajuste na unidade da inspeção; a situação   // S144 · itens 72 e 75: sem "modelo"; a conexão
 // S144 · item 78: o que a revisão sugere (o revisor escolhe; nada é marcado sozinho)
 const FUNCOES_VASO = ['Reservatório de ar comprimido', 'Pulmão de ar comprimido', 'Secador de ar comprimido', 'Filtro', 'Separador de condensado', 'Acumulador hidráulico',
   'Autoclave', 'Trocador de calor', 'Reservatório de gás', 'Tanque de pressão'];
@@ -2235,6 +2236,50 @@ function pontosEspalhados(){
   });
   return out;
 }
+/* E46 · issues 56, 61 e 81 (Revisão TapDoc · Rodada 7a) — o que a revisão corrige */
+function revCircTxt(v){ const c = Number(v && v.circunferencia_mm); return c > 0 ? fmt(c, 1) + ' mm (Ø ' + fmt(c / Math.PI, 0) + ' mm)' : '—'; }
+/** A circunferência × o volume informado: só com uma câmara e o comprimento do costado medido. O cilindro sozinho é o mínimo;
+ *  o cilindro mais uma esfera do mesmo raio (dois tampos hemisféricos) é o máximo. Fora de metade do mínimo ou de 1,5 × o máximo, avisa. */
+function revCircVolume(v){
+  const c = Number(v.circunferencia_mm), L = Number(v.costado_comprimento_mm), ks = CALC.ativas(v);
+  if (!(c > 0) || !(L > 0) || ks.length !== 1 || !(Number(ks[0].volume_m3) > 0)) return null;
+  const r = c / (2 * Math.PI), cil = Math.PI * r * r * L / 1e9, max = cil + 4 / 3 * Math.PI * r * r * r / 1e9, vol = Number(ks[0].volume_m3);
+  if (vol >= cil * 0.5 && vol <= max * 1.5) return null;
+  const lt = x => Math.round(x * 1000).toLocaleString('pt-BR') + ' litros';
+  return { texto:'A circunferência não combina com o volume: confira os dois',
+    detalhe:'Com a circunferência de ' + fmt(c, 1) + ' mm e o costado de ' + fmt(L, 0) + ' mm, o vaso teria entre ' + lt(cil) + ' e ' + lt(max) + '; o volume informado é ' + lt(vol)
+      + '. Um dos dois pode estar com o ponto de milhar errado ("1.250" lido como 1,25). Corrija em 1 · Dados contra as fotos.' };
+}
+const AC_VALVULA = ['valvula_seguranca','valvula_alivio'];
+function revOpMax(v){ return CALC.ativas(v).reduce((m, k) => Math.max(m, Math.abs(Number(k.p_operacao_max_mpa)) || 0), 0); }
+/** Issue 56: o ajuste da válvula acima de 3 × a maior pressão de operação costuma ser unidade trocada (7 kgf/cm² gravado como 7 MPa). */
+function revAjustesAltos(v, acess, pr){
+  const op = revOpMax(v); if (!(op > 0)) return [];
+  const NAC = nomesAcess(acess);
+  return (acess || []).filter(a => AC_VALVULA.indexOf(a.tipo) >= 0 && Number(a.pressao_ajuste_mpa) > 3 * op).map(a => ({ chave:'ajuste_alto', nivel:'amarelo',
+    texto:(a.tag || NAC[a.id] || 'Válvula') + ': ajuste de ' + pr(a.pressao_ajuste_mpa) + ', mais de 3 vezes a pressão de operação (' + pr(op) + '): confira',
+    detalhe:'Pode ser a unidade trocada (por exemplo, 7 kgf/cm² gravado como 7 MPa). Corrija o ajuste no quadro Acessórios (1 · Dados contra as fotos).' }));
+}
+/** Issue 61: o E e a geometria que a conta usa em cada componente. "padrão" = o campo não informou e vale o padrão da conta. */
+function revGeoHtml(v, eu){
+  const cs = (v.componentes || []).filter(c => c.ativo !== false); if (!cs.length) return '';
+  const pode = eu.pode && eu.plh, n3 = x => fmt(x, 3);
+  const val = (c, g, k) => g[k] == null ? '<span style="color:var(--crit)">falta</span>' : esc(n3(g[k])) + (g.padrao.indexOf(k) >= 0 ? ' <span class="muted">(padrão)</span>' : '');
+  return '<h3 style="margin-top:14px">E e geometria dos componentes</h3><table data-geo="1"><tr><th>Componente</th><th>E (solda)</th><th>Geometria da conta</th><th></th></tr>'
+    + cs.map(c => { const g = CALC.geoDe(v, c);
+        return '<tr data-georow="' + esc(c.id) + '"><td><b>' + esc(c.nome) + '</b><div class="muted">' + esc(TIPOS_COMP[c.tipo] || c.tipo) + (c.nao_medir ? ' · fora da conta (não medido)' : '') + '</div></td><td>' + val(c, g, 'E') + '</td><td>'
+          + (CALC.GEO_CAMPOS[c.tipo] || []).map(k => esc(CALC.GEO_ROT[k]) + ': ' + val(c, g, k)).join(' · ') + '</td><td>'
+          + (pode ? '<button class="btn mini" data-corg="' + esc(c.id) + '">Corrigir</button>' : '') + '</td></tr>'; }).join('') + '</table>'
+    + '<p class="muted" style="margin:6px 0 0">' + (pode ? 'Corrigir registra o antes, o depois e o motivo. Em branco vale o padrão da conta.' : 'Só o PLH corrige o E e a geometria (na aprovação).')
+    + ' Padrão: E = 0,7 no costado e no cone e 1,0 nos tampos; o raio vem da circunferência.</p>';
+}
+/** O aviso depois de corrigir: o banco devolve em "desmarcou" as marcas "conferido" que caíram (444 · issue 81). */
+function revCorrigido(r, aviso){
+  if (!r || !r.mudou){ U.toast('Era o mesmo valor.' + (aviso ? ' ' + aviso : ''), aviso ? undefined : 'ok'); return; }
+  const d = (r.desmarcou || []).map(k => CONF_ROT[k] || k);
+  const m = 'Corrigido.' + (d.length ? ' O "conferido" de ' + d.join(' e de ') + ' foi desmarcado: confira de novo.' : '') + (aviso ? ' ' + aviso : '');
+  U.toast(m, aviso ? undefined : 'ok');
+}
 const CONF_ROT = { dados:'1 · Dados contra as fotos', recomendacoes:'2 · Anomalias e recomendações', pmta:'3 · PMTA', espessuras:'4 · Espessuras contra o laudo anterior' };   // E33 · issue 15: o nome da tela, nunca o de sistema
 function revOk(item){ const e = REV.R.inspecao.etapa; return ((REV.R.oks || {})[e] || []).indexOf(item) >= 0; }
 function pintarRevisao(){
@@ -2284,6 +2329,9 @@ function pintarRevisao(){
   // S172 · issue 42: circunferência abaixo de 300 mm (Ø menor que ~95 mm) é pequena demais para um vaso de pressão
   if (Number(v.circunferencia_mm) > 0 && Number(v.circunferencia_mm) < 300) conf.push({ chave:'circ', nivel:'amarelo', texto:'Circunferência de ' + fmt(v.circunferencia_mm, 1) + ' mm (Ø ' + fmt(v.circunferencia_mm / Math.PI, 0) + ' mm): confira',
     detalhe:'Pequena demais para um vaso de pressão. Se o campo digitou "1.250" querendo dizer mil duzentos e cinquenta, corrija antes de aprovar: o raio entra na espessura mínima e na PMTA.' });
+  // E46 · issue 61: a circunferência que não combina com o volume informado; issue 56: o ajuste da válvula muito acima da operação
+  { const cv = revCircVolume(v); if (cv) conf.push({ chave:'circ_vol', nivel:'amarelo', texto:cv.texto, detalhe:cv.detalhe }); }
+  revAjustesAltos(v, R.acessorios, pr).forEach(x => conf.push(x));
   // S144 · item 78: tampos iguais (mesmo tipo, mesma câmara) com eficiência de solda (E) diferente; região do costado com o nome e a posição em desacordo
   CALC.ativas(v).forEach(k => {
     const tps = (v.componentes || []).filter(c => c.ativo !== false && ['eliptico','torisferico','hemisferico','conico','plano'].indexOf(c.tipo) >= 0 && (!c.camara_id || c.camara_id === k.id));
@@ -2291,7 +2339,7 @@ function pintarRevisao(){
     Object.values(porTipo).filter(g => g.length > 1).forEach(g => {
       const es = g.map(c => ({ c, E: CALC.geoDe(v, c).E }));
       if (es.some(x => Math.abs(x.E - es[0].E) > 1e-6)) conf.push({ chave:'tampos_e', nivel:'amarelo', texto:'Tampos iguais com eficiência de solda (E) diferente: ' + es.map(x => x.c.nome + ' E = ' + fmt(x.E, 2)).join(' e '),
-        detalhe:'Confira se é o mesmo tampo (mesma fabricação). Se for, corrija o E no componente: o laudo mostra uma conta para cada E.' });
+        detalhe:'Confira se é o mesmo tampo (mesma fabricação). Se for, o PLH corrige o E no quadro 3 · PMTA (E e geometria dos componentes): o laudo mostra uma conta para cada E.' });
     });
   });
   (v.componentes || []).filter(c => c.ativo !== false && c.tipo === 'costado').forEach(c => {
@@ -2328,7 +2376,7 @@ function pintarRevisao(){
       + (f.origem === 'galeria' ? ' · galeria' + (f.tirada_em ? ', tirada em ' + dataBR(dataSP(f.tirada_em)).slice(0, 5) : '') : ''); };
   h += cardConf('dados') + cab('dados', '1 · Dados contra as fotos')
     + '<div class="g2rev"><div><table><tr><th>Plaqueta</th><th></th><th></th></tr>'
-    + [['fabricante','Fabricante']].concat(REV_CAMPOS_VASO).map(([k, r]) => '<tr><td class="muted">' + r + '</td><td><b>' + esc(k === 'placa_situacao' ? PLACA_ROT[placaDe(R.vaso)] : R.vaso[k] == null ? '—' : String(R.vaso[k])) + '</b></td><td>'
+    + [['fabricante','Fabricante']].concat(REV_CAMPOS_VASO).map(([k, r]) => '<tr><td class="muted">' + r + '</td><td><b>' + esc(k === 'placa_situacao' ? PLACA_ROT[placaDe(R.vaso)] : k === 'circunferencia_mm' ? revCircTxt(v) : R.vaso[k] == null ? '—' : String(R.vaso[k])) + '</b></td><td>'
         + (eu.pode && k !== 'fabricante' ? '<button class="btn mini" data-corv="' + k + '">Corrigir</button>' : '') + '</td></tr>').join('') + '</table>'
     // S141 · itens 31, 45 e 47: a PMTA e a PTH de plaqueta, a pressão de operação e o volume são da câmara (como vieram do campo)
     + CALC.ativas(v).map(k => '<table style="margin-top:8px"><tr><th>' + (CALC.ativas(v).length > 1 ? esc(k.nome) : 'Câmara') + '</th><th></th><th></th></tr>'
@@ -2397,6 +2445,7 @@ function pintarRevisao(){
           + '</td></tr>';
       }).join('') + '</table>'
     + prev.camaras.map(ck => revPopHtml(ck, plhAprova, eu.pode, pr)).join('')   // E45 · issue 60: a PMTA adotada abaixo da pressão de operação
+    + revGeoHtml(v, eu)   // E46 · issue 61: o E e a geometria de cada componente (só o PLH corrige)
     + (prev.vaso && !prev.vaso.erro ? '<p class="muted" style="margin:8px 0 0">V = ' + fmt(prev.vaso.V, 3) + ' m³ (' + Math.round(prev.vaso.V * 1000).toLocaleString('pt-BR') + ' litros) · P·V = ' + fmt(prev.vaso.pv, 3) + ' · grupo ' + prev.vaso.grupo + ' · <b>categoria ' + prev.vaso.categoria + '</b> · próximas: externa em ' + prev.vaso.prazos.externo
         + ' ano(s), interna ' + (prev.vaso.prazos.interno == null ? 'a critério do PLH' : 'em ' + prev.vaso.prazos.interno + ' anos') + '</p>' : '')
     + (plhAprova && prev.vaso && !prev.vaso.erro ? revDatasHtml(prev.vaso.prazos) : '')   // E9 (410): as datas do PLH
@@ -3119,26 +3168,61 @@ function ligarRevisao(){
       catch(e){ erro(e); }
     });
   }));
+  // E46 · issues 56, 61 e 81: o número é lido aqui pela regra 50 (numMedida: vírgula decimal, "1.250" pergunta) e vai ao banco já
+  // como número; o ajuste da válvula é pedido e mostrado na unidade da inspeção e convertido para MPa; a situação é uma lista
   const corrigir = (alvo, ref, campos, atual) => {
+    const uR = CALC.unidadeDe(REV.v), uRot = CALC.UNID_ROT[uR];
+    const TIPO = { ano_fabricacao:'ano', circunferencia_mm:'mm', pressao_ajuste_mpa:'pressao', situacao:'sit' };
+    const CASAS_P = { 'bar':3, 'kgf/cm2':3, 'MPa':4, 'psi':1 };   // as casas que a conversão sustenta (as mesmas do celular, regra 53): o número volta como foi digitado
     janela('Corrigir', '<label class="f">Dado<select class="t" id="rcCampo">' + campos.map(([k, r]) => '<option value="' + k + '">' + r + '</option>').join('') + '</select></label>'
-      + '<label class="f">Valor certo<input class="t" id="rcValor" list="rcLista"><datalist id="rcLista"></datalist></label><p class="muted" id="rcDica" style="margin:2px 0 0"></p>'
+      + '<label class="f"><span id="rcRot">Valor certo</span><input class="t" id="rcValor" list="rcLista"><select class="t" id="rcSit" hidden>'
+        + Object.keys(ROT_SIT_AC).map(k => '<option value="' + k + '">' + esc(ROT_SIT_AC[k]) + '</option>').join('') + '</select><datalist id="rcLista"></datalist></label><p class="muted" id="rcDica" style="margin:2px 0 0"></p>'
       + '<label class="f">Motivo<input class="t" id="rcMotivo" placeholder="ex.: conforme a foto da plaqueta"></label>'
       + '<p class="muted">Fica registrado o antes, o depois e o seu nome.</p>', [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
-        rpc('tf_insp_revisao_corrigir', { p_id:id, p_alvo:alvo, p_ref:ref, p_campo:$('rcCampo').value, p_valor:$('rcValor').value, p_motivo:$('rcMotivo').value })
-          .then(r => { U.toast(r && r.mudou ? 'Corrigido.' : 'Era o mesmo valor.', 'ok'); N.janela.fechar(); recarregar(); }, erro);
+        const k = $('rcCampo').value, t = TIPO[k], rot = (campos.find(x => x[0] === k) || [])[1] || 'Valor';
+        let val = $('rcValor').value, aviso = '';
+        if (t === 'sit') val = $('rcSit').value;
+        else if (t){
+          let x; try{ x = numMedida($('rcValor'), rot); }catch(e){ U.toast(e.message, 'err'); return false; }
+          if (x == null) val = '';
+          else if (t === 'ano'){
+            if (x !== Math.round(x) || x < 1900 || x > new Date().getFullYear()){ U.toast('Ano de fabricação: 4 algarismos, de 1900 até o ano atual. Nada foi gravado.', 'err'); return false; }
+            val = String(x);
+          } else if (t === 'mm'){
+            if (x < 50 || x > 100000){ U.toast('Circunferência fora do esperado (de 50 a 100.000 mm). Nada foi gravado.', 'err'); return false; }
+            val = String(x);
+            if (x < 300) aviso = 'Confira: circunferência de ' + fmt(x, 1) + ' mm (Ø ' + fmt(x / Math.PI, 0) + ' mm) é pequena demais para um vaso de pressão. Gravado assim mesmo; a revisão mostra o aviso.';
+          } else {
+            if (x <= 0){ U.toast('Ajuste: informe um valor maior que zero, em ' + uRot + '. Nada foi gravado.', 'err'); return false; }
+            const mpa = Math.round(x * CALC.UNID[uR] * 1e4) / 1e4, op = revOpMax(REV.v);
+            if (mpa < 0.0001 || mpa > 100){ U.toast('Ajuste fora do esperado: ' + fmt(x, 4) + ' ' + uRot + ' = ' + fmt(mpa, 4) + ' MPa. Nada foi gravado.', 'err'); return false; }
+            val = String(mpa);
+            if (op > 0 && mpa > 3 * op) aviso = 'Confira: o ajuste (' + fmt(x, 3) + ' ' + uRot + ') passa de 3 vezes a pressão de operação (' + fmt(CALC.deMPa(op, uR), 2) + ' ' + uRot + '). Gravado assim mesmo; a revisão mostra o aviso.';
+          }
+        }
+        rpc('tf_insp_revisao_corrigir', { p_id:id, p_alvo:alvo, p_ref:ref, p_campo:k, p_valor:val, p_motivo:$('rcMotivo').value })
+          .then(r => { revCorrigido(r, aviso); N.janela.fechar(); recarregar(); }, erro);
         return false; } }]);
     // S144 · itens 63 e 78: a lista das funções do vaso; "sem placa" é sim ou não; o Número TAP é o nº do cliente + a TAG sem o prefixo
     const DICA = { numero_tap:'Nº do cliente + "-" + a TAG sem o prefixo (ex.: VP-23 do cliente 33 → 33-23). Depois de gravado na placa, não muda mais.',
-      placa_situacao:'Escolha: com placa indelével, placa ilegível ou não indelével, ou sem placa (NR-13, 13.5.1.3).', conexao:'Ex.: 1/2" (a bitola da rosca).' };
+      placa_situacao:'Escolha: com placa indelével, placa ilegível ou não indelével, ou sem placa (NR-13, 13.5.1.3).', conexao:'Ex.: 1/2" (a bitola da rosca).',
+      ano_fabricacao:'4 algarismos (ex.: 2015).', circunferencia_mm:'Em mm, medida em volta do costado. Dela sai o raio que entra na espessura mínima e na PMTA: a conta se refaz.',
+      pressao_ajuste_mpa:'Na unidade da inspeção (' + uRot + '), com vírgula nos decimais. A tela converte para MPa ao gravar.',
+      situacao:'A recomendação de substituir acompanha a situação e a aferição: confira o quadro 2 depois de corrigir.' };
     const sel = $('rcCampo'), pinta = () => {
-      const k = sel.value, a = atual(k);
-      $('rcValor').value = k === 'placa_situacao' ? PLACA_ROT[placaDe(REV.R.vaso || {})] : a == null ? '' : String(a);
+      const k = sel.value, a = atual(k), t = TIPO[k], inp = $('rcValor');
+      tirarPergunta(inp); inp.classList.remove('problema');
+      inp.hidden = t === 'sit'; $('rcSit').hidden = t !== 'sit';
+      if (t === 'sit') $('rcSit').value = ROT_SIT_AC[a] ? a : 'ok';
+      if (t && t !== 'sit') inp.setAttribute('inputmode', t === 'ano' ? 'numeric' : 'decimal'); else inp.removeAttribute('inputmode');
+      $('rcRot').textContent = 'Valor certo' + (t === 'pressao' ? ' (' + uRot + ')' : t === 'mm' ? ' (mm)' : '');
+      inp.value = k === 'placa_situacao' ? PLACA_ROT[placaDe(REV.R.vaso || {})] : a == null ? '' : t === 'pressao' ? fmt(CALC.deMPa(Number(a), uR), CASAS_P[uR]) : t === 'mm' ? fmt(a, 2) : String(a);
       $('rcLista').innerHTML = (k === 'funcao' ? FUNCOES_VASO : k === 'placa_situacao' ? Object.values(PLACA_ROT) : []).map(x => '<option value="' + esc(x) + '">').join('');
       $('rcDica').textContent = DICA[k] || '';
     };
     sel.addEventListener('change', pinta); pinta();
   };
-  T.querySelectorAll('[data-corv]').forEach(b => b.addEventListener('click', () => { corrigir('vaso', null, REV_CAMPOS_VASO, k => R.vaso[k]); $('rcCampo').value = b.dataset.corv; $('rcCampo').dispatchEvent(new Event('change')); }));
+  T.querySelectorAll('[data-corv]').forEach(b => b.addEventListener('click', () => { corrigir('vaso', null, REV_CAMPOS_VASO, k => k === 'circunferencia_mm' ? REV.v.circunferencia_mm : R.vaso[k]); $('rcCampo').value = b.dataset.corv; $('rcCampo').dispatchEvent(new Event('change')); }));
   T.querySelectorAll('[data-cora]').forEach(b => b.addEventListener('click', () => { const a = R.acessorios.find(x => x.id === b.dataset.cora); corrigir('acessorio', a.id, REV_CAMPOS_AC, k => a[k]); }));
   // S141 · itens 31, 45 e 47 (417): corrigir o dado da câmara; pressão na unidade da revisão, volume em m³ ou litros; o cálculo se refaz
   T.querySelectorAll('[data-corc]').forEach(b => b.addEventListener('click', () => {
@@ -3154,8 +3238,38 @@ function ligarRevisao(){
         if (!pres && ($('rkU').value === 'l' ? x : x * 1000) < 20) U.toast('Confira: ' + fmt($('rkU').value === 'l' ? x : x * 1000, 1) + ' litros é muito pouco para um vaso de pressão. Gravado assim mesmo; a revisão mostra o aviso.');
         const val = pres ? Math.round(x * ({ 'bar':0.1, 'kgf/cm2':0.0980665, 'MPa':1, 'psi':0.00689476 })[uR] * 1e5) / 1e5 : ($('rkU').value === 'l' ? x / 1000 : x);
         rpc('tf_insp_revisao_corrigir', { p_id:id, p_alvo:'camara', p_ref:kid, p_campo:campo, p_valor:String(val), p_motivo:$('rkMot').value })
-          .then(r => { U.toast(r && r.mudou ? 'Corrigido.' : 'Era o mesmo valor.', 'ok'); N.janela.fechar(); recarregar(); }, erro);
+          .then(r => { revCorrigido(r); N.janela.fechar(); recarregar(); }, erro);
         return false; } }]);
+  }));
+  // E46 · issue 61 (444): o PLH corrige o E e a geometria do componente; cada campo mudado vira uma correção no histórico
+  T.querySelectorAll('[data-corg]').forEach(b => b.addEventListener('click', () => {
+    const c = (REV.v.componentes || []).find(x => x.id === b.dataset.corg); if (!c) return;
+    const g = CALC.geoDe(REV.v, c), ks = ['E'].concat(CALC.GEO_CAMPOS[c.tipo] || []);
+    const ROT = k => k === 'E' ? 'E · eficiência de solda' : CALC.GEO_ROT[k], inf = k => c[CALC.GEO_COL[k]];
+    janela('Corrigir · ' + c.nome, ks.map(k => '<label class="f">' + esc(ROT(k)) + '<input class="t" inputmode="decimal" data-geok="' + k + '" value="' + (inf(k) == null ? '' : fmt(inf(k), 3)) + '"'
+        + ' placeholder="' + (g.padrao.indexOf(k) >= 0 && g[k] != null ? 'padrão: ' + fmt(g[k], 3) : 'sem padrão: informe') + '"></label>').join('')
+      + '<label class="f">Motivo<input class="t" id="rgMot" placeholder="ex.: conforme o prontuário do fabricante"></label>'
+      + '<p class="muted">Em branco vale o padrão da conta. Fica registrado o antes, o depois e o seu nome; a espessura mínima e a PMTA se refazem.</p>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => {
+        const mud = [];
+        try{
+          for (const k of ks){
+            const el = document.querySelector('[data-geok="' + k + '"]'), x = numMedida(el, ROT(k)), a = inf(k) == null ? null : Number(inf(k));
+            if (x != null && x <= 0){ el.classList.add('problema'); throw new Error(ROT(k) + ': informe um valor maior que zero. Nada foi gravado.'); }
+            if ((x == null) !== (a == null) || (x != null && Math.abs(x - a) > 1e-9)) mud.push([k, x]);
+          }
+        }catch(e){ U.toast(e.message, 'err'); return false; }
+        if (!mud.length){ U.toast('Nada mudou.'); return false; }
+        const mot = $('rgMot').value; let caiu = [], n = 0;
+        try{
+          for (const [k, x] of mud){
+            const r = await rpc('tf_insp_revisao_corrigir', { p_id:id, p_alvo:'componente', p_ref:c.id, p_campo:CALC.GEO_COL[k], p_valor:x == null ? '' : String(x), p_motivo:mot });
+            if (r && r.mudou){ n++; caiu = caiu.concat((r.desmarcou || []).filter(z => caiu.indexOf(z) < 0)); }
+          }
+        }catch(e){ erro(e); if (n) recarregar(); return false; }
+        revCorrigido({ mudou:n > 0, desmarcou:caiu });
+        recarregar();
+      } }]);
   }));
   // S141 · item 46 (417): as imagens da boroscopia, do computador, com a legenda; entram no laudo
   T.querySelectorAll('[data-bfoto]').forEach(b => b.addEventListener('click', () => { $('boroVisor').className = 'visorrev'; mostrarArquivoEm($('boroVisor'), { storage_path:b.dataset.bfoto }); }));
