@@ -192,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E47';   // E47 (S180 · issues 59, 66 e 32, Revisão TapDoc · Rodada 7b): "Não deu para medir" tira o componente da conta (como o "Não medir" do celular) e o PLH aprova; os componentes fora da conta aparecem com o motivo nas Espessuras e na PMTA, com aviso quando um costado ou tampo inteiro fica fora; na revisão, tirar do laudo uma foto do campo (com o motivo) e pôr de volta; escolher a foto do estado geral (7.4); laudo-pdf.js S175 (445)
+const VERSAO = 'TapDoc E48';   // E48 (S181 · issues 65 e 67, Revisão TapDoc · Rodada 8): a revisão grava mais rápido (as consultas ao mesmo tempo; ao gravar, só o que a gravação muda); ajustes da preparação e da revisão — a pressão com as casas da unidade, "pegar no cliente" e regravar um laudo conferido perguntam, tirar o vaso guarda as instruções, "Reabrir para o campo" volta para "A revisar", sem gravar duas vezes no toque duplo, a PMTA "outro valor" inválida avisa, a pressão de operação negativa (vácuo), a vida remanescente abaixo de 1 ano, o laudo sem páginas, a tela antiga não pinta por cima da nova
+// const VERSAO = 'TapDoc E47';   // E47 (S180 · issues 59, 66 e 32, Revisão TapDoc · Rodada 7b): "Não deu para medir" tira o componente da conta (como o "Não medir" do celular) e o PLH aprova; os componentes fora da conta aparecem com o motivo nas Espessuras e na PMTA, com aviso quando um costado ou tampo inteiro fica fora; na revisão, tirar do laudo uma foto do campo (com o motivo) e pôr de volta; escolher a foto do estado geral (7.4); laudo-pdf.js S175 (445)
 // const VERSAO = 'TapDoc E46';   // E46 (S179 · issues 56, 61 e 81, Revisão TapDoc · Rodada 7a): na revisão, corrigir o ano de fabricação e o ajuste da válvula grava (o ajuste na unidade da inspeção, convertido para MPa pela tela); a circunferência aparece em "Dados contra as fotos" e se corrige; a situação do acessório se corrige; o E e a geometria de cada componente no quadro da PMTA (só o PLH); o número digitado é lido pela regra 50 antes de ir ao banco; a correção desmarca o "conferido" do quadro (444)
 // const VERSAO = 'TapDoc E45';   // E45 (S178 · issues 58, 60 e 62, Revisão TapDoc · Rodada 6): na aprovação, o que o PLH digitou (datas menores e motivo, volume, PMTA externa) fica ao gravar outra parte; a PMTA adotada abaixo da pressão de operação vira pendência que o PLH resolve com justificativa escrita (o laudo e o Registro saem "não liberado para operar nessa pressão"; laudo-pdf.js S174, documentos-pdf.js D6; 443); o aviso da vida remanescente curta aparece na lista do sistema
 // const VERSAO = 'TapDoc E44';   // E44 (S177 · issues 54, 63, 64 e 85, Revisão TapDoc · Rodada 5): a PMTA recalculada é sempre a do vaso aberto; o laudo anterior não perde o que foi digitado; desativar instrumento ou material pergunta e dá para reativar; "Nova calibração" guarda o certificado anterior e cada inspeção baixa o do dia dela (442)
@@ -384,6 +385,10 @@ let UN = 'bar';
 try{ UN = localStorage.getItem('tfdoc_un') || 'bar'; }catch(e){}
 const paraMPa = v => v == null ? null : Math.round(v * UNID[UN] * 1e4) / 1e4;
 const deMPa = v => v == null || v === '' ? null : Number(v) / UNID[UN];
+// E48 · issue 65, item 1 (Revisão TapDoc · Rodada 8): a pressão mostrada com as casas que a conversão sustenta (as mesmas do celular,
+// regra 53): 10 kgf/cm² volta "10", não "10,0004" (o banco guarda MPa com 4 casas)
+const CASAS_UN = { 'bar':3, 'kgf/cm2':3, 'MPa':4, 'psi':1 };
+const fmtUn = v => fmt(deMPa(v), CASAS_UN[UN] == null ? 4 : CASAS_UN[UN]);
 const SIT = {
   pronto:['Pronto','✅'], precisa_laudo:['Precisa do laudo anterior','📄'], em_conferencia:['Em conferência','🟡'],
   pegar_cliente:['Pegar no cliente','🟠'], grave:['Divergência grave','⚠'], sem_laudo:['Sem laudo anterior','➖'],
@@ -395,6 +400,8 @@ const TIPOS_COMP = { costado:'Costado', eliptico:'Elíptico', torisferico:'Toris
 
 /** janela do núcleo: botões {rotulo, classe:'pri', acao}; acao que devolve false mantém aberta */
 function janela(tit, html, bts){
+  // E48 · issue 65, item 5: o núcleo já prende o botão enquanto a ação roda (semDuploEnvio); a ação que grava devolve a promessa
+  // (return rpc(...)), para o 2º toque rápido em "Gravar" esperar a resposta do banco e não gravar de novo.
   N.janela.abrir(tit, html, (bts || []).map(b => ({ label:b.rotulo, pri:b.classe === 'pri',
     onClick:async () => { const r = b.acao ? await b.acao() : undefined; if (r !== false) N.janela.fechar(); } })));
 }
@@ -416,6 +423,10 @@ function rota(){ const h = new URLSearchParams(location.hash.replace(/^#/, ''));
 function ir(r){ const p = new URLSearchParams(); if (r.os) p.set('os', r.os); if (r.v) p.set('v', r.v); if (r.aba && !r.os) p.set('aba', r.aba);
   location.hash = p.toString(); }
 window.addEventListener('hashchange', pintar);
+// E48 · issue 65, item 11: trocar de tela rápido (voltar enquanto carrega). Cada pintar() ganha um número; a tela que terminou de
+// carregar depois de outra ter sido aberta não pinta por cima dela (vigente() falso: a função para sem desenhar).
+let TELA_VEZ = 0;
+const vigente = vez => vez === TELA_VEZ;
 $('voltar').addEventListener('click', () => {
   const r = rota();
   if (r.rev){ location.hash = 'aba=rev'; return; }   // E8
@@ -425,7 +436,7 @@ $('voltar').addEventListener('click', () => {
 function titulo(t, s){ $('tTit').textContent = t; $('tSub').textContent = s || ''; }
 
 async function pintar(){
-  const r = rota();
+  const r = rota(); TELA_VEZ++;
   try{
     if (r.rev) return await telaRevisao(r.rev);   // E8 · R05a
     if (r.laudo) return await telaLaudo(r.laudo);   // E9 · R06a
@@ -441,6 +452,7 @@ async function pintar(){
 // ── 1 · as listas (entrada pelo hub) ───────────────────────────────────────
 let LISTAS = null;
 async function telaListas(aba){
+  const vez = TELA_VEZ;   // E48 · issue 65, item 11
   titulo('TapDoc', 'Preparação da inspeção · escritório');
   $('tela').innerHTML = '<p class="muted">Carregando…</p>';
   LISTAS = await rpc('tf_insp_preparacao_lista');
@@ -449,6 +461,7 @@ async function telaListas(aba){
   let nLaudo = 0; try{ nLaudo = (await rpc('tf_laudo_lista')).filter(x => x.situacao === 'liberada' && !(x.laudo && x.laudo.situacao !== 'substituido')).length; }catch(e){}   // E9: liberadas sem laudo
   let CAMPO = []; try{ CAMPO = await rpc('tf_insp_em_campo_lista'); }catch(e){}   // S141 · item 41 (417)
   let nTex = 0; try{ nTex = ((await rpc('tf_laudo_textos_ver')).propostas || []).filter(x => x.situacao === 'pendente').length; }catch(e){}   // S146 · item 79
+  if (!vigente(vez)) return;   // E48 · issue 65, item 11: outra tela foi aberta enquanto as listas vinham
   const abas = [['os','A preparar', (L.os || []).length], ['campo','Em campo', CAMPO.length], ['conf','Laudos a conferir', (L.a_conferir || []).length], ['plh','Para o PLH', nPlh], ['rev','A revisar', nRev],
                 ['laudos','Laudos', nLaudo], ['textos','Textos do laudo', nTex], ['inst','Instrumentos', 0], ['mat','Materiais', 0]];   // S146 · item 79   // E2 (S80) · E9 (Laudos)
   let h = '<div class="abas">' + abas.map(([k, r, n]) => '<button data-a="' + k + '" class="' + (aba === k ? 'on' : '') + '">' + r
@@ -558,9 +571,10 @@ function propostaHtml(p, B){
        : '<p class="muted" style="margin:6px 0 0">Só o PLH aprova textos do laudo.</p>') + '</div>';
 }
 async function abaTextos(h){
+  const vez = TELA_VEZ;   // E48 · issue 65, item 11
   $('tela').innerHTML = h + '<p class="muted">Carregando…</p>'; ligarAbas();
-  try{ TXT = await rpc('tf_laudo_textos_ver'); }
-  catch(e){ $('tela').innerHTML = h + '<div class="card vazio"></div>'; $('tela').querySelector('.vazio').textContent = e.message || 'Não deu para carregar.'; ligarAbas(); return; }
+  try{ TXT = await rpc('tf_laudo_textos_ver'); if (!vigente(vez)) return; }
+  catch(e){ if (!vigente(vez)) return; $('tela').innerHTML = h + '<div class="card vazio"></div>'; $('tela').querySelector('.vazio').textContent = e.message || 'Não deu para carregar.'; ligarAbas(); return; }
   pintarTextos(h);
 }
 function pintarTextos(h){
@@ -631,7 +645,9 @@ function segundoToque(chave, de, para, html){
 // S177 · issue 64: a lista pode mostrar os desativados (com "Reativar"); guardada para o aviso de nº de série repetido
 let INST_DESAT = false, INST_LISTA = [];
 async function telaInstrumentos(){
+  const vez = TELA_VEZ;   // E48 · issue 65, item 11
   const [ATIVOS, DESAT] = await Promise.all([rpc('tf_insp_instrumentos_lista'), rpc('tf_insp_desativados', { p_qual:'instrumentos' }).catch(() => [])]);
+  if (!vigente(vez)) return;
   const TODOS = ATIVOS.concat((DESAT || []).map(x => Object.assign({}, x, { ativo:false })));
   INST_LISTA = TODOS;   // o aviso de repetido olha também os desativados
   const nDes = TODOS.filter(x => x.ativo === false).length, L = INST_DESAT ? TODOS : TODOS.filter(x => x.ativo !== false);
@@ -867,7 +883,9 @@ async function cartaoAfericoes(ins){
 // S177 · issue 64: os materiais desativados aparecem a pedido, com "Reativar" (só o PLH grava)
 let MAT_DESAT = false, MAT_LISTA = [];
 async function telaMateriais(){
+  const vez = TELA_VEZ;   // E48 · issue 65, item 11
   const [ATIVOS, DESAT] = await Promise.all([rpc('tf_insp_materiais_lista'), rpc('tf_insp_desativados', { p_qual:'materiais' }).catch(() => [])]);
+  if (!vigente(vez)) return;
   const TODOS = ATIVOS.concat((DESAT || []).map(x => Object.assign({}, x, { ativo:false }))), admin = PLH,   /* E7: gravar e conferir material é do PLH */ nConf = TODOS.filter(x => !x.conferido && x.ativo !== false).length;
   MAT_LISTA = TODOS;   // o aviso de repetido olha também os desativados
   const nDesM = TODOS.filter(x => x.ativo === false).length, L = MAT_DESAT ? TODOS : TODOS.filter(x => x.ativo !== false);
@@ -951,9 +969,16 @@ function decidirPLH(laudo){
 
 // ── 2 · a OS ───────────────────────────────────────────────────────────────
 let PREP = null;
-async function carregarOS(os){ PREP = await rpc('tf_insp_preparacao_os', { p_os_id: os }); return PREP; }
+async function carregarOS(os){
+  // E48 · issue 65, item 11: a resposta que chega depois de outra tela ter sido aberta não troca a OS da tela nova
+  const vez = TELA_VEZ, P = await rpc('tf_insp_preparacao_os', { p_os_id: os });
+  if (vigente(vez) || !PREP) PREP = P;
+  return P;
+}
 async function telaOS(os){
+  const vez = TELA_VEZ;   // E48 · issue 65, item 11
   const P = await carregarOS(os);
+  if (!vigente(vez)) return;
   titulo(P.os.numero + ' · preparar a inspeção', P.os.cliente || '');
   const marc = P.vasos.filter(v => v.inspecao), fora = P.vasos.filter(v => !v.inspecao);
   const t05 = P.t05 || {}, vis = P.visita || {};
@@ -1009,9 +1034,23 @@ async function telaOS(os){
          { rotulo:'Aproveitar o que foi lançado', classe:'pri', acao:async () => { try{ await rpc('tf_insp_retomar', { p_os_id: os, p_equip: v0.id }); U.toast('A coleta anterior voltou a valer.', 'ok'); pintar(); }catch(e){ erro(e); c.checked = false; } } }]);
       return;
     }
-    c.disabled = true;
-    try{ await rpc('tf_insp_preparar', { p_os_id: os, p_equip: c.dataset.marca, p_marcar: c.checked, p_instrucoes: null }); pintar(); }
-    catch(e){ erro(e); c.checked = !c.checked; c.disabled = false; }
+    // E48 · issue 65, item 3 (só a tela; a trava no banco é o item 7 da issue 86, Rodada 12): desmarcar apaga as instruções no banco.
+    // Com instruções escritas, pergunta antes e as guarda no navegador; marcar de novo o mesmo vaso nesta OS as devolve.
+    const chI = 'tfdoc_instr_' + os + '_' + c.dataset.marca, tI = $('tela').querySelector('[data-instr="' + CSS.escape(c.dataset.marca) + '"]'),
+      txI = c.checked ? null : ((tI ? tI.value : (v0 && v0.inspecao && v0.inspecao.instrucoes_campo)) || '').trim();
+    let devolve = null; if (c.checked){ try{ devolve = localStorage.getItem(chI); }catch(e){} }
+    const fazer = async () => {
+      c.disabled = true;
+      try{ await rpc('tf_insp_preparar', { p_os_id: os, p_equip: c.dataset.marca, p_marcar: c.checked, p_instrucoes: c.checked && devolve ? devolve : null });
+        try{ if (txI) localStorage.setItem(chI, txI); else if (c.checked) localStorage.removeItem(chI); }catch(e){}
+        if (c.checked && devolve) U.toast('As instruções que estavam escritas para este vaso voltaram.', 'ok');
+        pintar(); }
+      catch(e){ erro(e); c.checked = !c.checked; c.disabled = false; }
+    };
+    if (txI) return janela('Tirar ' + (v0.tag || 'o vaso') + ' desta OS', '<p>Este vaso tem instruções escritas para o campo:</p><p class="muted" style="white-space:pre-wrap">' + esc(txI) + '</p>'
+      + '<p>Tirando o vaso, elas saem da inspeção. Ficam guardadas neste computador: se marcar o vaso de novo nesta OS, elas voltam.</p>',
+      [{ rotulo:'Cancelar', acao:() => { c.checked = true; } }, { rotulo:'Tirar o vaso', classe:'pri', acao:fazer }]);
+    await fazer();
   }));
   $('tela').querySelectorAll('[data-instr]').forEach(t => t.addEventListener('change', async () => {
     try{ await rpc('tf_insp_preparar', { p_os_id: os, p_equip: t.dataset.instr, p_marcar: true, p_instrucoes: t.value }); U.toast('Instruções gravadas.', 'ok'); }
@@ -1498,16 +1537,18 @@ async function textosRegistroMinuta(d){
 // ── 3 · um vaso: o laudo anterior ──────────────────────────────────────────
 let VASO = null, LAUDO = null, PREVIA = null;
 async function telaVaso(os, vid){
+  const vez = TELA_VEZ;   // E48 · issue 65, item 11
   if (!PREP || PREP.os.id !== os) await carregarOS(os);
+  if (!vigente(vez)) return;
   VASO = PREP.vasos.find(v => v.id === vid);
-  if (!VASO){ await carregarOS(os); VASO = PREP.vasos.find(v => v.id === vid); }
+  if (!VASO){ await carregarOS(os); if (!vigente(vez)) return; VASO = PREP.vasos.find(v => v.id === vid); }
   if (!VASO) throw new Error('Vaso não encontrado nesta OS.');
   LAUDO = VASO.laudo || null; PREVIA = null; PMTA_RECALC = null;   // S177 · issue 54: a PMTA recalculada é de cada vaso (refeita na prévia)
   const D = (LAUDO && LAUDO.declarado) || {};
   titulo(VASO.tag + ' · laudo anterior', PREP.os.numero + ' · ' + (PREP.os.cliente || ''));
   const cams = VASO.camaras || [];
   const v = (x) => x == null ? '' : esc(String(x));
-  const pr = (x) => x == null ? '' : esc(fmt(deMPa(x), 4));
+  const pr = (x) => x == null ? '' : esc(fmtUn(x));   // E48 · issue 65, item 1
   const arqs = VASO.arquivos || [];
   let h = '<div class="linha" style="margin-bottom:10px">' + chipSit(VASO.situacao)
     + (LAUDO && LAUDO.conferido_em ? '<span class="muted">conferido em ' + dataBR(String(LAUDO.conferido_em).slice(0,10)) + '</span>' : '')
@@ -1519,7 +1560,11 @@ async function telaVaso(os, vid){
        + '<span class="muted">' + (arqs.length ? arqs.length + ' arquivo(s)' : 'nenhum arquivo ainda') + '</span></div>'
        : '<p class="alerta falta">Marque o vaso na OS para anexar o laudo.</p>')
     + '<div class="arqs" id="arqs">' + arqs.map((a, i) => '<button data-arq="' + i + '">' + esc(a.legenda || ('arquivo ' + (i + 1))) + '</button>').join('') + '</div>'
-    + '<div id="visor"><p class="muted">' + (arqs.length ? 'Escolha um arquivo acima.' : 'O PDF do último laudo aparece aqui.') + '</p></div></div>';
+    + '<div id="visor">' + (arqs.length ? '<p class="muted">Escolha um arquivo acima.</p>'
+      // E48 · issue 65, item 10: o laudo em conferência sem nenhuma página (o campo não fotografou, ou tirou as fotos) diz isso, em vez da tela vazia
+      : LAUDO && LAUDO.situacao === 'em_conferencia' ? '<p class="alerta falta" id="semPaginas">Nenhuma página deste laudo foi fotografada em campo nem anexada aqui. '
+        + 'Anexe o PDF ou as fotos (botão acima) ou peça à equipe para fotografar o laudo impresso; sem elas, a conferência é feita só com o que foi digitado.</p>'
+      : '<p class="muted">O PDF do último laudo aparece aqui.</p>') + '</div></div>';
   h += '<div><div class="card"><h3>Atalhos</h3><div class="linha">'
     + '<button class="btn" id="pegar">O laudo não veio: pegar no cliente</button><button class="btn" id="semLaudo">Sem laudo anterior…</button></div>'
     + '<p class="muted" style="margin:6px 0 0">"Pegar no cliente": o inspetor fotografa o laudo impresso em campo, e a equipe confere depois. A T05 pode concluir assim.</p></div>';
@@ -1578,9 +1623,9 @@ async function telaVaso(os, vid){
     const cv = [...document.querySelectorAll('.pmtaCam')].map(i => { const x = num(i.value); return x == null || Number.isNaN(x) ? null : paraMPa(x); });
     const vv = [...document.querySelectorAll('.vAj')].map(i => { const x = num(i.value); return x == null || Number.isNaN(x) ? null : paraMPa(x); });
     UN = $('un').value; try{ localStorage.setItem('tfdoc_un', UN); }catch(e){}
-    ids.forEach((id, i) => { $(id).value = vals[i] == null ? '' : fmt(deMPa(vals[i]), 4); });
-    document.querySelectorAll('.pmtaCam').forEach((i, k) => { i.value = cv[k] == null ? '' : fmt(deMPa(cv[k]), 4); });
-    document.querySelectorAll('.vAj').forEach((i, k) => { i.value = vv[k] == null ? '' : fmt(deMPa(vv[k]), 4); });
+    ids.forEach((id, i) => { $(id).value = vals[i] == null ? '' : fmtUn(vals[i]); });   // E48 · issue 65, item 1
+    document.querySelectorAll('.pmtaCam').forEach((i, k) => { i.value = cv[k] == null ? '' : fmtUn(cv[k]); });
+    document.querySelectorAll('.vAj').forEach((i, k) => { i.value = vv[k] == null ? '' : fmtUn(vv[k]); });
     pintaUn();
   });
   $('vol_desc').addEventListener('change', () => { $('volume').disabled = $('vol_desc').checked; if ($('vol_desc').checked) $('volume').value = ''; });
@@ -1609,7 +1654,12 @@ async function telaVaso(os, vid){
   }));
   if (arqs.length) $('tela').querySelector('[data-arq]').click();
   const an = $('anexar'); if (an) an.addEventListener('click', () => { $('arqPdf').value = ''; $('arqPdf').click(); });
-  $('pegar').addEventListener('click', () => situacaoRapida('pendente_cliente'));
+  // E48 · issue 65, item 2: "pegar no cliente" muda a situação do laudo e volta para a OS: pede a confirmação antes
+  $('pegar').addEventListener('click', () => janela('O laudo não veio: pegar no cliente', '<p>O inspetor vai fotografar o laudo impresso em campo, e a equipe confere depois. '
+    + 'A T05 pode concluir assim.</p>' + (LAUDO && (LAUDO.numero || LAUDO.situacao === 'conferido') ? '<p class="alerta falta">Este vaso já tem um laudo '
+    + (LAUDO.situacao === 'conferido' ? '<b>conferido</b>' : 'digitado') + ' aqui. Confirmando, ele volta a "pegar no cliente" (os dados digitados ficam guardados).</p>' : '')
+    + '<p class="muted">O que estiver digitado nesta tela e ainda não foi gravado se perde.</p>',
+    [{ rotulo:'Cancelar' }, { rotulo:'Confirmar: pegar no cliente', classe:'pri', acao:() => situacaoRapida('pendente_cliente') }]));
   $('semLaudo').addEventListener('click', () => janela('Sem laudo anterior', '<label class="f">Por quê<select class="t" id="slTipo"><option value="sem_laudo">Inspeção inicial / o vaso nunca teve laudo</option>'
     + '<option value="cliente_nao_tem">O cliente não tem (laudo extraviado)</option></select></label><label class="f">Motivo *<textarea class="t" id="slMot"></textarea></label>'
     + '<p class="muted">Laudo extraviado exige a reconstituição do prontuário (NR-13 13.5.1.6).</p>',
@@ -1617,7 +1667,14 @@ async function telaVaso(os, vid){
       const m = ($('slMot').value || '').trim(); if (!m){ U.toast('Escreva o motivo.', 'err'); return false; }
       return situacaoRapida($('slTipo').value, m);
     } }]));
-  $('gravar').addEventListener('click', () => N.util.semDuploEnvio($('gravar'), gravarEConferir));
+  // E48 · issue 65, item 2: gravar de novo um laudo já conferido o devolve a "em conferência": avisa antes
+  $('gravar').addEventListener('click', () => {
+    if (LAUDO && LAUDO.situacao === 'conferido') return janela('Gravar de novo um laudo conferido', '<p>Este laudo já foi <b>conferido</b>'
+      + (LAUDO.conferido_em ? ' em ' + esc(dataBR(String(LAUDO.conferido_em).slice(0, 10))) : '') + '. Gravando de novo, ele volta para <b>"em conferência"</b>: '
+      + 'confira outra vez e toque em "Concluir a conferência" no fim da tela.</p>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Gravar e conferir de novo', classe:'pri', acao:async () => { await gravarEConferir(); } }]);
+    N.util.semDuploEnvio($('gravar'), gravarEConferir);
+  });
   if (LAUDO && (LAUDO.situacao === 'em_conferencia' || LAUDO.situacao === 'conferido') && LAUDO.numero) previa().catch(() => {});
 }
 function linhaComp(c){
@@ -1632,7 +1689,7 @@ function linhaComp(c){
 }
 function linhaValv(x){
   const tr = document.createElement('tr'); tr.className = 'lv';
-  tr.innerHTML = '<td><input data-k="tag" value="' + esc(x.tag || '') + '"></td><td><input class="vAj" data-k="ajuste" inputmode="decimal" value="' + esc(x.ajuste_mpa == null ? '' : fmt(deMPa(x.ajuste_mpa), 4)) + '"></td>'
+  tr.innerHTML = '<td><input data-k="tag" value="' + esc(x.tag || '') + '"></td><td><input class="vAj" data-k="ajuste" inputmode="decimal" value="' + esc(x.ajuste_mpa == null ? '' : fmtUn(x.ajuste_mpa)) + '"></td>'
     + '<td><button class="btn mini perigo">×</button></td>';
   tr.querySelector('button').addEventListener('click', () => tr.remove());
   $('valvs').appendChild(tr);
@@ -1772,7 +1829,7 @@ async function gravarEConferir(){
   if (dados.pmta_mpa != null && (dados.pmta_mpa <= 0 || dados.pmta_mpa >= 100)){ U.toast('PMTA fora do esperado: confira a unidade.', 'err'); return; }
   try{
     const id = await rpc('tf_insp_laudo_anterior_declarar', { p_equip: VASO.id, p_dados: dados });
-    LAUDO = Object.assign(LAUDO || {}, { id, declarado: dados.declarado });   // S177 · issue 54: a prévia refaz a conta com o que acabou de ser gravado
+    LAUDO = Object.assign(LAUDO || {}, { id, declarado: dados.declarado, situacao: 'em_conferencia' });   // E48 · issue 65, item 2: gravado de novo, volta a "em conferência"   // S177 · issue 54: a prévia refaz a conta com o que acabou de ser gravado
     await previa();
     U.toast('Gravado. Confira abaixo.', 'ok');
   }catch(e){ erro(e); }
@@ -2134,7 +2191,9 @@ const somaAnos = (d, n) => { const [y, m, dd] = d.split('-').map(Number); const 
 
 // ── a lista ────────────────────────────────────────────────────────────────
 async function abaRevisao(h){
+  const vez = TELA_VEZ;   // E48 · issue 65, item 11
   const L = await rpc('tf_insp_revisao_lista');
+  if (!vigente(vez)) return;
   const col = e => L.filter(x => x.etapa === e);
   h += '<div class="revcols">' + [1, 2, 3].map(e => '<div class="card"><h3>' + REV_ETAPA[e] + ' <span class="muted">(' + col(e).length + ')</span></h3>'
     + (col(e).length ? col(e).map(x => '<div class="revitem' + (x.pode ? ' minha' : '') + '" data-rev="' + esc(x.id) + '"><b>' + esc(x.tag) + '</b> · ' + esc(x.cliente || '')
@@ -2151,27 +2210,40 @@ async function abaRevisao(h){
 
 // ── a tela da inspeção ─────────────────────────────────────────────────────
 let REV = null;
+let REV_VEZ = 0;   // E48 · issue 67: a última leitura pedida é a que pinta (duas gravações seguidas: a resposta mais velha não pinta por cima)
 async function telaRevisao(id, manter){
   // S148 · item 89: ao gravar (manter), a tela fica como está até os dados novos chegarem
   if (!manter){ titulo('Revisão', 'carregando…'); $('tela').innerHTML = '<p class="muted">Carregando…</p>'; }
-  const R = await rpc('tf_insp_revisao_ver', { p_id:id });
-  const P = await rpc('tf_insp_pacote_os', { p_os_id:R.inspecao.os_id });
+  const vez = TELA_VEZ, vezR = ++REV_VEZ;
+  // E45 · issue 58: ao gravar outra parte da tela, a revisão é lida de novo; o que o PLH digitou na aprovação e ainda não está no
+  // banco (as datas menores e o motivo, o volume total, a PMTA externa e a justificativa dela, a justificativa da operação) fica
+  const ant = REV && REV.id === id ? REV : null;
+  // E48 · issue 67 (Revisão TapDoc · Rodada 8): as consultas saem todas ao mesmo tempo (antes, nove, uma depois da outra). Ao gravar
+  // (manter), só se busca de novo o que uma gravação da revisão pode mudar — a revisão, o pacote da OS (o vaso, as câmaras, as fotos),
+  // as aferições e o mapa (as medidas acompanham as correções). Os textos prontos (só mudam em "Textos do laudo"), a caixa "já tem a
+  // pasta", a do Prontuário e o link do TapWeb (cada quadro grava e se refaz sozinho) ficam como estavam.
+  const reler = !manter || !ant, osAnt = ant && ant.R && ant.R.inspecao && ant.R.inspecao.os_id;
+  const pR = rpc('tf_insp_revisao_ver', { p_id:id });
+  const pP = osAnt ? rpc('tf_insp_pacote_os', { p_os_id:osAnt }) : pR.then(R => rpc('tf_insp_pacote_os', { p_os_id:R.inspecao.os_id }));
+  const pAf = rpc('tf_insp_afericoes_lista', { p_inspecao:id }).then(L => (L || []).filter(x => !x.cancelada_em), () => []);   // E33 · issue 23: o cálculo de cada aferição (U e tolerância por ponto)
+  const pM = rpc('tf_insp_mapa_ver', { p_id:id }).catch(() => null);   // S151 · issue 7 (428): as medidas e a imagem do mapa
+  const pT = reler ? rpc('tf_laudo_textos_prontos').then(x => x || {}, () => ({})) : Promise.resolve(REV_TEXTOS || {});   // S146 · item 79 · E34
+  const pPa = reler ? pastaVer(id) : Promise.resolve(ant.pasta);   // E36 · issue 30, Parte 2 (DP8): a caixa "já tem a pasta"
+  const pPr = reler ? prontVer(id) : Promise.resolve(ant.pront);   // E37 · issue 30, Parte 3 (DP10): a caixa "Reconstituir o prontuário"
+  const pQ = reler ? qrVer(id) : Promise.resolve(ant.qr);          // E39 · issue 34: o link do TapWeb (o QR da placa e da lombada)
+  const [R, P, afs, M, TX, pasta, pront, qr] = await Promise.all([pR, pP, pAf, pM, pT, pPa, pPr, pQ]);
+  if (!vigente(vez) || vezR !== REV_VEZ) return;   // E48 · issue 65, item 11 e issue 67: outra tela (ou uma leitura mais nova) já está a caminho
   const v = (P.vasos || []).find(x => x.inspecao && x.inspecao.id === id);
   if (!v) throw new Error('O vaso desta inspeção não veio no pacote da OS.');
   CALC.usar(P);
   let prev; try{ prev = CALC.previa(v); }catch(e){ prev = { camaras:[], vaso:{ erro:e.message }, avisos:[e.message], detalhes:[] }; }
-  // E45 · issue 58: ao gravar outra parte da tela, a revisão é lida de novo; o que o PLH digitou na aprovação e ainda não está no
-  // banco (as datas menores e o motivo, o volume total, a PMTA externa e a justificativa dela, a justificativa da operação) fica
-  const ant = REV && REV.id === id ? REV : null;
-  REV = { id, R, P, v, prev, volume:ant ? ant.volume : null, pmta:{}, abertos:(ant && ant.abertos) || {},   // E33 · issue 13: o quadro aberto à mão continua aberto ao gravar
-    datas:(ant && ant.datas) || null, pext:(ant && ant.pext) || {}, justOp:(ant && ant.justOp) || {} };
-  if (ant && ant.volumeTxt != null) REV.volumeTxt = ant.volumeTxt;
-  try{ REV.afs = ((await rpc('tf_insp_afericoes_lista', { p_inspecao:id })) || []).filter(x => !x.cancelada_em); }catch(e){ REV.afs = []; }   // E33 · issue 23: o cálculo de cada aferição (U e tolerância por ponto)
-  try{ REV.M = await rpc('tf_insp_mapa_ver', { p_id:id }); }catch(e){ REV.M = null; }   // S151 · issue 7 (428): as medidas e a imagem do mapa
-  try{ REV_TEXTOS = (await rpc('tf_laudo_textos_prontos')) || {}; REV_PRONTOS = REV_TEXTOS.prontos || null; }catch(e){ REV_TEXTOS = {}; REV_PRONTOS = null; }   // S146 · item 79 · E34
-  REV.pasta = await pastaVer(id);   // E36 · issue 30, Parte 2 (DP8): a caixa "já tem a pasta"
-  REV.pront = await prontVer(id);   // E37 · issue 30, Parte 3 (DP10): a caixa "Reconstituir o prontuário"
-  REV.qr = await qrVer(id);         // E39 · issue 34: o link do TapWeb (o QR da placa e da lombada)
+  const antAgora = REV && REV.id === id ? REV : ant;   // o que foi digitado enquanto a leitura vinha também fica
+  REV = { id, R, P, v, prev, volume:antAgora ? antAgora.volume : null, pmta:{}, abertos:(antAgora && antAgora.abertos) || {},   // E33 · issue 13: o quadro aberto à mão continua aberto ao gravar
+    datas:(antAgora && antAgora.datas) || null, pext:(antAgora && antAgora.pext) || {}, justOp:(antAgora && antAgora.justOp) || {} };
+  if (antAgora && antAgora.volumeTxt != null) REV.volumeTxt = antAgora.volumeTxt;
+  REV.afs = afs; REV.M = M;
+  REV_TEXTOS = TX; REV_PRONTOS = TX.prontos || null;
+  REV.pasta = pasta; REV.pront = pront; REV.qr = qr;
   pintarRevisao();
 }
 // S148 · item 89: depois de gravar, a revisão volta ao MESMO quadro (não a um número de pixels) e realça a linha mexida
@@ -2516,7 +2588,8 @@ function pintarRevisao(){
   if (eu.pode && e === 3) h += '<button class="btn pri' + (nV ? ' bloq' : '') + '" id="revAprovar"' + (nV ? ' title="Há pendência em vermelho"' : '') + '>Aprovar e liberar para o laudo</button>';   // E33 · issue 15: o clique leva até a pendência
   if (eu.pode && (e === 2 || e === 3)) h += '<button class="btn" id="revDevolver">Devolver à ' + (e === 2 ? 'Revisão 1' : 'Revisão 2') + '</button>';
   if (eu.pode && ['enviada','em_revisao'].indexOf(I.situacao) >= 0) h += '<button class="btn sec" id="revReabrirCampo">Reabrir para o campo</button>';
-  h += '<span class="muted">' + (e === 3 ? 'Aprovar grava o cálculo oficial e libera a inspeção para o laudo (R06).' : 'Para corrigir o que veio do campo, reabra a inspeção para a equipe (vaso › Reabrir).') + '</span></div>';
+  h += '<span class="muted">' + (e === 3 ? 'Aprovar grava o cálculo oficial e libera a inspeção para o laudo (R06).' : 'Para corrigir o que veio do campo: o "Corrigir" de cada quadro, ou ' + (eu.pode && ['enviada','em_revisao'].indexOf(I.situacao) >= 0 ? '"Reabrir para o campo" (ao lado)' : 'quem revisa reabre para o campo')   // E48 · issue 65, item 4
+      + ', e a equipe corrige no celular.') + '</span></div>';
   $('tela').innerHTML = h;
   ligarRevisao();
   // E36 · issue 30, Parte 2: gravou a caixa → só o quadro dela se refaz (a revisão fica onde está)
@@ -2611,7 +2684,8 @@ function revPrazoHtml(prev, pode){
   const vidas = (REV.vidas || revVidas()).filter(x => x.vida != null && x.vida > 0 && !x.semPerda);
   const menor = vidas.length ? vidas.reduce((a, b) => b.vida < a.vida ? b : a) : null;
   const refPrz = prz ? (prz.interno != null ? prz.interno : prz.externo) : null;
-  const sug = menor && refPrz != null && menor.vida < refPrz ? Math.max(1, Math.floor(menor.vida)) : null;
+  // E48 · issue 65, item 9: com a vida remanescente abaixo de 1 ano, "reduzir para 1 ano" passaria do fim dela: não sugere ano nenhum
+  const curta = menor && menor.vida < 1, sug = menor && !curta && refPrz != null && menor.vida < refPrz ? Math.floor(menor.vida) : null;
   let h = '<div class="card"><h3 style="margin:0">Prazo das próximas inspeções</h3>'
     + '<p class="muted" style="margin:4px 0 8px">' + (prz ? 'Pela NR-13 (Tabela 2, categoria ' + esc(prev.vaso.categoria) + '): externo ' + prz.externo + ' ano(s), interno ' + (prz.interno == null ? 'a critério do PLH' : prz.interno + ' anos') + '. ' : '')
     + 'Pode ser menor, nunca maior. Quem reduziu fica só no controle interno; o laudo diz os prazos e o motivo.</p>';
@@ -2623,6 +2697,9 @@ function revPrazoHtml(prev, pode){
   if (PR && !prz) h += '<p class="alerta crit" style="margin:0 0 8px">Sem a categoria do vaso, o prazo reduzido não pode ser conferido com a NR-13: resolva a categoria (volume, pressão e fluido) antes de aprovar.</p>';
   else if (naoRed.length) h += '<p class="alerta crit" style="margin:0 0 8px">Não é redução: ' + esc(naoRed.join('; ')) + ' (não é menor que o prazo da norma). A aprovação usa o prazo da norma'
     + (naoRed.length === [PR.externo, PR.interno].filter(x => x != null).length ? ' e o laudo não diz "reduzido"' : ' nessa parte') + '. Corrija o prazo abaixo ou volte ao prazo da norma.</p>';
+  if (curta) h += '<p class="alerta crit" style="margin:0 0 8px">A vida remanescente do ' + esc(menor.nome) + ' (' + esc(menor.vidaTxt) + ') é <b>menor que 1 ano</b>: '
+    + 'nenhum prazo em anos cabe nela. Na aprovação, o PLH põe a <b>data</b> da próxima inspeção interna antes do fim da vida remanescente (as datas do PLH, com o motivo), '
+    + 'e avalia a PMTA e as recomendações (reparo ou substituição).</p>';
   if (sug != null) h += '<p class="alerta falta" style="margin:0 0 8px">Sugestão: a vida remanescente do ' + esc(menor.nome) + ' (' + esc(menor.vidaTxt) + ') é menor que o prazo da norma. Avalie reduzir o prazo do exame interno para ' + sug + ' ano(s).</p>';
   if (pode) h += '<div class="g3"><label class="f">Externo (anos)<input class="t" id="przExt" inputmode="numeric" value="' + esc(PR && PR.externo != null ? PR.externo : '') + '" placeholder="' + (prz ? 'norma: ' + prz.externo : '') + '"></label>'
     + '<label class="f">Interno (anos)<input class="t" id="przInt" inputmode="numeric" value="' + esc(PR && PR.interno != null ? PR.interno : (sug != null && !PR ? sug : '')) + '" placeholder="' + (prz && prz.interno != null ? 'norma: ' + prz.interno : '') + '"></label>'
@@ -3146,7 +3223,7 @@ function ligarRevisao(){
       + '<label class="f">Motivo<textarea class="t" id="rcpMot" rows="3" placeholder="o que o inspetor deve corrigir"></textarea></label>',
       [{ rotulo:'Cancelar' }, { rotulo:'Reabrir', classe:'pri', acao:async () => {
         if (!($('rcpMot').value || '').trim()){ U.toast('Diga o motivo.', 'err'); return false; }
-        try{ await rpc('tf_insp_reabrir', { p_id:id, p_para:'em_campo', p_motivo:$('rcpMot').value }); U.toast('Reaberta para o campo.', 'ok'); location.hash = 'aba=laudos'; }
+        try{ await rpc('tf_insp_reabrir', { p_id:id, p_para:'em_campo', p_motivo:$('rcpMot').value }); U.toast('Reaberta para o campo.', 'ok'); location.hash = 'aba=rev'; }   // E48 · issue 65, item 4: volta para "A revisar"
         catch(e){ erro(e); return false; } } }]);
   });
   const bbo = $('revBoro'); if (bbo) bbo.addEventListener('click', () => {
@@ -3254,9 +3331,9 @@ function ligarRevisao(){
             if (op > 0 && mpa > 3 * op) aviso = 'Confira: o ajuste (' + fmt(x, 3) + ' ' + uRot + ') passa de 3 vezes a pressão de operação (' + fmt(CALC.deMPa(op, uR), 2) + ' ' + uRot + '). Gravado assim mesmo; a revisão mostra o aviso.';
           }
         }
-        rpc('tf_insp_revisao_corrigir', { p_id:id, p_alvo:alvo, p_ref:ref, p_campo:k, p_valor:val, p_motivo:$('rcMotivo').value })
-          .then(r => { revCorrigido(r, aviso); N.janela.fechar(); recarregar(); }, erro);
-        return false; } }]);
+        // E48 · issue 65, item 5: a ação espera o banco (o 2º toque em "Gravar" é ignorado enquanto isso)
+        return rpc('tf_insp_revisao_corrigir', { p_id:id, p_alvo:alvo, p_ref:ref, p_campo:k, p_valor:val, p_motivo:$('rcMotivo').value })
+          .then(r => { revCorrigido(r, aviso); N.janela.fechar(); recarregar(); return false; }, e => { erro(e); return false; }); } }]);
     // S144 · itens 63 e 78: a lista das funções do vaso; "sem placa" é sim ou não; o Número TAP é o nº do cliente + a TAG sem o prefixo
     const DICA = { numero_tap:'Nº do cliente + "-" + a TAG sem o prefixo (ex.: VP-23 do cliente 33 → 33-23). Depois de gravado na placa, não muda mais.',
       placa_situacao:'Escolha: com placa indelével, placa ilegível ou não indelével, ou sem placa (NR-13, 13.5.1.3).', conexao:'Ex.: 1/2" (a bitola da rosca).',
@@ -3282,18 +3359,22 @@ function ligarRevisao(){
   T.querySelectorAll('[data-corc]').forEach(b => b.addEventListener('click', () => {
     const [kid, campo] = b.dataset.corc.split('|'), k = CALC.ativas(REV.v).find(x => x.id === kid), def = REV_CAMPOS_CAM.find(x => x[0] === campo);
     const uR = CALC.unidadeDe(REV.v), pres = def[2] === 'p', atual = k[campo];
-    janela('Corrigir · ' + def[1], (pres ? '<label class="f">Valor certo (' + CALC.UNID_ROT[uR] + ')<input class="t" id="rkV" inputmode="decimal" value="' + (atual != null ? fmt(CALC.deMPa(atual, uR), 4) : '') + '"></label>'
+    janela('Corrigir · ' + def[1], (pres ? '<label class="f">Valor certo (' + CALC.UNID_ROT[uR] + ')<input class="t" id="rkV" inputmode="decimal" value="' + (atual != null ? fmt(CALC.deMPa(atual, uR), CASAS_UN[uR] == null ? 4 : CASAS_UN[uR]) : '') + '"></label>'
+        + (campo === 'p_operacao_max_mpa' ? '<p class="muted" style="margin:-4px 0 8px">Câmara que trabalha com vácuo: pressão negativa (ex.: -0,5 bar).</p>' : '')
         : '<label class="f">Valor certo<div class="linha"><input class="t" id="rkV" inputmode="decimal" style="flex:1" value="' + (atual != null ? fmt(Number(atual) * 1000, 1) : '') + '">'
           + '<select class="t" id="rkU" style="width:110px"><option value="l">litros</option><option value="m3">m³</option></select></div></label>')
       + '<label class="f">Motivo<input class="t" id="rkMot" placeholder="ex.: conforme a foto da plaqueta"></label><p class="muted">Fica registrado o antes, o depois e o seu nome. O P·V, a categoria e os prazos se refazem.</p>',
       [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
         let x; try{ x = pres ? num($('rkV').value) : numMedida($('rkV'), 'Volume'); }catch(e){ U.toast(e.message, 'err'); return false; }   // S172 · issue 55: o volume pergunta (a pressão não mudou: issue 49)
-        if (x == null || Number.isNaN(x) || x <= 0){ U.toast('Informe o valor.', 'err'); return false; }
+        // E48 · issue 65, item 8: a pressão de operação aceita valor negativo (câmara com vácuo; o banco aceita acima de -1 atm, -0,1013 MPa)
+        const vac = campo === 'p_operacao_max_mpa';
+        if (x == null || Number.isNaN(x)){ U.toast('Informe o valor.', 'err'); return false; }
+        if (!vac && x <= 0){ U.toast('Informe um valor maior que zero.', 'err'); return false; }
+        if (vac && x * CALC.UNID[uR] <= -0.1013){ U.toast('Vácuo vai até -1 atm (-0,1013 MPa = ' + fmt(-0.1013 / CALC.UNID[uR], 3) + ' ' + CALC.UNID_ROT[uR] + '). Nada foi gravado.', 'err'); return false; }
         if (!pres && ($('rkU').value === 'l' ? x : x * 1000) < 20) U.toast('Confira: ' + fmt($('rkU').value === 'l' ? x : x * 1000, 1) + ' litros é muito pouco para um vaso de pressão. Gravado assim mesmo; a revisão mostra o aviso.');
         const val = pres ? Math.round(x * ({ 'bar':0.1, 'kgf/cm2':0.0980665, 'MPa':1, 'psi':0.00689476 })[uR] * 1e5) / 1e5 : ($('rkU').value === 'l' ? x / 1000 : x);
-        rpc('tf_insp_revisao_corrigir', { p_id:id, p_alvo:'camara', p_ref:kid, p_campo:campo, p_valor:String(val), p_motivo:$('rkMot').value })
-          .then(r => { revCorrigido(r); N.janela.fechar(); recarregar(); }, erro);
-        return false; } }]);
+        return rpc('tf_insp_revisao_corrigir', { p_id:id, p_alvo:'camara', p_ref:kid, p_campo:campo, p_valor:String(val), p_motivo:$('rkMot').value })   // E48 · issue 65, item 5
+          .then(r => { revCorrigido(r); N.janela.fechar(); recarregar(); return false; }, e => { erro(e); return false; }); } }]);
   }));
   // E46 · issue 61 (444): o PLH corrige o E e a geometria do componente; cada campo mudado vira uma correção no histórico
   T.querySelectorAll('[data-corg]').forEach(b => b.addEventListener('click', () => {
@@ -3362,9 +3443,9 @@ function ligarRevisao(){
       + '<label class="f">Recomendação<textarea class="t" id="rTxt" rows="3">' + esc(r.texto || '') + '</textarea></label><label class="f">Prazo (opcional)<input class="t" id="rPrazo" type="date" value="' + esc(r.prazo || '') + '"></label>',
       [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => {
         if (!r.id && !comecaComQue($('rTxt').value)){ U.toast('A recomendação começa com "Que…" (ex.: "Que o manômetro seja substituído;").', 'err'); return false; }   // E34 · issue 20
-        rpc('tf_insp_recomendacao_gravar', { p_id:id, p_rec:{ id:r.id || null, tipo:$('rTipo').value, texto:$('rTxt').value, prazo:$('rPrazo').value || null, ref:r.ref } })
-          .then(() => { N.janela.fechar(); recarregar(); }, erro);
-        return false; } }]);
+        // E48 · issue 65, item 5: dois toques rápidos em "Gravar" criavam duas recomendações iguais
+        return rpc('tf_insp_recomendacao_gravar', { p_id:id, p_rec:{ id:r.id || null, tipo:$('rTipo').value, texto:$('rTxt').value, prazo:$('rPrazo').value || null, ref:r.ref } })
+          .then(() => { N.janela.fechar(); recarregar(); return false; }, e => { erro(e); return false; }); } }]);
   };
   T.querySelectorAll('[data-novarec]').forEach(b => b.addEventListener('click', () => formRec(null, b.dataset.novarec || null, b.dataset.sug)));
   // E34 · issue 12: tirar, voltar e editar as recomendações da lista (só neste laudo; inspecoes.rec_ajustes)
@@ -3459,7 +3540,10 @@ function ligarRevisao(){
     guardarPmta(); manterLugar(async () => pintarRevisao());
   }));
   T.querySelectorAll('[data-pval]').forEach(i => i.addEventListener('change', () => {
-    const k = i.dataset.pval, x = paraM(num(i.value)), ck = REV.prev.camaras.find(c => c.cam.id === k), calc = ck && ck.governante ? ck.governante.pmta : null;
+    const k = i.dataset.pval, lido = num(i.value), ck = REV.prev.camaras.find(c => c.cam.id === k), calc = ck && ck.governante ? ck.governante.pmta : null;
+    // E48 · issue 65, item 7: número inválido (ou zero) não some calado: avisa, marca o campo e não grava nada
+    if (Number.isNaN(lido) || (lido != null && lido <= 0)){ marcarProblema(i, 'PMTA: ' + (Number.isNaN(lido) ? '"' + i.value + '" não é um número (use vírgula nos decimais, ex.: 8,5)' : 'informe um valor maior que zero') + '. Nada foi gravado.'); return; }
+    const x = paraM(lido);
     if (x != null && calc != null && x > calc + 1e-4){ U.toast('Acima da calculada: não é aceita.', 'err'); i.value = ''; REV.pmta[k].valor = null; return; }
     REV.pmta[k].valor = x; guardarPmta(); manterLugar(async () => pintarRevisao());
   }));
@@ -3484,8 +3568,8 @@ function ligarRevisao(){
   }));
   const bd = $('revDevolver'); if (bd) bd.addEventListener('click', () => {
     janela('Devolver', '<label class="f">O que precisa ser revisto<textarea class="t" id="dvTxt" rows="3"></textarea></label>', [{ rotulo:'Cancelar' }, { rotulo:'Devolver', classe:'pri', acao:() => {
-      rpc('tf_insp_revisao_devolver', { p_id:id, p_comentario:$('dvTxt').value }).then(() => { N.janela.fechar(); U.toast('Devolvida.', 'ok'); location.hash = 'aba=rev'; }, erro);
-      return false; } }]);
+      return rpc('tf_insp_revisao_devolver', { p_id:id, p_comentario:$('dvTxt').value })   // E48 · issue 65, item 5
+        .then(() => { N.janela.fechar(); U.toast('Devolvida.', 'ok'); location.hash = 'aba=rev'; return false; }, e => { erro(e); return false; }); } }]);
   });
   const ba = $('revAprovar'); if (ba) ba.addEventListener('click', () => U.semDuploEnvio(ba, async () => {
     revAtualizarPend();   // E45: as pendências da PMTA com o que está digitado agora
@@ -3889,9 +3973,11 @@ function mostrarDocs(docs, d, o){
 const SIT_LAUDO = { emitindo:['número reservado, PDF pendente','s-em_conferencia'], emitido:['emitido, falta a assinatura','s-pegar_cliente'],
                     assinado:['assinado','s-pronto'], substituido:['substituído','s-sem_laudo'] };
 async function abaLaudos(h){
+  const vez = TELA_VEZ;   // E48 · issue 65, item 11
   const [L, cfg, DES, PAC, NP] = await Promise.all([rpc('tf_laudo_lista'), rpc('tf_laudo_config_ver'),
     rpc('tf_laudo_desenho_situacao').catch(() => null), PLH ? pacoteParaAssinar() : Promise.resolve([]),
     rpc('tf_laudo_prontuario_numeracao', { p_proximo: null }).catch(() => null)]);   // E37: o próximo P do mês   // E35 · issue 30: com os documentos
+  if (!vigente(vez)) return;   // E48 · issue 65, item 11
   h += '<div class="card"><div class="linha" style="justify-content:space-between"><div><b>Emissão oficial: ' + (cfg.oficial ? 'ligada' : 'desligada') + '</b>'
     + '<div class="muted">' + (cfg.oficial ? 'O PLH emite o laudo com número.' : 'Piloto: sai só o rascunho, marcado "PILOTO", sem gastar número. Compare com o PDF do TapDoc antigo.')
     + ' Numeração de ' + String(cfg.mes).padStart(2, '0') + '/' + cfg.ano + ': ' + (cfg.proximo_codigo ? 'próximo <b>' + esc(cfg.proximo_codigo) + '</b>' : 'não informada')
