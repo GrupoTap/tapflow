@@ -192,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E46';   // E46 (S179 · issues 56, 61 e 81, Revisão TapDoc · Rodada 7a): na revisão, corrigir o ano de fabricação e o ajuste da válvula grava (o ajuste na unidade da inspeção, convertido para MPa pela tela); a circunferência aparece em "Dados contra as fotos" e se corrige; a situação do acessório se corrige; o E e a geometria de cada componente no quadro da PMTA (só o PLH); o número digitado é lido pela regra 50 antes de ir ao banco; a correção desmarca o "conferido" do quadro (444)
+const VERSAO = 'TapDoc E47';   // E47 (S180 · issues 59, 66 e 32, Revisão TapDoc · Rodada 7b): "Não deu para medir" tira o componente da conta (como o "Não medir" do celular) e o PLH aprova; os componentes fora da conta aparecem com o motivo nas Espessuras e na PMTA, com aviso quando um costado ou tampo inteiro fica fora; na revisão, tirar do laudo uma foto do campo (com o motivo) e pôr de volta; escolher a foto do estado geral (7.4); laudo-pdf.js S175 (445)
+// const VERSAO = 'TapDoc E46';   // E46 (S179 · issues 56, 61 e 81, Revisão TapDoc · Rodada 7a): na revisão, corrigir o ano de fabricação e o ajuste da válvula grava (o ajuste na unidade da inspeção, convertido para MPa pela tela); a circunferência aparece em "Dados contra as fotos" e se corrige; a situação do acessório se corrige; o E e a geometria de cada componente no quadro da PMTA (só o PLH); o número digitado é lido pela regra 50 antes de ir ao banco; a correção desmarca o "conferido" do quadro (444)
 // const VERSAO = 'TapDoc E45';   // E45 (S178 · issues 58, 60 e 62, Revisão TapDoc · Rodada 6): na aprovação, o que o PLH digitou (datas menores e motivo, volume, PMTA externa) fica ao gravar outra parte; a PMTA adotada abaixo da pressão de operação vira pendência que o PLH resolve com justificativa escrita (o laudo e o Registro saem "não liberado para operar nessa pressão"; laudo-pdf.js S174, documentos-pdf.js D6; 443); o aviso da vida remanescente curta aparece na lista do sistema
 // const VERSAO = 'TapDoc E44';   // E44 (S177 · issues 54, 63, 64 e 85, Revisão TapDoc · Rodada 5): a PMTA recalculada é sempre a do vaso aberto; o laudo anterior não perde o que foi digitado; desativar instrumento ou material pergunta e dá para reativar; "Nova calibração" guarda o certificado anterior e cada inspeção baixa o do dia dela (442)
 // const VERSAO = 'TapDoc E43';   // E43 (S174 · issue 38, Revisão TapDoc · Rodada 4a): o CSV do medidor com uma leitura inválida (zero ou vazia) não é mais recusado inteiro — as boas entram e a janela diz quais ficaram de fora; sem SQL
@@ -2236,6 +2237,26 @@ function pontosEspalhados(){
   });
   return out;
 }
+/* E47 · issue 59 (Revisão TapDoc · Rodada 7b) — os componentes fora da conta, na PMTA e na lista do sistema */
+function revForaHtml(v){
+  const f = espFora(v); if (!f.length) return '';
+  return '<p class="muted" id="revFora" style="margin:8px 0 0">Fora do cálculo: ' + f.map(x => '<b>' + esc(x.c.nome) + '</b> (' + esc(espForaTxt(x)) + ')').join(' · ') + '</p>';
+}
+const TIPOS_TAMPO = ['eliptico','torisferico','hemisferico','conico','plano'];
+function revForaAvisos(v){
+  const out = [], ks = CALC.ativas(v), sem = espSem(v);
+  ks.forEach(k => {
+    const nm = ks.length > 1 ? ' (' + k.nome + ')' : '';
+    const daCam = c => c.ativo !== false && (!c.camara_id || c.camara_id === k.id || ks.length === 1);
+    const cost = (v.componentes || []).filter(c => daCam(c) && c.tipo === 'costado');
+    const mot = cs => [...new Set(cs.map(c => (sem[c.id] || '').trim()).filter(Boolean))].join('; ') || 'sem o motivo';
+    if (cost.length && cost.every(c => c.nao_medir)) out.push({ chave:'fora_conta', nivel:'amarelo', texto:'Costado inteiro fora da conta' + nm + ': ' + mot(cost),
+      detalhe:'Nenhuma região do costado foi medida: a PMTA sai só dos tampos. Confira o motivo; se der para medir, "Medir" no quadro Espessuras do medidor.' });
+    (v.componentes || []).filter(c => daCam(c) && c.nao_medir && TIPOS_TAMPO.indexOf(c.tipo) >= 0).forEach(c => out.push({ chave:'fora_conta', nivel:'amarelo',
+      texto:c.nome + ' fora da conta' + nm + ': ' + mot([c]), detalhe:'O tampo não entra na PMTA nem na espessura do laudo; o motivo sai no 7.3. Se der para medir, "Medir" no quadro Espessuras do medidor.' }));
+  });
+  return out;
+}
 /* E46 · issues 56, 61 e 81 (Revisão TapDoc · Rodada 7a) — o que a revisão corrige */
 function revCircTxt(v){ const c = Number(v && v.circunferencia_mm); return c > 0 ? fmt(c, 1) + ' mm (Ø ' + fmt(c / Math.PI, 0) + ' mm)' : '—'; }
 /** A circunferência × o volume informado: só com uma câmara e o comprimento do costado medido. O cilindro sozinho é o mínimo;
@@ -2332,6 +2353,7 @@ function pintarRevisao(){
   // E46 · issue 61: a circunferência que não combina com o volume informado; issue 56: o ajuste da válvula muito acima da operação
   { const cv = revCircVolume(v); if (cv) conf.push({ chave:'circ_vol', nivel:'amarelo', texto:cv.texto, detalhe:cv.detalhe }); }
   revAjustesAltos(v, R.acessorios, pr).forEach(x => conf.push(x));
+  revForaAvisos(v).forEach(x => conf.push(x));   // E47 · issue 59: costado ou tampo inteiro fora da conta
   // S144 · item 78: tampos iguais (mesmo tipo, mesma câmara) com eficiência de solda (E) diferente; região do costado com o nome e a posição em desacordo
   CALC.ativas(v).forEach(k => {
     const tps = (v.componentes || []).filter(c => c.ativo !== false && ['eliptico','torisferico','hemisferico','conico','plano'].indexOf(c.tipo) >= 0 && (!c.camara_id || c.camara_id === k.id));
@@ -2369,6 +2391,7 @@ function pintarRevisao(){
     + (e && e < 3 ? '<label class="okrev"><input type="checkbox" data-ok="' + k + '"' + (revOk(k) ? ' checked' : '') + (podeMarcar ? '' : ' disabled') + '> conferido</label>' : '') + '</div>';
   // 1 · dados × fotos
   const fotos = (R.fotos || []), LUG = lugaresRev(R), semAc = R.inspecao.fotos_sem_acesso || {};
+  const fotosLaudo = fotos.filter(f => !f.fora_laudo);   // E47 · issue 66: a foto tirada do laudo não ocupa o lugar
   const rotFoto = f => { const l = /^lugar:/.test(f.item || '') ? LUG.find(x => 'lugar:' + x.lugar === f.item) : null;
     const ac = f.secao === 'acessorios' && f.item ? String(f.item).replace(/^afer:/, '').split(':') : null;   // E33 · issue 14: o nome do acessório
     const acTxt = ac && NAC[ac[0]] ? ' · ' + NAC[ac[0]] + (/^afer:/.test(f.item) ? ' · aferição' + (ac[1] ? ' (' + ({ bancada:'bancada', padrao:'padrão', instrumento:'em teste' }[ac[1]] || ac[1]) + ')' : '') : '') : '';
@@ -2384,10 +2407,12 @@ function pintarRevisao(){
           + (eu.pode ? '<button class="btn mini" data-corc="' + esc(k.id) + '|' + c + '">Corrigir</button>' : '') + '</td></tr>').join('') + '</table>').join('')
     + '</div>'
     + '<div><div class="muted" style="margin-bottom:4px">Fotos (' + fotos.length + ')</div><div class="fotosrev">' + fotos.map(f => '<button class="fotorev" data-foto="' + esc(f.path) + '" data-fid="' + esc(f.id) + '" title="' + esc((f.secao || '') + (f.legenda ? ' · ' + f.legenda : '')) + '"'
-      + (f.origem === 'galeria' ? ' style="border-style:dashed"' : '') + '>' + esc(rotFoto(f)) + '</button>').join('')
+      + ((f.origem === 'galeria' || f.fora_laudo) ? ' style="' + (f.origem === 'galeria' ? 'border-style:dashed;' : '') + (f.fora_laudo ? 'text-decoration:line-through;opacity:.6' : '') + '"' : '')
+      + '>' + esc(rotFoto(f)) + (f.fora_laudo ? ' · fora do laudo' : '') + (f.estado_geral ? ' · 7.4' : '') + '</button>').join('')   // E47 · issues 66 e 32
     + '</div>' + (LUG.some(l => semAc[l.lugar]) ? '<p class="muted" style="margin:6px 0 0">Sem foto (o motivo sai no laudo): ' + LUG.filter(l => semAc[l.lugar]).map(l => '<b>' + esc(l.rotulo) + '</b>: ' + esc(semAc[l.lugar])).join(' · ') + '</p>' : '')
-    + (LUG.some(l => !semAc[l.lugar] && !fotos.some(f => f.item === 'lugar:' + l.lugar) && !(l.lugar === 'placa_fabricacao' && fotos.some(f => f.secao === 'plaqueta' && !f.item)))
-        ? '<p class="alerta" style="margin:6px 0 0">Sem foto e sem motivo: ' + LUG.filter(l => !semAc[l.lugar] && !fotos.some(f => f.item === 'lugar:' + l.lugar) && !(l.lugar === 'placa_fabricacao' && fotos.some(f => f.secao === 'plaqueta' && !f.item))).map(l => esc(l.rotulo)).join(', ') + '. Ponha uma foto no lugar (clique na foto › Lugar no laudo).</p>' : '')
+    + (LUG.some(l => !semAc[l.lugar] && !fotosLaudo.some(f => f.item === 'lugar:' + l.lugar) && !(l.lugar === 'placa_fabricacao' && fotosLaudo.some(f => f.secao === 'plaqueta' && !f.item)))
+        ? '<p class="alerta" style="margin:6px 0 0">Sem foto e sem motivo: ' + LUG.filter(l => !semAc[l.lugar] && !fotosLaudo.some(f => f.item === 'lugar:' + l.lugar) && !(l.lugar === 'placa_fabricacao' && fotosLaudo.some(f => f.secao === 'plaqueta' && !f.item))).map(l => esc(l.rotulo)).join(', ') + '. Ponha uma foto no lugar (clique na foto › Lugar no laudo).</p>' : '')
+    + (fotos.some(f => f.fora_laudo) ? '<p class="muted" id="revForaLaudo" style="margin:6px 0 0">Fora do laudo (a foto fica guardada): ' + fotos.filter(f => f.fora_laudo).map(f => '<b>' + esc(rotFoto(f)) + '</b>: ' + esc(f.fora_laudo)).join(' · ') + '</p>' : '')
     + '<div id="revVisor" class="visorrev"><p class="muted">Clique numa foto para ver.</p></div></div></div>'
     + '<h3 style="margin-top:14px">Acessórios</h3>' + ((R.acessorios || []).length ? '<table><tr><th>Acessório</th><th>Marca · conexão</th><th>Lacre</th><th>Ajuste</th><th>Aferição</th><th></th></tr>'
       + R.acessorios.map(a => { const ct = contradicaoAc(a, NAC[a.id]), pe = pontosEspalhados().some(x => x.af.acessorio_id === a.id);   // E33 · issues 19 e 23
@@ -2444,7 +2469,9 @@ function pintarRevisao(){
             : '<span class="muted">' + (adot != null ? '<b>' + pr(adot) + '</b> · ' : '') + ({ mantida_anterior:'a anterior', calculada:'a calculada', plaqueta:'a de plaqueta', outro:'outro valor' }[esc0.regra] || 'o PLH decide') + '</span>')
           + '</td></tr>';
       }).join('') + '</table>'
-    + prev.camaras.map(ck => revPopHtml(ck, plhAprova, eu.pode, pr)).join('')   // E45 · issue 60: a PMTA adotada abaixo da pressão de operação
+    + prev.camaras.map(ck => revPopHtml(ck, plhAprova, eu.pode, pr)).join('')
+    + revForaHtml(v)   // E47 · issue 59: os componentes fora do cálculo, com o motivo
+    // E45 · issue 60: a PMTA adotada abaixo da pressão de operação
     + revGeoHtml(v, eu)   // E46 · issue 61: o E e a geometria de cada componente (só o PLH corrige)
     + (prev.vaso && !prev.vaso.erro ? '<p class="muted" style="margin:8px 0 0">V = ' + fmt(prev.vaso.V, 3) + ' m³ (' + Math.round(prev.vaso.V * 1000).toLocaleString('pt-BR') + ' litros) · P·V = ' + fmt(prev.vaso.pv, 3) + ' · grupo ' + prev.vaso.grupo + ' · <b>categoria ' + prev.vaso.categoria + '</b> · próximas: externa em ' + prev.vaso.prazos.externo
         + ' ano(s), interna ' + (prev.vaso.prazos.interno == null ? 'a critério do PLH' : 'em ' + prev.vaso.prazos.interno + ' anos') + '</p>' : '')
@@ -3162,6 +3189,33 @@ function ligarRevisao(){
       + '<label class="f" id="revLugarCx" style="flex-basis:100%" hidden>Lugar no laudo<select class="t" id="revLugar"><option value="">sem lugar (' + esc(ROT_SECAO[f.secao] || f.secao) + ')</option>'
       + LUG.map(l => '<option value="' + l.lugar + '"' + (f.item === 'lugar:' + l.lugar ? ' selected' : '') + '>' + esc(l.rotulo) + '</option>').join('') + '</select></label>'
       + (f.origem === 'galeria' ? '<p class="muted">Da galeria do celular' + (f.tirada_em ? ', tirada em ' + quandoBR(f.tirada_em) : '') + '.</p>' : ''));
+    // E47 · issues 66 e 32 (445): tirar do laudo (com o motivo; a foto fica guardada e volta) e a foto do estado geral do 7.4
+    vis.insertAdjacentHTML('beforeend', '<div class="linha" style="flex-basis:100%;gap:8px;margin-top:6px;align-items:center">'
+      + (f.fora_laudo ? '<span style="color:var(--crit);font-weight:600">Fora do laudo:</span> ' + esc(f.fora_laudo) + ' <button class="btn mini" id="revFotoVolta">Pôr de volta no laudo</button>'
+        : '<button class="btn mini" id="revFotoFora">Não usar no laudo</button>'
+          + (f.estado_geral ? ' <span class="chip s-ok">estado geral (7.4)</span> <button class="btn mini" id="revFoto74">Tirar do 7.4</button>'
+                            : ' <button class="btn mini" id="revFoto74" title="Vale quando o teste de pressão não é feito">Usar no 7.4 (estado geral)</button>'))
+      + '</div>');
+    const bFora = $('revFotoFora'); if (bFora) bFora.addEventListener('click', () => {
+      janela('Não usar a foto no laudo', '<label class="f">Motivo<select class="t" id="flSel"><option value="">—</option>' + FOTO_FORA_MOTIVOS.map(m => '<option>' + esc(m) + '</option>').join('')
+        + '<option value="+">Outro…</option></select></label><label class="f">Detalhe<small>Obrigatório em "Outro".</small><textarea class="t" id="flTx"></textarea></label>'
+        + '<p class="muted">A foto fica guardada e marcada na revisão; dá para pôr de volta.</p>'
+        + (lugF ? '<p class="alerta falta">Ela está no lugar "' + esc(lugF.rotulo) + '": o lugar fica sem foto. Ponha outra foto nele.</p>' : '')
+        + (f.estado_geral ? '<p class="alerta falta">É a foto do estado geral (7.4): o 7.4 volta à regra de sempre (a foto do teste ou a da capa).</p>' : ''),
+        [{ rotulo:'Cancelar' }, { rotulo:'Não usar no laudo', classe:'pri', acao:async () => {
+          const sl = $('flSel').value, tx = ($('flTx').value || '').trim(), m = sl && sl !== '+' ? (tx ? sl + ' ' + tx : sl) : tx;
+          if (m.length < 5){ U.toast('Diga por que a foto não vai no laudo.', 'err'); return false; }
+          try{ await rpc('tf_insp_foto_fora_laudo', { p_foto:f.id, p_motivo:m }); U.toast('A foto não vai no laudo.', 'ok'); recarregar(); }catch(e){ erro(e); return false; }
+        } }]);
+    });
+    const bVolta = $('revFotoVolta'); if (bVolta) bVolta.addEventListener('click', () => U.semDuploEnvio(bVolta, async () => {
+      try{ const r = await rpc('tf_insp_foto_fora_laudo', { p_foto:f.id, p_motivo:null });
+           U.toast(r && r.lugar_ocupado ? 'A foto voltou ao laudo, sem o lugar: o lugar já tem outra foto.' : 'A foto voltou ao laudo.', 'ok'); recarregar(); }catch(e){ erro(e); }
+    }));
+    const b74 = $('revFoto74'); if (b74) b74.addEventListener('click', () => U.semDuploEnvio(b74, async () => {
+      try{ await rpc('tf_insp_foto_estado_geral', { p_foto:f.id, p_usar:!f.estado_geral });
+           U.toast(f.estado_geral ? 'O 7.4 volta à regra de sempre (a foto do teste ou a da capa).' : 'Foto do estado geral do 7.4 (quando o teste de pressão não é feito).', 'ok'); recarregar(); }catch(e){ erro(e); }
+    }));
     $('revLugarTrocar').addEventListener('click', ev => { ev.preventDefault(); $('revLugarCx').hidden = false; $('revLugarTrocar').hidden = true; });
     $('revLugar').addEventListener('change', async ev => {
       try{ await rpc('tf_insp_foto_lugar', { p_foto:f.id, p_lugar:ev.target.value || null }); U.toast('Foto no lugar novo.', 'ok'); await recarregar(); }
@@ -3486,6 +3540,7 @@ function problemaRev(e){
 // entram, ou nenhuma. Gravar derruba os "ok" de PMTA e Espessuras da etapa.
 // ════════════════════════════════════════════════════════════════════════════
 const ESP_MAX_PONTOS = 60;
+const FOTO_FORA_MOTIVOS = ['Foto repetida.', 'Foto tremida ou sem foco.', 'Foto de outro vaso ou de outro lugar.', 'Item voltou a conforme.', 'Acessório lançado por engano.'];   // E47 · issue 66
 const ESP_MOTIVOS = ['Sem acesso ao componente.', 'Isolamento térmico no componente.', 'Revestimento ou pintura impede a leitura.'];
 const espLeit = (v, cid) => ((v.inspecao && v.inspecao.leituras) || []).filter(l => l.componente_id === cid);
 const espSem = v => (v.inspecao && v.inspecao.ultrassom_sem_leitura) || {};
@@ -3493,8 +3548,16 @@ function espPode(){
   const I = REV.R.inspecao, e = I.etapa;
   return (I.situacao === 'enviada' || I.situacao === 'em_revisao') && (e !== 3 || REV.R.eu.plh);
 }
+// E47 · issue 59 (445): os componentes fora da conta ("Não medir" do celular ou "Não deu para medir" daqui), com o motivo;
+// a janela nunca se mede. A mesma lista no quadro das Espessuras, na PMTA e no aviso da lista do sistema.
+function espFora(v){
+  const sem = espSem(v);
+  return (v.componentes || []).filter(c => c.ativo !== false && c.nao_medir)
+    .map(c => ({ c, motivo:(sem[c.id] || '').trim(), janela:c.tipo === 'janela' }));
+}
+const espForaTxt = x => x.janela ? 'janela de inspeção: não se mede' : (x.motivo || 'sem o motivo');
 function espHtml(){
-  const { v, P } = REV, cs = CALC.compsMedir(v), pode = espPode(), i = v.inspecao || {};
+  const { v, P } = REV, cs = CALC.compsMedir(v), pode = espPode(), i = v.inspecao || {}, fora = espFora(v);
   const med = (P.medidores || []).find(m => m.id === i.medidor_id);
   const falta = cs.filter(c => !espLeit(v, c.id).length && !(espSem(v)[c.id] || '').trim());
   let h = '<h2 id="espTopo">Espessuras do medidor</h2><div class="card">'
@@ -3502,7 +3565,7 @@ function espHtml(){
     + (med ? esc([med.descricao, med.marca, med.modelo].filter(Boolean).join(' · ') + (med.numero_serie ? ' · nº ' + med.numero_serie : '')) : (i.medidor_id ? 'escolhido (certificado vencido ou desativado)' : '<span style="color:var(--crit)">não informado</span>'))
     + '</b>' + (i.ultrassom_pasta ? ' · pasta no medidor: <b>' + esc(i.ultrassom_pasta) + '</b>' : '') + '</div>'
     + (pode && cs.length ? '<button class="btn pri" id="espCsv">Anexar o CSV do medidor</button>' : '') + '</div>';
-  if (!cs.length) return h + '<p class="muted">Este vaso não tem componente a medir.</p></div>';
+  if (!cs.length && !fora.length) return h + '<p class="muted">Este vaso não tem componente a medir.</p></div>';
   h += '<table style="margin-top:10px"><tr><th>Componente</th><th>Pontos</th><th>Leituras</th><th>Menor</th><th>Requerida</th><th>Origem</th><th></th></tr>';
   cs.forEach(c => {
     const l = espLeit(v, c.id), mot = (espSem(v)[c.id] || '').trim();
@@ -3515,6 +3578,11 @@ function espHtml(){
       + (req.valor != null ? fmt(req.valor, 2) + ' mm' : '<span class="muted">' + esc(req.erro || '—') + '</span>') + '</td><td class="muted">' + org + '</td>';
     h += '<td>' + (pode ? (mot ? '<button class="btn mini" data-espvolta="' + esc(c.id) + '">Medir</button>'
                              : '<button class="btn mini" data-espsem="' + esc(c.id) + '">Não deu para medir</button>') : '') + '</td></tr>';
+  });
+  // E47 · issue 59: fora da conta, com o motivo e o "Medir" (a janela não)
+  fora.forEach(x => {
+    h += '<tr data-espfora="' + esc(x.c.id) + '"><td><b>' + esc(x.c.nome) + '</b></td><td colspan="5"><span class="chip s-sem_laudo">fora da conta</span> ' + esc(espForaTxt(x)) + '</td><td>'
+      + (pode && !x.janela ? '<button class="btn mini" data-espvolta="' + esc(x.c.id) + '">Medir</button>' : '') + '</td></tr>';
   });
   h += '</table>';
   h += falta.length ? '<p class="alerta crit" id="espFalta" style="margin:10px 0 0">Faltam as espessuras de: <b>' + esc(falta.map(c => c.nome).join(', ')) + '</b>. Sem elas a revisão não conclui e o PLH não aprova.</p>'
@@ -3625,16 +3693,18 @@ function ligarEsp(recarregar){
     const c = REV.v.componentes.find(x => x.id === bt.dataset.espsem), tem = espLeit(REV.v, c.id).length;
     janela('Sem leitura · ' + c.nome, '<label class="f">Motivo<select class="t" id="esSel"><option value="">—</option>' + ESP_MOTIVOS.map(m => '<option>' + esc(m) + '</option>').join('')
       + '<option value="+">Outro…</option></select></label><label class="f">Detalhe<small>Obrigatório em "Outro".</small><textarea class="t" id="esTx"></textarea></label>'
+      + '<p class="muted">O componente sai da conta da PMTA, como o "Não medir" do celular; o motivo sai no laudo (7.3). "Medir" desfaz.</p>'   // E47 · issue 59
       + (tem ? '<p class="alerta falta">O componente tem ' + tem + ' leitura(s). Elas serão apagadas.</p>' : ''),
       [{ rotulo:'Cancelar' }, { rotulo:'Confirmar', classe:'pri', acao:async () => {
         const s = $('esSel').value, tx = ($('esTx').value || '').trim(), m = s && s !== '+' ? (tx ? s + ' ' + tx : s) : tx;
         if (!m){ U.toast('Informe o motivo.', 'err'); return false; }
-        try{ await rpc('tf_insp_espessuras_escritorio', { p_id:REV.id, p_lotes:null, p_sem:{ [c.id]:m }, p_arquivo:null }); recarregar(); }catch(e){ erro(e); return false; }
+        try{ await rpc('tf_insp_espessuras_escritorio', { p_id:REV.id, p_lotes:null, p_sem:{ [c.id]:m }, p_arquivo:null });
+             U.toast(c.nome + ' fora da conta, com o motivo.', 'ok'); recarregar(); }catch(e){ erro(e); return false; }
       } }]);
   }));
   $('tela').querySelectorAll('[data-espvolta]').forEach(bt => bt.addEventListener('click', async () => {
     try{ await rpc('tf_insp_espessuras_escritorio', { p_id:REV.id, p_lotes:null, p_sem:{ [bt.dataset.espvolta]:'' }, p_arquivo:null });
-         U.toast('Motivo tirado. Anexe o CSV com as leituras deste componente.', 'ok'); recarregar(); }catch(e){ erro(e); }
+         U.toast('O componente volta à conta. Anexe o CSV com as leituras dele.', 'ok'); recarregar(); }catch(e){ erro(e); }
   }));
 }
 // ════════════════════════════════════════════════════════════════════════════
@@ -3657,7 +3727,7 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S174');
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S175');
     if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D6');   // E35 · issue 30: o Resumo e os nomes dos arquivos
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S158');
     return true;
@@ -4096,6 +4166,8 @@ async function telaLaudo(id){
   titulo('Laudo', 'carregando…');
   $('tela').innerHTML = '<p class="muted">Carregando…</p>';
   LD = { id, d: await rpc('tf_laudo_dados', { p_id:id }), docs:null, pac:[] };
+  // E47 · issue 66 (445): a foto tirada do laudo na revisão fica guardada, mas não vai no laudo nem nos documentos
+  if (LD.d && Array.isArray(LD.d.fotos)) LD.d.fotos = LD.d.fotos.filter(f => !f.fora_laudo);
   // E35 · issue 30: os documentos deste vaso (DP14 b) e o que falta assinar dele (DP4)
   try{ await libDocs(); LD.docs = await rpc('tf_insp_documentos', { p_os: null, p_insp: id }); }catch(e){ LD.docs = null; }
   if ((LD.d.eu || {}).plh) LD.pac = await pacoteParaAssinar([id]).catch(() => []);
