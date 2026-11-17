@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S182';   // S182: issues 71, 72 e 33 — TapDoc escritório E49 (a emissão para quando falta uma foto do laudo; a tela do laudo não mostra os documentos de outro vaso; aceitar o desenho da assinatura só com a digital; sem SQL)
+const VERSAO = 'H16-S183';   // S183: issues 69 e 84 — TapDoc escritório E50 (a válvula aprovada em campo que abre acima da PMTA adotada sai NÃO CONFORME no laudo, com a recomendação; a PMTA adotada vira a vigente na assinatura do laudo; laudo-pdf.js S176, documentos-pdf.js D7; 446)
+// const VERSAO = 'H16-S182';   // S182: issues 71, 72 e 33 — TapDoc escritório E49 (a emissão para quando falta uma foto do laudo; a tela do laudo não mostra os documentos de outro vaso; aceitar o desenho da assinatura só com a digital; sem SQL)
 // const VERSAO = 'H16-S181';   // S181: issues 65 e 67 — TapDoc escritório E48 (a revisão grava mais rápido; ajustes pequenos da preparação e da revisão; sem SQL)
 // const VERSAO = 'H16-S180';   // S180: issues 59, 66 e 32 — TapDoc escritório E47 ("Não deu para medir" tira o componente da conta e o PLH aprova; os componentes fora da conta aparecem com o motivo; na revisão, tirar do laudo uma foto do campo e pôr de volta; a foto do estado geral do 7.4: laudo-pdf.js S175; 445)
 // const VERSAO = 'H16-S179';   // S179: issues 56, 61 e 81 — TapDoc escritório E46 (na revisão, corrigir o ano de fabricação e o ajuste da válvula grava, o ajuste na unidade da inspeção; a circunferência, a situação do acessório e o E e a geometria dos componentes se corrigem; a correção desmarca o "conferido" do quadro; 444)
@@ -101,7 +102,7 @@ const ESSENCIAIS = [
   './doc/',
   './doc/motor-calculo-nr13.js?v=R00.6',
   './doc/recomendacoes.js?v=RC1',   // S163: a lista das recomendações e do prazo (a revisão sem sinal precisa dela)
-  './doc/documentos-pdf.js?v=D6',   // S164: os nomes dos arquivos e o Resumo; S165: o Registro de Segurança; S166: os textos do Prontuário na minuta; S173: o prazo reduzido pelas datas
+  './doc/documentos-pdf.js?v=D7',   // S164: os nomes dos arquivos e o Resumo; S165: o Registro de Segurança; S166: os textos do Prontuário na minuta; S173: o prazo reduzido pelas datas
   // S88 · Acessos P1: a tela do admin
   './acessos/',
   // S116 · TapSeg 1: a Segurança do Trabalho

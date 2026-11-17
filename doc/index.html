@@ -192,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E49';   // E49 (S182 · issues 71, 72 e 33, Revisão TapDoc · Rodada 9): a emissão não sai sem uma foto que devia estar no laudo (tenta de novo e, se faltar, para dizendo qual); a tela do laudo não mostra os documentos de outro vaso (TELA_VEZ e as consultas juntas); aceitar o desenho da assinatura só com a digital (sem o PIN)
+const VERSAO = 'TapDoc E50';   // E50 (S183 · issues 69 e 84, Revisão TapDoc · Rodada 10a): na revisão, a válvula aprovada em campo que abre acima da PMTA adotada é pendência (vermelha sem a recomendação; com ela, amarela: o laudo sai com a válvula NÃO CONFORME e a recomendação de reajustar ou substituir); em 3 · PMTA, de onde veio a PMTA anterior (qual laudo, qual data) e o aviso quando ela espera a conferência do laudo anterior; laudo-pdf.js S176, documentos-pdf.js D7 (446)
+// const VERSAO = 'TapDoc E49';   // E49 (S182 · issues 71, 72 e 33, Revisão TapDoc · Rodada 9): a emissão não sai sem uma foto que devia estar no laudo (tenta de novo e, se faltar, para dizendo qual); a tela do laudo não mostra os documentos de outro vaso (TELA_VEZ e as consultas juntas); aceitar o desenho da assinatura só com a digital (sem o PIN)
 // const VERSAO = 'TapDoc E48';   // E48 (S181 · issues 65 e 67, Revisão TapDoc · Rodada 8): a revisão grava mais rápido (as consultas ao mesmo tempo; ao gravar, só o que a gravação muda); ajustes da preparação e da revisão — a pressão com as casas da unidade, "pegar no cliente" e regravar um laudo conferido perguntam, tirar o vaso guarda as instruções, "Reabrir para o campo" volta para "A revisar", sem gravar duas vezes no toque duplo, a PMTA "outro valor" inválida avisa, a pressão de operação negativa (vácuo), a vida remanescente abaixo de 1 ano, o laudo sem páginas, a tela antiga não pinta por cima da nova
 // const VERSAO = 'TapDoc E47';   // E47 (S180 · issues 59, 66 e 32, Revisão TapDoc · Rodada 7b): "Não deu para medir" tira o componente da conta (como o "Não medir" do celular) e o PLH aprova; os componentes fora da conta aparecem com o motivo nas Espessuras e na PMTA, com aviso quando um costado ou tampo inteiro fica fora; na revisão, tirar do laudo uma foto do campo (com o motivo) e pôr de volta; escolher a foto do estado geral (7.4); laudo-pdf.js S175 (445)
 // const VERSAO = 'TapDoc E46';   // E46 (S179 · issues 56, 61 e 81, Revisão TapDoc · Rodada 7a): na revisão, corrigir o ano de fabricação e o ajuste da válvula grava (o ajuste na unidade da inspeção, convertido para MPa pela tela); a circunferência aparece em "Dados contra as fotos" e se corrige; a situação do acessório se corrige; o E e a geometria de cada componente no quadro da PMTA (só o PLH); o número digitado é lido pela regra 50 antes de ir ao banco; a correção desmarca o "conferido" do quadro (444)
@@ -2500,11 +2501,14 @@ function pintarRevisao(){
         + (ct ? '<tr><td colspan="6"><p class="alerta crit" style="margin:0">' + esc(ct) + '</p></td></tr>' : ''); }).join('') + '</table>' : '<p class="vazio">Nenhum acessório.</p>')
     + '</div>';
   // 2 · anomalias e recomendações
-  const recs = R.recomendacoes || [];
+  const recs = R.recomendacoes || [], vAcima = revValvAcima().map(x => x.a.id);
   const anom = (R.visual || []).filter(x => x.conforme === false).map(x => ({ ref:'visual:' + x.item, titulo:x.item, texto:x.anomalia, sug:sugestaoRec(x.item, x.anomalia) }))
-    .concat((R.acessorios || []).filter(a => a.situacao === 'substituir' || (a.afericao && (a.afericao.grave || a.afericao.resultado === 'reprovado')))
-      .map(a => ({ ref:'acessorio:' + a.id, titulo:(a.tag || ROT_ACESS[a.tipo] || a.tipo), texto:a.situacao === 'substituir' ? 'a substituir' : 'aferição ' + (a.afericao.resultado || ''),
-                   sug:/valvula|quebra/.test(a.tipo) ? 'Que a ' + (ROT_ACESS[a.tipo] || 'válvula').toLowerCase() + (a.tag ? ' ' + a.tag : '') + ' seja substituída ou reajustada;'   // E34 · issue 20
+    .concat((R.acessorios || []).filter(a => a.situacao === 'substituir' || (a.afericao && (a.afericao.grave || a.afericao.resultado === 'reprovado')) || vAcima.indexOf(a.id) >= 0)
+      .map(a => ({ ref:'acessorio:' + a.id, titulo:(a.tag || ROT_ACESS[a.tipo] || a.tipo),
+                   texto:vAcima.indexOf(a.id) >= 0 ? 'abre acima da PMTA adotada: sai NÃO CONFORME no laudo' : a.situacao === 'substituir' ? 'a substituir' : 'aferição ' + (a.afericao.resultado || ''),
+                   // E50 · issue 69: a válvula aprovada em campo que abre acima da PMTA adotada pede a recomendação de reajustar ou substituir
+                   sug:vAcima.indexOf(a.id) >= 0 ? 'Que a ' + (ROT_ACESS[a.tipo] || 'válvula').toLowerCase() + (a.tag ? ' ' + a.tag : '') + ' seja reajustada para abrir em pressão igual ou inferior à PMTA adotada nesta inspeção e testada novamente, ou substituída por outra ajustada e testada;'
+                     : /valvula|quebra/.test(a.tipo) ? 'Que a ' + (ROT_ACESS[a.tipo] || 'válvula').toLowerCase() + (a.tag ? ' ' + a.tag : '') + ' seja substituída ou reajustada;'   // E34 · issue 20
                      : 'Que o ' + (ROT_ACESS[a.tipo] || '').toLowerCase() + (a.tag ? ' ' + a.tag : '') + ' seja substituído;' })));
   h += cardConf('recomendacoes') + cab('recomendacoes', '2 · Anomalias e recomendações')
     + (anom.length ? '<table><tr><th>Anomalia</th><th>Recomendação</th><th></th></tr>' + anom.map(x => {
@@ -2531,7 +2535,10 @@ function pintarRevisao(){
         const esc0 = revEscolha(ck), px = REV.pext[k.id] || {};   // E45: a escolha num lugar só (revEscolha); a PMTA externa digitada fica (issue 58)
         const adot = revAdotada(ck, esc0), placa = k.pmta_plaqueta_mpa != null ? Number(k.pmta_plaqueta_mpa) : null;
         return '<tr><td><b>' + esc(k.nome) + '</b>' + (ck.governante ? '<div class="muted">governante: ' + esc(nomeGov(ck)) + '</div>' : '') + '</td><td>' + pr(k.p_operacao_max_mpa) + '</td><td>'
-          + (calc == null ? '<span style="color:var(--crit)">' + esc(ck.erro || 'sem cálculo') + '</span>' : '<b>' + pr(calc) + '</b>') + '</td><td>' + pr(ant) + '</td><td>' + pr(k.pmta_plaqueta_mpa) + '</td><td>'
+          + (calc == null ? '<span style="color:var(--crit)">' + esc(ck.erro || 'sem cálculo') + '</span>' : '<b>' + pr(calc) + '</b>') + '</td><td>' + pr(ant)
+            + (ant != null && k.pmta_vigente_de ? '<div class="muted" data-vigde="' + esc(k.id) + '">' + esc(k.pmta_vigente_de) + '</div>' : '')
+            + (ant != null && k.pmta_vigente_espera ? '<div style="color:var(--warn);font-size:12px">Espera a conferência do laudo anterior.</div>' : '')
+            + '</td><td>' + pr(k.pmta_plaqueta_mpa) + '</td><td>'
           + (eu.pode && calc != null ? '<select class="t" data-regra="' + esc(k.id) + '"><option value="calculada"' + (esc0.regra === 'calculada' ? ' selected' : '') + '>a calculada (' + pr(calc) + ')</option>'
               + (placa != null && placa <= calc + 1e-4 ? '<option value="plaqueta"' + (esc0.regra === 'plaqueta' ? ' selected' : '') + '>a de plaqueta (' + pr(placa) + ')</option>' : '')
               + (ant != null && ant <= calc + 1e-4 ? '<option value="mantida_anterior"' + (esc0.regra === 'mantida_anterior' ? ' selected' : '') + '>a anterior (' + pr(ant) + ')</option>' : '')
@@ -2626,11 +2633,13 @@ function revDatasHtml(prz){
 }
 // ── E34 · S163 · issue 12: a lista das recomendações do laudo (a mesma regra do celular e do laudo: recomendacoes.js) ──
 function revRecLista(){
-  const { R, prev, v } = REV, T = REV_TEXTOS || {};
+  const { R, prev, v } = REV, T = REV_TEXTOS || {}, RG = (T.rec || {}).rec_regra || {}, acima = revValvAcima().map(x => x.a.id);
   return RecsNR13.montar({ B:Object.assign({}, T.rec || {}, { prontos:REV_PRONTOS || {} }), ambiente:R.inspecao.ambiente || (v && v.inspecao && v.inspecao.ambiente) || null,
     categoria:prev && prev.vaso && !prev.vaso.erro ? prev.vaso.categoria : null, placa:placaDe(R.vaso || {}), rec_casos:R.inspecao.rec_casos || [],
     ajustes:R.inspecao.rec_ajustes || {}, linhas:R.recomendacoes || [],
-    acessorios:(R.acessorios || []).map(a => ({ id:a.id, tipo:a.tipo, situacao:a.situacao, resultado:a.afericao && a.afericao.resultado, grave:a.afericao && a.afericao.grave, caso_campos:a.caso_campos })) });
+    // E50 · issue 69: a válvula aprovada em campo que abre acima da PMTA adotada conta como reprovada (o texto pronto: rec_regra.valvula_pmta; sem ele, o do tipo)
+    acessorios:(R.acessorios || []).map(a => { const ac = acima.indexOf(a.id) >= 0;
+      return { id:a.id, tipo:ac && RG.valvula_pmta ? 'valvula_pmta' : a.tipo, situacao:a.situacao, resultado:ac ? 'reprovado' : a.afericao && a.afericao.resultado, grave:a.afericao && a.afericao.grave, caso_campos:a.caso_campos }; }) });
 }
 const ORIG_REC = { fixa:'da norma', regra:'da resposta', pronta:'pronta', livre:'escrita aqui' };
 function revRecListaHtml(pode){
@@ -3053,6 +3062,42 @@ function revAbaixoOp(ck){
 const POP_MIN = 10;   // letras da justificativa (o banco pede o mesmo)
 const revJustOp = kid => String(REV.justOp[kid] != null ? REV.justOp[kid] : ((REV.pmta[kid] || {}).just_op || '')).trim();
 const POP_FRASE = 'não liberado para operar nessa pressão';
+// ── E50 · S183 · issue 69 (opção B, Bruno 15/11): a válvula aprovada em campo que abre acima da PMTA ADOTADA ──
+// A mesma conta do banco (tf__afericao_adotada, 446): maior abertura (em MPa) > PMTA adotada + 0,00005 MPa (o arredondamento das
+// 4 casas da PMTA guardada). A PMTA é a escolha da câmara da válvula; válvula sem câmara: a única câmara ou, com mais de uma, a menor.
+const AF_FATOR = { 'MPa':1, 'bar':0.1, 'kgf/cm2':0.0980665, 'psi':0.00689476, 'kPa':0.001 }, VALV_FOLGA = 0.00005;
+function revAdotadaCam(camId){
+  const cks = ((REV.prev || {}).camaras || []).filter(c => !c.erro && c.governante);
+  const de = c => { const x = revAdotada(c, revEscolha(c)); return x != null && x > 0 ? Number(x) : null; };
+  const ck = camId ? cks.find(c => c.cam.id === camId) : null;
+  if (ck) return de(ck);
+  if (camId && cks.length !== ((REV.prev || {}).camaras || []).length) return null;
+  const vs = cks.map(de).filter(x => x != null);
+  return vs.length ? Math.min.apply(null, vs) : null;
+}
+/** As válvulas aprovadas em campo que abrem acima da PMTA adotada (a escolha de agora): [{ a, af, max, adot, temRec }]. */
+function revValvAcima(){
+  if (!REV || !REV.R) return [];
+  const R = REV.R, RG = ((REV_TEXTOS || {}).rec || {}).rec_regra || {}, fora = ((R.inspecao.rec_ajustes || {}).fora) || [];
+  return (R.acessorios || []).map(a => {
+    const af = (REV.afs || []).filter(x => x.acessorio_id === a.id && x.tipo === 'valvula' && !x.cancelada_em).slice(-1)[0];
+    if (!af || af.resultado !== 'aprovado') return null;
+    const ab = (((af.leituras || {}).aberturas) || []).map(Number).filter(x => isFinite(x) && x > 0); if (!ab.length) return null;
+    const max = Math.max.apply(null, ab) * (AF_FATOR[af.unidade] || 0.1), adot = revAdotadaCam(a.camara_id);
+    if (adot == null || !(max > adot + VALV_FOLGA)) return null;
+    const temRec = (R.recomendacoes || []).some(r => r.ref === 'acessorio:' + a.id) || ((!!RG.valvula_pmta || !!RG[a.tipo]) && fora.indexOf('acessorio:' + a.id) < 0);
+    return { a, af, max, adot, temRec };
+  }).filter(Boolean);
+}
+// As pendências das válvulas (da câmara ck; as sem câmara entram na 1ª): vermelho sem a recomendação; com ela, amarelo (o laudo sai NÃO CONFORME)
+function revPendValv(ck){
+  const u = CALC.unidadeDe(REV.v), pr = x => fmt(CALC.deMPa(x, u), 2) + ' ' + CALC.UNID_ROT[u], NAC = nomesAcess(REV.R.acessorios);
+  const prim = REV.prev.camaras[0] === ck;
+  return revValvAcima().filter(x => x.a.camara_id ? x.a.camara_id === ck.cam.id : prim).map(x => ({ chave:'valv_pmta', pk:'valv_pmta|' + x.a.id, nivel:x.temRec ? 'amarelo' : 'vermelho',
+    texto:(x.a.tag || NAC[x.a.id] || 'Válvula') + ': abre a ' + pr(x.max) + ', acima da PMTA adotada (' + pr(x.adot) + ')' + (x.temRec ? ': sai NÃO CONFORME no laudo, com a recomendação' : ': falta a recomendação'),
+    detalhe:x.temRec ? 'O teste de campo aprovou a válvula contra a PMTA que o vaso tinha. Com a PMTA adotada agora, o relatório (7.6), o certificado da válvula e a conclusão saem NÃO CONFORME, com a recomendação de reajustar ou substituir (NR-13, 13.5.1.2 "a"). Se der para reajustar e testar de novo antes de aprovar, reabra para o campo.'
+      : 'O laudo vai sair com a válvula NÃO CONFORME e precisa da recomendação de reajustar ou substituir: escreva-a em 2 · Anomalias e recomendações (no acessório). Outros caminhos: reabrir para o campo, reajustar a válvula e testar de novo; ou rever a PMTA adotada.' }));
+}
 // As pendências da câmara na lista "1 · O que o sistema confere": vermelho trava a aprovação; resolvida pelo PLH, fica amarelo
 function revPendPmta(ck, nm){
   const out = [], k = ck.cam, u = CALC.unidadeDe(REV.v), pr = x => fmt(CALC.deMPa(x, u), 2) + ' ' + CALC.UNID_ROT[u];
@@ -3071,6 +3116,12 @@ function revPendPmta(ck, nm){
       detalhe:ok ? 'A PMTA da câmara foi escolhida pelo PLH, com justificativa, e há recomendação de segurança.'
         : 'Falta: ' + [plh ? '' : 'o PLH escolher a PMTA da câmara (3 · PMTA › "outro valor…" ou "a de plaqueta"), com a justificativa', seg ? '' : 'uma recomendação de segurança (2 · Anomalias e recomendações)'].filter(Boolean).join('; e ') + '.' });
   });
+  revPendValv(ck).forEach(x => out.push(x));   // E50 · issue 69: a válvula aprovada em campo × a PMTA adotada
+  // E50 · issue 84: a PMTA vigente veio de um laudo anterior que voltou para "em conferência"
+  if (k.pmta_vigente_espera && k.pmta_vigente_mpa != null) out.push({ chave:'vigente_espera', pk:'vigente_espera|' + k.id, nivel:'amarelo',
+    texto:'PMTA anterior (' + pr(k.pmta_vigente_mpa) + ')' + nm + ': espera a conferência do laudo anterior',
+    detalhe:'O laudo anterior foi alterado depois de conferido e voltou para "em conferência": a PMTA anterior do vaso ainda é a da conferência antiga'
+      + (k.pmta_vigente_de ? ' (' + k.pmta_vigente_de + ')' : '') + '. A aferição da válvula e a opção "a anterior" usam esse número. Confira o laudo anterior de novo (Preparação) antes de aprovar.' });
   return out;
 }
 const revConfResumo = nV => (nV ? '<b style="color:var(--crit)">' + nV + ' pendência(s) em vermelho travam a aprovação.</b> ' : 'Nada em vermelho. ') + 'O amarelo só avisa.';
@@ -3815,8 +3866,8 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S175');
-    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D6');   // E35 · issue 30: o Resumo e os nomes dos arquivos
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S176');
+    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D7');   // E35 · issue 30: o Resumo e os nomes dos arquivos
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S158');
     return true;
   })().catch(e => { LIBS = null; throw e; });
@@ -4135,7 +4186,7 @@ function ligarDesenho(){
 }
 // A4/A5: o pacote para o token (Assinador SERPRO, em lote) e a devolução dos assinados
 // E35 · issue 30 (DP4): o pacote leva todos os documentos técnicos (o relatório, o Resumo e os certificados), cada um num PDF
-function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D6').then(() => true, () => false); }
+function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D7').then(() => true, () => false); }
 /** O que falta assinar: os relatórios (tf_laudo_para_assinar) e os outros documentos (tf_insp_docs_para_assinar). insps: só dessas inspeções. */
 async function pacoteParaAssinar(insps){
   const [L, D] = await Promise.all([rpc('tf_laudo_para_assinar').catch(() => []), rpc('tf_insp_docs_para_assinar').catch(() => []), libDocs()]);

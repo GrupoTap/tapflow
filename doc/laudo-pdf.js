@@ -11,6 +11,10 @@
  * A conta da espessura mínima e da PMTA é a do motor (motor-calculo-nr13.js);
  * aqui ela só é ESCRITA com os números (a memória de cálculo do laudo).
  *
+ * S176 · S183 · issue 69 (17/11/2026, opção B do Bruno): a válvula aprovada em campo que abre ACIMA da PMTA adotada pelo PLH chega na
+ *   fotografia como "reprovado" (afericao.acima_adotada, tf_laudo_dados 446): o 7.6 sai NÃO CONFORME pelo motivo da PMTA, o certificado
+ *   diz por quê e a seção 11 leva a recomendação de reajustar ou substituir (rec_regra.valvula_pmta; tipoRec). A frase "A pressão de
+ *   ajuste da válvula é de …" não sai quando o ajuste não foi informado (semFrase).
  * S175 · S180 · issues 32 e 66 (17/11/2026): a foto do estado geral do vaso no 7.4 (teste não feito) é a escolhida na revisão
  *   (`estado_geral`, 445); sem escolha, a regra do S161 (a foto do teste ou a da capa). A foto tirada do laudo na revisão
  *   (`fora_laudo`) não entra (a página já as tira de `d.fotos`; aqui também, por garantia).
@@ -71,6 +75,16 @@ function pressaoVars(d) {
   const just = [...new Set(L.map(x => semPonto(x.justificativa)).filter(Boolean))];
   return { pressoes: L.map(x => (varias && x.nome ? 'câmara ' + x.nome + ': ' : '') + 'pressão máxima de operação de ' + bar(x.operacao) + ' e PMTA adotada de ' + bar(x.pmta)).join('; '),
     justificativa: just.length ? (just.length > 1 ? L.filter(x => x.justificativa).map(x => (x.nome ? x.nome + ': ' : '') + semPonto(x.justificativa)).join('; ') : just[0]) : 'não informada' };
+}
+// ── S176 · issue 69 (opção B): a válvula aprovada em campo que abre acima da PMTA adotada ──
+/** O tipo que a lista das recomendações (recomendacoes.js) usa para o texto pronto do acessório: a válvula que abre acima da PMTA
+ *  adotada usa rec_regra.valvula_pmta, se o modelo tiver; senão, o texto do tipo dela (rec_regra.<tipo>). RG = blocos.rec_regra. */
+function tipoRec(a, RG) {
+  return a && a.afericao && a.afericao.acima_adotada && RG && RG.valvula_pmta ? 'valvula_pmta' : (a || {}).tipo;
+}
+/** Tira do texto a frase (até o ponto final) que tem o marcador {{nome}}: para o dado que não foi informado não sair "é de —". */
+function semFrase(t, nome) {
+  return String(t || '').replace(new RegExp('(^|[.!?]\\s+)[^.!?{]*\\{\\{' + nome + '\\}\\}[^.!?]*[.!?]\\s*'), '$1');
 }
 // ── S173 · issue 57: o prazo das próximas inspeções sai das DATAS aprovadas pelo PLH ──
 // A NR-13 dá os prazos MÁXIMOS (13.5.4.5, Tabela 2); o relatório traz a data prevista da próxima inspeção (13.5.4.11 "l") e o
@@ -299,12 +313,16 @@ function documentosAfericao(d, opc) {
       if (enc != null) C.push({ text: L.reajustada ? 'Encontrada abrindo a ' + fmt(enc, 2) + ' ' + un + '; foi reajustada.' : 'Encontrada abrindo a ' + fmt(enc, 2) + ' ' + un + ' (sem ajuste).', style: 'par' });
       const mx = ab.filter(x => x != null).length ? Math.max(...ab.filter(x => x != null).map(Number)) : null;
       if (ok && mx != null) C.push({ text: 'Adequada para instalação em vasos com PMTA igual ou maior que ' + fmt(mx, 2) + ' ' + un + ' (NR-13, item 13.5.1.2 "a").', style: 'destaque' });
+      // S176 · issue 69: aprovada no teste e, depois, acima da PMTA que o PLH adotou na inspeção
+      if (f.acima_adotada && mx != null) C.push({ text: 'A maior abertura (' + fmt(mx, 2) + ' ' + un + ') ficou acima da PMTA adotada pelo PLH nesta inspeção ('
+        + fmt(Number(f.pmta_adotada_mpa) * 10 / (EM_BAR[String(f.unidade || 'bar').toLowerCase()] || 1), 2) + ' ' + un + '): a válvula não atende à alínea "a" do item 13.5.1.2 da NR-13 neste vaso.', style: 'par' });
       if (L.motivo_acima) C.push({ text: 'Sem ajuste possível: ' + L.motivo_acima, style: 'par' });
       if (L.motivo_abaixo) C.push({ text: 'Observação: ' + L.motivo_abaixo, style: 'par' });
     }
     if (f.lacre_colocado && !e1) C.push({ text: 'Lacre colocado nº ' + f.lacre_colocado + '. A violação do lacre implica a perda desta aferição.', style: 'par' });
     C.push({ text: [{ text: 'Resultado: ' }, { text: ok ? 'CONFORME' : 'NÃO CONFORME', bold: true, color: ok ? VERDE : VERM }, { text: e1 ? ' (reprovado na etapa 1).' : '.' }], style: 'destaque' });
-    if (!ok) C.push({ text: 'Recomendação: substituir ' + (vv ? 'a válvula por outra em condições e testada' : 'o manômetro por outro em condições e aferido') + ' (NR-13, item 13.3.6).', style: 'par' });
+    if (!ok && f.acima_adotada) C.push({ text: 'Recomendação: reajustar a válvula para abrir em pressão igual ou inferior à PMTA adotada e testá-la de novo, ou substituí-la por outra ajustada e testada (NR-13, item 13.5.1.2, alínea "a").', style: 'par' });
+    else if (!ok) C.push({ text: 'Recomendação: substituir ' + (vv ? 'a válvula por outra em condições e testada' : 'o manômetro por outro em condições e aferido') + ' (NR-13, item 13.3.6).', style: 'par' });
     C.push({ text: 'Verificação por comparação com padrão rastreável; não é calibração acreditada. O padrão tem certificado de calibração de laboratório acreditado (RBC), citado acima.', style: 'nota', margin: [0, 8, 0, 0] });
     C.push({ margin: [0, 26, 0, 0], unbreakable: true, stack: (CAR ? [{ image: CAR.imagem, fit: [170, 60] }] : [{ text: ' ' }]).concat([
       { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 220, y2: 0, lineWidth: 0.5, lineColor: CZ }] },
@@ -869,15 +887,17 @@ function montar(d, opc) {
       const pz = f.padrao || {}, bz = f.bancada || {}, ab = ((f.leituras || {}).aberturas || []).map(Number).filter(x => isFinite(x)),
         asv = ((f.leituras || {}).assentamentos || []).map(Number).filter(x => isFinite(x));
       const pmtaBar = kc.pmta_adotada_mpa != null ? Number(kc.pmta_adotada_mpa) * 10 : null, maior = ab.length ? Math.max(...ab) : null;
-      const acima = maior != null && pmtaBar != null && emBar(maior, f.unidade) > pmtaBar + 1e-6;
+      // S176 · issue 69: a conta do banco (tf__afericao_adotada, com a folga do arredondamento) vale quando veio; senão, a de sempre
+      const acima = f.acima_adotada === true || (maior != null && pmtaBar != null && emBar(maior, f.unidade) > pmtaBar + 1e-6);
+      const comAj = t => f.ajuste == null || f.ajuste === '' ? semFrase(t, 'ajuste') : t;   // sem a pressão de ajuste, a frase dela não sai
       const lacre = f.lacre_colocado || a.lacre_num;
       const ident = [!vazio(a.marca) ? 'da marca ' + a.marca : null, a.conexao ? 'com conexão ' + a.conexao : null].filter(Boolean);
       const vars = Object.assign({ tipo: tipoNome, ident: ident.length ? ', ' + ident.join(', ') + ',' : '',
         bancada: bancadaTxt(bz), ajuste: unidadeTxt(f.ajuste, f.unidade), aberturas: ab.length ? numsTxt(ab, f.unidade) : '—', assentamentos: asv.length ? numsTxt(asv, f.unidade) : '—',
         ciclos: ab.length || 3, maior: maior != null ? unidadeTxt(maior, f.unidade) : '—', pmta: pmtaBar != null ? bar(kc.pmta_adotada_mpa) : '—',
         lacre: lacre ? txt(M.valvula_lacre, { lacre }) : '', codigo: f.codigo || 'a numerar' }, padraoVars(pz));
-      if (f.resultado === 'aprovado') par(comResultado(M.valvula_feita, vars, 'ok'));
-      else par(comResultado(M.valvula_reprovada, Object.assign(vars, { motivo: acima ? txt(M.valvula_motivo_pmta, vars) : M.valvula_motivo_tolerancia }), 'nc'));
+      if (f.resultado === 'aprovado') par(comResultado(comAj(M.valvula_feita), vars, 'ok'));
+      else par(comResultado(comAj(M.valvula_reprovada), Object.assign(vars, { motivo: acima ? txt(M.valvula_motivo_pmta, vars) : M.valvula_motivo_tolerancia }), 'nc'));
       fotoAfer(a, 'Aferição da ' + tipoNome);
       conc.valv.push(f.resultado === 'aprovado' ? K.valv_ok : K.valv_nc);
     } else if (caso(a.afericao_caso, a.caso_campos, a.tipo)) { const x = caso(a.afericao_caso, a.caso_campos, a.tipo); parCaso(x); conc.valv.push(x.conc); }   // S146 · item 79
@@ -1022,7 +1042,7 @@ function montar(d, opc) {
     const RC = raiz.RecsNR13;
     if (!RC) throw new Error('Falta o recomendacoes.js para montar as recomendações do laudo.');
     const L = RC.montar({ B: M, ambiente: I.ambiente, categoria: R.categoria, placa, rec_casos: I.rec_casos, ajustes: I.rec_ajustes || {}, linhas: recs,
-      acessorios: acs.map(a => ({ id: a.id, tipo: a.tipo, situacao: a.situacao, resultado: a.afericao && a.afericao.resultado, grave: a.afericao && a.afericao.grave, caso_campos: a.caso_campos })) })
+      acessorios: acs.map(a => ({ id: a.id, tipo: tipoRec(a, M.rec_regra), situacao: a.situacao, resultado: a.afericao && a.afericao.resultado, grave: a.afericao && a.afericao.grave, caso_campos: a.caso_campos })) })
       .filter(x => x.marcada);
     sub('11.1', T.rec_seguranca || 'Recomendações de segurança');
     lista(L.filter(x => x.tipo !== 'conservacao').map(comPrazo), true);
@@ -1198,6 +1218,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, prazoReduzido, prazosNorma, prazoRotulo, prazosRedTxt, pressaoAbaixo, pressaoVars, versao: 'R06a-S175-2026-11-17' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, prazoReduzido, prazosNorma, prazoRotulo, prazosRedTxt, pressaoAbaixo, tipoRec, semFrase, pressaoVars, versao: 'R06a-S176-2026-11-17' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);

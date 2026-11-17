@@ -18,7 +18,8 @@
  */
 (function (raiz) {
 'use strict';
-const VERSAO = 'D6-S178-2026-11-16';   // D6 (S178 · issue 60): a condição operacional "não liberado para operar nessa pressão" no Registro (PMTA adotada abaixo da pressão de operação; LaudoPDF.pressaoAbaixo)
+const VERSAO = 'D7-S183-2026-11-17';   // D7 (S183 · issue 69): a válvula aprovada em campo que abre acima da PMTA adotada conta como recomendação (rec_regra.valvula_pmta) e sai "não conforme" no Registro (a fotografia já a traz "reprovado")
+// const VERSAO = 'D6-S178-2026-11-16';   // D6 (S178 · issue 60): a condição operacional "não liberado para operar nessa pressão" no Registro (PMTA adotada abaixo da pressão de operação; LaudoPDF.pressaoAbaixo)
 // const VERSAO = 'D5-S173-2026-11-16';   // D5 (S173 · issue 57): o prazo reduzido do Registro pelas datas aprovadas (LaudoPDF.prazoReduzido)
 const AZUL = '#1B6FA9', CINZA = '#515252', FAIXA = '#5B6770', VERDE = '#1E6B3A', VERM = '#A62D18';
 
@@ -240,7 +241,9 @@ function fatosRegistro(d) {
   if (raiz.RecsNR13 && I.rec_ajustes !== undefined) {
     try {
       comRec = raiz.RecsNR13.montar({ B: M, ambiente: I.ambiente, categoria: R.categoria, placa: (d.vaso || {}).placa_situacao, rec_casos: I.rec_casos, ajustes: I.rec_ajustes || {},
-        linhas: d.recomendacoes || [], acessorios: (d.acessorios || []).map(a => ({ id: a.id, tipo: a.tipo, situacao: a.situacao, resultado: a.afericao && a.afericao.resultado,
+        // D7 · issue 69: a válvula que abre acima da PMTA adotada usa o texto pronto dela (rec_regra.valvula_pmta), como no laudo
+        linhas: d.recomendacoes || [], acessorios: (d.acessorios || []).map(a => ({ id: a.id,
+          tipo: a.afericao && a.afericao.acima_adotada && (M.rec_regra || {}).valvula_pmta ? 'valvula_pmta' : a.tipo, situacao: a.situacao, resultado: a.afericao && a.afericao.resultado,
           grave: a.afericao && a.afericao.grave, caso_campos: a.caso_campos })) }).some(x => x.marcada && !x.fixa);
     } catch (e) { comRec = true; }
   } else comRec = (d.recomendacoes || []).length > 0 || (I.rec_casos || []).length > 0 || nc.length > 0 || afs.some(a => a.afericao.resultado === 'reprovado');
