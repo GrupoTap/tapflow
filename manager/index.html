@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow · S156</title>
+<title>TapFlow · S184</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2415,7 +2415,8 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S156';   // S156: issue 1 (passo 2): esta página é só o TapFlow, o módulo das OS (quadros, Agenda, Compras, Contratos, Documentos, Relatórios, Meu perfil e as Configurações do TapFlow). Saiu o código parado de Cadastros, das abas de Configurações que mudaram de lugar e de Fornecedores (132 trechos); o nome nas telas passou de "Manager" para "TapFlow" (a pasta continua manager/)
+const APP_VERSION = 'S184';   // S184: issue 90: a T16 "Emitir boleto / nota fiscal" da inspeção comum abre junto com a OS (309); com a medição (T06B) ainda aberta, "medição em aberto" (com o aviso) junto do "faturar no TapFin" na linha da T16
+// const APP_VERSION = 'S156';   // S156: issue 1 (passo 2): esta página é só o TapFlow, o módulo das OS (quadros, Agenda, Compras, Contratos, Documentos, Relatórios, Meu perfil e as Configurações do TapFlow). Saiu o código parado de Cadastros, das abas de Configurações que mudaram de lugar e de Fornecedores (132 trechos); o nome nas telas passou de "Manager" para "TapFlow" (a pasta continua manager/)
 // const APP_VERSION = 'S139';   // S139: item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
 // const APP_VERSION = 'S135';   // S135: item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const APP_VERSION = 'S134';   // S134: Cadastros (Clientes, Catálogo, Duplicados) e as Configurações do TapHub saíram para o cadastros/ (TapHub Cadastros 1); Planos e Serviços do negócio para o TapCRM; Fornecedores só no TapFin; saiu o código parado do comercial (decisões K1–K9 do Bruno, 09/11)
@@ -3437,7 +3438,7 @@ function pintarDrawer(){
             // S41 · item 7 (S61: atrasada depois do ÚLTIMO dia)
             + (t.data_prevista && (t._ate || t.data_prevista) < isoHoje() ? ' <span class="chip atrasoDia">atrasada</span>' : '')
           : '<i>ninguém designado</i>') + ' ' + marcaReag(card.os_id, t.tarefa_id, null)
-        + (tarefaFechada(t, tarefas) ? ' <span class="chip fechada" title="Ninguém assume antes de a inspeção ser agendada (o admin designa).">abre depois do agendamento</span>' : '')
+        + (tarefaFechada(t, tarefas) && !ehT16Faturar(t) ? ' <span class="chip fechada" title="Ninguém assume antes de a inspeção ser agendada (o admin designa).">abre depois do agendamento</span>' : '')
         + '</span>'
         + (podeTrocar ? '<button class="btn mini" type="button">' + (quem ? 'trocar' : 'designar') + '</button>' : '');
       if (podeTrocar) d.querySelector('button').addEventListener('click', ev => {
@@ -3470,7 +3471,16 @@ function pintarDrawer(){
       // do "concluir" (que o banco recusaria), o caminho para a preparação
       if (!eAtual && podePreparar(t)) d.appendChild(botaoPreparacao(card.os_id, true));
       // S102 · a T16 aberta fora da tarefa atual: o caminho para o TapFin
-      if (!eAtual && podeFaturar(t)) d.appendChild(botaoFaturar(card.os_id, true));
+      if (!eAtual && podeFaturar(t)){
+        d.appendChild(botaoFaturar(card.os_id, true));
+        // S184 · issue 90: a T16 abre com a OS; com a medição ainda aberta, a nota sai pela proposta
+        if (medAbertaFaturar(tarefas)){
+          const cm = document.createElement('span');
+          cm.className = 'chip risco'; cm.dataset.medAberta = '1';
+          cm.textContent = 'medição em aberto'; cm.title = AVISO_MED_FATURAR;
+          d.appendChild(cm);
+        }
+      }
       if (!podeTrocar && !eAtual && possoAssumir(t)){
         const ba = document.createElement('button');
         ba.className = 'btn mini'; ba.type = 'button'; ba.textContent = 'assumir';
@@ -4411,6 +4421,12 @@ function botaoPreparacao(osId, mini){
 // "Encerrar OS"), então vale a T16 cujo nome fala de boleto ou nota fiscal —
 // a da inspeção hoje e a do molde de contrato quando ele vier.
 const ehT16Faturar = t => !!(t && t.tarefa_id === 'T16' && /boleto|nota fiscal/i.test(t.nome || ''));
+// S184 · issue 90: desde a 309 a T16 da inspeção comum abre junto com a OS. Enquanto a T06B "Fechar a medição"
+// não estiver resolvida, o faturamento ganha o aviso (decisão 4); nada trava. OS sem T06B (contrato, acessórios,
+// OS anteriores à 306) não avisa.
+const AVISO_MED_FATURAR = 'A medição ainda não foi fechada: a nota vai sair pelo valor da proposta.';
+const medAbertaFaturar = ts => (ts || []).some(x => x.tarefa_id === 'T06B' && x.ativo !== 'NAO'
+  && x.status !== 'completo' && x.status !== 'dispensado');
 // ── S105 · A T16 FECHA E REABRE SOZINHA (opção C do Bruno; 302 do TapFlow + 516 do TapFin) ──
 // O TapFin conclui a T16 quando todo o aprovado da OS tem nota e a reabre quando uma nota
 // cai, pelas funções de sistema da 302. A marca fica na tarefa (`respostas.origem`,
