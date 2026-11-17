@@ -192,7 +192,8 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E50';   // E50 (S183 · issues 69 e 84, Revisão TapDoc · Rodada 10a): na revisão, a válvula aprovada em campo que abre acima da PMTA adotada é pendência (vermelha sem a recomendação; com ela, amarela: o laudo sai com a válvula NÃO CONFORME e a recomendação de reajustar ou substituir); em 3 · PMTA, de onde veio a PMTA anterior (qual laudo, qual data) e o aviso quando ela espera a conferência do laudo anterior; laudo-pdf.js S176, documentos-pdf.js D7 (446)
+const VERSAO = 'TapDoc E51';   // E51 (S185 · issues 70 e 73, Revisão TapDoc · Rodada 10b): o laudo emitido antes da última reabertura da inspeção não entra mais em "Para assinar com o token" (aparece "Falta emitir a revisão"); na devolução do PDF assinado, o certificado vencido na data da assinatura é recusado, o tipo da assinatura é gravado pelo emissor (ICP-Brasil = qualificada; gov.br = avançada; os outros = não identificada) e a tela mostra de quem é o certificado, quem emitiu e até quando vale; o nome do certificado fica sem o CPF (assinatura-pdf.js S174; 447)
+// const VERSAO = 'TapDoc E50';   // E50 (S183 · issues 69 e 84, Revisão TapDoc · Rodada 10a): na revisão, a válvula aprovada em campo que abre acima da PMTA adotada é pendência (vermelha sem a recomendação; com ela, amarela: o laudo sai com a válvula NÃO CONFORME e a recomendação de reajustar ou substituir); em 3 · PMTA, de onde veio a PMTA anterior (qual laudo, qual data) e o aviso quando ela espera a conferência do laudo anterior; laudo-pdf.js S176, documentos-pdf.js D7 (446)
 // const VERSAO = 'TapDoc E49';   // E49 (S182 · issues 71, 72 e 33, Revisão TapDoc · Rodada 9): a emissão não sai sem uma foto que devia estar no laudo (tenta de novo e, se faltar, para dizendo qual); a tela do laudo não mostra os documentos de outro vaso (TELA_VEZ e as consultas juntas); aceitar o desenho da assinatura só com a digital (sem o PIN)
 // const VERSAO = 'TapDoc E48';   // E48 (S181 · issues 65 e 67, Revisão TapDoc · Rodada 8): a revisão grava mais rápido (as consultas ao mesmo tempo; ao gravar, só o que a gravação muda); ajustes da preparação e da revisão — a pressão com as casas da unidade, "pegar no cliente" e regravar um laudo conferido perguntam, tirar o vaso guarda as instruções, "Reabrir para o campo" volta para "A revisar", sem gravar duas vezes no toque duplo, a PMTA "outro valor" inválida avisa, a pressão de operação negativa (vácuo), a vida remanescente abaixo de 1 ano, o laudo sem páginas, a tela antiga não pinta por cima da nova
 // const VERSAO = 'TapDoc E47';   // E47 (S180 · issues 59, 66 e 32, Revisão TapDoc · Rodada 7b): "Não deu para medir" tira o componente da conta (como o "Não medir" do celular) e o PLH aprova; os componentes fora da conta aparecem com o motivo nas Espessuras e na PMTA, com aviso quando um costado ou tampo inteiro fica fora; na revisão, tirar do laudo uma foto do campo (com o motivo) e pôr de volta; escolher a foto do estado geral (7.4); laudo-pdf.js S175 (445)
@@ -3868,7 +3869,7 @@ function libsLaudo(){
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
     if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S176');
     if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D7');   // E35 · issue 30: o Resumo e os nomes dos arquivos
-    if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S158');
+    if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S174');
     return true;
   })().catch(e => { LIBS = null; throw e; });
   return LIBS;
@@ -4189,16 +4190,30 @@ function ligarDesenho(){
 function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D7').then(() => true, () => false); }
 /** O que falta assinar: os relatórios (tf_laudo_para_assinar) e os outros documentos (tf_insp_docs_para_assinar). insps: só dessas inspeções. */
 async function pacoteParaAssinar(insps){
-  const [L, D] = await Promise.all([rpc('tf_laudo_para_assinar').catch(() => []), rpc('tf_insp_docs_para_assinar').catch(() => []), libDocs()]);
+  // E51 · issue 70: R = os laudos de inspeção reaberta e aprovada de novo, que esperam a revisão (não se assinam)
+  const [L, D, , R] = await Promise.all([rpc('tf_laudo_para_assinar').catch(() => []), rpc('tf_insp_docs_para_assinar').catch(() => []), libDocs(),
+    rpc('tf_laudo_falta_revisao').catch(() => [])]);
   const P = (L || []).map(x => ({ tipo:'relatorio', laudo:x, id:x.id, inspecao_id:x.inspecao_id, laudo_numero:x.numero, revisao:x.revisao, tag:x.tag, numero_tap:x.numero_tap,
       cliente:x.cliente, numero:x.numero, ordem:1, total:1, pdf_path:x.pdf_path, pdf_sha256:x.pdf_sha256, emitido_em:x.emitido_em }))
     .concat((D || []).map(x => ({ tipo:x.tipo, doc:x, id:x.id, inspecao_id:x.inspecao_id, laudo_numero:x.laudo_numero, revisao:x.revisao, tag:x.tag, numero_tap:x.numero_tap,
       cliente:x.cliente, numero:x.numero, ordem:x.ordem, total:x.total_tipo, pdf_path:x.pdf_path, pdf_sha256:x.pdf_sha256, emitido_em:x.emitido_em })));
-  return insps ? P.filter(x => insps.indexOf(x.inspecao_id) >= 0) : P;
+  const S = insps ? P.filter(x => insps.indexOf(x.inspecao_id) >= 0) : P;
+  S.revisao = (R || []).filter(x => !insps || insps.indexOf(x.inspecao_id) >= 0);
+  return S;
+}
+/** E51 · issue 70: os laudos que esperam a revisão (a inspeção foi reaberta depois da emissão e aprovada de novo). */
+function faltaRevisaoHtml(R){
+  if (!R || !R.length) return '';
+  return '<div class="alerta falta" id="pacRevisao" style="margin-top:8px"><b>Falta emitir a revisão (' + R.length + '):</b> a inspeção foi reaberta depois que o laudo foi emitido e já foi aprovada de novo. '
+    + 'O laudo de antes não se assina mais: abra o laudo e toque em "Aprovar e emitir a revisão"; depois, assine os PDFs da revisão.<ul style="margin:6px 0 0">'
+    + R.map(x => '<li><a href="#laudo=' + esc(x.inspecao_id) + '"><b>' + esc(x.numero) + (x.revisao ? ' Rev. ' + x.revisao : '') + '</b></a> · ' + esc(x.tag || '') + ' · ' + esc(x.cliente || '')
+      + (x.os ? ' · OS ' + esc(x.os) : '') + ' <span class="muted">(reaberta em ' + quandoBR(x.reaberta_em) + (x.situacao === 'assinado' ? '; o laudo de antes estava assinado' : '') + ')</span></li>').join('') + '</ul></div>';
 }
 const rotDoc = x => ((window.DocumentosPDF && DocumentosPDF.ROTULO[x.tipo]) || x.tipo) + (x.total > 1 ? ' ' + x.ordem : '') + (x.numero && x.tipo !== 'relatorio' ? ' ' + x.numero : '');
 function cartaoPacote(P){
-  if (!PLH || !P || !P.length) return '';
+  if (!PLH || !P) return '';
+  const R = P.revisao || [];
+  if (!P.length) return R.length ? '<div class="card"><h3>Para assinar com o token (0)</h3>' + faltaRevisaoHtml(R) + '</div>' : '';
   const grupos = []; const por = {};
   P.forEach(x => { const k = x.inspecao_id + '|' + x.laudo_numero + '|' + x.revisao; if (!por[k]){ por[k] = { x, itens:[] }; grupos.push(por[k]); } por[k].itens.push(x); });
   return '<div class="card"><h3>Para assinar com o token (' + P.length + ')</h3>'
@@ -4209,7 +4224,7 @@ function cartaoPacote(P){
       + esc(g.x.tag || '') + '</td><td data-r="Cliente">' + esc(g.x.cliente || '') + '</td><td data-r="Documentos">' + g.itens.map(x => esc(rotDoc(x))).join('<br>')
       + '</td><td data-r="Aprovado">' + quandoBR(g.x.emitido_em) + '</td></tr>').join('') + '</table>'
     + '<div class="linha" style="margin-top:8px"><button class="btn" id="pacBaixar">Baixar o pacote (.zip)</button><button class="btn pri" id="pacDevolver">Devolver os assinados</button>'
-    + '<input type="file" id="pacArqs" accept="application/pdf" multiple hidden><span class="muted" id="pacAviso"></span></div><div id="pacRes"></div></div>';
+    + '<input type="file" id="pacArqs" accept="application/pdf" multiple hidden><span class="muted" id="pacAviso"></span></div><div id="pacRes"></div>' + faltaRevisaoHtml(R) + '</div>';
 }
 /** O nome de um item do pacote (DP5), sem o "(para assinar)": o pacote inteiro é para assinar. */
 const nomePacote = x => nomeArq(x.tipo, { tag:x.tag, tap:x.numero_tap, cliente:x.cliente, ordem:x.ordem, total:x.total, revisao:x.revisao });
@@ -4244,8 +4259,11 @@ async function devolverVarios(P, fs, aviso){
       const shas = (await AssinaturaPDF.prefixos(b)).map(p => p.sha);
       const x = P.find(y => shas.indexOf(y.pdf_sha256) >= 0);
       if (!x) throw new Error('não é nenhum dos laudos do pacote nem dos documentos dele (ou foi mudado antes de assinar).');
-      if (x.laudo) await devolverAssinado(x.laudo, b); else await devolverDoc(x.doc, b);
-      ok++; res.push('<li>✅ ' + esc(f.name) + ': ' + esc(rotDoc(x) + ' do ' + x.laudo_numero + (x.revisao ? ' Rev. ' + x.revisao : '')) + ' assinado e conferido.</li>');
+      const c = x.laudo ? await devolverAssinado(x.laudo, b) : await devolverDoc(x.doc, b);
+      // E51 · issue 73: o que foi conferido — de quem é o certificado, quem emitiu, até quando vale e o tipo da assinatura
+      ok++; res.push('<li>✅ ' + esc(f.name) + ': ' + esc(rotDoc(x) + ' do ' + x.laudo_numero + (x.revisao ? ' Rev. ' + x.revisao : '')) + ' assinado e conferido.'
+        + '<div class="muted" data-cert="' + esc(c.tipo || '') + '">' + esc(AssinaturaPDF.resumo(c)) + '</div>'
+        + (c.tipo === 'nao_identificada' ? '<div style="color:var(--crit)">Atenção: o certificado não é da ICP-Brasil nem do gov.br. A assinatura ficou gravada como "tipo não identificado": confira com quem vai receber o laudo se ela é aceita.</div>' : '') + '</li>');
     }catch(e){ res.push('<li style="color:var(--crit)">✗ ' + esc(f.name) + ': ' + esc(e.message || String(e)) + '</li>'); }
   }
   aviso('');
@@ -4355,6 +4373,16 @@ async function telaLaudo(id){
   pintarLaudo();
 }
 let VEZ_TELA_LD = 0;
+/** E51 · issue 73: o que ficou gravado da assinatura do laudo (o nome do certificado, o emissor, a validade e o tipo). */
+const ROT_TIPO_ASS = { qualificada:'assinatura qualificada (certificado ICP-Brasil)', avancada:'assinatura avançada (gov.br, reserva do token)',
+  nao_identificada:'tipo não identificado (certificado fora da ICP-Brasil e do gov.br)' };
+function certLaudoHtml(l){
+  if (!l || !l.assinado_path) return '';
+  const c = l.assinado_conferencia || {}, v = c.validade || {}, nome = String(l.assinado_certificado || c.certificado || '').replace(/\s*:\s*\d{11,14}\s*$/, '');
+  return '<div class="muted" data-ldcert="' + esc(l.assinado_tipo || '') + '">' + esc(ROT_TIPO_ASS[l.assinado_tipo] || 'tipo da assinatura não registrado')
+    + (nome ? '<br>certificado de ' + esc(nome) : '') + (c.emissor ? '<br>emitido por ' + esc(c.emissor) + (c.emissor_org ? ' (' + esc(c.emissor_org) + ')' : '') : '')
+    + (v.ate ? '<br>válido até ' + dataBR(dataSP(v.ate)) : '') + '</div>';
+}
 function laudoAtual(d){ return (d.laudos || []).filter(l => l.situacao !== 'substituido').pop() || null; }
 function pintarLaudo(){
   const d = LD.d, I = d.inspecao, eu = d.eu || {}, cfg = d.config || {}, atual = laudoAtual(d), fal = d.faltas || [];
@@ -4364,6 +4392,10 @@ function pintarLaudo(){
     + '<div class="muted">' + esc(d.empresa.razao_social || '') + ' · OS ' + esc((d.os || {}).numero || '—') + ' · inspeção de ' + dataBR(dataSP(I.termino || I.inicio))
     + (I.aprovado && I.aprovado.nome ? ' · aprovada por ' + esc(I.aprovado.nome) + ' (' + quandoBR(I.aprovado.em) + ')' : '') + '</div></div>'
     + '<span class="chip ' + (I.situacao === 'assinada' ? 's-pronto' : 's-em_conferencia') + '">' + esc(I.situacao) + '</span></div></div>';
+  // E51 · issue 70: reaberta depois da emissão, o laudo de antes não se assina; sai a revisão
+  if (reaberta && cfg.oficial) h += '<div class="alerta falta" id="ldReaberta"><b>A inspeção foi reaberta depois que o ' + esc(atual.numero) + (atual.revisao ? ' Rev. ' + atual.revisao : '') + ' foi emitido'
+    + (d.reabertura.motivo ? ' (' + esc(d.reabertura.motivo) + ')' : '') + '.</b> Este laudo não se assina mais. '
+    + (I.situacao === 'liberada' ? 'A inspeção já foi aprovada de novo: emita a revisão (Rev. ' + (atual.revisao + 1) + ') e assine os PDFs dela.' : 'Depois de a inspeção ser aprovada de novo, emita a revisão (Rev. ' + (atual.revisao + 1) + ').') + '</div>';
   if (!cfg.oficial) h += '<div class="alerta falta"><b>Piloto:</b> o TapHub ainda não emite o laudo oficial. Gere o rascunho e compare com o PDF do TapDoc antigo. Quem liga a emissão é o admin (aba Laudos › Configurar).</div>';
   // E45 · issue 60: aprovada pelo PLH com a PMTA adotada abaixo da pressão de operação
   if (pressaoAbaixoDe(d).length) h += '<div class="alerta falta" id="ldPressao"><b>PMTA adotada abaixo da pressão de operação:</b> o relatório e o Registro de Segurança deste vaso saem <b>"' + POP_FRASE + '"</b>, com as duas pressões e a justificativa do PLH ('
@@ -4398,7 +4430,7 @@ function pintarLaudo(){
     + d.laudos.map(l => '<tr><td><b>' + esc(l.numero) + (l.revisao ? ' Rev. ' + l.revisao : '') + '</b>' + (l.motivo_rev ? '<div class="muted">' + esc(l.motivo_rev) + '</div>' : '') + '</td><td data-r="Situação"><span class="chip ' + (SIT_LAUDO[l.situacao] || ['', ''])[1] + '">'
       + esc((SIT_LAUDO[l.situacao] || [l.situacao])[0]) + '</span></td><td data-r="Emitido">' + esc(l.emitido_por_nome || '') + '<div class="muted">' + quandoBR(l.emitido_em) + '</div></td><td data-r="PDF">'
       + (l.pdf_path ? '<button class="btn mini" data-ldpdf="' + esc(l.pdf_path) + '" data-ldnome="' + esc(nomeLaudo(d, { revisao: l.revisao, paraAssinar: l.situacao === 'emitido' })) + '">Abrir</button><div class="muted">' + l.paginas + ' pág.</div>' : '—') + '</td><td data-r="Assinado">'
-      + (l.assinado_path ? '<button class="btn mini" data-ldpdf="' + esc(l.assinado_path) + '" data-ldnome="' + esc(nomeLaudo(d, { revisao: l.revisao })) + '">Abrir</button><div class="muted">' + esc(l.assinado_por_nome || '') + ' · ' + quandoBR(l.assinado_em) + '</div>' : '—')
+      + (l.assinado_path ? '<button class="btn mini" data-ldpdf="' + esc(l.assinado_path) + '" data-ldnome="' + esc(nomeLaudo(d, { revisao: l.revisao })) + '">Abrir</button><div class="muted">' + esc(l.assinado_por_nome || '') + ' · ' + quandoBR(l.assinado_em) + '</div>' + certLaudoHtml(l) : '—')
       + '</td></tr>').join('') + '</table></div>';
   h += cartaoPasta(LD.pasta, 'Ld', LD.pront);   // E36 · issue 30, Parte 2 (DP8, quadro 2) · E37 · Parte 3 (DP10)
   h += cartaoDocsVaso(LD.docs);   // E35 · issue 30 (DP14 b)

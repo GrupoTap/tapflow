@@ -1,5 +1,5 @@
 /* ============================================================================
- * assinatura-pdf.js · TapDoc · S158 (antes S145: rodada E, decisão A5 do desenho da assinatura)
+ * assinatura-pdf.js · TapDoc · S174 (antes S158; S145: rodada E, decisão A5 do desenho da assinatura)
  * ----------------------------------------------------------------------------
  * Confere o PDF que o PLH devolve assinado com o token (Assinador SERPRO, PAdES):
  *   1. o começo do arquivo é EXATAMENTE o PDF aprovado (a assinatura PAdES é
@@ -13,6 +13,13 @@
  * Não confere a cadeia até a raiz ICP-Brasil (para isso: verificador do ITI).
  * S158: lê também o CMS com tamanho indefinido (BER), que é como o assinador do
  *   gov.br grava (reserva do token: o banco aceita e grava como assinatura avançada).
+ * S174 (S185 · issue 73):
+ *   5. a validade do certificado é conferida na data da assinatura (o atributo signingTime; sem ele, agora):
+ *      certificado vencido (ou ainda não válido) nessa data é recusado;
+ *   6. o tipo da assinatura sai do que o certificado declara: "qualificada" só com o emissor da ICP-Brasil
+ *      (O = ICP-Brasil), "avancada" com o gov.br e "nao_identificada" nos outros casos (MP 2.200-2/2001, art. 10;
+ *      Lei 14.063/2020, art. 4º). A cadeia até a raiz continua sem conferência: é o que o certificado diz de si;
+ *   7. o nome do certificado vai sem o CPF (na ICP-Brasil o CN é "NOME:CPF"; LGPD, art. 6º, III).
  * Puro: sem DOM; roda no navegador e no node (testes). Usa crypto.subtle.
  * ========================================================================== */
 (function (raiz) {
@@ -81,13 +88,18 @@ function lerCms(b) {
     const tbs = filhos(b, filhos(b, c)[0]); const o = tbs[0].tag === 0xa0 ? 1 : 0;
     if (!serieSid || hex(b.subarray(tbs[o].ini, tbs[o].fim)) === serieSid) { cert = { c, tbs, o }; break; }
   }
-  let md = null;
-  if (attrs) for (const a of filhos(b, attrs)) { const [o, set] = filhos(b, a); if (oid(b, o) === '1.2.840.113549.1.9.4') { const v = filhos(b, set)[0]; md = hex(b.subarray(v.ini, v.fim)); } }
-  const r = { digAlg: DIG[digAlg] || null, sigAlg, md, assin, attrs: attrs ? b.slice(attrs.cab, attrs.fim) : null };
+  let md = null, quando = null;
+  if (attrs) for (const a of filhos(b, attrs)) {
+    const [o, set] = filhos(b, a), id = oid(b, o);
+    if (id === '1.2.840.113549.1.9.4') { const v = filhos(b, set)[0]; md = hex(b.subarray(v.ini, v.fim)); }
+    if (id === '1.2.840.113549.1.9.5') { const v = filhos(b, set)[0]; quando = v ? tempo(b, v) : null; }   // S174: signingTime (a data que o assinador declarou)
+  }
+  const r = { digAlg: DIG[digAlg] || null, sigAlg, md, assin, attrs: attrs ? b.slice(attrs.cab, attrs.fim) : null, assinadoEm: quando };
   if (cert) {
     const { tbs, o } = cert;
     r.serie = hex(b.subarray(tbs[o].ini, tbs[o].fim));
     r.emissor = nome(b, tbs[o + 2], '2.5.4.3');
+    r.emissorOrg = nome(b, tbs[o + 2], '2.5.4.10');   // S174: a organização do emissor (na ICP-Brasil, "ICP-Brasil")
     const val = filhos(b, tbs[o + 3]); r.validade = { de: tempo(b, val[0]), ate: tempo(b, val[1]) };
     r.cn = nome(b, tbs[o + 4], '2.5.4.3');
     const spki = tbs[o + 5]; r.spki = b.slice(spki.cab, spki.fim);
@@ -116,17 +128,40 @@ async function prefixos(b) {
   return r;
 }
 
+// ── S174 · issue 73: o nome sem o CPF, o tipo da assinatura e a validade ─────────────────────────
+/** O nome do certificado sem o CPF/CNPJ: na ICP-Brasil o CN é "NOME:00000000000". */
+const semCpf = cn => cn == null ? null : String(cn).replace(/\s*:\s*\d{11,14}\s*$/, '').trim() || null;
+/** O tipo, pelo que o certificado declara (c.emissor = CN do emissor; c.emissor_org = O do emissor). O banco refaz a mesma conta. */
+function tipo(c) {
+  c = c || {};
+  if (/(governo federal|gov-?br)/i.test(c.emissor || '') || /gov-?br/i.test(c.emissor_org || '')) return 'avancada';
+  if (/^icp-?brasil$/i.test(String(c.emissor_org || '').trim())) return 'qualificada';
+  return 'nao_identificada';
+}
+const ROTULO_TIPO = { qualificada: 'assinatura qualificada (certificado ICP-Brasil)', avancada: 'assinatura avançada (gov.br, reserva do token)',
+                      nao_identificada: 'tipo não identificado (certificado fora da ICP-Brasil e do gov.br)' };
+const rotuloTipo = t => ROTULO_TIPO[t] || 'tipo não registrado';
+const diaBR = iso => { const d = new Date(iso); return isNaN(d) ? '?' : d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }); };
+/** Uma linha para a tela: de quem é o certificado, quem emitiu, até quando vale e o tipo. c = a conferência (ou a gravada no banco). */
+function resumo(c, t) {
+  c = c || {}; const v = c.validade || {};
+  return 'certificado de ' + (semCpf(c.certificado) || '?') + (c.emissor ? ', emitido por ' + c.emissor + (c.emissor_org ? ' (' + c.emissor_org + ')' : '') : '')
+    + (v.ate ? ', válido até ' + diaBR(v.ate) : '') + (c.assinado_em ? ', assinado em ' + diaBR(c.assinado_em) : '') + ' · ' + rotuloTipo(t || c.tipo || tipo(c));
+}
+
 /**
  * Confere o PDF assinado. esperado = o SHA-256 do PDF aprovado (ou uma lista deles).
+ * opc.agora (ISO): a data usada quando a assinatura não traz o signingTime (os testes fixam; a página usa a hora dela).
  * Devolve a "conferência" que vai ao banco (tf_laudo_assinado): original_sha256,
  * assinatura_ok, resumo_ok, cobre_tudo, certificado (CN), serie, emissor, validade,
  * assinado_sha256, assinaturas (quantas) e erro (texto para a pessoa, se não conferiu).
  */
-async function conferir(bytes, esperado) {
+async function conferir(bytes, esperado, opc) {
   const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   const lista = [].concat(esperado || []).filter(Boolean);
-  const r = { versao: 'S158', original_sha256: null, assinatura_ok: false, resumo_ok: false, cobre_tudo: false, certificado: null,
-              serie: null, emissor: null, validade: null, assinaturas: 0, assinado_sha256: await sha('SHA-256', b), erro: null };
+  const r = { versao: 'S174', original_sha256: null, assinatura_ok: false, resumo_ok: false, cobre_tudo: false, certificado: null,
+              serie: null, emissor: null, emissor_org: null, validade: null, assinado_em: null, validade_ok: false, tipo: null,
+              assinaturas: 0, assinado_sha256: await sha('SHA-256', b), erro: null };
   try {
     if (!(b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46)) throw new Error('O arquivo não é um PDF.');
     const ps = await prefixos(b);
@@ -152,7 +187,8 @@ async function conferir(bytes, esperado) {
     if (h.length % 2) throw new Error('A assinatura está ilegível.');
     const cms = new Uint8Array(h.length / 2); for (let k = 0; k < cms.length; k++) cms[k] = parseInt(h.substr(2 * k, 2), 16);
     const C = lerCms(cms);
-    r.certificado = C.cn || null; r.serie = C.serie || null; r.emissor = C.emissor || null; r.validade = C.validade || null;
+    r.certificado = semCpf(C.cn); r.serie = C.serie || null; r.emissor = semCpf(C.emissor); r.emissor_org = C.emissorOrg || null;
+    r.validade = C.validade || null; r.assinado_em = C.assinadoEm || null; r.tipo = tipo(r);
     if (!C.digAlg) throw new Error('Resumo da assinatura em formato não suportado.');
     if (!C.attrs || !C.md) throw new Error('A assinatura não traz os atributos assinados (PAdES).');
     const cobertos = new Uint8Array(l1 + l2); cobertos.set(b.subarray(a, a + l1), 0); cobertos.set(b.subarray(c, c + l2), l1);
@@ -166,10 +202,17 @@ async function conferir(bytes, esperado) {
     const at = C.attrs.slice(); at[0] = 0x31;   // os atributos assinados são assinados como SET OF
     r.assinatura_ok = await subtle().verify('RSASSA-PKCS1-v1_5', chave, C.assin, at);
     if (!r.assinatura_ok) throw new Error('A assinatura digital do PDF não conferiu.');
+    // S174 · issue 73: o certificado tem de estar válido na data da assinatura (a que o assinador declarou; sem ela, agora)
+    const v = r.validade || {}, ref = r.assinado_em || (opc && opc.agora) || new Date().toISOString();
+    if (!v.de || !v.ate) throw new Error('O certificado da assinatura não traz a validade.');
+    r.validade_ok = ref >= v.de && ref <= v.ate;
+    if (!r.validade_ok) throw new Error('O certificado de "' + (r.certificado || '?') + '" estava fora da validade em ' + diaBR(ref)
+      + (r.assinado_em ? ' (a data da assinatura)' : ' (hoje; a assinatura não traz a data)') + ': ele vale de ' + diaBR(v.de) + ' a ' + diaBR(v.ate)
+      + '. Assine de novo com um certificado válido.');
   } catch (e) { r.erro = e.message || String(e); }
   return r;
 }
 
-const AssinaturaPDF = { conferir, prefixos, assinaturas, versao: 'S158-2026-11-13' };
+const AssinaturaPDF = { conferir, prefixos, assinaturas, semCpf, tipo, rotuloTipo, resumo, versao: 'S174-2026-11-17' };
 if (typeof module !== 'undefined' && module.exports) module.exports = AssinaturaPDF; else raiz.AssinaturaPDF = AssinaturaPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
