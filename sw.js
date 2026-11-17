@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S186';   // S186: issues 74 e 75 — TapDoc escritório E52, laudo-pdf.js S177 e documentos-pdf.js D8 (ajustes pequenos do que o laudo e os documentos escrevem e das telas do laudo e dos documentos; sem SQL)
+const VERSAO = 'H16-S187';   // S187: issue 86 — Revisão TapDoc · Rodada 12 (só banco: 448; nenhuma tela mudou)
+// const VERSAO = 'H16-S186';   // S186: issues 74 e 75 — TapDoc escritório E52, laudo-pdf.js S177 e documentos-pdf.js D8 (ajustes pequenos do que o laudo e os documentos escrevem e das telas do laudo e dos documentos; sem SQL)
 // const VERSAO = 'H16-S185';   // S185: issues 70 e 73 — TapDoc escritório E51 e assinatura-pdf.js S174 (o laudo emitido antes da reabertura da inspeção não se assina mais; a devolução do PDF assinado recusa certificado vencido e grava o tipo certo da assinatura; 447)
 // const VERSAO = 'H16-S184';   // S184: issue 90 — a T16 "Emitir boleto / nota fiscal" da inspeção comum abre junto com a OS (309): TapFlow S184 ("medição em aberto" na T16) e TapFin F21 (o aviso no painel da OS)
 // const VERSAO = 'H16-S183';   // S183: issues 69 e 84 — TapDoc escritório E50 (a válvula aprovada em campo que abre acima da PMTA adotada sai NÃO CONFORME no laudo, com a recomendação; a PMTA adotada vira a vigente na assinatura do laudo; laudo-pdf.js S176, documentos-pdf.js D7; 446)
