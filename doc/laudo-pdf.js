@@ -11,6 +11,9 @@
  * A conta da espessura mínima e da PMTA é a do motor (motor-calculo-nr13.js);
  * aqui ela só é ESCRITA com os números (a memória de cálculo do laudo).
  *
+ * S177 · S186 · issue 74 (Revisão TapDoc · Rodada 11, 17/11/2026): o volume do quadro 6.1 é o da categoria (o total informado pelo PLH
+ *   quando falta o volume de uma câmara); o 7.3 diz "+N" quando o ponto tem mais de 4 leituras; a data do certificado de aferição
+ *   é a de quando ela terminou (dataAfericao).
  * S176 · S183 · issue 69 (17/11/2026, opção B do Bruno): a válvula aprovada em campo que abre ACIMA da PMTA adotada pelo PLH chega na
  *   fotografia como "reprovado" (afericao.acima_adotada, tf_laudo_dados 446): o 7.6 sai NÃO CONFORME pelo motivo da PMTA, o certificado
  *   diz por quê e a seção 11 leva a recomendação de reajustar ou substituir (rec_regra.valvula_pmta; tipoRec). A frase "A pressão de
@@ -51,6 +54,18 @@ function fmt(v, c) {
 }
 const bar = (mpa, c) => mpa == null ? '—' : fmt(Number(mpa) * 10, c == null ? 2 : c) + ' bar';
 const mpaTxt = (mpa, c) => mpa == null ? '—' : fmt(mpa, c == null ? 3 : c) + ' MPa';
+/** S177 · issue 74, item 5: a data da aferição é a de quando ela TERMINOU, não a de quando foi começada (realizada_em).
+ *  O fim é a última gravação (updated_at, na fotografia do laudo); como ela é a hora em que chegou ao banco (sem sinal, pode
+ *  chegar depois) e o escritório também a muda (a validade), fica limitada ao término da inspeção e nunca antes do começo.
+ *  O Resumo (documentos-pdf.js) usa a mesma conta. */
+function dataAfericao(f, I) {
+  const t = x => x ? new Date(x).getTime() : NaN;
+  const ini = t(f && f.realizada_em), fim = t(f && f.updated_at), term = t(I && I.termino);
+  let v = isFinite(fim) ? fim : ini;
+  if (isFinite(v) && isFinite(term) && v > term) v = term;
+  if (isFinite(v) && isFinite(ini) && v < ini) v = ini;
+  return isFinite(v) ? new Date(v).toISOString() : (I && (I.termino || I.inicio)) || null;
+}
 function dataBR(x) {
   if (!x) return '—';
   const s = String(x);
@@ -283,7 +298,7 @@ function documentosAfericao(d, opc) {
       linha('Cliente', emp.razao_social || emp.nome_fantasia), linha('Vaso de pressão', [V.tag, V.numero_tap ? 'Número TAP ' + V.numero_tap : null].filter(Boolean).join(' · ')),
       linha(vv ? 'Válvula' : 'Manômetro', [TIPOS_ACESS[a.tipo] || a.tipo, a.tag, !vazio(a.marca) ? 'marca ' + a.marca : null, a.conexao ? 'conexão ' + a.conexao : null].filter(Boolean).join(' · ')),
       linha(vv ? 'Unidade' : 'Escala de indicação', vv ? un : (f.faixa_fim != null ? fmt(f.faixa_ini || 0, 1) + ' a ' + fmt(f.faixa_fim, 1) + ' ' + un + (f.resolucao ? ' · resolução ' + fmt(f.resolucao, 2) : '') : '—')),
-      linha('Data', dataBR(f.realizada_em || I.termino || I.inicio)),
+      linha('Data', dataBR(dataAfericao(f, I))),   // S177 · issue 74, item 5: a de quando terminou
       linha('Procedimento', 'PR-ENG-001 (Engetap), aprovado pelo PLH: ' + (vv ? 'desmontada até onde a construção permite, inspecionada, limpa e testada (NR-13, item 13.5.4.9)'
         : 'etapa 1, inspeção visual e funcional; etapa 2, comparação com o padrão em 3 cargas e 3 descargas por ponto')),
     ].concat(e1 ? [] : [linha('Padrão', [pz.descricao, pz.numero_serie ? 'nº ' + pz.numero_serie : null, pz.certificado_num ? 'certificado ' + pz.certificado_num : null,
@@ -630,7 +645,7 @@ function montar(d, opc) {
     'possui placa de identificação ilegível ou não indelével, em desacordo com o') : null);
   par(txt(placa === 'sem' && M.vaso_intro_sem_placa ? M.vaso_intro_sem_placa : placa === 'ilegivel' && introIlegivel ? introIlegivel : M.vaso_intro, { serie: V.numero_serie || 'não informado',
     fabricante: V.fabricante || 'fabricante não identificado', funcao: funcao ? ' e funciona como ' + funcao : '', quadro: qVaso }));
-  const volume = cams.reduce((a, k) => a + (Number(k.volume_m3) || 0), 0) || (R.volume_m3 != null ? Number(R.volume_m3) : null);
+  const volume = (R.volume_m3 != null ? Number(R.volume_m3) : cams.reduce((a, k) => a + (Number(k.volume_m3) || 0), 0) || null);
   // S143 · item 78: "Tampos: 2, elípticos 2:1" e "Costado: cilíndrico" no lugar das siglas soltas
   const ativos = (V.componentes || []).filter(c => c.ativo !== false).sort(ordemMedicao(V));   // S148 · item 85
   const TAMPO_PL = { eliptico: ['elíptico 2:1', 'elípticos 2:1'], torisferico: ['torisférico', 'torisféricos'], hemisferico: ['hemisférico', 'hemisféricos'], plano: ['plano', 'planos'] };
@@ -739,16 +754,22 @@ function montar(d, opc) {
     certificado: med.certificado_num || '—', laboratorio: med.laboratorio ? ', ' + med.laboratorio : '', validade: dataBR(med.validade), quadro: qUS }));
   if (fMapa && M.ultrassom_mapa) par(txt(M.ultrassom_mapa, { figura: fMapa }));
   const linhasUS = [];
+  let maisDe4 = false;   // S177 · issue 74, item 4: ponto com 5 leituras ou mais
   comLeitura.forEach(c => {
     const ls = leit.filter(l => l.componente_id === c.id);
     const pontos = [...new Set(ls.map(l => l.ponto))].sort((a, b) => a - b);
     pontos.forEach((p, k) => {
       const vs = ls.filter(l => l.ponto === p).sort((a, b) => a.leitura - b.leitura).map(l => Number(l.valor_mm));
-      linhasUS.push([k === 0 ? { text: presos(nomeComp(c)), style: 'td', rowSpan: pontos.length } : {}, String(p)].concat([0, 1, 2, 3].map(i => vs[i] != null ? fmt(vs[i], 2) : ''))
+      // S177 · issue 74, item 4: o quadro tem 4 colunas de leitura e a "Mínima" olha todas; com 5 ou mais, a 4ª coluna diz quantas
+      // ficaram de fora ("+N") e uma nota explica, para a mínima nunca parecer não estar entre as leituras
+      const extra = vs.length > 4 ? vs.length - 3 : 0; if (extra) maisDe4 = true;
+      linhasUS.push([k === 0 ? { text: presos(nomeComp(c)), style: 'td', rowSpan: pontos.length } : {}, String(p)]
+        .concat([0, 1, 2, 3].map(i => extra && i === 3 ? '+' + extra : vs[i] != null ? fmt(vs[i], 2) : ''))
         .concat([{ text: fmt(Math.min(...vs), 2), style: 'td', bold: true }]));
     });
   });
   if (linhasUS.length) tabela(['Componente', 'Ponto', 'Leitura 1', 'Leitura 2', 'Leitura 3', 'Leitura 4', 'Mínima'], linhasUS, ['*', 38, 54, 54, 54, 54, 52], 'Medição de espessura (mm)');
+  if (maisDe4) C.push({ text: '"+N" na coluna Leitura 4: o ponto teve mais leituras, que não cabem no quadro; a mínima considera todas as leituras do ponto.', style: 'nota', margin: [0, 2, 0, 6] });
   if (fMapa) { fig++; C.push({ stack: [imgMapa ? { image: imgMapa, fit: [500, 392], alignment: 'center' } : { svg: mapaSvg(V.posicao, siglasMapa), alignment: 'center', width: V.posicao === 'vertical' ? 240 : 380 },
     { text: 'Figura ' + fMapa + ' – ' + presos(T.fig_mapa || 'Representação dos pontos no mapa de medição') + '.', style: 'legenda' }], margin: [0, 4, 0, 10], unbreakable: true }); }
   const semL = I.ultrassom_sem_leitura || {};
@@ -1218,6 +1239,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, prazoReduzido, prazosNorma, prazoRotulo, prazosRedTxt, pressaoAbaixo, tipoRec, semFrase, pressaoVars, versao: 'R06a-S176-2026-11-17' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, prazoReduzido, prazosNorma, prazoRotulo, prazosRedTxt, pressaoAbaixo, tipoRec, semFrase, pressaoVars, dataAfericao, versao: 'R06a-S177-2026-11-17' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
