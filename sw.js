@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S188';   // S188: TapFin F22 — os quadros do Painel e das Projeções em nucleo/fin-painel.js e .css (FP1), para o TapGestão usar os mesmos (sem SQL)
+const VERSAO = 'H16-S189';   // S189: TapGestão GE4 — a aba Reunião (bloco Financeiro, com os quadros do TapFin, a meta de recebimento e a ata); TapFin F23 e nucleo/fin-painel FP2 (524, 152)
+// const VERSAO = 'H16-S188';   // S188: TapFin F22 — os quadros do Painel e das Projeções em nucleo/fin-painel.js e .css (FP1), para o TapGestão usar os mesmos (sem SQL)
 // const VERSAO = 'H16-S187';   // S187: issue 86 — Revisão TapDoc · Rodada 12 (só banco: 448; nenhuma tela mudou)
 // const VERSAO = 'H16-S186';   // S186: issues 74 e 75 — TapDoc escritório E52, laudo-pdf.js S177 e documentos-pdf.js D8 (ajustes pequenos do que o laudo e os documentos escrevem e das telas do laudo e dos documentos; sem SQL)
 // const VERSAO = 'H16-S185';   // S185: issues 70 e 73 — TapDoc escritório E51 e assinatura-pdf.js S174 (o laudo emitido antes da reabertura da inspeção não se assina mais; a devolução do PDF assinado recusa certificado vencido e grava o tipo certo da assinatura; 447)
@@ -101,8 +102,8 @@ const ESSENCIAIS = [
   './nucleo/modulos.js?v=M4',
   // S110 · o gerador de documentos (o Manager o pede com ?v=D1; o jszip e o pdfmake vêm sob demanda)
   './nucleo/documentos.js?v=D1',
-  './nucleo/fin-painel.js?v=FP1',   // S188 · os quadros do Painel do TapFin (TapFin e TapGestão)
-  './nucleo/fin-painel.css?v=FP1',
+  './nucleo/fin-painel.js?v=FP2',   // S188 · os quadros do Painel do TapFin (TapFin e TapGestão)
+  './nucleo/fin-painel.css?v=FP2',
   // S74 · TapFin: a página (S76 · TapFin 2: o plano B fin/util.js saiu)
   './fin/',
   // S77 · TapDoc do escritório (R02b1) e o motor de cálculo que ele usa
