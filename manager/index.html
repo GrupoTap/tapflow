@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow · S184</title>
+<title>TapFlow · S191</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2415,7 +2415,8 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S184';   // S184: issue 90: a T16 "Emitir boleto / nota fiscal" da inspeção comum abre junto com a OS (309); com a medição (T06B) ainda aberta, "medição em aberto" (com o aviso) junto do "faturar no TapFin" na linha da T16
+const APP_VERSION = 'S191';   // S191: Rodada R2 da auditoria (issues 200 e 208): os parâmetros do Drive pela função tf_drive_parametros (215); aceita o script do Drive v3
+// const APP_VERSION = 'S184';   // S184: issue 90: a T16 "Emitir boleto / nota fiscal" da inspeção comum abre junto com a OS (309); com a medição (T06B) ainda aberta, "medição em aberto" (com o aviso) junto do "faturar no TapFin" na linha da T16
 // const APP_VERSION = 'S156';   // S156: issue 1 (passo 2): esta página é só o TapFlow, o módulo das OS (quadros, Agenda, Compras, Contratos, Documentos, Relatórios, Meu perfil e as Configurações do TapFlow). Saiu o código parado de Cadastros, das abas de Configurações que mudaram de lugar e de Fornecedores (132 trechos); o nome nas telas passou de "Manager" para "TapFlow" (a pasta continua manager/)
 // const APP_VERSION = 'S139';   // S139: item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
 // const APP_VERSION = 'S135';   // S135: item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
@@ -4944,8 +4945,7 @@ let PARAM = { drive_url:'', drive_chave:'' };
 async function carregarParametros(){
   if (DEMO){ PARAM = { drive_url:'demo', drive_chave:'demo' }; return; }
   try{
-    const r = await get('parametros?select=chave,valor');
-    const m = {}; (r||[]).forEach(x => m[x.chave] = x.valor);
+    const m = (await rpc('tf_drive_parametros')) || {};   // S191 (215, issue 200): a tabela de parâmetros fechou ao app
     PARAM = { drive_url: m.drive_url || '', drive_chave: m.drive_chave || '' };
   }catch(e){ console.warn('[parametros]', e.message); }
 }
@@ -11923,7 +11923,7 @@ async function ctrDriveV2(){
   let j = null;
   try{ const r = await fetch(PARAM.drive_url + (PARAM.drive_url.indexOf('?') >= 0 ? '&' : '?') + 'action=ping', { redirect: 'follow', signal: sinal(false) }); j = await r.json(); }catch(e){ j = null; }
   if (!j) throw new Error('Não consegui falar com o serviço do Drive agora. Tente de novo em instantes.');
-  if (j.versao !== 'v2') throw Object.assign(new Error('O script do Drive ainda está na versão 1. Republique a versão 2 (passo a passo da rodada C1-Drive) antes de gravar documentos de contrato.'), { negocio: true });
+  if (!/^v([2-9]|\d{2,})$/.test(String(j.versao || ''))) throw Object.assign(new Error('O script do Drive ainda está na versão 1. Publique a versão nova do script (drive/GAS_TapFlow_Drive.gs) antes de gravar documentos de contrato.'), { negocio: true });   // S191: v2 ou v3
   DRIVE_V2 = true;
 }
 async function ctrDriveChamar(corpo){

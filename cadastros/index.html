@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapHub Cadastros 5 · Cadastros e Configurações</title>
+<title>TapHub Cadastros 6 · Cadastros e Configurações</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2371,7 +2371,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'CAD5';   // TapHub Cadastros 5 (S167): "Imprime a pasta" no cliente — a Engetap imprime e entrega a pasta (fichário) dos vasos dele? Já vem "sim"; com "não", o TapDoc não gera o fichário nem as lombadas (issue 30, Parte 4; 212)
+const APP_VERSION = 'CAD6';   // TapHub Cadastros 6 (S191): Configurações › Google Drive lê e grava pelas funções do banco (215, issue 200: a tabela de parâmetros fechou ao app)
+// const APP_VERSION = 'CAD5';   // TapHub Cadastros 5 (S167): "Imprime a pasta" no cliente — a Engetap imprime e entrega a pasta (fichário) dos vasos dele? Já vem "sim"; com "não", o TapDoc não gera o fichário nem as lombadas (issue 30, Parte 4; 212)
 // const APP_VERSION = 'CAD4';   // TapHub Cadastros 4 (S144): ramo de atividade e grau de risco do cliente (NR-04), que saem na seção 4 do laudo do TapDoc (item 78 da lista; 211)
 // const APP_VERSION = 'CAD3';   // TapHub Cadastros 3 (S139): item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
 // const APP_VERSION = 'CAD2';   // TapHub Cadastros 2 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
@@ -2558,8 +2559,7 @@ let PARAM = { drive_url:'', drive_chave:'' };
 async function carregarParametros(){
   if (DEMO){ PARAM = { drive_url:'demo', drive_chave:'demo' }; return; }
   try{
-    const r = await get('parametros?select=chave,valor');
-    const m = {}; (r||[]).forEach(x => m[x.chave] = x.valor);
+    const m = (await rpc('tf_drive_parametros')) || {};   // S191 (215, issue 200): a tabela de parâmetros fechou ao app
     PARAM = { drive_url: m.drive_url || '', drive_chave: m.drive_chave || '' };
   }catch(e){ console.warn('[parametros]', e.message); }
 }
@@ -3314,8 +3314,7 @@ async function cfgParametros(){
   const c = document.getElementById('cfgCorpo');
   let par = {};
   try{
-    const r = DEMO ? [] : await get('parametros?select=chave,valor');
-    (r||[]).forEach(x => par[x.chave] = x.valor);
+    if (!DEMO) par = (await rpc('tf_drive_parametros')) || {};   // S191 (215): pela função, não pela tabela
   }catch(e){ toast(e.message,'err'); }
 
   const ligado = !!(par.drive_url && par.drive_chave);
@@ -3357,11 +3356,9 @@ async function cfgParametros(){
   document.getElementById('drSalvar').addEventListener('click', async (e) => {
     e.target.disabled = true;
     try{
-      const vals = { drive_url: document.getElementById('drUrl').value.trim(),
-                     drive_chave: document.getElementById('drCh').value.trim(),
-                     drive_raiz: document.getElementById('drRaiz').value.trim() || 'TapFlow' };
-      for (const k of Object.keys(vals))
-        await patch('parametros', 'chave=eq.' + k, { valor: vals[k] });
+      // S191 (215, issue 200): grava pela função (só o admin), não direto na tabela
+      if (!DEMO) await rpc('tf_drive_parametros_gravar', { p_url: document.getElementById('drUrl').value.trim(),
+        p_chave: document.getElementById('drCh').value.trim(), p_raiz: document.getElementById('drRaiz').value.trim() || 'TapFlow' });
       toast('Salvo. O app de campo pega na próxima abertura.','ok');
       cfgParametros();
     }catch(err){ toast(err.message,'err'); e.target.disabled = false; }
