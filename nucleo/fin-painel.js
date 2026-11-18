@@ -1,4 +1,4 @@
-/* nucleo/fin-painel.js · FP1 (S188) — os quadros do Painel Financeiro e das Projeções do TapFin.
+/* nucleo/fin-painel.js · FP2 (S189: a linha da meta de recebimento no "Entrou × saiu", só quando FINPM.metaEntrou existe) · FP1 (S188) — os quadros do Painel Financeiro e das Projeções do TapFin.
  * Movido do fin/index.html (F21) sem mudar o código, para o TapGestão (aba Reunião) usar os MESMOS gráficos
  * (decisão RE9 do Bruno, 17/11/2026, processos/tapgestao-reuniao-desenho.md). Mudou um gráfico? Muda aqui, e vale
  * nos dois lugares. A página que carrega este arquivo precisa ter: esc, BRL, dataBR, rpc, irPara, visao, finPlural,
@@ -1012,7 +1012,9 @@ function fpmGrafico(k){
   const el = document.getElementById('fpmGraf'); if (!el) return;
   const M = FINPM.meses;
   const W = Math.max(240, el.clientWidth || 700), H = 250, pl = 54, pr = 10, pt = 22, pb = 30, iw = W - pl - pr, ih = H - pt - pb;
-  const E = fpjEscala(M.flatMap(m => { const x = fpmMes(m); return [x.entrou, x.saiu, x.entrou - x.saiu]; }), pt, ih, 25000);
+  // FP2 (S189): a meta de recebimento (só a Reunião do TapGestão põe FINPM.metaEntrou; no TapFin fica sem a linha)
+  const META = Number(FINPM.metaEntrou) > 0 ? Number(FINPM.metaEntrou) : 0;
+  const E = fpjEscala(M.flatMap(m => { const x = fpmMes(m); return [x.entrou, x.saiu, x.entrou - x.saiu]; }).concat(META ? [META] : []), pt, ih, 25000);
   const bw = iw / M.length, barW = Math.min(26, bw * 0.3), gap = 2, rotula = bw >= 150;
   let s = '<svg width="' + W + '" height="' + H + '" role="img" aria-label="Entrou, saiu e resultado por mês" style="display:block">' + fpjDefs([FPM_COR.entrou, FPM_COR.saiu]) + fpjGrade(E, pl, W, pr);
   const pts = [];
@@ -1028,6 +1030,8 @@ function fpmGrafico(k){
     pts.push([cx, E.y(x.entrou - x.saiu), m]);
   });
   s += '<polyline fill="none" stroke="' + FPM_COR.res + '" stroke-width="2" points="' + pts.map(p => p[0] + ',' + p[1]).join(' ') + '"/>';
+  if (META) s += '<line x1="' + pl + '" x2="' + (W - pr) + '" y1="' + E.y(META) + '" y2="' + E.y(META) + '" stroke="#4338CA" stroke-width="2" stroke-dasharray="6 4"/>'
+    + '<text x="' + (pl + 4) + '" y="' + (E.y(META) - 5) + '" font-size="11" font-weight="700" fill="#4338CA"' + FPJ_HALO + '>meta ' + esc(fpjK(META)) + '</text>';
   pts.forEach(p => { s += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (p[2] === k ? 5 : 4) + '" fill="' + FPM_COR.res + '" stroke="#fff" stroke-width="2"/>'; });
   const sp = pts.find(p => p[2] === k), sx = fpmMes(k), rv = sx.entrou - sx.saiu;
   if (sp){
