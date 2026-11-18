@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S190';   // S190: Rodada R1 da auditoria — as portas do banco (214, issues 197, 198 e 199); nenhuma tela mudou
+const VERSAO = 'H16-S191';   // S191: Rodada R2 da auditoria (issues 200, 202 e 208): TapFlow S191, Cadastros CAD6 e TapFin F24 pegam os parâmetros do Drive pela função (215); o TapFlow aceita o script do Drive v3
+// const VERSAO = 'H16-S190';   // S190: Rodada R1 da auditoria — as portas do banco (214, issues 197, 198 e 199); nenhuma tela mudou
 // const VERSAO = 'H16-S189';   // S189: TapGestão GE4 — a aba Reunião (bloco Financeiro, com os quadros do TapFin, a meta de recebimento e a ata); TapFin F23 e nucleo/fin-painel FP2 (524, 152)
 // const VERSAO = 'H16-S188';   // S188: TapFin F22 — os quadros do Painel e das Projeções em nucleo/fin-painel.js e .css (FP1), para o TapGestão usar os mesmos (sem SQL)
 // const VERSAO = 'H16-S187';   // S187: issue 86 — Revisão TapDoc · Rodada 12 (só banco: 448; nenhuma tela mudou)

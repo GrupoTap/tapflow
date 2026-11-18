@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S59-T43';   // S175: TapDoc 31 (issues 48, 49, 50, 51 e 53: toques que apagavam respostas, a pressão sem casas quebradas, mensagens, acessórios e ajustes pequenos; sem SQL)
+const VERSAO = 'S60-T44';   // S191: Field S60 (os parâmetros do Drive pela função tf_drive_parametros, 215)
+// const VERSAO = 'S59-T43';   // S175: TapDoc 31 (issues 48, 49, 50, 51 e 53: toques que apagavam respostas, a pressão sem casas quebradas, mensagens, acessórios e ajustes pequenos; sem SQL)
 // const VERSAO = 'S59-T42';   // S174: TapDoc 30 (issues 38, 39, 52, 82 e 83: o CSV com leitura inválida entra com as boas; o PDF que não coube avisa; a miniatura renova o acesso; a câmera que fechou o app volta para a mesma tela e avisa; PDF até 50 MB e o GPS de volta no pacote: 441)
 // const VERSAO = 'S59-T41';   // S173: TapDoc 29 (issues 43 a 47: a aferição reprovada põe "substituir" ao sair do campo e volta atrás; cancelar a aferição; a válvula contra a PMTA da plaqueta; "Gerar os pontos" pergunta; o prazo menor sem gravar a cada letra; 440)
 // const VERSAO = 'S59-T40';   // S172: TapDoc 28 (issues 40, 42 e 55: "1.250" sem vírgula pergunta "1250 ou 1,25?" e não grava; volume abaixo de 20 litros e circunferência abaixo de 300 mm avisam)
