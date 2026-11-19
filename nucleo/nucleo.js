@@ -1618,13 +1618,16 @@
   }
   /** N12 (issue 154, item 2): aviso de ERRO longo (mais de TOAST_LONGO letras) ou com { fixo:true } fica na tela até
    *  a pessoa tocar em "Entendi" (o de "aparelho sem espaço" sumia em 4 s, sem dar tempo de ler). O resto some sozinho. */
-  var TOAST_LONGO = 120;
+  var TOAST_LONGO = 120, toastFora = function () {};
   function toast(msg, tipo, opt) {
     var el = garantirToast();
     var meu = el.classList.contains('tfn-toast');
     var fixo = !!(opt && opt.fixo) || (tipo === 'err' && String(msg == null ? '' : msg).length > TOAST_LONGO);
     var base = 'toast' + (meu ? ' tfn-toast' : '');
-    function some() { el.className = base; el.style.pointerEvents = ''; el.removeAttribute('data-fixo'); }
+    function some() { el.className = base; el.style.pointerEvents = ''; el.removeAttribute('data-fixo'); document.removeEventListener('pointerdown', fora, true); }
+    // o aviso fixo não trava a tela: só o botão "Entendi" recebe o toque; tocar em outra coisa (seguir trabalhando) também o fecha
+    function fora(e) { if (!el.contains(e.target)) some(); }
+    document.removeEventListener('pointerdown', toastFora, true); toastFora = fora;
     el.textContent = msg;
     el.className = 'toast on' + (tipo ? ' ' + tipo : '') + (meu ? ' tfn-toast' : '');
     clearTimeout(toastTimer);
@@ -1632,9 +1635,11 @@
       var b = document.createElement('button');
       b.type = 'button'; b.className = 'tfn-entendi'; b.textContent = 'Entendi';
       b.style.cssText = 'display:block;margin:8px 0 0 auto;padding:6px 14px;border:1px solid rgba(255,255,255,.7);border-radius:3px;background:transparent;color:inherit;font:inherit;font-weight:600;cursor:pointer';
+      b.style.pointerEvents = 'auto';
       b.addEventListener('click', function (e) { e.stopPropagation(); some(); });
       el.appendChild(b);
-      el.style.pointerEvents = 'auto'; el.setAttribute('data-fixo', '1');
+      el.style.pointerEvents = 'none'; el.setAttribute('data-fixo', '1');
+      setTimeout(function () { if (el.getAttribute('data-fixo') === '1' && toastFora === fora) document.addEventListener('pointerdown', fora, true); }, 600);
       return;
     }
     el.style.pointerEvents = ''; el.removeAttribute('data-fixo');
@@ -2343,7 +2348,7 @@
     }
     var querFechar = false;
     function fechar() {
-      var temAlgo = el.querySelector('#tfRelTxt').value.trim() || imgs.length;
+      var temAlgo = el.querySelector('#tfRelTxt').value.trim();   // a pergunta é pelo TEXTO digitado (issue 154)
       if (temAlgo && !querFechar) {
         querFechar = true;
         el.querySelector('#tfRelFechar').textContent = 'Fechar mesmo assim';
