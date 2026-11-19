@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapRH 18 · Recursos Humanos</title>
+<title>TapRH 19 · Recursos Humanos</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2434,7 +2434,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'RH18';   // TapRH 18 (S197): Rodada R6 da auditoria — issue 143 (sem os códigos do desenho, como "(P17)" e "parte 2B", nas telas do Ponto; o tempo da batida repetida vem do parâmetro)
+const APP_VERSION = 'RH19';   // TapRH 19 (S198): Rodada R7 da auditoria — issue 174 (a planilha baixada com R$, total por fórmula, data de verdade e largura da coluna; a mesma relXLSX do TapFlow)
+// const APP_VERSION = 'RH18';   // TapRH 18 (S197): Rodada R6 da auditoria — issue 143 (sem os códigos do desenho, como "(P17)" e "parte 2B", nas telas do Ponto; o tempo da batida repetida vem do parâmetro)
 // const APP_VERSION = 'RH17';   // TapRH 17 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 119 (textos sem nome de arquivo e sem nomes fixos, TapField, o caminho certo no desligamento, Sair pela janela, sem a sobra do "Liberar novo PIN"); núcleo N13
 // const APP_VERSION = 'RH16';   // TapRH 16 (S195): Rodada R4 da auditoria (issue 142) — anexos, fotos, espelho e documentos do funcionário abrem com a página aberta há mais de 1 hora (o acesso renova também no HTTP 400); o anexo do pedido baixa com o tipo verdadeiro; núcleo N12
 // const APP_VERSION = 'RH15';   // TapRH 15 (S194): Rodada R3 da auditoria (issues 139, 203, 204 e 205): horas pagas sem teto de 24 h e "valer a escolha"; avisos do Fechamento (limite do IR, batida faltando, batida depois de liberar, 100% de mês anterior); espelho congelado; resumo do contador com as faltas separadas (617)
@@ -3003,18 +3004,39 @@ async function relPDF(m){
   doc.save(relNomeArq(m, 'pdf'));
 }
 
+/**
+ * A planilha sai sem biblioteca: um .xlsx é um ZIP com cinco XMLs, e escrever à
+ * mão evita 900 KB de CDN para uma função que roda uma vez por semana. Número
+ * vai como NÚMERO — planilha em que tudo é texto é um PDF com grade.
+ * S198 (issue 174, a regra da moeda de 29/10): dinheiro é número com o formato R$ (soma no Excel); total por
+ * fórmula no fim de cada aba (nas colunas de dinheiro); "DD/MM/AAAA" vira data de verdade (ordena e filtra);
+ * a coluna `pct` sai como porcentagem; cabeçalho em negrito e fixo; largura da coluna pelo conteúdo.
+ * ⚠ Cópia IGUAL em manager/ e rh/: trocou numa, troque na outra.
+ */
 async function relXLSX(m){
   const JSZipLib = await carregarJSZip();
   const zip = new JSZipLib();
   const esc_ = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const col = n => { let s = ''; n++; while (n > 0){ const r = (n-1) % 26; s = String.fromCharCode(65+r) + s; n = Math.floor((n-1)/26); } return s; };
+  // "DD/MM/AAAA" → o número de dias do Excel (1º/01/1900 = 1; a conta parte de 30/12/1899)
+  const dataXL = v => {
+    const x = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(v ?? '').trim());
+    if (!x) return null;
+    const t = Date.UTC(+x[3], +x[2] - 1, +x[1]);
+    const d = new Date(t);
+    if (isNaN(t) || d.getUTCDate() !== +x[1] || d.getUTCMonth() !== +x[2] - 1) return null;
+    return Math.round((t - Date.UTC(1899, 11, 30)) / 864e5);
+  };
+  const ehNum = v => typeof v === 'number' && isFinite(v);
+  const moedaTxt = v => 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const abas = m.blocos.filter(b => b.linhas.length).map((b, bi) => ({
     nome: (b.titulo || ('Bloco ' + (bi+1))).replace(/[\\\/\?\*\[\]:]/g,'').slice(0,28),
     colunas: b.colunas,
     linhas: b.linhas,
     numericas: b.numericas || [],
-    moeda: b.moeda || []
+    moeda: b.moeda || [],
+    pct: b.pct || []
   }));
   if (!abas.length){ toast('Nada no período para exportar.','err'); return; }
 
@@ -3039,28 +3061,63 @@ async function relXLSX(m){
     '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
     + abas.map((_,i) => '<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>').join('')
     + '<Relationship Id="rIdS" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+  // estilos: 0 normal · 1 negrito · 2 R$ · 3 data · 4 % · 5 R$ em negrito (o total)
   xl.file('styles.xml',
     '<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<numFmts count="3"><numFmt numFmtId="164" formatCode="&quot;R$ &quot;#,##0.00;\\-&quot;R$ &quot;#,##0.00"/>'
+    + '<numFmt numFmtId="165" formatCode="dd/mm/yyyy"/><numFmt numFmtId="166" formatCode="0.0%"/></numFmts>'
     + '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font>'
     + '<font><b/><sz val="11"/><name val="Calibri"/></font></fonts>'
     + '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
     + '<borders count="1"><border/></borders>'
     + '<cellStyleXfs count="1"><xf/></cellStyleXfs>'
-    + '<cellXfs count="2"><xf xfId="0"/><xf xfId="0" fontId="1" applyFont="1"/></cellXfs></styleSheet>');
+    + '<cellXfs count="6"><xf xfId="0"/><xf xfId="0" fontId="1" applyFont="1"/>'
+    + '<xf xfId="0" numFmtId="164" applyNumberFormat="1"/><xf xfId="0" numFmtId="165" applyNumberFormat="1"/>'
+    + '<xf xfId="0" numFmtId="166" applyNumberFormat="1"/><xf xfId="0" numFmtId="164" fontId="1" applyFont="1" applyNumberFormat="1"/>'
+    + '</cellXfs></styleSheet>');
 
   const ws = xl.folder('worksheets');
   abas.forEach((a, i) => {
-    const linhas = [a.colunas].concat(a.linhas);
-    const xml = linhas.map((l, ri) =>
-      '<row r="'+(ri+1)+'">' + l.map((v, ci) => {
-        const ref = col(ci) + (ri+1);
-        const num = ri > 0 && a.numericas.includes(ci) && typeof v === 'number' && isFinite(v);
-        if (num) return '<c r="'+ref+'"><v>'+v+'</v></c>';
-        return '<c r="'+ref+'" t="inlineStr"'+(ri===0?' s="1"':'')+'><is><t xml:space="preserve">'+esc_(v)+'</t></is></c>';
-      }).join('') + '</row>').join('');
+    const larg = a.colunas.map(c => String(c).length);
+    const mede = (ci, t) => { larg[ci] = Math.max(larg[ci], String(t).length); };
+    const celula = (ref, v, ci) => {
+      if (a.moeda.includes(ci) && ehNum(v)){ mede(ci, moedaTxt(v)); return '<c r="'+ref+'" s="2"><v>'+v+'</v></c>'; }
+      if (a.pct.includes(ci) && ehNum(v)){ mede(ci, v + ' %'); return '<c r="'+ref+'" s="4"><v>'+(v / 100)+'</v></c>'; }
+      if (a.numericas.includes(ci) && ehNum(v)){
+        const n = Math.round(v * 10000) / 10000; mede(ci, String(n)); return '<c r="'+ref+'"><v>'+n+'</v></c>';
+      }
+      const d = dataXL(v);
+      if (d != null){ mede(ci, '00/00/0000'); return '<c r="'+ref+'" s="3"><v>'+d+'</v></c>'; }
+      mede(ci, v ?? '');
+      return '<c r="'+ref+'" t="inlineStr"><is><t xml:space="preserve">'+esc_(v)+'</t></is></c>';
+    };
+    let xml = '<row r="1">' + a.colunas.map((c, ci) =>
+      '<c r="'+col(ci)+'1" t="inlineStr" s="1"><is><t xml:space="preserve">'+esc_(c)+'</t></is></c>').join('') + '</row>';
+    a.linhas.forEach((l, li) => {
+      const r = li + 2;
+      xml += '<row r="'+r+'">' + l.map((v, ci) => celula(col(ci) + r, v, ci)).join('') + '</row>';
+    });
+    // o total, por fórmula, nas colunas de dinheiro (o valor já vai calculado para quem abre sem recalcular)
+    if (a.moeda.length){
+      const r = a.linhas.length + 2, ult = r - 1;
+      let t = '';
+      a.colunas.forEach((_, ci) => {
+        const ref = col(ci) + r;
+        if (a.moeda.includes(ci)){
+          const s = a.linhas.reduce((x, l) => x + (ehNum(l[ci]) ? l[ci] : 0), 0);
+          t += '<c r="'+ref+'" s="5"><f>SUM('+col(ci)+'2:'+col(ci)+ult+')</f><v>'+(Math.round(s * 100) / 100)+'</v></c>';
+        } else if (ci === 0){
+          t += '<c r="'+ref+'" t="inlineStr" s="1"><is><t>Total</t></is></c>';
+        }
+      });
+      xml += '<row r="'+r+'">' + t + '</row>';
+    }
+    const cols = '<cols>' + larg.map((w, ci) => '<col min="'+(ci+1)+'" max="'+(ci+1)+'" width="'
+      + Math.min(Math.max(w + 2, 8), 60) + '" customWidth="1"/>').join('') + '</cols>';
     ws.file('sheet'+(i+1)+'.xml',
       '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-      + '<sheetData>' + xml + '</sheetData></worksheet>');
+      + '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+      + cols + '<sheetData>' + xml + '</sheetData></worksheet>');
   });
 
   const blob = await zip.generateAsync({ type:'blob',
