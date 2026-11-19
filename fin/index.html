@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 24 · Financeiro</title>
+<title>TapFin 25 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2137,9 +2137,9 @@ th.num .tfThFixo{text-align:right}
 :root[data-modulo="tapfin"] .topbar{box-shadow:inset 0 4px 0 var(--mod)}
 </style>
 <!-- S63 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N11">
-<script src="../nucleo/config.js?v=N11"></script>
-<script src="../nucleo/nucleo.js?v=N11"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N12">
+<script src="../nucleo/config.js?v=N12"></script>
+<script src="../nucleo/nucleo.js?v=N12"></script>
 <!-- F4 · H10: a tabela única dos módulos (cor da moldura e o menu "Trocar de módulo"). Sem ele, o TapFin fica azul e o botão leva ao hub, como antes. -->
 <script src="../nucleo/modulos.js?v=M4"></script>
 <script src="../nucleo/fin-painel.js?v=FP2"></script>
@@ -2210,7 +2210,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'F24';   // TapFin 24 (S191): os parâmetros do Drive pela função tf_drive_parametros (215, issue 200); nada muda na tela
+const APP_VERSION = 'F25';   // TapFin 25 (S195): Rodada R4 da auditoria — issue 142 (nota, boleto, canhotos e faturas abrem com a página aberta há mais de 1 hora), 189 ("1.250" = R$ 1.250,00 na Conta corrente Proper e nos Cartões; confirmar o valor antes de lançar; "Quem vê" pede confirmação) e 146 (a planilha .xlsx pelo leitor do núcleo); núcleo N12
+// const APP_VERSION = 'F24';   // TapFin 24 (S191): os parâmetros do Drive pela função tf_drive_parametros (215, issue 200); nada muda na tela
 // const APP_VERSION = 'F23';   // TapFin 23 (S189): pede o nucleo/fin-painel FP2 (a linha da meta só aparece na Reunião do TapGestão; o Painel não muda)
 // const APP_VERSION = 'F22';   // TapFin 22 (S188): os quadros do Painel e das Projeções foram para nucleo/fin-painel.js e .css (FP1), comuns com o TapGestão (RE9); nada muda na tela
 // const APP_VERSION = 'F21';   // TapFin 21 (S184): issue 90: no painel da OS, o aviso em destaque quando a medição ainda não foi fechada (a T16 abre com a OS desde a 309 do TapFlow)
@@ -2435,15 +2436,11 @@ let FINRSV = { envelopes:null };
 
 let FINCAT = { lista:null };
 
+/** F25 (issue 189): pelo leitor único do núcleo (Nucleo.util.lerValor): "1.250" = 1.250,00 (antes R$ 1,25).
+ *  Devolve NaN quando está vazio ou não é número (como antes). */
 function ccValor(v){
-  if (typeof v === 'number') return v;
-  let t = String(v == null ? '' : v).replace(/R\$|\s/g, '');
-  if (!t) return NaN;
-  const neg = /^\(.*\)$/.test(t) || /^-/.test(t) || /-$/.test(t);
-  t = t.replace(/[()\-]/g, '');
-  if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
-  const n = Number(t);
-  return isFinite(n) ? (neg ? -n : n) : NaN;
+  const n = Nucleo.util.lerValor(v);
+  return n == null ? NaN : n;
 }
 
 const ccSinal = v => (v > 0 ? '+ ' : v < 0 ? '− ' : '') + BRL(Math.abs(v));
@@ -2599,15 +2596,17 @@ function ccNovoLancamento(){
     +   '<label class="chk" style="margin:0 0 4px"><input type="radio" name="ccSent" value="1" checked> Aumenta a dívida da Proper</label>'
     +   '<label class="chk" style="margin:0"><input type="radio" name="ccSent" value="-1"> Diminui a dívida da Proper</label></div>'
     + '<div class="campo"><label for="ccDt">Data</label><input id="ccDt" type="date" value="' + isoHoje() + '" max="' + isoHoje() + '"></div>'
-    + '<div class="campo"><label for="ccVl">Valor (R$)</label><input id="ccVl" type="text" inputmode="decimal" placeholder="ex.: 1.250,00"></div>'
+    + '<div class="campo"><label for="ccVl">Valor (R$)</label><input id="ccVl" type="text" inputmode="decimal" placeholder="ex.: 1.250,00" data-valor="moeda"></div>'
     + '<div class="campo"><label for="ccDs">Descrição</label><input id="ccDs" type="text" maxlength="300" placeholder="ex.: PIX recebido da Proper"></div>'
     + '<p class="nota" id="ccMsg" style="color:var(--crit)"></p>',
     [ { label:'Cancelar', onClick: fecharModal },
       { label:'Lançar', pri:true, onClick: async () => {
           const tp = document.getElementById('ccTp').value;
-          const msg = document.getElementById('ccMsg');
-          let v = ccValor(document.getElementById('ccVl').value);
-          if (!isFinite(v) || !v){ msg.textContent = 'Informe o valor.'; return; }
+          const msg = document.getElementById('ccMsg'); msg.style.color = '';
+          const vlTxt = document.getElementById('ccVl').value;
+          let v = ccValor(vlTxt);
+          if (!vlTxt.trim()){ msg.textContent = 'Informe o valor.'; return; }
+          if (!isFinite(v) || !v){ msg.textContent = 'O valor não é um número: use vírgula nos centavos (ex.: 1.250,00).'; return; }
           v = Math.abs(v);
           if (tp === 'pagamento') v = -v;
           else if (tp !== 'aumento'){
@@ -2618,14 +2617,28 @@ function ccNovoLancamento(){
           const ds = document.getElementById('ccDs').value.trim();
           if (!dt){ msg.textContent = 'Informe a data.'; return; }
           if (!ds){ msg.textContent = 'Descreva o lançamento.'; return; }
+          // F25 (issue 189): o valor por extenso antes de gravar; o 2º toque em "Lançar" confirma
+          const assin = [tp, v, dt, ds].join('|');
+          if (ccNovoLancamento._conf !== assin){
+            ccNovoLancamento._conf = assin;
+            msg.style.color = 'var(--ink)';
+            msg.textContent = 'Lançar ' + ccSinal(v) + ' em ' + dataBR(dt) + '? Toque em «Lançar» de novo para confirmar.';
+            return;
+          }
+          ccNovoLancamento._conf = null;
           try{
             if (!DEMO) await rpc('tf_cc_lancar', { p_data: dt, p_tipo: tp, p_valor: v, p_descricao: ds });
             fecharModal(); toast('Lançado: ' + ccSinal(v) + '.', 'ok'); pintarContaCorrente();
-          }catch(e){ msg.textContent = e.message; }
+          }catch(e){ msg.style.color = ''; msg.textContent = e.message; }
       } } ]);
+  ccNovoLancamento._conf = null;
   const tp = document.getElementById('ccTp');
   const acerta = () => { document.getElementById('ccSentCx').hidden = tp.value === 'aumento' || tp.value === 'pagamento'; };
   tp.addEventListener('change', acerta); acerta();
+  // mudou qualquer campo: a confirmação volta a ser pedida (F25 · issue 189)
+  ['ccTp','ccDt','ccVl','ccDs'].forEach(id => document.getElementById(id).addEventListener('input', () => {
+    ccNovoLancamento._conf = null; const m = document.getElementById('ccMsg'); m.style.color = ''; m.textContent = ''; }));
+  document.querySelectorAll('input[name=ccSent]').forEach(r => r.addEventListener('change', () => { ccNovoLancamento._conf = null; document.getElementById('ccMsg').textContent = ''; }));
 }
 
 function ccEstornar(l){
@@ -2659,7 +2672,7 @@ async function ccLerPlanilha(file){
   else throw new Error('Use .xlsx ou .csv. (.xls antigo: abra no Excel e salve como .xlsx.)');
 
   let iCab = -1, m = null;
-  for (let i = 0; i < Math.min(linhas.length, 15); i++){
+  for (let i = 0; i < Math.min(linhas.length, 30); i++){   // F25: 30 (as linhas vazias agora contam)
     const c = {};
     (linhas[i] || []).forEach((cel, j) => {
       const n = _twNorm(cel);
@@ -2681,12 +2694,15 @@ async function ccLerPlanilha(file){
     const data = _twData(r[m.data]);
     const valor = ccValor(r[m.valor]);
     const descricao = String(r[m.desc] == null ? '' : r[m.desc]).trim();
+    // F25 (issue 189): valor escrito como texto, sem vírgula e com ponto ("1.250" ou "12.5"): destacar como foi lido
+    const vDet = typeof r[m.valor] === 'string' ? Nucleo.util.lerValorDetalhe(r[m.valor]) : {};
+    const confira = (vDet.milharSemVirgula || vDet.pontoDecimal) ? 'veio "' + String(r[m.valor]).trim() + '" sem vírgula: lido como ' + BRL(valor) + ' — confira' : '';
     const prob = [];
     if (!data) prob.push('data ilegível');
     else if (data > isoHoje()) prob.push('data no futuro');
     if (!isFinite(valor) || !valor) prob.push('valor ilegível ou zero');
     if (!descricao) prob.push('sem descrição');
-    itens.push({ linha: i + 1, data, valor: isFinite(valor) ? Math.round(valor * 100) / 100 : null, descricao, prob });
+    itens.push({ linha: i + 1, data, valor: isFinite(valor) ? Math.round(valor * 100) / 100 : null, descricao, prob, confira });
   }
   return itens;
 }
@@ -2723,7 +2739,8 @@ function ccImportar(){
       const ruins = it.filter(x => x.prob.length).length;
       const soma = it.reduce((a, x) => a + (x.valor || 0), 0);
       cx.innerHTML = '<p class="nota" style="margin:10px 0 0"><b>' + it.length + '</b> linha(s) · soma '
-        + esc(ccSinal(soma)) + (ruins ? ' · <b style="color:var(--crit)">' + ruins + ' com problema</b>' : ' · tudo legível') + '</p>'
+        + esc(ccSinal(soma)) + (ruins ? ' · <b style="color:var(--crit)">' + ruins + ' com problema</b>' : ' · tudo legível')
+        + (it.some(x => x.confira) ? ' · <b style="color:var(--warn)">' + it.filter(x => x.confira).length + ' valor(es) sem vírgula: confira</b>' : '') + '</p>'
         + '<div class="ccPrev"></div>';
       const pv = cx.querySelector('.ccPrev');
       it.forEach(x => {
@@ -2732,7 +2749,9 @@ function ccImportar(){
         d.innerHTML = '<span class="d"></span><span class="t"><span class="ccDesc"></span><small></small></span><span class="n"></span>';
         d.querySelector('.d').textContent = x.data ? dataBR(x.data) : '?';
         d.querySelector('.ccDesc').textContent = x.descricao || '—';
-        d.querySelector('small').textContent = x.prob.length ? 'linha ' + x.linha + ': ' + x.prob.join(', ') : '';
+        d.querySelector('small').textContent = x.prob.length ? 'linha ' + x.linha + ': ' + x.prob.join(', ')
+          : (x.confira ? 'linha ' + x.linha + ': ' + x.confira : '');
+        if (!x.prob.length && x.confira){ d.classList.add('confira'); d.querySelector('small').style.color = 'var(--warn)'; }
         d.querySelector('.n').textContent = x.valor != null ? ccSinal(x.valor) : '?';
         pv.appendChild(d);
       });
@@ -2751,7 +2770,7 @@ async function ccQuemVe(){
   }catch(e){ toast(e.message, 'err'); return; }
   abrirModal('Quem vê a conta corrente',
       '<p class="nota" style="margin-top:0">Marque quem enxerga esta tela e decide "abater da dívida" nos pedidos à Proper. '
-    + 'É por pessoa: ser administrador não basta.</p><div id="ccQL"></div>'
+    + 'É por pessoa: ser administrador não basta.</p><div id="ccQL"></div><div id="ccQConf" hidden></div>'
     + '<p class="nota" id="ccMsg" style="color:var(--crit)"></p>',
     [ { label:'Fechar', onClick: () => { fecharModal(); if (!CC_AUT){ montarNav(); irPara('eu'); } } } ]);
   const el = document.getElementById('ccQL');
@@ -2763,6 +2782,22 @@ async function ccQuemVe(){
     lb.querySelector('span').textContent = u.nome + (u.email ? ' · ' + u.email : '');
     cb.addEventListener('change', async () => {
       const msg = document.getElementById('ccMsg'); msg.textContent = '';
+      // F25 (issue 189, item 2): dar ou tirar o acesso pede confirmação (é a lista de quem enxerga a dívida entre as
+      // empresas). A caixa volta ao que era até tocar em "Sim"; a pergunta fica embaixo da lista.
+      const quer = cb.checked;
+      cb.checked = !quer;
+      const cx = document.getElementById('ccQConf');
+      cx.hidden = false; cx.innerHTML = '';
+      const p = document.createElement('p'); p.style.margin = '8px 0 6px';
+      p.textContent = (quer ? 'Dar a ' + u.nome + ' o acesso à Conta corrente Proper?' : 'Tirar de ' + u.nome + ' o acesso à Conta corrente Proper?')
+        + (u.usuario_id === eu && !quer ? ' Você vai tirar a si mesmo.' : '');
+      const sim = document.createElement('button'); sim.type = 'button'; sim.className = 'btn pri'; sim.textContent = quer ? 'Sim, dar o acesso' : 'Sim, tirar o acesso';
+      const nao = document.createElement('button'); nao.type = 'button'; nao.className = 'btn'; nao.textContent = 'Não'; nao.style.marginLeft = '6px';
+      cx.append(p, sim, nao);
+      nao.addEventListener('click', () => { cx.hidden = true; cx.innerHTML = ''; });
+      sim.addEventListener('click', () => _semDuploEnvio_(sim, async () => {
+      cx.hidden = true; cx.innerHTML = '';
+      cb.checked = quer;
       try{
         if (!DEMO) await rpc('tf_cc_definir_autorizado', { p_usuario_id: u.usuario_id, p_sim: cb.checked });
         if (u.usuario_id === eu){
@@ -2770,6 +2805,7 @@ async function ccQuemVe(){
           if (!cb.checked) msg.textContent = 'Você tirou a si mesmo: ao fechar, esta tela some do seu menu.';
         }
       }catch(e){ cb.checked = !cb.checked; msg.textContent = e.message; }
+      }));
     });
     el.appendChild(lb);
   });
@@ -2806,72 +2842,9 @@ function _twData(v){
   return undefined;
 }
 
-const _xmlTexto = t => String(t == null ? '' : t)
-  .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
-  .replace(/&#(\d+);/g,          (_, d) => String.fromCodePoint(parseInt(d, 10)))
-  .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-  .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
-  .replace(/&amp;/g, '&');
-
+/** F25 (issue 146): o leitor de .xlsx é o do núcleo (a célula vazia formatada não leva mais o valor da vizinha). */
 async function _lerXLSX(file){
-  const JSZipLib = await carregarJSZip();
-  const zip = await JSZipLib.loadAsync(file);
-
-  const textoDe = async nome => {
-    const f = zip.file(nome);
-    return f ? f.async('string') : null;
-  };
-  // os textos compartilhados: o .xlsx guarda cada string uma vez e referencia
-  const ssXml = await textoDe('xl/sharedStrings.xml');
-  const compart = [];
-  if (ssXml){
-    (ssXml.match(/<si>[\s\S]*?<\/si>/g) || []).forEach(si => {
-      compart.push(_xmlTexto((si.match(/<t[^>]*>([\s\S]*?)<\/t>/g) || [])
-        .map(t => t.replace(/<[^>]+>/g, '')).join('')));
-    });
-  }
-
-  // a PRIMEIRA planilha, pela ordem das relações do workbook — não por
-  // "sheet1.xml", que nem sempre é a primeira aba
-  const wbXml  = await textoDe('xl/workbook.xml');
-  const relXml = await textoDe('xl/_rels/workbook.xml.rels');
-  let alvo = 'xl/worksheets/sheet1.xml';
-  if (wbXml && relXml){
-    const rid = (wbXml.match(/<sheet[^>]*r:id="([^"]+)"/) || [])[1];
-    if (rid){
-      const re = new RegExp('<Relationship[^>]*Id="' + rid + '"[^>]*Target="([^"]+)"');
-      const alvoRel = (relXml.match(re) || [])[1];
-      if (alvoRel) alvo = 'xl/' + alvoRel.replace(/^\/?xl\//, '').replace(/^\//, '');
-    }
-  }
-  const wsXml = await textoDe(alvo) || await textoDe('xl/worksheets/sheet1.xml');
-  if (!wsXml) throw new Error('Não achei nenhuma planilha dentro do arquivo.');
-
-  const colDe = ref => {
-    let n = 0;
-    for (const ch of String(ref).replace(/\d+/g, '')) n = n * 26 + (ch.charCodeAt(0) - 64);
-    return n - 1;
-  };
-  const linhas = [];
-  (wsXml.match(/<row[\s\S]*?<\/row>|<row[^>]*\/>/g) || []).forEach(row => {
-    const cels = [];
-    (row.match(/<c[\s\S]*?<\/c>|<c[^>]*\/>/g) || []).forEach(c => {
-      const ref = (c.match(/ r="([A-Z]+\d+)"/) || [])[1];
-      const tipo = (c.match(/ t="([^"]+)"/) || [])[1];
-      let v = null;
-      if (tipo === 'inlineStr'){
-        v = _xmlTexto((c.match(/<t[^>]*>([\s\S]*?)<\/t>/) || [])[1] || '');
-      } else {
-        const bruto = (c.match(/<v>([\s\S]*?)<\/v>/) || [])[1];
-        if (bruto == null) v = null;
-        else if (tipo === 's') v = compart[Number(bruto)] != null ? compart[Number(bruto)] : '';
-        else v = /^-?\d+(\.\d+)?$/.test(bruto) ? Number(bruto) : bruto;
-      }
-      cels[ref ? colDe(ref) : cels.length] = v;
-    });
-    linhas.push(cels);
-  });
-  return linhas;
+  return Nucleo.planilha.lerXLSX(file, await carregarJSZip());
 }
 
 function _lerCSV(texto){
@@ -3163,18 +3136,11 @@ const REL_PERIODOS = ['personalizado','hoje','ontem','semana','semana_passada','
 const rhDT = t => t ? new Date(t).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit',
   month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }).replace(',', '') : '—';
 
-/** fetch no Storage com a sessão (bucket privado: sem token não abre). Token
- *  vencido: uma chamada barata pelo núcleo renova a sessão, e repete uma vez. */
+/** N12 (issue 142): fetch no Storage pelo núcleo (Nucleo.storage.pedir): renova o acesso antes, e também
+ *  quando o armazenamento responde ao acesso vencido com HTTP 400; sessão acabada = "Sua sessão venceu:
+ *  recarregue a página"; sem sinal = "Sem sinal. Tente de novo com internet." (antes só renovava no 401/403). */
 async function rhfdFetch(url, opts){
-  const vai = () => fetch(url, Object.assign({}, opts, { headers: Object.assign({ apikey: SUPABASE_ANON_KEY },
-    sessao.token ? { Authorization: 'Bearer ' + sessao.token } : {}, (opts && opts.headers) || {}) }));
-  let r = await vai();
-  if ((r.status === 401 || r.status === 403) && sessao.refresh){
-    const antes = sessao.token;
-    try{ await Nucleo.api.rpc('tf_fin_autorizado', {}); }catch(e){}
-    if (sessao.token && sessao.token !== antes) r = await vai();
-  }
-  return r;
+  return Nucleo.storage.pedir(url, opts || {});
 }
 
 
@@ -6510,11 +6476,10 @@ const carDiaTxt = iso => iso ? dataBR(iso).slice(0, 5) + ' (' + CAR_DIA_SEM[new 
 
 const carNorm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
+/** F25 (issue 189): pelo leitor único do núcleo: "1.250" = 1.250,00 (antes R$ 1,25). NaN quando vazio ou inválido. */
 function carNum(txt){
-  let s = String(txt == null ? '' : txt).replace(/[R$\s ]/g, '');
-  if (!s) return NaN;
-  if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
-  const n = Number(s); return isFinite(n) ? Math.round(n * 100) / 100 : NaN;
+  const n = Nucleo.util.lerValor(txt);
+  return n == null || !isFinite(n) ? NaN : Math.round(n * 100) / 100;
 }
 
 const carValTxt = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -6740,7 +6705,7 @@ function carLinhaCanhoto(c, corrigindo){
       + (c.origem === 'whatsapp' ? '<span class="chip">do WhatsApp</span>' : '')
       + (c.linha_id ? '<span class="chip fOk" title="A fatura importada já achou este canhoto">já na fatura</span>' : '')
       + (corrigindo && c.situacao === 'lancado' ? '<span class="chip">corrigindo</span>' : '') + '</div>'
-    + '<label class="carCampo carValor"><span>Valor</span><input type="text" inputmode="decimal" value="' + esc(carValTxt(c.valor)) + '" aria-label="Valor"></label>'
+    + '<label class="carCampo carValor"><span>Valor</span><input type="text" inputmode="decimal" data-valor="moeda" value="' + esc(carValTxt(c.valor)) + '" aria-label="Valor"></label>'
     + '<label class="carCampo carCat"><span>Categoria' + (fonte ? ' <em>(' + fonte + ')</em>' : '') + '</span><select aria-label="Categoria">' + carOpcoesCat(sug) + '</select></label>'
     + '<label class="carCampo carDesc"><span>Descrição</span><input type="text" maxlength="200" value="' + esc((c.titulo && c.titulo.descricao) || c.frase || '') + '" placeholder="ex.: Abastecimento Saveiro 02" aria-label="Descrição"></label>'
     + '<div class="carA"><button class="btn pri" type="button" data-lancar>' + (c.situacao === 'lancado' ? 'Salvar' : 'Lançar') + '</button>'
@@ -6943,7 +6908,7 @@ function carImportar(){
     + '<div class="campo"><label for="ciVenc">Vencimento da fatura</label><input id="ciVenc" type="date"></div></div>'
     + '<div class="dupla"><div class="campo"><label for="ciCsv">CSV da fatura (as linhas)</label><input id="ciCsv" type="file" accept=".csv,text/csv,text/plain"></div>'
     + '<div class="campo"><label for="ciPdf">PDF da fatura (o total)</label><input id="ciPdf" type="file" accept="application/pdf,.pdf"></div></div>'
-    + '<div class="campo"><label for="ciTot">Total impresso na fatura</label><input id="ciTot" type="text" inputmode="decimal" placeholder="lido do PDF — ou digite"><div class="dica" id="ciTotD"></div></div>'
+    + '<div class="campo"><label for="ciTot">Total impresso na fatura</label><input id="ciTot" type="text" inputmode="decimal" placeholder="lido do PDF — ou digite" data-valor="moeda"><div class="dica" id="ciTotD"></div></div>'
     + '<div id="ciPrev"></div>',
     [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Importar', pri: true, onClick: () => carImportarEnviar(I) }]);
   document.getElementById('modal').classList.add('largo');
@@ -7238,7 +7203,7 @@ function carLigarFatura(el, F, conf){
   })));
   const bt = document.getElementById('carTot');
   if (bt) bt.addEventListener('click', () => {
-    abrirModal('Total da fatura', '<div class="campo"><label for="carTotV">Total impresso na fatura</label><input id="carTotV" type="text" inputmode="decimal" value="'
+    abrirModal('Total da fatura', '<div class="campo"><label for="carTotV">Total impresso na fatura</label><input id="carTotV" type="text" inputmode="decimal" data-valor="moeda" value="'
       + esc(F.total != null ? carValTxt(F.total) : '') + '"></div>', [{ label: 'Cancelar', onClick: fecharModal },
       { label: 'Gravar', pri: true, onClick: async () => { const v = carNum(document.getElementById('carTotV').value);
           if (!(v >= 0)){ toast('Digite o total.', 'err'); return; }

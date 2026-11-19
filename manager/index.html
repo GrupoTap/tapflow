@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow · S191</title>
+<title>TapFlow · S195</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2302,12 +2302,12 @@ th.num .tfThFixo{text-align:right}
 <!-- S63 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js.
      S76 · ?v=N2, igual ao hub e ao Field (o N2 aceita tudo do N1: o Manager já rodava o N2 com o
      endereço ?v=N1). O sw.js da raiz guarda estes três endereços: trocou aqui, troca lá (é do central). -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N11">
-<script src="../nucleo/config.js?v=N11"></script>
-<script src="../nucleo/nucleo.js?v=N11"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N12">
+<script src="../nucleo/config.js?v=N12"></script>
+<script src="../nucleo/nucleo.js?v=N12"></script>
 <!-- S82 · H10: a tabela única dos módulos (cor, miniatura, menu "Trocar de módulo"). Mudou o ?v=? Troque no sw.js da raiz também (é do central). -->
 <script src="../nucleo/modulos.js?v=M4"></script>
-<script src="../nucleo/documentos.js?v=D1"></script>
+<script src="../nucleo/documentos.js?v=D2"></script>
 <!-- S119 · CRM1 · C2: as propostas, comuns ao Manager e ao TapCRM (crm/). Mudou o ?v=? Troque no sw.js da raiz também. -->
 <script src="../nucleo/propostas.js?v=PR1"></script>
 </head>
@@ -2415,7 +2415,8 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S191';   // S191: Rodada R2 da auditoria (issues 200 e 208): os parâmetros do Drive pela função tf_drive_parametros (215); aceita o script do Drive v3
+const APP_VERSION = 'S195';   // S195: Rodada R4 da auditoria (issue 167): os números dos contratos pelo leitor único do núcleo ("2.5" = 2,5; "1500.50" = 1.500,50; "R$ 100,00" = 100); o campo mostra como entendeu e recusa o que não é número; núcleo N12, documentos.js D2
+// const APP_VERSION = 'S191';   // S191: Rodada R2 da auditoria (issues 200 e 208): os parâmetros do Drive pela função tf_drive_parametros (215); aceita o script do Drive v3
 // const APP_VERSION = 'S184';   // S184: issue 90: a T16 "Emitir boleto / nota fiscal" da inspeção comum abre junto com a OS (309); com a medição (T06B) ainda aberta, "medição em aberto" (com o aviso) junto do "faturar no TapFin" na linha da T16
 // const APP_VERSION = 'S156';   // S156: issue 1 (passo 2): esta página é só o TapFlow, o módulo das OS (quadros, Agenda, Compras, Contratos, Documentos, Relatórios, Meu perfil e as Configurações do TapFlow). Saiu o código parado de Cadastros, das abas de Configurações que mudaram de lugar e de Fornecedores (132 trechos); o nome nas telas passou de "Manager" para "TapFlow" (a pasta continua manager/)
 // const APP_VERSION = 'S139';   // S139: item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
@@ -11573,7 +11574,12 @@ const ctrServ = k => (CTR_SERV.find(x => x[0] === k) || [k, k])[1];
 const ctrConta = k => (CTR_CONTA.find(x => x[0] === k) || [k, k])[1];
 const ctrQtd = v => v == null || v === '' ? '' : (window.Documentos && Documentos.qtd ? Documentos.qtd(v)
   : Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 4 }));
-const ctrNum = v => { const n = Number(String(v == null ? '' : v).replace(/\./g, '').replace(',', '.')); return isFinite(n) && String(v).trim() !== '' ? n : null; };
+/** S195 (issue 167): pelo leitor único do núcleo. Antes tirava TODOS os pontos ("2.5" virava 25, "1500.50" virava
+ *  150.050) e "R$ 100,00" virava campo em branco. Devolve o número, null (vazio) ou NaN (não é número: a tela recusa). */
+const ctrNum = v => Nucleo.util.lerValor(v);
+/** Confere os campos de número antes de gravar: devolve a mensagem do primeiro que não é número (ou ''). */
+const ctrNumInval = ids => { for (const id of ids){ const t = ctrVal(id); if (t && !isFinite(ctrNum(t))){
+  const lb = document.querySelector('label[for="' + id + '"]'); return '"' + t + '" não é um número' + (lb ? ' (' + lb.textContent.replace(/\s*—.*$/, '').trim() + ')' : '') + ': use só algarismos, com vírgula nos decimais (ex.: 1.500,50).'; } } return ''; };
 const ctrMob = n => String(n == null ? '' : n).padStart(2, '0');
 const ctrPodeEsc = () => DEMO || podeEscritorio();
 const ctrAdmin = () => !!sessao.admin;
@@ -11751,13 +11757,14 @@ function modalItemContrato(c){
     + '<div class="campo"><label for="itDesc">Descrição (como o cliente escreve)</label><input id="itDesc" type="text" autocomplete="off"></div>'
     + '<div class="dupla"><div class="campo"><label for="itConta">Como se conta</label><select id="itConta">' + CTR_CONTA.map(([k, r]) => '<option value="' + k + '">' + esc(r) + '</option>').join('') + '</select></div>'
     + '<div class="campo"><label for="itUn">Unidade</label><input id="itUn" type="text" value="UN." autocomplete="off"></div></div>'
-    + '<div class="dupla"><div class="campo"><label for="itMin">Faixa: acima de (m³)</label><input id="itMin" type="text" inputmode="decimal" autocomplete="off"></div>'
-    + '<div class="campo"><label for="itMax">até (m³, inclusive)</label><input id="itMax" type="text" inputmode="decimal" autocomplete="off"></div></div>'
+    + '<div class="dupla"><div class="campo"><label for="itMin">Faixa: acima de (m³)</label><input id="itMin" type="text" inputmode="decimal" data-valor="m3" autocomplete="off"></div>'
+    + '<div class="campo"><label for="itMax">até (m³, inclusive)</label><input id="itMax" type="text" inputmode="decimal" data-valor="m3" autocomplete="off"></div></div>'
     + '<div class="dupla"><div class="campo"><label for="itBit">Bitola (opcional)</label><input id="itBit" type="text" autocomplete="off"></div>'
-    + '<div class="campo"><label for="itPre">Preço (R$) — pode ficar em branco</label><input id="itPre" type="text" inputmode="decimal" autocomplete="off"></div></div>'
-    + '<div class="campo"><label for="itPrev">Quantidade prevista (opcional)</label><input id="itPrev" type="text" inputmode="decimal" autocomplete="off"></div>',
+    + '<div class="campo"><label for="itPre">Preço (R$) — pode ficar em branco</label><input id="itPre" type="text" inputmode="decimal" data-valor="moeda" autocomplete="off"></div></div>'
+    + '<div class="campo"><label for="itPrev">Quantidade prevista (opcional)</label><input id="itPrev" type="text" inputmode="decimal" data-valor="num" autocomplete="off"></div>',
     [{ label: 'Cancelar', onClick: fecharModal },
      { label: 'Gravar', pri: true, onClick: async () => {
+        const inv = ctrNumInval(['itMin','itMax','itPre','itPrev']); if (inv) return toast(inv, 'err');   // S195 · issue 167
         const d = { codigo_cliente: ctrVal('itCod'), servico: ctrVal('itServ'), descricao: ctrVal('itDesc'), como_conta: ctrVal('itConta'), unidade: ctrVal('itUn'),
                     faixa_min: ctrNum(ctrVal('itMin')), faixa_max: ctrNum(ctrVal('itMax')), bitola: ctrVal('itBit'), preco: ctrNum(ctrVal('itPre')), qtd_prevista: ctrNum(ctrVal('itPrev')) };
         try{ await rpc('tf_contrato_item_gravar', { p_contrato: c.id, p_dados: d }); fecharModal(); toast('Item lançado.', 'ok'); await ctrRecarregar(); }
@@ -11766,11 +11773,12 @@ function modalItemContrato(c){
 function modalAditivo(c, it){
   abrirModal('Preço novo (aditivo) — ' + (it.codigo_cliente || ctrServ(it.servico)),
       '<p class="nota" style="margin-top:0">' + esc(it.descricao) + ' · preço atual ' + esc(BRL(it.preco)) + '. O preço antigo fica guardado.</p>'
-    + '<div class="dupla"><div class="campo"><label for="adPre">Preço novo (R$)</label><input id="adPre" type="text" inputmode="decimal" autocomplete="off"></div>'
+    + '<div class="dupla"><div class="campo"><label for="adPre">Preço novo (R$)</label><input id="adPre" type="text" inputmode="decimal" data-valor="moeda" autocomplete="off"></div>'
     + '<div class="campo"><label for="adDe">Vale a partir de</label><input id="adDe" type="date" value="' + isoHoje() + '"></div></div>'
     + '<div class="campo"><label for="adMot">Motivo</label><input id="adMot" type="text" autocomplete="off" placeholder="ex.: reajuste anual, aditivo 02"></div>',
     [{ label: 'Cancelar', onClick: fecharModal },
      { label: 'Gravar', pri: true, onClick: async () => {
+        const inv = ctrNumInval(['adPre']); if (inv) return toast(inv, 'err');   // S195 · issue 167
         try{ await rpc('tf_contrato_item_gravar', { p_contrato: c.id, p_dados: { substitui_id: it.id, preco: ctrNum(ctrVal('adPre')), vigente_desde: ctrVal('adDe'), motivo: ctrVal('adMot') } });
              fecharModal(); toast('Preço novo gravado.', 'ok'); await ctrRecarregar(); }
         catch(e){ toast(e.message, 'err'); } } }]);
@@ -11778,18 +11786,20 @@ function modalAditivo(c, it){
 function modalPrecoItem(it){
   abrirModal('Definir o preço — ' + (it.codigo_cliente || ctrServ(it.servico)),
       '<p class="nota" style="margin-top:0">' + esc(it.descricao) + '. O preço em branco só se preenche uma vez; depois, só por aditivo.</p>'
-    + '<div class="campo"><label for="prP">Preço (R$)</label><input id="prP" type="text" inputmode="decimal" autocomplete="off"></div>',
+    + '<div class="campo"><label for="prP">Preço (R$)</label><input id="prP" type="text" inputmode="decimal" data-valor="moeda" autocomplete="off"></div>',
     [{ label: 'Cancelar', onClick: fecharModal },
      { label: 'Gravar', pri: true, onClick: async () => {
+        const inv = ctrNumInval(['prP']); if (inv) return toast(inv, 'err');   // S195 · issue 167
         try{ await rpc('tf_contrato_item_preco', { p_item: it.id, p_preco: ctrNum(ctrVal('prP')) }); fecharModal(); toast('Preço gravado.', 'ok'); await ctrRecarregar(); }
         catch(e){ toast(e.message, 'err'); } } }]);
 }
 function modalPrevisto(it){
   abrirModal('Quantidade prevista — ' + (it.codigo_cliente || ctrServ(it.servico)),
       '<p class="nota" style="margin-top:0">É a coluna "previsto" do boletim. Não é preço: muda quando precisar.</p>'
-    + '<div class="campo"><label for="pvQ">Quantidade prevista no ano</label><input id="pvQ" type="text" inputmode="decimal" autocomplete="off" value="' + esc(it.qtd_prevista == null ? '' : ctrQtd(it.qtd_prevista)) + '"></div>',
+    + '<div class="campo"><label for="pvQ">Quantidade prevista no ano</label><input id="pvQ" type="text" inputmode="decimal" data-valor="num" autocomplete="off" value="' + esc(it.qtd_prevista == null ? '' : ctrQtd(it.qtd_prevista)) + '"></div>',
     [{ label: 'Cancelar', onClick: fecharModal },
      { label: 'Gravar', pri: true, onClick: async () => {
+        const inv = ctrNumInval(['pvQ']); if (inv) return toast(inv, 'err');   // S195 · issue 167
         try{ await rpc('tf_contrato_item_previsto', { p_item: it.id, p_qtd: ctrNum(ctrVal('pvQ')) }); fecharModal(); toast('Previsto gravado.', 'ok'); await ctrRecarregar(); }
         catch(e){ toast(e.message, 'err'); } } }]);
 }
@@ -12033,7 +12043,7 @@ async function modalContrato(c){
     + '<div class="campo"><label for="ctGesF">Gestor – Fornecedor (rodapé do boletim; Engetap)</label><select id="ctGesF">' + ctrOpts((EQUIPE || []).filter(u => u.ativo !== false), novo ? null : c.gestor_fornecedor_id, '—') + '</select></div></div>'
     + '<div class="dupla"><div class="campo"><label for="ctArt">ART (número)</label><input id="ctArt" type="text" autocomplete="off" value="' + esc(novo ? '' : c.art_numero || '') + '"></div>'
     + '<div class="campo"><label for="ctArtD">ART (data)</label><input id="ctArtD" type="date" value="' + esc(novo ? '' : c.art_data || '') + '"></div></div>'
-    + '<div class="dupla"><div class="campo"><label for="ctVal">Valor previsto no ano (R$)</label><input id="ctVal" type="text" inputmode="decimal" autocomplete="off" value="' + esc(novo || c.valor_previsto == null ? '' : String(c.valor_previsto).replace('.', ',')) + '"></div>'
+    + '<div class="dupla"><div class="campo"><label for="ctVal">Valor previsto no ano (R$)</label><input id="ctVal" type="text" inputmode="decimal" data-valor="moeda" autocomplete="off" value="' + esc(novo || c.valor_previsto == null ? '' : String(c.valor_previsto).replace('.', ',')) + '"></div>'
     + '<div class="campo"><label>&nbsp;</label><label class="ctrMarca"><input type="checkbox" id="ctPed"' + (novo || c.usa_pedido ? ' checked' : '') + '> usa pedido de compra</label></div></div>'
     + (novo ? '<div class="secTit">Números de partida (conferidos com o inspetor)</div><div class="dupla3"><div class="campo"><label for="ctL">Próxima letra</label><input id="ctL" type="text" value="A" maxlength="4"></div>'
       + '<div class="campo"><label for="ctR">Próximo RDO</label><input id="ctR" type="text" inputmode="numeric" value="1"></div>'
@@ -12046,6 +12056,7 @@ async function modalContrato(c){
   abrirModal(novo ? 'Novo contrato' : 'Dados do contrato ' + c.numero, corpo(ctts), [
     { label: 'Cancelar', onClick: fecharModal },
     { label: 'Gravar', pri: true, onClick: async () => {
+        const inv = ctrNumInval(['ctVal', 'ctR', 'ctM']); if (inv) return toast(inv, 'err');   // S195 · issue 167
         const d = { numero: ctrIni(ctrVal('ctNum')), contrato_cliente: ctrVal('ctCC'), inicio: ctrVal('ctIni'), fim: ctrVal('ctFim') || null, objeto: ctrVal('ctObj'), area: ctrVal('ctArea'),
                     fiscal_id: ctrVal('ctFis') || null, gestor_id: ctrVal('ctGes') || null, art_numero: ctrVal('ctArt'), art_data: ctrVal('ctArtD') || null,
                     fiscal_fornecedor_id: ctrVal('ctFisF') || null, gestor_fornecedor_id: ctrVal('ctGesF') || null,
@@ -12398,12 +12409,13 @@ function modalVasoNovo(){
   abrirModal('Vaso novo (fora do contrato)',
       '<p class="nota" style="margin-top:0">Para vaso que ainda não está no contrato (vaso novo na planta). Ele entra no contrato e nesta visita <b>a conferir</b>: só é cobrado depois que o escritório ou o inspetor conferir a TAG e o volume.</p>'
     + '<div class="dupla"><div class="campo"><label for="vnTag">TAG</label><input id="vnTag" type="text" autocomplete="off"></div>'
-    + '<div class="campo"><label for="vnVol">Volume (m³)</label><input id="vnVol" type="text" inputmode="decimal" autocomplete="off" placeholder="ex.: 2,5"></div></div>'
+    + '<div class="campo"><label for="vnVol">Volume (m³)</label><input id="vnVol" type="text" inputmode="decimal" data-valor="m3" autocomplete="off" placeholder="ex.: 2,5"></div></div>'
     + '<div class="campo"><label for="vnLoc">Local (opcional)</label><input id="vnLoc" type="text" autocomplete="off" placeholder="ex.: casa de compressores"></div>',
     [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Cadastrar e incluir', pri: true, onClick: async () => {
       const vol = ctrNum(ctrVal('vnVol'));
       if (!ctrVal('vnTag')) return toast('Informe a TAG do vaso.', 'err');
-      if (vol == null || vol <= 0) return toast('Informe o volume do vaso (m³): sem ele não há faixa de preço.', 'err');
+      { const inv = ctrNumInval(['vnVol']); if (inv) return toast(inv, 'err'); }   // S195 · issue 167
+      if (!(vol > 0)) return toast('Informe o volume do vaso (m³): sem ele não há faixa de preço.', 'err');
       try{ const x = await rpc('tf_contrato_vaso_novo', { p_os: osAberta.card.os_id, p_tag: ctrVal('vnTag'), p_volume: vol, p_localizacao: ctrVal('vnLoc') || null });
            fecharModal(); CTR.equip = {}; toast('Vaso ' + x.tag + ' cadastrado e incluído na visita (a conferir).', 'ok'); await ctrRepintarOS(); }
       catch(e){ toast(e.message, 'err'); } } }]);
@@ -12414,10 +12426,11 @@ function modalConferirVaso(eqId, e, depois){
   abrirModal('Conferir o vaso ' + (e.tag || ''),
       '<p class="nota" style="margin-top:0">Confira a TAG e o volume na placa ou no prontuário. O volume escolhe a faixa de preço do exame.</p>'
     + '<div class="dupla"><div class="campo"><label for="cvTag">TAG</label><input id="cvTag" type="text" autocomplete="off" value="' + esc(e.tag || '') + '"></div>'
-    + '<div class="campo"><label for="cvVol">Volume (m³)</label><input id="cvVol" type="text" inputmode="decimal" autocomplete="off" value="' + esc(e.volume_m3 == null && e.volume == null ? '' : ctrQtd(e.volume_m3 != null ? e.volume_m3 : e.volume)) + '"></div></div>',
+    + '<div class="campo"><label for="cvVol">Volume (m³)</label><input id="cvVol" type="text" inputmode="decimal" data-valor="m3" autocomplete="off" value="' + esc(e.volume_m3 == null && e.volume == null ? '' : ctrQtd(e.volume_m3 != null ? e.volume_m3 : e.volume)) + '"></div></div>',
     [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Conferido', pri: true, onClick: async () => {
       const vol = ctrNum(ctrVal('cvVol'));
-      if (vol == null || vol <= 0) return toast('Informe o volume do vaso (m³).', 'err');
+      { const inv = ctrNumInval(['cvVol']); if (inv) return toast(inv, 'err'); }   // S195 · issue 167
+      if (!(vol > 0)) return toast('Informe o volume do vaso (m³).', 'err');
       try{ const x = await rpc('tf_contrato_vaso_conferir', { p_equipamento: eqId, p_tag: ctrVal('cvTag'), p_volume: vol });
            fecharModal(); CTR.equip = {};
            toast('Vaso conferido.' + (x && x.volume_mudou ? ' O volume mudou: se a medição já foi montada, use «Refazer a montagem».' : ''), 'ok');
@@ -12538,7 +12551,7 @@ async function ctrPintarMedicao(){
       + '<div class="mdTx"><b class="mono">' + esc(it.codigo || '—') + '</b> ' + esc(it.descricao) + (it.tag ? ' <span class="mini">' + esc(it.tag) + '</span>' : '')
       + (it.falta_volume ? ' <span class="mini warn">informe o volume</span>' : '') + (it.sem_preco ? ' <span class="mini crit">sem preço</span>' : '')
       + (it.equipamento_id && CTRO.aConferir && CTRO.aConferir.has(it.equipamento_id) ? ' <span class="mini warn" title="Vaso novo: confira a TAG e o volume na aba Vasos">vaso a conferir</span>' : '') + '</div>'
-      + '<div class="mdQt">' + (rasc ? '<input type="text" inputmode="decimal" class="mdQ" data-q="' + esc(it.id) + '" value="' + esc(ctrQtd(it.quantidade)) + '" aria-label="Quantidade">' : '<b>' + esc(ctrQtd(it.quantidade)) + '</b>') + '</div>'
+      + '<div class="mdQt">' + (rasc ? '<input type="text" inputmode="decimal" class="mdQ" data-valor="num" data-q="' + esc(it.id) + '" value="' + esc(ctrQtd(it.quantidade)) + '" aria-label="Quantidade">' : '<b>' + esc(ctrQtd(it.quantidade)) + '</b>') + '</div>'
       + '<div class="mdTt">' + (it.total == null ? '—' : esc(BRL(it.total))) + '</div>'
       + '<div class="mdSub">' + (rasc ? '<select data-rd2="' + esc(it.id) + '" aria-label="Dia / RDO">' + optRdo(it) + '</select>' : (it.dia ? esc(dataBR(it.dia).slice(0, 5)) : ''))
       + ' <span class="nota" style="margin:0">× ' + (it.preco == null ? 'sem preço' : esc(BRL(it.preco))) + '</span>'
@@ -12555,7 +12568,7 @@ async function ctrPintarMedicao(){
   const grava = async d => { try{ await rpc('tf_medicao_item_gravar', { p_medicao: m.id, p_dados: d }); ctrPintarMedicao(); }catch(e){ toast(e.message, 'err'); ctrPintarMedicao(); } };
   body.querySelectorAll('[data-in]').forEach(c => c.addEventListener('change', () => grava({ id: c.dataset.in, incluido: c.checked })));
   body.querySelectorAll('[data-rd2]').forEach(s => s.addEventListener('change', () => grava({ id: s.dataset.rd2, rdo_id: s.value || null })));
-  body.querySelectorAll('[data-q]').forEach(i => i.addEventListener('change', () => { const q = ctrNum(i.value); if (q == null || q < 0){ toast('Quantidade inválida.', 'err'); return ctrPintarMedicao(); } grava({ id: i.dataset.q, quantidade: q }); }));
+  body.querySelectorAll('[data-q]').forEach(i => i.addEventListener('change', () => { const q = ctrNum(i.value); if (!(q >= 0)){ toast('Quantidade inválida: use só algarismos, com vírgula nos decimais.', 'err'); return ctrPintarMedicao(); } grava({ id: i.dataset.q, quantidade: q }); }));
   body.querySelectorAll('[data-ed]').forEach(b => b.addEventListener('click', () => modalLinhaMedicao(CTRO.itens.find(i => i.id === b.dataset.ed))));
   on('mdMais', () => modalLinhaMedicao(null));
   on('mdRefaz', async () => {
@@ -12587,14 +12600,15 @@ function modalLinhaMedicao(it){
   abrirModal(novo ? 'Linha à mão na medição' : 'Linha da medição',
       '<div class="campo"><label for="lmIt">Item do contrato</label><select id="lmIt"><option value="">' + (novo ? '— escolha —' : '— pela faixa do volume —') + '</option>' + civ.map(c => '<option value="' + esc(c.id) + '"' + (it && it.contrato_item_id === c.id ? ' selected' : '') + '>'
         + esc((c.codigo_cliente ? c.codigo_cliente + ' · ' : '') + c.descricao + (c.preco == null ? ' (sem preço)' : ' — ' + BRL(c.preco))) + '</option>').join('') + '</select></div>'
-    + '<div class="dupla"><div class="campo"><label for="lmQ">Quantidade</label><input id="lmQ" type="text" inputmode="decimal" value="' + esc(it ? ctrQtd(it.quantidade) : '1') + '"></div>'
+    + '<div class="dupla"><div class="campo"><label for="lmQ">Quantidade</label><input id="lmQ" type="text" inputmode="decimal" data-valor="num" value="' + esc(it ? ctrQtd(it.quantidade) : '1') + '"></div>'
     + '<div class="campo"><label for="lmRdo">Dia / RDO</label><select id="lmRdo"><option value="">—</option>' + dias.map(r => '<option value="' + esc(r.id) + '"' + (it && it.rdo_id === r.id ? ' selected' : '') + '>' + esc(dataBR(r.dia).slice(0, 5)) + (r.numero ? ' · ' + ctrRdoNum(r) : '') + '</option>').join('') + '</select></div></div>'
-    + ((it && it.equipamento_id) || (it && it.falta_volume) ? '<div class="campo"><label for="lmVol">Volume do vaso ' + esc(it.tag || '') + ' (m³)' + (it.volume ? ' — hoje ' + esc(ctrQtd(it.volume)) : '') + '</label><input id="lmVol" type="text" inputmode="decimal" placeholder="informe só se faltar ou estiver errado"></div>' : '')
+    + ((it && it.equipamento_id) || (it && it.falta_volume) ? '<div class="campo"><label for="lmVol">Volume do vaso ' + esc(it.tag || '') + ' (m³)' + (it.volume ? ' — hoje ' + esc(ctrQtd(it.volume)) : '') + '</label><input id="lmVol" type="text" inputmode="decimal" data-valor="m3" placeholder="informe só se faltar ou estiver errado"></div>' : '')
     + '<div class="campo"><label for="lmTx">Texto do serviço executado (sai no boletim)</label><input id="lmTx" type="text" autocomplete="off" value="' + esc(it ? it.texto_servico || '' : '') + '"></div>',
     [{ label: 'Cancelar', onClick: fecharModal },
      ...(it && it.origem === 'mao' ? [{ label: 'Remover a linha', cls: 'perigo', onClick: async () => {
         try{ await rpc('tf_medicao_item_gravar', { p_medicao: CTRO.med.id, p_dados: { id: it.id, remover: true } }); fecharModal(); ctrPintarMedicao(); }catch(e){ toast(e.message, 'err'); } } }] : []),
      { label: 'Gravar', pri: true, onClick: async () => {
+        const inv = ctrNumInval(['lmQ', 'lmVol']); if (inv) return toast(inv, 'err');   // S195 · issue 167
         const d = { quantidade: ctrNum(ctrVal('lmQ')), rdo_id: ctrVal('lmRdo') || null, texto_servico: ctrVal('lmTx') };
         const escolhido = ctrVal('lmIt') || null;
         if (!it || escolhido !== (it.contrato_item_id || null)) d.contrato_item_id = escolhido;   // só manda se mudou: senão a faixa pelo volume não se refaz

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapHub Cadastros 6 · Cadastros e Configurações</title>
+<title>TapHub Cadastros 7 · Cadastros e Configurações</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2302,9 +2302,9 @@ th.num .tfThFixo{text-align:right}
 <!-- S63 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js.
      S76 · ?v=N2, igual ao hub e ao Field (o N2 aceita tudo do N1: o Manager já rodava o N2 com o
      endereço ?v=N1). O sw.js da raiz guarda estes três endereços: trocou aqui, troca lá (é do central). -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N11">
-<script src="../nucleo/config.js?v=N11"></script>
-<script src="../nucleo/nucleo.js?v=N11"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N12">
+<script src="../nucleo/config.js?v=N12"></script>
+<script src="../nucleo/nucleo.js?v=N12"></script>
 <!-- S82 · H10: a tabela única dos módulos (cor, miniatura, menu "Trocar de módulo"). Mudou o ?v=? Troque no sw.js da raiz também (é do central). -->
 <script src="../nucleo/modulos.js?v=M4"></script>
 </head>
@@ -2371,7 +2371,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'CAD6';   // TapHub Cadastros 6 (S191): Configurações › Google Drive lê e grava pelas funções do banco (215, issue 200: a tabela de parâmetros fechou ao app)
+const APP_VERSION = 'CAD7';   // TapHub Cadastros 7 (S195): Rodada R4 da auditoria (issue 146) — Importar do TapWeb lê o .xlsx pelo leitor do núcleo (a célula vazia formatada não leva mais o valor da vizinha); núcleo N12
+// const APP_VERSION = 'CAD6';   // TapHub Cadastros 6 (S191): Configurações › Google Drive lê e grava pelas funções do banco (215, issue 200: a tabela de parâmetros fechou ao app)
 // const APP_VERSION = 'CAD5';   // TapHub Cadastros 5 (S167): "Imprime a pasta" no cliente — a Engetap imprime e entrega a pasta (fichário) dos vasos dele? Já vem "sim"; com "não", o TapDoc não gera o fichário nem as lombadas (issue 30, Parte 4; 212)
 // const APP_VERSION = 'CAD4';   // TapHub Cadastros 4 (S144): ramo de atividade e grau de risco do cliente (NR-04), que saem na seção 4 do laudo do TapDoc (item 78 da lista; 211)
 // const APP_VERSION = 'CAD3';   // TapHub Cadastros 3 (S139): item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
@@ -5215,72 +5216,11 @@ function _twData(v){
   return undefined;
 }
 
-const _xmlTexto = t => String(t == null ? '' : t)
-  .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
-  .replace(/&#(\d+);/g,          (_, d) => String.fromCodePoint(parseInt(d, 10)))
-  .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-  .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
-  .replace(/&amp;/g, '&');
-
+/** CAD7 (issue 146): o leitor de .xlsx é o do núcleo, o mesmo da Conta corrente Proper do TapFin. O de antes
+ *  lia a célula vazia mas formatada ("<c r="B2" s="1"/>") junto com a vizinha: a data da Inspeção Interna podia
+ *  entrar como "Data de desativação". */
 async function _lerXLSX(file){
-  const JSZipLib = await carregarJSZip();
-  const zip = await JSZipLib.loadAsync(file);
-
-  const textoDe = async nome => {
-    const f = zip.file(nome);
-    return f ? f.async('string') : null;
-  };
-  // os textos compartilhados: o .xlsx guarda cada string uma vez e referencia
-  const ssXml = await textoDe('xl/sharedStrings.xml');
-  const compart = [];
-  if (ssXml){
-    (ssXml.match(/<si>[\s\S]*?<\/si>/g) || []).forEach(si => {
-      compart.push(_xmlTexto((si.match(/<t[^>]*>([\s\S]*?)<\/t>/g) || [])
-        .map(t => t.replace(/<[^>]+>/g, '')).join('')));
-    });
-  }
-
-  // a PRIMEIRA planilha, pela ordem das relações do workbook — não por
-  // "sheet1.xml", que nem sempre é a primeira aba
-  const wbXml  = await textoDe('xl/workbook.xml');
-  const relXml = await textoDe('xl/_rels/workbook.xml.rels');
-  let alvo = 'xl/worksheets/sheet1.xml';
-  if (wbXml && relXml){
-    const rid = (wbXml.match(/<sheet[^>]*r:id="([^"]+)"/) || [])[1];
-    if (rid){
-      const re = new RegExp('<Relationship[^>]*Id="' + rid + '"[^>]*Target="([^"]+)"');
-      const alvoRel = (relXml.match(re) || [])[1];
-      if (alvoRel) alvo = 'xl/' + alvoRel.replace(/^\/?xl\//, '').replace(/^\//, '');
-    }
-  }
-  const wsXml = await textoDe(alvo) || await textoDe('xl/worksheets/sheet1.xml');
-  if (!wsXml) throw new Error('Não achei nenhuma planilha dentro do arquivo.');
-
-  const colDe = ref => {
-    let n = 0;
-    for (const ch of String(ref).replace(/\d+/g, '')) n = n * 26 + (ch.charCodeAt(0) - 64);
-    return n - 1;
-  };
-  const linhas = [];
-  (wsXml.match(/<row[\s\S]*?<\/row>|<row[^>]*\/>/g) || []).forEach(row => {
-    const cels = [];
-    (row.match(/<c[\s\S]*?<\/c>|<c[^>]*\/>/g) || []).forEach(c => {
-      const ref = (c.match(/ r="([A-Z]+\d+)"/) || [])[1];
-      const tipo = (c.match(/ t="([^"]+)"/) || [])[1];
-      let v = null;
-      if (tipo === 'inlineStr'){
-        v = _xmlTexto((c.match(/<t[^>]*>([\s\S]*?)<\/t>/) || [])[1] || '');
-      } else {
-        const bruto = (c.match(/<v>([\s\S]*?)<\/v>/) || [])[1];
-        if (bruto == null) v = null;
-        else if (tipo === 's') v = compart[Number(bruto)] != null ? compart[Number(bruto)] : '';
-        else v = /^-?\d+(\.\d+)?$/.test(bruto) ? Number(bruto) : bruto;
-      }
-      cels[ref ? colDe(ref) : cels.length] = v;
-    });
-    linhas.push(cels);
-  });
-  return linhas;
+  return Nucleo.planilha.lerXLSX(file, await carregarJSZip());
 }
 
 function _lerCSV(texto){
@@ -5322,7 +5262,7 @@ async function lerPlanilhaTapWeb(file){
   // o cabeçalho pode não estar na primeira linha: o relatório do TapWeb às
   // vezes sai com título e uma linha em branco antes
   let iCab = -1, mapa = null;
-  for (let i = 0; i < Math.min(linhas.length, 12); i++){
+  for (let i = 0; i < Math.min(linhas.length, 30); i++){   // CAD7: 30 (as linhas vazias agora contam: a linha N da planilha é a N daqui)
     const m = {};
     (linhas[i] || []).forEach((cel, j) => {
       const n = _twNorm(cel);
