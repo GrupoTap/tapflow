@@ -331,7 +331,7 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 2
 .toast.on{display:block;animation:toastIn .18s ease-out}
 .toast::after{content:'✕';position:absolute;right:12px;top:50%;transform:translateY(-50%);
   font-size:14px;opacity:.75}
-.toast.err{background:var(--crit)}.toast.ok{background:var(--ok)}
+.toast.err{background:var(--crit)}.toast.ok{background:var(--ok)}.toast.warn{background:var(--warn,#8A5A12)}
 .toast.flut{position:fixed}
 @keyframes toastIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.toast.on{animation:none}}
@@ -617,9 +617,9 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 #filaTxt{cursor:pointer}
 </style>
 <!-- S33 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N12">
-<script src="../nucleo/config.js?v=N12"></script>
-<script src="../nucleo/nucleo.js?v=N12"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N13">
+<script src="../nucleo/config.js?v=N13"></script>
+<script src="../nucleo/nucleo.js?v=N13"></script>
 <script src="../nucleo/modulos.js?v=M4"></script>
 </head>
 <body>
@@ -659,7 +659,7 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 <div class="login" id="login" hidden>
   <div class="box">
     <h1>Tap<span>Flow</span></h1>
-    <p class="sub">Field · Engetap Engenharia <span id="lgVer" class="mono"></span></p>
+    <p class="sub">TapField · Engetap Engenharia <span id="lgVer" class="mono"></span></p>
     <div class="campo"><label for="lgE">E-mail</label>
       <input id="lgE" type="email" autocomplete="username" inputmode="email"></div>
     <div class="campo"><label for="lgS">Senha</label>
@@ -681,7 +681,8 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S62';   // S62 (S195): Rodada R4 da auditoria — issue 142 (o espelho assinado, o documento do RH e a foto do canhoto abrem com o acesso vencido: renova também no HTTP 400) e 167/189 (o valor do canhoto pelo leitor único do núcleo: "2.5" = 2,50; "1.250" = 1.250,00); núcleo N12
+const APP_VERSION = 'S63';   // S63 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 109 (as confirmações pela janela do TapHub, com o motivo dentro dela), 110 ("sem sinal, na fila" em amarelo; a T06 com o nome) e nomes fixos trocados por "o escritório"; núcleo N13
+// const APP_VERSION = 'S62';   // S62 (S195): Rodada R4 da auditoria — issue 142 (o espelho assinado, o documento do RH e a foto do canhoto abrem com o acesso vencido: renova também no HTTP 400) e 167/189 (o valor do canhoto pelo leitor único do núcleo: "2.5" = 2,50; "1.250" = 1.250,00); núcleo N12
 // const APP_VERSION = 'S61';   // S61 (S194): Rodada R3 da auditoria (issues 203, 204 e 205): o prazo do gov.br de cada pessoa; o espelho de mês fechado é o congelado; a saída da madrugada "(+1)"; o aviso dos 15 min de intervalo (617)
 // const APP_VERSION = 'S60';   // S60 (S191): os parâmetros do Drive pela função tf_drive_parametros (215, issue 200); nada muda na tela
 // const APP_VERSION = 'S59';   // S59 (S171): só o núcleo N11 (issue 35: a fila avisa em vermelho quando o aparelho está sem espaço)
@@ -843,11 +844,11 @@ async function req(caminho, opts={}, tentativas=2){
           opts.headers||{})
       }));
       const txt = await r.text();
-      if (txt.trim().startsWith('<')) throw new Error('O servidor devolveu HTML — confira a URL');
+      if (txt.trim().startsWith('<')) throw Object.assign(new Error('O servidor respondeu de um jeito inesperado. Tente de novo; se continuar, avise o administrador.'), { estranho: true });
       let corpo = null;
-      if (txt){ try{ corpo = JSON.parse(txt); }catch(e){ throw new Error('Resposta inválida do servidor'); } }
+      if (txt){ try{ corpo = JSON.parse(txt); }catch(e){ throw Object.assign(new Error('O servidor respondeu de um jeito inesperado. Tente de novo; se continuar, avise o administrador.'), { estranho: true }); } }
       if (!r.ok){
-        const msg = (corpo && (corpo.message||corpo.error_description||corpo.error||corpo.hint)) || ('HTTP '+r.status);
+        const msg = (corpo && (corpo.message||corpo.error_description||corpo.error||corpo.hint)) || ('O servidor deu erro (código ' + r.status + '). Tente de novo.');
         const err = new Error(msg); err.negocio = (r.status>=400 && r.status<500); err.status = r.status;
 
         // sessão velha: renova UMA vez e repete. Vale também para o item na
@@ -879,7 +880,7 @@ async function req(caminho, opts={}, tentativas=2){
         : e;
       if (e && e.autorFora) throw e;
       const transitorio = !e.negocio && (ehTO(e) || /Failed to fetch|NetworkError|Load failed/i.test(e.message)
-        || /devolveu HTML/.test(e.message) || /^HTTP 5\d\d$/.test(e.message));
+        || !!e.estranho || /^O servidor deu erro \(código 5\d\d\)/.test(e.message));
       ultimo.rede = transitorio;
       if (!transitorio || i === tentativas){ if (transitorio) agendarRecon(); throw ultimo; }
       await new Promise(r => setTimeout(r, 600*(i+1)));
@@ -1567,9 +1568,9 @@ const semRede = e => !navigator.onLine || (e && (e.rede || /Failed to fetch|Netw
 async function concluirAtrasada(a, d){
   const par = ATR_PAR.get(chaveReag(a.os_id, a.tarefa_id, null));
   if (!par) return;
-  if (!confirm('Concluir "' + par.t.nome + '"?\n\n' + [par.os.numero, par.os.cliente].filter(Boolean).join(' · ')
-      + '\n\nEla está liberada em paralelo com a etapa atual da OS. A OS continua na etapa em que está, '
-      + 'e a tarefa NÃO é reagendada: fica registrada como feita agora, por você.')) return;
+  if (!await perguntar('Concluir "' + par.t.nome + '"?', '<p>' + esc([par.os.numero, par.os.cliente].filter(Boolean).join(' · ')) + '</p>'
+      + '<p>Ela está liberada em paralelo com a etapa atual da OS. A OS continua na etapa em que está, '
+      + 'e a tarefa <b>não</b> é reagendada: fica registrada como feita agora, por você.</p>', 'Concluir')) return;
   const botoes = d.querySelectorAll('button');
   botoes.forEach(x => x.disabled = true);
   try{
@@ -1782,8 +1783,8 @@ function cardCompromisso(t){
  *  compromisso continua onde está até dar certo. */
 async function feitoCompromisso(id, titulo, d){
   if (!id) return;
-  if (!confirm('Marcar "' + (titulo || 'compromisso') + '" como feito?\n\nEle sai da sua agenda de hoje (e da de quem vai junto). '
-      + 'Se for engano, o escritório devolve à agenda pela Gestão.')) return;
+  if (!await perguntar('Marcar "' + (titulo || 'compromisso') + '" como feito?', '<p>Ele sai da sua agenda de hoje (e da de quem vai junto). '
+      + 'Se for engano, o escritório devolve à agenda pela Gestão.</p>', 'Marcar como feito')) return;
   const botoes = d.querySelectorAll('button');
   botoes.forEach(x => x.disabled = true);
   try{
@@ -2248,9 +2249,9 @@ function painelEtapas(){
       const c = document.createElement('button');
       c.type = 'button'; c.className = 'btn sm pri';
       c.textContent = 'Concluir etapa';
-      c.addEventListener('click', () => {
-        if (!confirm('Concluir "' + t.nome + '"?\n\nEla está liberada em paralelo com a etapa atual da OS. '
-            + 'A OS continua na etapa em que está.')) return;
+      c.addEventListener('click', async () => {
+        if (!await perguntar('Concluir "' + t.nome + '"?', '<p>Ela está liberada em paralelo com a etapa atual da OS. '
+            + 'A OS continua na etapa em que está.</p>', 'Concluir')) return;
         agir('concluir', t);
       });
       d.appendChild(c);
@@ -2447,8 +2448,8 @@ function pintarOSBase(){
     const quem = [t.usuario_designado ? nomeDe(t.usuario_designado) : ''].concat((t.apoios || []).map(nomeDe)).filter(Boolean);
     const av = document.createElement('p');
     av.className = 'semAbrir'; av.id = 'semT06';
-    av.textContent = 'Você não está na T06 desta OS. Peça ao escritório para te pôr como apoio'
-      + (quem.length ? ' (na T06: ' + quem.join(', ') + ').' : ' (ainda não há ninguém na T06).');
+    av.textContent = 'Você não está na tarefa T06 "Executar a inspeção" desta OS. Peça ao escritório para te pôr como apoio'
+      + (quem.length ? ' (nela: ' + quem.join(', ') + ').' : ' (ainda não há ninguém nela).');
     p.appendChild(av);
   }
 
@@ -3081,8 +3082,8 @@ function itemEl(it, i){
   d.querySelector('.q').textContent = it.quantidade;
   d.querySelector('b').textContent = it.descricao;
   d.querySelector('small').textContent = flags.join(' · ') || (it.tipo_rotulo || '');
-  d.querySelector('.x').addEventListener('click', () => {
-    if (!confirm('Remover "' + it.descricao + '"?')) return;
+  d.querySelector('.x').addEventListener('click', async () => {
+    if (!await perguntar('Remover o item', '<p>Remover <b>' + esc(it.descricao) + '</b> da coleta?</p>', 'Remover', true)) return;
     coleta.itens.splice(i,1); salvarDraft(); pintarColeta();
   });
   d.querySelector('.d').addEventListener('click', () => formItem(i));
@@ -3282,7 +3283,7 @@ async function enviar(){
     filaAdd({ tipo:'levantamento', funcao:'tf_enviar_levantamento', payload, assinatura,
               osId: os.os_id, rotulo: os.numero, fotos });
     toast('Sem sinal — salvo e na fila' + (fotos.length ? ', com as fotos' : '') +
-          '. Sobe sozinho quando conectar.', 'err');
+          '. Sobe sozinho quando conectar.', 'warn');
     await carregar(true); pintarLista(); return;
   }
 
@@ -4335,6 +4336,9 @@ function medDemo(osId){
 // ════════════════════════════════════════════════════════════════════════════
 // AUXILIARES
 // ════════════════════════════════════════════════════════════════════════════
+// S196 (N13, issue 109): as perguntas "tem certeza?" pela janela do TapHub (núcleo), não pela do navegador.
+// perguntar(título, html, rótulo do sim, perigo, campo) → true/false; com campo → { texto } ou false (ver o núcleo, confirmarJanela).
+function perguntar(titulo, html, sim, perigo, campo){ return Nucleo.janela.confirmar(titulo, html, sim, perigo, campo); }
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -4533,7 +4537,7 @@ async function entrar(email, senha){
   sessao.refresh = j.refresh_token || null;
   // O servidor diz quem é a pessoa e o que ela abre — ver sql/26_acesso.sql.
   const a = await rpc('tf_meu_acesso', {});
-  if (!a || !a.perfil) throw new Error('Login criado, mas você ainda não tem perfil no sistema. Fale com o Fernando.');
+  if (!a || !a.perfil) throw new Error('Seu acesso ainda não foi liberado. Avise o escritório.');
   if (!a.usa_campo){
     // S16 · de escritório com ficha de RH entra só para a Minha Segurança
     let temFicha = false; try{ temFicha = !!(await rpc('tf_rh_tenho_ficha', {})); }catch(e){}
@@ -4673,7 +4677,7 @@ function pintarSeg(){
   m.innerHTML = '';
   if (!SEG || !SEG.tem_ficha){
     m.innerHTML = '<div class="vazio"><b>Sua ficha de segurança ainda não foi aberta</b>'
-      + '<p>Quando o Bruno abrir a sua ficha de RH, as entregas de EPI aparecem aqui para você confirmar.</p></div>';
+      + '<p>Quando o escritório abrir a sua ficha de RH, as entregas de EPI aparecem aqui para você confirmar.</p></div>';
     abasTopo(m, 'seg');
     return;
   }
@@ -4706,7 +4710,7 @@ function pintarSeg(){
     const p = document.createElement('div'); p.className = 'painel';
     p.style.borderLeft = '4px solid var(--crit)';
     p.innerHTML = '<div class="et" style="color:var(--crit)">PIN travado</div><p style="margin:6px 0 0">Cinco tentativas erradas. '
-      + 'Tente de novo depois de ' + esc(rhDTf(SEG.pin.bloqueado_ate).slice(11)) + '. Esqueceu? Peça ao Bruno para liberar um novo PIN.</p>';
+      + 'Tente de novo depois de ' + esc(rhDTf(SEG.pin.bloqueado_ate).slice(11)) + '. Esqueceu? Peça um novo em "Esqueci o PIN", na tela do PIN.</p>';
     m.appendChild(p);
   }
 
@@ -4755,7 +4759,7 @@ function pintarSeg(){
   const tamE = (SEG.tamanhos || []).filter(t => !t.uniforme), tamU = (SEG.tamanhos || []).filter(t => t.uniforme);   // S48 · G3 · U2
   cad.innerHTML = (tamE.length ? '<div class="grupoTit" style="margin-top:0">Tamanhos · EPI</div>' + tamH(tamE) : '')
       + (tamU.length ? '<div class="grupoTit">Tamanhos · Uniforme</div>' + tamH(tamU) : '')
-    + '<p style="font-size:12.5px;color:var(--ink-3);margin:0 0 12px">Mudou o tamanho? Troque aqui — o Bruno é avisado.</p>'
+    + '<p style="font-size:12.5px;color:var(--ink-3);margin:0 0 12px">Mudou o tamanho? Troque aqui — o escritório é avisado.</p>'
     + '<div class="grupoTit" style="margin-top:4px">Óculos de grau</div>'
     + '<p style="font-size:14px;margin:0 0 8px">' + (SEG.usa_oculos_grau ? 'Você usa óculos de segurança com lente graduada.'
       : 'Na sua ficha: não usa óculos de grau. Se usa, mande a receita.') + '</p>'
@@ -4763,13 +4767,13 @@ function pintarSeg(){
       + '</small><button class="lnk" type="button" data-rec="' + esc(r.id) + '">abrir</button></div>').join('')
     + '<label class="btn sm" style="cursor:pointer;margin-top:8px">Enviar receita nova (foto ou PDF)'
     + '<input type="file" id="recArq" accept="image/*,application/pdf" hidden></label>'
-    + '<p style="font-size:12.5px;color:var(--ink-3);margin:6px 0 0">Receita nova avisa o Bruno para encomendar o óculos; o atual vale até o novo chegar. '
-    + 'Só você, o Bruno e o Fernando veem a receita.</p>';
+    + '<p style="font-size:12.5px;color:var(--ink-3);margin:6px 0 0">Receita nova avisa o escritório para encomendar o óculos; o atual vale até o novo chegar. '
+    + 'Só você e quem o escritório autorizou veem a receita.</p>';
   m.appendChild(cad);
   cad.querySelectorAll('select[data-epi]').forEach(s => s.addEventListener('change', async () => {
     s.disabled = true;
     try{ await rpc1('tf_rh_definir_tamanho', { p_usuario: meuId(), p_epi: s.dataset.epi, p_tamanho: s.value || null });
-         toast('Tamanho gravado. O Bruno foi avisado.', 'ok'); }
+         toast('Tamanho gravado. O escritório foi avisado.', 'ok'); }
     catch(e){ toast(e.message, 'err'); }
     s.disabled = false;
   }));
@@ -4785,7 +4789,7 @@ function pintarSeg(){
           fr.onerror = () => er(new Error('Não consegui ler o arquivo.')); fr.readAsDataURL(f); });
       } else dados = await reduzirFoto(f, 1800, 0.85);
       await rpc1('tf_rh_enviar_receita', { p_usuario: meuId(), p_nome: f.name || 'receita', p_mime: mime, p_conteudo: dados });
-      toast('Receita enviada. O Bruno foi avisado.', 'ok'); await recarregarSeg();
+      toast('Receita enviada. O escritório foi avisado.', 'ok'); await recarregarSeg();
     }catch(e){ toast(e.message, 'err'); }
   });
 
@@ -4836,10 +4840,12 @@ function painelLote(itens, podeConfirmar){
   const pu = p.querySelector('p.tUni'); if (pu && eU) pu.textContent = eU.termo_texto || '';
   p.querySelectorAll('[data-nr]').forEach(b => b.addEventListener('click', async () => {
     const e = itens.find(x => x.id === b.dataset.nr);
-    const obs = prompt('"Não recebi" — ' + e.epi_nome + '\nQuer explicar? (opcional)', '');
-    if (obs === null) return;
+    const rr = await perguntar('"Não recebi" — ' + e.epi_nome, '<div class="campo"><label for="nrObs">Quer explicar? (opcional)</label>'
+      + '<textarea id="nrObs" rows="3"></textarea></div>', 'Avisar', false, 'nrObs');
+    if (!rr) return;
+    const obs = rr.texto;
     b.disabled = true;
-    try{ await rpc1('tf_rh_nao_recebi', { p_id: e.id, p_obs: obs }); toast('Avisado: o Bruno vai ver.', 'ok'); await recarregarSeg(); }
+    try{ await rpc1('tf_rh_nao_recebi', { p_id: e.id, p_obs: obs }); toast('Avisado: o escritório vai ver.', 'ok'); await recarregarSeg(); }
     catch(er){ toast(er.message, 'err'); b.disabled = false; }
   }));
   const bc = p.querySelector('[data-conf]');
@@ -4898,11 +4904,13 @@ function painelDevolucao(dv, podeConfirmar){
   });
   const bn = p.querySelector('[data-dnao]');
   if (bn) bn.addEventListener('click', async () => {
-    const obs = prompt('O que não confere na devolução? (o Bruno vê)', '');
-    if (obs === null) return;
-    if (obs.trim().length < 5){ toast('Explique em poucas palavras o que não confere.', 'err'); return; }
+    const rr = await perguntar('A devolução não confere', '<div class="campo"><label for="dvObs">O que não confere? (o escritório vê)</label>'
+      + '<textarea id="dvObs" rows="3"></textarea></div>', 'Avisar', false,
+      { campo: 'dvObs', obrigatorio: 'Explique em poucas palavras o que não confere.', minimo: 5 });
+    if (!rr) return;
+    const obs = rr.texto;
     bn.disabled = true;
-    try{ await rpc1('tf_rh_contestar_devolucao', { p_lote: dv.lote, p_obs: obs }); toast('Avisado: o Bruno vai ver.', 'ok'); await recarregarSeg(); }
+    try{ await rpc1('tf_rh_contestar_devolucao', { p_lote: dv.lote, p_obs: obs }); toast('Avisado: o escritório vai ver.', 'ok'); await recarregarSeg(); }
     catch(e){ toast(e.message, 'err'); bn.disabled = false; }
   });
   return p;
@@ -4917,7 +4925,7 @@ function trocarPin(){
     + '<div class="campo"><label for="pb">PIN novo</label><input id="pb" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></div>'
     + '<div class="campo"><label for="pc">Repita o novo</label><input id="pc" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></div>'
     + '<div class="linha"><button class="btn" type="button" id="pX">Cancelar</button><button class="btn pri" type="button" id="pOk">Trocar</button></div>'
-    + '<p style="font-size:12.5px;color:var(--ink-3);margin:8px 0 0">Esqueceu o atual? Peça ao Bruno para liberar um novo.</p>';
+    + '<p style="font-size:12.5px;color:var(--ink-3);margin:8px 0 0">Esqueceu o atual? Peça um novo em "Esqueci o PIN", na tela do PIN.</p>';
   m.insertBefore(p, m.children[1] || null);
   p.scrollIntoView({ behavior:'smooth', block:'start' });
   p.querySelector('#pX').addEventListener('click', () => p.remove());
@@ -5094,12 +5102,12 @@ function painelPresenca(s, podeConfirmar){
 function painelPedidos(){
   const P = SEG.pedidos || [];
   const cx = document.createElement('div'); cx.className = 'painel';
-  const ST = { pedido:['alt','aguardando o Bruno separar'], separado:['','separado'], recusado:['atr','recusado'], cancelado:['','cancelado'] };
+  const ST = { pedido:['alt','aguardando o escritório separar'], separado:['','separado'], recusado:['atr','recusado'], cancelado:['','cancelado'] };
   cx.innerHTML = '<button class="btn pri sm" type="button" id="bPedir">' + ((SEG.pediveis || []).some(e => e.uniforme) ? 'Pedir EPI ou uniforme' : 'Pedir EPI') + '</button>'
     + '<p style="font-size:12.5px;color:var(--ink-3);margin:6px 0 0">Estragou, perdeu ou o tamanho não serve? Peça aqui — o tamanho já vem da sua ficha. '
-    + 'Quando o Bruno separar e deixar na sua mesa, a entrega aparece aqui em cima para você confirmar com o PIN.</p>'
+    + 'Quando o escritório separar e deixar na sua mesa, a entrega aparece aqui em cima para você confirmar com o PIN.</p>'
     + P.map(x => { const st = ST[x.status] || ['', x.status];
-        const sub = x.status === 'separado' ? (x.entrega_status === 'separado' ? 'separado — o Bruno vai deixar na sua mesa'
+        const sub = x.status === 'separado' ? (x.entrega_status === 'separado' ? 'separado — o escritório vai deixar na sua mesa'
                     : x.entrega_status === 'aguardando' ? 'entregue — confirme a entrega lá em cima'
                     : x.entrega_status === 'confirmado' ? 'entregue e confirmado'
                     : x.entrega_status === 'cancelada' ? 'cancelado' : 'separado') : st[1];
@@ -5158,7 +5166,7 @@ function pedirEpi(){
       await rpc1('tf_rh_pedir_epi', { p_epi: e.id, p_tamanho: e.tem_tamanho ? p.querySelector('#pdT').value : null,
         p_quantidade: e.uniforme ? Number(p.querySelector('#pdQ').value) || 1 : 1,
         p_motivo: p.querySelector('#pdM').value, p_obs: p.querySelector('#pdO').value });
-      toast('Pedido enviado. O Bruno vai separar.', 'ok'); await recarregarSeg();
+      toast('Pedido enviado. O escritório vai separar.', 'ok'); await recarregarSeg();
     }catch(er){ toast(er.message, 'err'); bt.disabled = false; }
   });
 }
@@ -5182,7 +5190,7 @@ function painelDocumentos(){
               + '">abrir o certificado</button>' : '')
             : '<div class="chips" style="margin-top:4px"><span class="chip atr">previsto — ainda sem registro</span></div>') + '</div>'; }).join('')
       : '<p style="font-size:14px;margin:0">Nenhum treinamento registrado.</p>')
-    + '<p style="font-size:12.5px;color:var(--ink-3);margin:8px 0 0">O ASO é dado de saúde: só você, o Bruno e o Fernando o veem.</p>';
+    + '<p style="font-size:12.5px;color:var(--ink-3);margin:8px 0 0">O ASO é dado de saúde: só você e quem o escritório autorizou o veem.</p>';
   cx.querySelectorAll('[data-arq]').forEach(b => b.addEventListener('click', () => abrirArquivoRH(b.dataset.arq)));
   return cx;
 }
@@ -5275,7 +5283,7 @@ async function carregarFaq(){ try{ FAQ = await rpc('tf_rh_faq', {}); }catch(e){ 
 function blocoEnviarDuvida(videoId){
   const d = document.createElement('div'); d.className = 'painel';
   d.innerHTML = '<div class="campo"><label for="dvT">Enviar uma dúvida</label><textarea id="dvT" rows="3" maxlength="2000" '
-    + 'placeholder="Escreva do seu jeito — o Bruno ou o Fernando respondem."></textarea></div>'
+    + 'placeholder="Escreva do seu jeito — o escritório responde."></textarea></div>'
     + '<button class="btn pri sm" type="button" id="dvOk">Enviar dúvida</button>';
   d.querySelector('#dvOk').addEventListener('click', async ev => {
     const t = d.querySelector('#dvT').value.trim();
@@ -6120,7 +6128,7 @@ async function pintarPontoTermo(id){
       titulo: 'Confirme que é você', sub: 'Estou ciente · ' + (adv ? 'advertência' : 'termo') + ' nº ' + T.numero });
     if (!c || !c.ok){ if (c && c.semSinal) toast('Sem sinal: a ciência precisa de internet.', 'err'); return; }
     try{ await rpc1('tf_ponto_termo_ciente', { p_id: T.id, p_confirmacao: c.confirmacao, p_versao: (m.querySelector('#ptTmV') || {}).value || null, p_conversar: conv });
-         toast('Ciência registrada (' + (c.metodo === 'digital' ? 'digital' : 'PIN') + ').' + (conv ? ' O Bruno vai te procurar.' : ''), 'ok');
+         toast('Ciência registrada (' + (c.metodo === 'digital' ? 'digital' : 'PIN') + ').' + (conv ? ' O escritório vai te procurar.' : ''), 'ok');
          await ptCarregarSaude(); pintarPontoTermo(T.id); }
     catch(e){ toast(e.message, 'err'); }
   });
@@ -6161,7 +6169,7 @@ async function ptPushAtivar(){
   if (perm !== 'granted') perm = await Notification.requestPermission();
   if (perm !== 'granted'){ toast('Sem a permissão de notificação os avisos não chegam. Dá para liberar nos ajustes do navegador.', 'err'); await ptPushEstado(); pintarEu(); return; }
   let chave = null; try{ chave = await rpc('tf_push_chave_publica', {}); }catch(e){}
-  if (!chave){ toast('Os avisos ainda não foram ligados no servidor. Avise o Bruno.', 'err'); return; }
+  if (!chave){ toast('Os avisos ainda não foram ligados no servidor. Avise o administrador.', 'err'); return; }
   try{
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
@@ -6636,7 +6644,7 @@ async function pintarPontoPedidos(pre){
     + '<div class="campo"><label for="ppTxt">Texto (pode mudar antes de enviar)</label><textarea id="ppTxt" rows="3" maxlength="600"></textarea></div>'
     + '<button type="button" class="btn pri" id="ppEnviar">Enviar pedido</button>'
     + '<button type="button" class="btn" id="ppFechar">Fechar</button>'
-    + '<p class="ptDica">Quem aprova é o Bruno (ou o Fernando). O texto que você mandar fica guardado como está.</p>';
+    + '<p class="ptDica">Quem aprova é o escritório. O texto que você mandar fica guardado como está.</p>';
   m.appendChild(f);
   const fotos = [], sm = f.querySelector('#ppMot'), tx = f.querySelector('#ppTxt'), tb = f.querySelector('#ppTb'), hr = f.querySelector('#ppHora');
   let mexeu = false, D = null;
@@ -6857,7 +6865,7 @@ function desenharDiariasF(){
     + '<div class="diaNav"><button type="button" class="btn sm" id="dAnt" aria-label="Dia anterior">‹</button>'
     + '<label><span>' + (dia === hoje ? 'Hoje' : esc(DIA_SEM_F(dia))) + '</span><input type="date" id="dDia" max="' + esc(hoje) + '" value="' + esc(dia) + '"></label>'
     + '<button type="button" class="btn sm" id="dPro" aria-label="Dia seguinte"' + (dia >= hoje ? ' disabled' : '') + '>›</button></div>'
-    + (fechado ? '<p class="diaFech">O mês de ' + esc(MES_F(dia)) + ' está <b>fechado</b>. Esqueceu algo? Fale com o Bruno ou o Fernando.</p>' : '')
+    + (fechado ? '<p class="diaFech">O mês de ' + esc(MES_F(dia)) + ' está <b>fechado</b>. Esqueceu algo? Fale com o escritório.</p>' : '')
     + (!D.pode_lancar ? '<p class="diaFech">Seu cadastro não está ativo para lançar diárias.</p>' : '')
     + (minhaAusEm(dia) ? '<p class="diaAus">Neste dia você está <b>' + esc(AUS_VERBO_F[minhaAusEm(dia).tipo] || 'fora')
         + '</b>: diária não se lança. Se trabalhou, avise o escritório para corrigir a ausência.</p>'
@@ -7133,7 +7141,7 @@ function desenharFeriasF(){
     }).join('');
     m.appendChild(pl);
     pl.querySelectorAll('[data-des]').forEach(b => b.addEventListener('click', async () => {
-      if (!confirm('Confirmar? A data fica livre para os colegas.')) return;
+      if (!await perguntar('Liberar a data?', '<p>A data fica livre para os colegas.</p>', 'Liberar')) return;
       if (DEMO){ toast('Modo demonstração: nada é gravado.', 'err'); return; }
       b.disabled = true;
       try{ await rpc1('tf_ferias_cancelar_meu', { p_id: b.dataset.des, p_motivo: null }); toast('Feito.', 'ok'); pintarFeriasF(); }
@@ -7326,7 +7334,7 @@ async function pintarDocsF(){
   const pend = L.filter(d => d.situacao === 'liberado'), outros = L.filter(d => d.situacao !== 'liberado');
   if (!DOCS.termo_ok && pend.length) m.insertAdjacentHTML('beforeend', '<div class="painel" style="border-left:4px solid var(--warn)"><div class="et" style="color:var(--warn)">'
     + 'Termo do ponto e do recibo pendente</div><p style="margin:6px 0 0">Para assinar pelo celular, falta assinar no papel o termo do ponto e do recibo '
-    + '(uma folha, uma vez só). Fale com o Bruno. Você já pode abrir e conferir os documentos.</p></div>');
+    + '(uma folha, uma vez só). Fale com o escritório. Você já pode abrir e conferir os documentos.</p></div>');
   if (!temPin && pend.length) m.insertAdjacentHTML('beforeend', '<div class="painel" style="border-left:4px solid var(--accent)"><div class="et">Crie o seu PIN</div>'
     + '<p style="margin:6px 0 10px">A assinatura é com o mesmo PIN da Segurança.</p><button class="btn sm" type="button" id="dcPin">Ir para a Segurança</button></div>');
   if (bloq) m.insertAdjacentHTML('beforeend', '<div class="painel" style="border-left:4px solid var(--crit)"><div class="et" style="color:var(--crit)">PIN travado</div>'
@@ -7440,7 +7448,7 @@ function painelDocF(d, podeAssinar){
     + '<p style="margin:0 0 10px;font-size:13px">' + (d.prazo ? 'Assine até ' + esc(dataBR(d.prazo)) + (d.vencido ? ' — <b style="color:var(--crit)">o prazo já passou</b>' : '') + '.' : '')
     + (d.versao > 1 ? ' Esta é a versão ' + d.versao + ' (substitui a anterior).' : '') + '</p>'
     + '<button class="btn sm" type="button" data-abrir>Abrir ' + (d.tipo === 'ponto' ? 'a folha' : 'o recibo') + '</button>'
-    + '<p class="docDica">' + (d.tipo === 'ponto' ? 'Se tiver dúvida sobre esta folha, fale com o Bruno antes de assinar.'
+    + '<p class="docDica">' + (d.tipo === 'ponto' ? 'Se tiver dúvida sobre esta folha, fale com o escritório antes de assinar.'
         : 'Se tiver dúvida sobre os valores, fale com o administrativo antes de assinar.') + '</p>'
     + (podeAssinar ? '<div class="campo" style="margin-top:10px"><label>Seu PIN</label><input class="pinC" type="password" inputmode="numeric" maxlength="6" autocomplete="off" pattern="[0-9]*"></div>'
         + '<button class="btn pri" type="button" data-ass>Assinar</button>' : '')
@@ -7462,8 +7470,8 @@ function painelDocF(d, podeAssinar){
     ba.disabled = false;
   });
   p.querySelector('[data-nao]').addEventListener('click', async ev => {
-    if (!confirm('"Não é ' + meu + '": o documento sai do seu celular agora e o escritório é avisado de que ele chegou à pessoa errada.\n\n'
-      + 'Use só se o nome no documento NÃO for o seu. Dúvida sobre ' + (d.tipo === 'ponto' ? 'as horas' : 'os valores') + ' se resolve conversando, não por aqui.\n\nContinuar?')) return;
+    if (!await perguntar('"Não é ' + meu + '"', '<p>O documento sai do seu celular agora e o escritório é avisado de que ele chegou à pessoa errada.</p>'
+      + '<p>Use só se o nome no documento <b>não</b> for o seu. Dúvida sobre ' + (d.tipo === 'ponto' ? 'as horas' : 'os valores') + ' se resolve conversando, não por aqui.</p>', 'Continuar', true)) return;
     const b = ev.currentTarget; b.disabled = true;
     try{ await rpc1('tf_rhdoc_nao_e_meu', { p_id: d.id }); toast('Devolvido. O escritório vai conferir e mandar o certo.', 'ok'); await recarregarDocs(); pintarDocsF(); }
     catch(e){ toast(e.message, 'err'); b.disabled = false; }
@@ -7693,11 +7701,11 @@ async function canEnviar(){
   const data = document.getElementById('canD').value || canHoje();
   if (!CAN.foto){ toast('Tire a foto do canhoto primeiro.', 'err'); return; }
   if (!(valor > 0)){ toast('Digite o valor do canhoto.', 'err'); document.getElementById('canV').focus(); return; }
-  if (valor > 2000 && !confirm('R$ ' + canValTxt(valor) + ' — é isso mesmo?')) return;
+  if (valor > 2000 && !await perguntar('Confira o valor', '<p><b>R$ ' + esc(canValTxt(valor)) + '</b> — é isso mesmo?</p>', 'Sim, é isso')) return;
   // o mesmo canhoto duas vezes é o erro mais comum do grupo: avisa
   const igual = canFila().concat(((CAN.meus && CAN.meus.comprovantes) || []).filter(c => c.situacao !== 'cancelado'))
     .find(c => Math.abs(Number(c.valor) - valor) < 0.005 && (c.data || c.data_compra) === data);
-  if (igual && !confirm('Você já mandou um canhoto de R$ ' + canValTxt(valor) + ' ' + (data === canHoje() ? 'hoje' : 'nesse dia') + '. Enviar mesmo assim?')) return;
+  if (igual && !await perguntar('Canhoto repetido?', '<p>Você já mandou um canhoto de R$ ' + esc(canValTxt(valor)) + ' ' + (data === canHoje() ? 'hoje' : 'nesse dia') + '. Enviar mesmo assim?</p>', 'Enviar mesmo assim')) return;
   CAN.enviando = true;
   const id = canNovoId();
   try{
@@ -7795,7 +7803,7 @@ function canDesenharLista(){
     const c = M.find(y => y.id === b.dataset.denovo); canNovo({ valor: Number(c.valor), frase: c.frase || '', data: c.data_compra });
   }));
   el.querySelectorAll('[data-canc]').forEach(b => b.addEventListener('click', async () => {
-    if (!confirm('Cancelar este canhoto? O escritório deixa de vê-lo.')) return;
+    if (!await perguntar('Cancelar este canhoto?', '<p>O escritório deixa de vê-lo.</p>', 'Cancelar o canhoto', true)) return;
     try{ await rpc('tf_cartao_comprovante_cancelar', { p_id: b.dataset.canc }); toast('Cancelado.', 'ok'); await canAtualizar(); canDesenharLista(); }
     catch(e){ toast(e.message, 'err'); }
   }));
@@ -7921,14 +7929,14 @@ document.getElementById('euSair').addEventListener('click', async () => {
   const n = (LS.get(K_FILA, []) || []).length;
   if (EMP_F()){
     // S53 · celular da empresa: some do "Quem vai usar?"; o que está na fila ainda sobe com a sessão dela
-    if (!confirm('Sair deste celular? Você some da lista "Quem vai usar?" e, para voltar, entra com e-mail e senha.'
-        + (n ? ' Os ' + n + ' envio(s) da fila continuam e sobem quando tiver sinal.' : ''))) return;
+    if (!await perguntar('Sair deste celular?', '<p>Você some da lista "Quem vai usar?" e, para voltar, entra com e-mail e senha.'
+        + (n ? ' Os ' + n + ' envio(s) da fila continuam e sobem quando tiver sinal.' : '') + '</p>', 'Sair')) return;
     try{ await Nucleo.empresa.sairDeste(sessao.email); }catch(e){}
     LS.del(K_SESSAO); LS.del(K_SESSAO_VELHA);
     location.href = '../'; return;
   }
-  if (n && !confirm('Você tem ' + n + ' envio(s) na fila. Eles ficam guardados neste aparelho e '
-      + 'saem quando você entrar de novo. Sair mesmo assim?')) return;
+  if (!await perguntar('Sair da conta?', n ? '<p>Você tem ' + n + ' envio(s) na fila. Eles ficam guardados neste aparelho e '
+      + 'saem quando você entrar de novo.</p>' : '<p>Para voltar, entre de novo com e-mail e senha.</p>', 'Sair')) return;
   LS.del(K_SESSAO); LS.del(K_SESSAO_VELHA);
   if (NO_SERVIDOR){ location.href = '../'; return; }
   location.reload();

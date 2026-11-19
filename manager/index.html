@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow · S195</title>
+<title>TapFlow · S196</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2302,14 +2302,14 @@ th.num .tfThFixo{text-align:right}
 <!-- S63 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js.
      S76 · ?v=N2, igual ao hub e ao Field (o N2 aceita tudo do N1: o Manager já rodava o N2 com o
      endereço ?v=N1). O sw.js da raiz guarda estes três endereços: trocou aqui, troca lá (é do central). -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N12">
-<script src="../nucleo/config.js?v=N12"></script>
-<script src="../nucleo/nucleo.js?v=N12"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N13">
+<script src="../nucleo/config.js?v=N13"></script>
+<script src="../nucleo/nucleo.js?v=N13"></script>
 <!-- S82 · H10: a tabela única dos módulos (cor, miniatura, menu "Trocar de módulo"). Mudou o ?v=? Troque no sw.js da raiz também (é do central). -->
 <script src="../nucleo/modulos.js?v=M4"></script>
 <script src="../nucleo/documentos.js?v=D2"></script>
 <!-- S119 · CRM1 · C2: as propostas, comuns ao Manager e ao TapCRM (crm/). Mudou o ?v=? Troque no sw.js da raiz também. -->
-<script src="../nucleo/propostas.js?v=PR1"></script>
+<script src="../nucleo/propostas.js?v=PR2"></script>
 </head>
 <body>
 
@@ -2415,7 +2415,8 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S195';   // S195: Rodada R4 da auditoria (issue 167): os números dos contratos pelo leitor único do núcleo ("2.5" = 2,5; "1500.50" = 1.500,50; "R$ 100,00" = 100); o campo mostra como entendeu e recusa o que não é número; núcleo N12, documentos.js D2
+const APP_VERSION = 'S196';   // S196: Rodada R5 da auditoria (padrões de todas as telas) — issues 108 (excluir OS pela janela do TapHub, com motivo e o número digitado), 109 (custo e Sair pela janela), 169 (a janela é a do núcleo: com algo digitado não fecha clicando fora; o RDO que falta algo fica aberto) e 110 (textos sem nome de arquivo, sem nomes fixos, TapField); núcleo N13
+// const APP_VERSION = 'S195';   // S195: Rodada R4 da auditoria (issue 167): os números dos contratos pelo leitor único do núcleo ("2.5" = 2,5; "1500.50" = 1.500,50; "R$ 100,00" = 100); o campo mostra como entendeu e recusa o que não é número; núcleo N12, documentos.js D2
 // const APP_VERSION = 'S191';   // S191: Rodada R2 da auditoria (issues 200 e 208): os parâmetros do Drive pela função tf_drive_parametros (215); aceita o script do Drive v3
 // const APP_VERSION = 'S184';   // S184: issue 90: a T16 "Emitir boleto / nota fiscal" da inspeção comum abre junto com a OS (309); com a medição (T06B) ainda aberta, "medição em aberto" (com o aviso) junto do "faturar no TapFin" na linha da T16
 // const APP_VERSION = 'S156';   // S156: issue 1 (passo 2): esta página é só o TapFlow, o módulo das OS (quadros, Agenda, Compras, Contratos, Documentos, Relatórios, Meu perfil e as Configurações do TapFlow). Saiu o código parado de Cadastros, das abas de Configurações que mudaram de lugar e de Fornecedores (132 trechos); o nome nas telas passou de "Manager" para "TapFlow" (a pasta continua manager/)
@@ -2524,12 +2525,12 @@ async function req(caminho, opts = {}, tentativas = 2){
       }));
       const txt = await r.text();
       if (txt.trim().startsWith('<'))
-        throw new Error('O servidor devolveu HTML — verifique a URL do projeto');
+        throw Object.assign(new Error('O servidor respondeu de um jeito inesperado. Tente de novo; se continuar, avise o administrador.'), { estranho: true });   // S196 (issue 110)
       let corpo = null;
-      if (txt) { try { corpo = JSON.parse(txt); } catch(e){ throw new Error('Resposta inválida: ' + txt.slice(0,80)); } }
+      if (txt) { try { corpo = JSON.parse(txt); } catch(e){ throw Object.assign(new Error('O servidor respondeu de um jeito inesperado. Tente de novo; se continuar, avise o administrador.'), { estranho: true }); } }
       if (!r.ok){
         // erro de NEGÓCIO (o banco recusou): não retenta e não derruba o verde
-        const msg = (corpo && (corpo.message || corpo.error_description || corpo.error || corpo.hint)) || ('HTTP ' + r.status);
+        const msg = (corpo && (corpo.message || corpo.error_description || corpo.error || corpo.hint)) || ('O servidor deu erro (código ' + r.status + '). Tente de novo.');
         const err = new Error(msg); err.negocio = (r.status >= 400 && r.status < 500); err.status = r.status;
 
         // token vencido não é erro de negócio nem de rede: é sessão velha.
@@ -2559,7 +2560,7 @@ async function req(caminho, opts = {}, tentativas = 2){
       }
       const transitorio = ehTimeout(e) || !e.negocio && (
         /Failed to fetch|NetworkError|Load failed/i.test(e.message) ||
-        /devolveu HTML/.test(e.message) || /^HTTP 5\d\d$/.test(e.message));
+        !!e.estranho || /^O servidor deu erro \(código 5\d\d\)/.test(e.message));
       // ESCRITA NÃO SE REPETE SOZINHA. Um POST que chegou ao servidor e estourou
       // o prazo do cliente já foi commitado lá: o AbortSignal aborta o navegador,
       // não desfaz a transação no banco. Reenviar cria o segundo registro — e só
@@ -2730,7 +2731,7 @@ function lerSessao(){
 async function quemSou(){
   const a = await rpc('tf_meu_acesso', {});
   if (!a || !a.perfil)
-    throw new Error('Login existe, mas você não está na tabela usuarios — veja o Passo 3b do guia.');
+    throw new Error('Seu acesso ainda não foi liberado. Avise o administrador.');
   Object.assign(sessao, {
     nome:a.nome, email:a.email, perfil:a.perfil, perfil_nome:a.perfil_nome,
     admin:!!a.admin, modulos:a.modulos || [], executa_em:a.executa_em
@@ -3896,12 +3897,24 @@ function botaoExcluirOS(cx, card){
   w.innerHTML = '<button class="btn perigo" id="osDel" style="width:100%">Excluir esta OS</button>';
   cx.appendChild(w);
   document.getElementById('osDel').addEventListener('click', async () => {
-    const motivo = prompt('Excluir ' + card.numero + ' definitivamente.\n\n'
-      + 'Some com tarefas, itens, levantamentos, propostas e anexos. '
-      + 'Os arquivos no Drive NÃO são apagados.\n\nPor quê? (fica registrado)');
-    if (motivo === null) return;
+    // S196 (issue 108): janela do TapHub em vermelho, com o motivo obrigatório e o número da OS digitado antes de excluir
+    const num = String(card.numero || '');
+    const r = await confirmar('Excluir ' + num + ' definitivamente',
+      '<p><b>' + esc(num) + '</b>' + (card.cliente ? ' · ' + esc(card.cliente) : '') + '</p>'
+      + '<div class="aviso"><b>Isto não tem volta.</b> Some com as tarefas, os itens, os levantamentos, as propostas e os anexos desta OS. '
+      + 'Os arquivos no Drive não são apagados.</div>'
+      + '<div class="campo"><label for="exMot">Por quê? (fica registrado, pelo menos 5 letras)</label><input id="exMot" type="text" autocomplete="off"></div>'
+      + '<div class="campo"><label for="exNum">Para confirmar, digite o número da OS: <b>' + esc(num) + '</b></label><input id="exNum" type="text" autocomplete="off"></div>',
+      'Excluir', true,
+      { campo: 'exMot', obrigatorio: 'Escreva o motivo da exclusão.', minimo: 5,
+        validar: () => {
+          const dig = (document.getElementById('exNum').value || '').replace(/\s/g, '').toUpperCase();
+          return dig === num.replace(/\s/g, '').toUpperCase() ? '' : 'Digite o número da OS (' + num + ') para liberar a exclusão.';
+        } });
+    if (!r) return;
+    const motivo = r.texto;
     try{
-      if (!DEMO) await rpc('tf_excluir_os', { p_os_id: card.os_id, p_motivo: motivo || null });
+      if (!DEMO) await rpc('tf_excluir_os', { p_os_id: card.os_id, p_motivo: motivo });
       toast(card.numero + ' excluída.','ok');
       fecharDrawer(); carregar();
     }catch(e){ toast(e.message,'err'); }
@@ -3992,7 +4005,7 @@ function pintarAcoes_(){
     return;
   }
   if (String(t.tipo||'').startsWith('auto:')){
-    hint.textContent = 'Esta etapa fecha com o envio do app de campo.';
+    hint.textContent = 'Esta etapa fecha com o envio pelo TapField.';
     return;
   }
 
@@ -4095,7 +4108,7 @@ function pintarAcoes_(){
         '<p>Confirma que <b>' + esc(t.nome) + '</b> foi realmente feito?</p>'
       + '<div class="aviso">Concluir esta tarefa <b>'
       + (fecha === 'fechar_os' ? 'encerra a OS inteira' : 'fecha a fase') + '</b>. '
-      + 'Ela não pode ser reaberta pela tela depois — se for engano, a correção passa pelo Fernando.</div>',
+      + 'Ela não pode ser reaberta pela tela depois — se for engano, a correção passa pelo administrador.</div>',
       [{ label:'Cancelar', onClick: () => fecharModal() },
        { label:'Sim, foi feito', pri:true, onClick: async () => {
            fecharModal(); await agir('concluir', t); }}]);
@@ -5375,7 +5388,7 @@ async function subirArquivo(dataUrl, meta){
   if (DEMO){ demoAnexo(meta.os_id, meta.categoria, meta.nome);
              return { url:'https://drive.google.com/demo', file_id:'demo' }; }
   if (!driveLigado())
-    throw Object.assign(new Error('O Google Drive ainda não foi configurado — veja o Passo 8 do guia.'),
+    throw Object.assign(new Error('O Google Drive ainda não foi configurado. Avise o administrador.'),
                         { negocio:true });
 
   const r = await fetch(PARAM.drive_url, {
@@ -6200,8 +6213,7 @@ async function montarGerador(caixa, props){
   catch(e){ caixa.innerHTML = '<p class="dica">Não consegui ler os modelos: ' + esc(e.message) + '</p>'; return; }
   if (!modelos.length){
     caixa.innerHTML = '<h3 style="font-size:15px;margin:0 0 4px">Gerar proposta</h3>' +
-      '<p class="dica">Nenhum modelo cadastrado. Rode o <b>23_gerador_modelos.sql</b> e suba os ' +
-      '.docx no bucket <b>modelos</b>.</p>';
+      '<p class="dica">Nenhum modelo de proposta cadastrado. Falta uma atualização do sistema: avise o administrador.</p>';
     return;
   }
   sel.innerHTML = modelos.map(m => '<option value="'+m.id+'">'+esc(m.titulo)+'</option>').join('');
@@ -6549,7 +6561,7 @@ async function pintarProposta(){
       // ITEM 4 (S29): até o S28 esta coluna mostrava o número PURO, e a
       // revisão só aparecia na coluna "V." (o contador interno: 2 = Rev. 01)
       tr.querySelector('.n').textContent = rotuloProposta(pr.numero, pr.versao);
-      tr.querySelector('.s').textContent = pr.status;
+      tr.querySelector('.s').textContent = rotuloSituacaoProposta(pr.status);   // S196 (issue 128): o nome que a pessoa lê
       tr.querySelector('.t').textContent = BRL(pr.valor_total);
       tr.querySelector('.d').textContent = pr.dias_sem_resposta != null ? pr.dias_sem_resposta + 'd' : '—';
       // ── registrar o envio ──
@@ -6764,7 +6776,7 @@ async function pintarArquivos(){
         + ' — pode haver arquivo no Drive que não está aparecendo aqui.'
       : (driveLigado()
         ? 'Nada ainda. As fotos do campo e os PDFs aparecem aqui assim que subirem.'
-        : 'O Google Drive ainda não foi configurado — veja o Passo 8 do guia de instalação.');
+        : 'O Google Drive ainda não foi configurado. Avise o administrador.');
     body.appendChild(p2);
     return;
   }
@@ -6788,54 +6800,13 @@ async function pintarArquivos(){
 // ════════════════════════════════════════════════════════════════════════════
 // MODAL
 // ════════════════════════════════════════════════════════════════════════════
-let _focoAntesDoModal = null;
-function abrirModal(titulo, corpoHtml, botoes){
-  _focoAntesDoModal = document.activeElement;
-  document.getElementById('mTit').textContent = titulo;
-  document.getElementById('mBody').innerHTML = corpoHtml;
-  delete document.getElementById('mBody').dataset.ausOk;   // S53 · o "Gravar de novo" vale só para esta janela
-  const f = document.getElementById('mFoot'); f.innerHTML = '';
-  (botoes||[]).forEach(b => {
-    const el = document.createElement('button');
-    el.className = 'btn' + (b.pri ? ' pri' : '') + (b.cls ? ' ' + b.cls : '');   // S45: `cls` (ex.: perigo)
-    el.textContent = b.label;
-    // toda ação de modal passa pela trava de duplo envio: modal é onde se grava
-    el.addEventListener('click', () => _semDuploEnvio_(el, () => b.onClick(el)));
-    f.appendChild(el);
-  });
-  document.getElementById('mScrim').hidden = false;
-  document.getElementById('modal').hidden = false;
-  // foco no primeiro campo: quem chega de teclado não deveria ter que caçar
-  requestAnimationFrame(() => {
-    const alvo = document.querySelector('#mBody input,#mBody select,#mBody textarea')
-              || document.querySelector('#mFoot .btn');
-    if (alvo) alvo.focus();
-  });
-}
-/** Um `abrirModal` que devolve sim/não — para a confirmação que não grava
-    nada por conta própria, só responde. Existe porque `confirm()` do
-    navegador não se estiliza, não fecha com ESC pela nossa pilha e some atrás
-    de outro modal. */
-function confirmar(titulo, corpoHtml, rotuloSim, perigo){
-  return new Promise(ok => {
-    abrirModal(titulo, corpoHtml, [
-      { label:'Cancelar', onClick: () => { fecharModal(); ok(false); } },
-      { label: rotuloSim || 'Confirmar', pri: !perigo,
-        onClick: () => { fecharModal(); ok(true); } }
-    ]);
-  });
-}
-
-function fecharModal(){
-  document.getElementById('mScrim').hidden = true;
-  document.getElementById('modal').hidden = true;
-  document.getElementById('modal').classList.remove('largo');   // S42 · o modal largo do RH
-  // devolve o foco a quem abriu — sem isto ele volta para o começo da página
-  if (_focoAntesDoModal && document.body.contains(_focoAntesDoModal)){
-    try{ _focoAntesDoModal.focus(); }catch(e){}
-  }
-  _focoAntesDoModal = null;
-}
+// S196 (N13, issues 109 e 169): a janela é a do núcleo (Nucleo.janela), como nos outros módulos. Ganha o
+// "Cancelar" no X/Esc/clique fora (confirmar responde false), o campo digitado devolvido ({ texto }) e a
+// trava do que foi digitado (clicar fora não fecha; o X pede 2º toque). A assinatura das três continua igual.
+function abrirModal(titulo, corpoHtml, botoes, opcoes){ return Nucleo.janela.abrir(titulo, corpoHtml, botoes, opcoes); }
+/** Um `abrirModal` que devolve sim/não (ou { texto } com um campo: ver o núcleo, confirmarJanela). */
+function confirmar(titulo, corpoHtml, rotuloSim, perigo, campo){ return Nucleo.janela.confirmar(titulo, corpoHtml, rotuloSim, perigo, campo); }
+function fecharModal(){ return Nucleo.janela.fechar(); }
 
 async function modalNovaOS(){
   let clientes = [];
@@ -7300,7 +7271,7 @@ async function pintarCustos(){
     + '</div>'
     + (some > 0
         ? '<p class="nota aviso2">O que não é item comeu <b>' + BRL(some) + '</b> — '
-          + ((m&&m.extras_pct)||0) + '% da venda. Este é o número que somia quando o frete '
+          + ((m&&m.extras_pct)||0) + '% da venda. Este é o número que sumia quando o frete '
           + 'ficava no WhatsApp.</p>'
         : '<p class="nota">Nenhum custo fora dos itens lançado ainda. Se houve frete ou '
           + 'deslocamento e ele não está aqui, a margem acima está otimista.</p>')
@@ -7354,7 +7325,7 @@ async function pintarCustos(){
       + (c.realizado ? ' · realizado' : ' · previsto');
     el.querySelector('.vl').textContent = BRL(c.valor);
     el.querySelector('.x').addEventListener('click', async () => {
-      if (!confirm('Remover "' + c.descricao + '"?')) return;
+      if (!await confirmar('Remover o custo', '<p>Remover <b>' + esc(c.descricao) + '</b> (' + esc(BRL(c.valor)) + ') dos custos desta OS?</p>', 'Remover', true)) return;
       try{
         if (!DEMO) await del('custos_os', 'id=eq.' + c.id);
         toast('Removido.','ok'); pintarCustos();
@@ -8030,7 +8001,7 @@ function pintarMeuPerfil(){
     + '<button class="btn pri" type="button" id="euNome" style="width:100%">Corrigir meu nome</button>'
     + '<p class="nota">Para trocar e-mail, senha ou perfil — seu ou de outra pessoa — fale com o '
     + 'administrador'
-    + (sessao.admin ? ' (você é um: <b>Configurações › Usuários</b>; o que cada pessoa vê, em '
+    + (sessao.admin ? ' (você é um: <b>TapHub › Cadastros › Configurações › Usuários</b>; o que cada pessoa vê, em '
        + '<a href="../acessos/">Pessoas e acessos</a>).' : '.') + '</p>'
     // S45 · item 1: instalar o TapFlow neste aparelho
     + '<div class="secTit">O TapHub como app</div>'
@@ -8099,7 +8070,7 @@ async function pintarConfig(){
   const board = document.getElementById('board');
   if (!sessao.admin){
     board.innerHTML = '<div class="painel"><h3>Configurações</h3>'
-      + '<p class="nota">Esta área é do perfil admin. Fale com o Fernando ou o Bruno.</p></div>';
+      + '<p class="nota">Esta área é do perfil admin. Fale com o administrador.</p></div>';
     return;
   }
   board.innerHTML = '<div class="cfgWrap">'
@@ -8145,12 +8116,12 @@ async function cfgAlertas(){
   c.innerHTML = '<p class="nota">Carregando…</p>';
   let al = [];
   try{ al = DEMO ? [] : await get('alertas_menu?select=*&order=ordem'); }
-  catch(e){ c.innerHTML = '<div class="aviso">Não deu para ler os alertas (falta rodar o <b>59_venda_adicional_s39.sql</b>?): '
+  catch(e){ c.innerHTML = '<div class="aviso">Não deu para ler os alertas (pode faltar uma atualização do sistema: avise o administrador): '
     + esc(e.message) + '</div>'; return; }
   c.innerHTML = '<div class="painel"><h3 style="margin-top:0">Alertas do menu</h3>'
     + '<p class="nota">O número ao lado de cada menu passou a contar o que pede atenção de quem está olhando: '
     + 'a tarefa atual é do perfil dela (e não é de outra pessoa), mais os alertas ligados abaixo. '
-    + 'Os filtros rápidos do Equipe Comercial usam os mesmos alertas.</p>'
+    + 'Os filtros rápidos do TapCRM usam os mesmos alertas.</p>'
     + '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Alerta</th><th>Ligado</th><th>A partir de</th><th></th></tr></thead>'
     + '<tbody></tbody></table></div></div>';
   const tb = c.querySelector('tbody');
@@ -8289,7 +8260,7 @@ async function cfgTarefasPerfil(){
   }catch(e){
     c.innerHTML = '<div class="painel"><h3>Tarefas por perfil</h3>'
       + '<div class="aviso"><b>Não deu para carregar os moldes.</b><br>' + esc(e.message)
-      + '<br>Falta rodar o <b>52_ajustes_s31.sql</b>?</div>'
+      + '<br>Pode faltar uma atualização do sistema: avise o administrador.</div>'
       + '<button class="btn" id="tpRetry">Tentar de novo</button></div>';
     document.getElementById('tpRetry').addEventListener('click', cfgTarefasPerfil);
     return;
@@ -9844,7 +9815,7 @@ function agChavesHTML(nRes){
     + '</div>'
     + (comConc && AGENDA.concluidos && AGENDA.erroRes
         ? '<div class="aviso">Os concluídos não vieram: ' + esc(AGENDA.erroRes)
-          + (/v_agenda_resolvidos/.test(AGENDA.erroRes) ? ' — falta rodar o <b>51_ajustes_s29.sql</b>.' : '') + '</div>'
+          + (/v_agenda_resolvidos/.test(AGENDA.erroRes) ? ' — falta uma atualização do sistema: avise o administrador.' : '') + '</div>'
         : '');
 }
 function agLigarChaves(){
@@ -9894,7 +9865,7 @@ function agVistaDia(cx){
 
   if (!agEhUtil(dia) && !doDia.length && !res.length){
     cx.innerHTML = chave + '<div class="vazio2"><b>' + esc(dataBR(dia)) + ' não é dia útil</b>'
-      + '<p>E não há nada marcado. Mude o turno em Configurações › Turno se deveria ser.</p></div>';
+      + '<p>E não há nada marcado. Mude o turno em TapHub › Cadastros › Configurações › Turno se deveria ser.</p></div>';
     ligarChave();
     return;
   }
@@ -10545,7 +10516,7 @@ async function modalQuem(t){
          + pessoas.map(linha).join('') + '</div>'
        : (sessao.admin
           ? '<div class="aviso">Ninguém do time tem o perfil responsável por esta '
-            + 'tarefa. Confira os perfis em Configurações → Usuários.</div>'
+            + 'tarefa. Confira os perfis em TapHub › Cadastros › Configurações › Usuários.</div>'
           : '<div class="aviso">Esta tarefa é de <b>'
             + esc((t.perfis_responsaveis || []).join(' ou ') || 'outro perfil')
             + '</b> — o seu perfil não a assume. Quem muda isso é o administrador, '
@@ -10693,7 +10664,7 @@ async function modalCompromisso(c, padrao){
     // S74 · compromisso de inspeção não abre a coleta: a inspeção da OS se
     // agenda pela T03 (pedido do central para a N1d2, 21/10). Só avisa.
     + (pode && !fechado ? '<div class="aviso" id="acInsp" role="status" style="display:none">'
-        + '<b>Inspeção de OS se agenda pela T03.</b> Para abrir a coleta no Field, agende pela '
+        + '<b>Inspeção de OS se agenda pela tarefa T03 "Agendar serviço".</b> Para abrir a coleta no TapField, agende pela '
         + '<b>T03 "Agendar serviço"</b> da OS (no quadro ou na Agenda). Este compromisso entra na '
         + 'agenda, mas não abre a coleta de ninguém.</div>' : '')
     // S61 · início, hora, tempo em horas e minutos e a prévia dos dias
@@ -10982,8 +10953,8 @@ document.addEventListener('keydown', e => {
   if (el && !el.disabled){ e.preventDefault(); el.focus(); el.select(); }
 });
 
-function sairDaConta(){
-  if (!confirm('Sair da conta? O que está na fila continua guardado.')) return;
+async function sairDaConta(){
+  if (!await confirmar('Sair da conta?', '<p>O que está na fila continua guardado neste aparelho.</p>', 'Sair')) return;
   try{ localStorage.removeItem(SESSAO_KEY); localStorage.removeItem(SESSAO_VELHA); }catch(e){}
   if (NO_SERVIDOR){ location.href = '../'; return; }
   location.reload();
@@ -11609,7 +11580,7 @@ async function pintarContratos(){
     + (ctrPodeEsc() ? '<button class="btn pri" type="button" id="ctrNovo">+ Novo contrato</button>' : '') + '</div>'
     + '<div class="lista" id="ctrLista"><p class="nota">Carregando…</p></div></div>';
   const nv = document.getElementById('ctrNovo'); if (nv) nv.addEventListener('click', () => modalContrato(null));
-  if (DEMO){ document.getElementById('ctrLista').innerHTML = '<div class="aviso">Na demonstração os contratos não estão disponíveis: dependem do banco real (migration 301).</div>'; return; }
+  if (DEMO){ document.getElementById('ctrLista').innerHTML = '<div class="aviso">Na demonstração os contratos não estão disponíveis: precisam do sistema de verdade.</div>'; return; }
   await ctrCarregarLista();
 }
 
@@ -11907,7 +11878,7 @@ async function ctrBaixarArquivo(path){
 }
 async function ctrSubirArquivo(path, bytes, mime){
   const r = await ctrStorage(ctrStorageUrl(path) + '?upsert=true', { method: 'POST', headers: { 'Content-Type': mime, 'x-upsert': 'true' }, body: bytes });
-  if (!r.ok) throw new Error('Não consegui guardar o arquivo (HTTP ' + r.status + '). ' + (r.status === 403 ? 'Falta a permissão do bucket "contratos".' : ''));
+  if (!r.ok) throw new Error('Não consegui guardar o arquivo. ' + (r.status === 403 ? 'Falta a permissão de guardar arquivos de contrato: avise o administrador.' : 'Tente de novo.'));
   return path;
 }
 // ── C1-Drive (S111): os documentos do contrato na pasta do cliente ───────────
@@ -11933,7 +11904,7 @@ async function ctrDriveV2(){
   let j = null;
   try{ const r = await fetch(PARAM.drive_url + (PARAM.drive_url.indexOf('?') >= 0 ? '&' : '?') + 'action=ping', { redirect: 'follow', signal: sinal(false) }); j = await r.json(); }catch(e){ j = null; }
   if (!j) throw new Error('Não consegui falar com o serviço do Drive agora. Tente de novo em instantes.');
-  if (!/^v([2-9]|\d{2,})$/.test(String(j.versao || ''))) throw Object.assign(new Error('O script do Drive ainda está na versão 1. Publique a versão nova do script (drive/GAS_TapFlow_Drive.gs) antes de gravar documentos de contrato.'), { negocio: true });   // S191: v2 ou v3
+  if (!/^v([2-9]|\d{2,})$/.test(String(j.versao || ''))) throw Object.assign(new Error('O script do Drive está desatualizado e não grava documentos de contrato. Avise o administrador.'), { negocio: true });   // S191: v2 ou v3
   DRIVE_V2 = true;
 }
 async function ctrDriveChamar(corpo){
@@ -11976,7 +11947,7 @@ const ctrDriveMsgErro = e => (e && e.message) || 'erro desconhecido';
 function ctrAbaModelos(el){
   const P = CTR.painel, c = P.contrato, edita = ctrPodeEsc() && c.situacao !== 'encerrado' && c.situacao !== 'cancelado';
   el.innerHTML = '<p class="nota" style="margin-top:0">O modelo é o arquivo do próprio cliente, com marcadores no lugar dos dados: o layout, as cores, as fórmulas e as abas ficam como estão. '
-    + 'Sem modelo, o sistema usa o layout padrão e avisa. Um modelo ativo por tipo; trocar guarda o anterior. O arquivo fica no armazenamento privado (nunca no GitHub).</p>'
+    + 'Sem modelo, o sistema usa o layout padrão e avisa. Um modelo ativo por tipo; trocar guarda o anterior. O arquivo fica guardado só no sistema, sem acesso público.</p>'
     + '<div class="ctrModelos">' + Object.keys(CTR_MODELO).map(t => {
       const m = (P.modelos || []).find(x => x.tipo === t && x.ativo), M = CTR_MODELO[t];
       return '<div class="ctrMod"><div class="secTit" style="margin-top:0">' + esc(M.rot) + '</div>'
@@ -12137,7 +12108,7 @@ const CTRO = { rdos: [], os: null, med: null, itens: [], civis: [], modelos: [],
 const ehContrato = card => !!card && card.template_id === 'INSPECAO_NR13_CONTRATO';
 const ctrHora = h => h ? String(h).slice(0, 5) : '';
 const ctrRdoNum = r => r.numero == null ? '' : String(r.numero).padStart(3, '0') + '/' + r.ano_numero;
-const ctrDocsOk = () => { if (!window.Documentos){ toast('O gerador de documentos (nucleo/documentos.js) não está no ar nesta versão.', 'err'); return false; } return true; };
+const ctrDocsOk = () => { if (!window.Documentos){ toast('O gerador de documentos não abriu. Recarregue a página; se continuar, avise o administrador.', 'err'); return false; } return true; };
 const ctrSit = { marcado: 'marcado', preenchido: 'RDO preenchido', desmarcado: 'desmarcado' };
 // S130 (308, M2) · o tipo do dia de campo; só o de Serviço ganha letra e pasta do dia (M4)
 const CTR_TIPOS = [['servico', 'Serviço'], ['reuniao', 'Reunião'], ['treinamento', 'Treinamento'], ['aguardando', 'Aguardando liberação']];
@@ -12488,9 +12459,15 @@ async function gravarRDO(r, concluir){
   try{
     const eraPreenchido = r.situacao === 'preenchido';
     const x = await rpc('tf_rdo_gravar', { p_rdo: r.id, p_dados: d });
+    // S196 (issue 169): concluir com alguma coisa faltando salva o rascunho e a janela FICA aberta, com o que falta em vermelho
+    if (concluir && x.situacao !== 'preenchido' && x.falta && x.falta.length){
+      Nucleo.janela.mexida(false);   // o que foi digitado já está salvo: fechar agora não perde nada
+      Nucleo.janela.erro('Rascunho salvo, mas ainda falta: ' + x.falta.join(', ') + '. Complete e toque em "Concluir o RDO" de novo.');
+      ctrRepintarOS().catch(() => {});
+      return;
+    }
     fecharModal();
     if (x.situacao === 'preenchido') toast('RDO ' + (x.numero ? String(x.numero).padStart(3, '0') : '') + ' preenchido' + (x.letra ? ' — dia ' + x.letra : '') + '.', 'ok');
-    else if (concluir && x.falta && x.falta.length) toast('Rascunho salvo. Falta: ' + x.falta.join(', ') + '.', 'err');
     else toast('Rascunho salvo.', 'ok');
     // S111: ao concluir o RDO pela primeira vez, Word e PDF vão sozinhos para o Controle de RDO do cliente (correção: pelo botão)
     if (x.situacao === 'preenchido' && !eraPreenchido){ await ctrEnviarRDODrive(Object.assign({}, r, { dia: r.dia }), true); }
@@ -12631,7 +12608,7 @@ function modalPedido(m, corrigir){
   const s = document.getElementById('pdSem'); if (s) s.addEventListener('change', () => { document.getElementById('pdMotC').hidden = !s.checked; document.getElementById('pdNum').disabled = s.checked; });
 }
 function modalReabrirMedicao(m){
-  abrirModal('Reabrir a medição ' + ctrMob(m.numero), '<p class="nota" style="margin-top:0">Só com a nota e o boleto cancelados no TapFin. A medição volta a ser rascunho, o pedido do cliente é apagado e a K02/K03 voltam a esperar.</p>'
+  abrirModal('Reabrir a medição ' + ctrMob(m.numero), '<p class="nota" style="margin-top:0">Só com a nota e o boleto cancelados no TapFin. A medição volta a ser rascunho, o pedido do cliente é apagado e as tarefas K02 "Criar Consolidado/Medição" e K03 "Boletim aprovado e pedido do cliente" voltam a esperar.</p>'
     + '<div class="campo"><label for="rbMot">Motivo (pelo menos 5 letras)</label><input id="rbMot" type="text" autocomplete="off"></div>',
     [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Reabrir', cls: 'perigo', onClick: async () => {
       try{ await rpc('tf_medicao_reabrir', { p_medicao: m.id, p_motivo: ctrVal('rbMot') }); fecharModal(); toast('Medição reaberta.', 'ok'); await ctrRepintarOS(); abaDrawer = 'med'; montarTabsOS(osAberta.card); pintarDrawer(); }
@@ -12751,7 +12728,7 @@ async function osmedPintar(){
   OSMED.v = v; OSMED.os = card.os_id;
   body.innerHTML = '';
   if (!v){
-    body.innerHTML = '<p class="nota" style="margin-top:0">A medição ainda não foi aberta. Ela nasce da proposta aprovada quando a equipe a abre no celular (Field), na tarefa "Fechar a medição", e é lá que a equipe ajusta, lança o que foi a mais e fecha com o encarregado.</p>';
+    body.innerHTML = '<p class="nota" style="margin-top:0">A medição ainda não foi aberta. Ela nasce da proposta aprovada quando a equipe a abre no celular (TapField), na tarefa "Fechar a medição", e é lá que a equipe ajusta, lança o que foi a mais e fecha com o encarregado.</p>';
     return;
   }
   const r = v.resumo || {}, aberta = v.situacao === 'rascunho', fechada = v.situacao === 'fechada';
@@ -12819,7 +12796,7 @@ async function osmedPintar(){
   }
   if (aberta){
     const n = document.createElement('p'); n.className = 'nota';
-    n.textContent = 'A equipe ajusta e fecha a medição no celular (Field), ainda na planta. Aqui é só para acompanhar.';
+    n.textContent = 'A equipe ajusta e fecha a medição no celular (TapField), ainda na planta. Aqui é só para acompanhar.';
     body.appendChild(n);
   }
 }
@@ -12868,7 +12845,7 @@ function osmedAcoesTarefa(card, t, row, hint){
   const b = document.createElement('button'); b.className = 'btn pri'; b.type = 'button'; b.textContent = 'Ver a medição';
   b.addEventListener('click', () => { abaDrawer = 'osmed'; montarTabsOS(card); pintarDrawer(); });
   row.appendChild(b);
-  hint.textContent = 'A equipe fecha a medição no celular (Field), com o encarregado. Ao fechar, esta tarefa se conclui sozinha e libera "Emitir boleto / nota fiscal".';
+  hint.textContent = 'A equipe fecha a medição no celular (TapField), com o encarregado. Ao fechar, esta tarefa se conclui sozinha e libera "Emitir boleto / nota fiscal".';
   return true;
 }
 // BOOT
@@ -13626,7 +13603,7 @@ async function cfgAutoDesig(){
   }catch(e){
     c.innerHTML = '<div class="painel"><h3>Responsáveis automáticos</h3><div class="aviso"></div></div>';
     c.querySelector('.aviso').textContent = 'Não deu para ler as regras: ' + e.message
-      + (/auto_designacao/.test(e.message) ? ' — falta rodar o 117_s62.sql no Supabase.' : '');
+      + (/auto_designacao/.test(e.message) ? ' — falta uma atualização do sistema: avise o administrador.' : '');
     return;
   }
   const pessoas = EQUIPE.slice().sort((a, b) => a.nome.localeCompare(b.nome));
@@ -13652,11 +13629,11 @@ async function cfgAutoDesig(){
         + '<label class="linhaOpc"><input type="checkbox" class="adA"' + (r.ativo ? ' checked' : '') + '> ligada</label>'
         + '</div>'
         + '<div class="adPe"><span class="nota">' + (r.alterado_em ? 'Mudada por ' + esc(r.alterado_por_nome || '?') + ' em '
-            + esc(dataBR(String(r.alterado_em).slice(0, 10))) : 'Como veio no 117') + '</span>'
+            + esc(dataBR(String(r.alterado_em).slice(0, 10))) : 'Como veio de fábrica') + '</span>'
         + '<button class="btn pri" type="button">Gravar</button></div>'
         + '<div class="dica adMsg" style="color:var(--crit)" role="alert"></div>'
         + '</div>').join('')
-      : '<div class="aviso">Nenhuma regra. O 117_s62.sql cria as duas da inspeção.</div>')
+      : '<div class="aviso">Nenhuma regra. Falta uma atualização do sistema (as duas regras da inspeção): avise o administrador.</div>')
     + '</div>';
   c.querySelectorAll('.adRegra').forEach(box => box.querySelector('.adPe button').addEventListener('click', async ev => {
     const q = cl => box.querySelector(cl);
