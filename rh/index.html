@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapRH 17 · Recursos Humanos</title>
+<title>TapRH 18 · Recursos Humanos</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2434,7 +2434,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'RH17';   // TapRH 17 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 119 (textos sem nome de arquivo e sem nomes fixos, TapField, o caminho certo no desligamento, Sair pela janela, sem a sobra do "Liberar novo PIN"); núcleo N13
+const APP_VERSION = 'RH18';   // TapRH 18 (S197): Rodada R6 da auditoria — issue 143 (sem os códigos do desenho, como "(P17)" e "parte 2B", nas telas do Ponto; o tempo da batida repetida vem do parâmetro)
+// const APP_VERSION = 'RH17';   // TapRH 17 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 119 (textos sem nome de arquivo e sem nomes fixos, TapField, o caminho certo no desligamento, Sair pela janela, sem a sobra do "Liberar novo PIN"); núcleo N13
 // const APP_VERSION = 'RH16';   // TapRH 16 (S195): Rodada R4 da auditoria (issue 142) — anexos, fotos, espelho e documentos do funcionário abrem com a página aberta há mais de 1 hora (o acesso renova também no HTTP 400); o anexo do pedido baixa com o tipo verdadeiro; núcleo N12
 // const APP_VERSION = 'RH15';   // TapRH 15 (S194): Rodada R3 da auditoria (issues 139, 203, 204 e 205): horas pagas sem teto de 24 h e "valer a escolha"; avisos do Fechamento (limite do IR, batida faltando, batida depois de liberar, 100% de mês anterior); espelho congelado; resumo do contador com as faltas separadas (617)
 // const APP_VERSION = 'RH14';   // TapRH 14 (S156): issue 1 (passo 2) — a folga a negociar manda marcar em Cadastros › Configurações › Feriados (onde a tela está desde o S134), não mais no "Manager"
@@ -5688,6 +5689,10 @@ async function pintarPonto(){
       ? 'O ponto ainda não abre: falta uma atualização do sistema: avise o administrador. (' + e.message + ')' : e.message, pintarPonto);
   }
   if (visao !== 'rhpt') return;
+  if (PT.dupMin == null){   // RH18 (issue 143): o tempo da repetida para a legenda e as notas
+    try{ PT.dupMin = Number((((await rpc('tf_ponto_config_ver', {})) || {}).limites || {}).duplicada_min) || 10; }catch(e){ PT.dupMin = 10; }
+    if (visao !== 'rhpt') return;
+  }
   if (PT.aba === 'escalas') return ptEscalas(corpo);
   if (PT.aba === 'importar') return ptImportar(corpo);
   if (PT.aba === 'parametros') return ptParametros(corpo);
@@ -5746,9 +5751,12 @@ const PT_ORIGEM = {
   tf_original:       { cls: 'ptO', rot: 'batida do funcionário (TapField)' },
   tf_ajuste:         { cls: 'ptI', rot: 'incluída por ajuste aprovado' },
   tf_desconsiderada: { cls: 'ptD', rot: 'desconsiderada' },
-  tf_repetida:       { cls: 'ptD', rot: 'repetida em até 10 min (não conta)' },
-  ez_repetida:       { cls: 'ptD', rot: 'repetida em até 10 min (não conta)' },
+  // RH18 (S197, issue 143): o tempo da batida repetida vem do parâmetro (Parâmetros › "Batida repetida: até (min)"), não fixo
+  tf_repetida:       { cls: 'ptD', get rot(){ return 'repetida em até ' + ptDupMin() + ' min (não conta)'; } },
+  ez_repetida:       { cls: 'ptD', get rot(){ return 'repetida em até ' + ptDupMin() + ' min (não conta)'; } },
 };
+/** RH18 (issue 143): o parâmetro "Batida repetida: até (min)" (1 a 15), lido uma vez ao abrir o Ponto (10 se não veio). */
+const ptDupMin = () => { const v = Number(PT.dupMin); return v >= 1 && v <= 15 ? v : 10; };
 
 function ptEspelhoDesenhar(){
   const area = document.getElementById('ptEsp'); const E = PT.esp; if (!area || !E) return;
@@ -5828,9 +5836,9 @@ function ptEspelhoDesenhar(){
   });
   h += '</tbody></table></div><p class="nota">As horas são somadas pelos pares de batidas (1ª com 2ª, 3ª com 4ª…). O saldo do dia tem a tolerância de '
     + esc(String(((E.parametros || {}).tolerancia_dia_min) ?? 10)) + ' min (art. 58 §1º): dentro dela o dia conta como certo. Sábado fora da escala conta 1:1; '
-    + 'domingo e feriado vão a 100%, fora do banco (P12); dispensa não desconta, e quem trabalha nela ganha as horas 1:1; atraso, falta e folga descontam do banco (P19). '
+    + 'domingo e feriado vão a 100%, fora do banco; dispensa não desconta, e quem trabalha nela ganha as horas 1:1; atraso, falta e folga descontam do banco. '
     + 'O banco por lote vale desde ' + esc(dataBR(((E.parametros || {}).calculo_inicio) || '2026-11-01')) + '; antes disso vale o EzPoint (banco do arquivo AEJ, para comparar). '
-    + 'O fechamento do mês (escolha banco ou dinheiro e assinatura) é a parte 2B. Passe o mouse sobre uma batida incluída para ver o motivo.</p>';
+    + 'O fechamento do mês (banco ou dinheiro e a assinatura) fica na aba Fechamento. Passe o mouse sobre uma batida incluída para ver o motivo.</p>';
   area.innerHTML = h;
   area.querySelectorAll('[data-fotos]').forEach(b => b.addEventListener('click', () => ptFotosDia(PT.sel, b.dataset.fotos)));
   area.querySelectorAll('[data-apr]').forEach(b => b.addEventListener('click', () => _semDuploEnvio_(b, () => ptDecidir([b.dataset.apr], true, null, ptEspelhoCarregar))));
@@ -5873,7 +5881,7 @@ function ptBancoResumo(E){
   if (!B.acordo){
     const M = B.mes || {};
     return '<div class="ptBanco aviso"><b>Sem acordo de banco assinado.</b> Neste mês: ' + ptHm(M.sem_acordo_mais || 0) + ' a mais (hora extra de 50%) e '
-      + ptHm(M.sem_acordo_menos || 0) + ' a menos (o escritório decide, P19). Informe a data do acordo em Escalas e regras.</div>';
+      + ptHm(M.sem_acordo_menos || 0) + ' a menos (o escritório decide). Informe a data do acordo em Escalas e regras.</div>';
   }
   const L0 = B.lote_antigo || {}, M = B.mes || {}, av = B.a_vencer || [];
   return '<div class="ptBanco"><b>Banco de horas</b> · acordo assinado em ' + esc(dataBR(B.acordo))
@@ -5909,7 +5917,7 @@ async function ptMotivos(){
 }
 async function ptIncluirModal(usuario, dia){
   const M = (await ptMotivos()).filter(m => m.tipo === 'esqueci');
-  abrirModal('Incluir batida · ' + ptDia(dia), '<p class="nota">Exceção (P15): a batida lançada pelo escritório só entra quando o funcionário confirmar no celular. '
+  abrirModal('Incluir batida · ' + ptDia(dia), '<p class="nota">Exceção: a batida lançada pelo escritório só entra quando o funcionário confirmar no celular. '
     + 'Até lá aparece como pedido “esperando o funcionário”.</p><div class="ptForm">'
     + '<label>Qual batida<select id="ptIt">' + [['entrada','Entrada'],['saida_almoco','Saída para o almoço'],['volta_almoco','Volta do almoço'],['saida','Saída'],
         ['chegada_hotel','Chegada ao hotel'],['saida_hotel','Saída do hotel']].map(([k, r]) => '<option value="' + k + '">' + r + '</option>').join('') + '</select></label>'
@@ -6178,7 +6186,7 @@ async function ptHoje(corpo){
         + '<td><span class="ptSit aviso">' + esc(a.rot) + '</span></td><td><b>' + esc(a.nome) + '</b> · ' + esc(a.det || '') + '</td>'
         + '<td><button class="btn mini" type="button" data-esp="' + esc(a.usuario_id) + '" data-dia="' + esc(a.dia) + '">Ver espelho</button></td></tr>').join('')
         + '</tbody></table></div>' : '<p class="nota">Nenhum.</p>')
-    + '<p class="nota">As batidas do EzPoint aparecem com “EZ” depois que o arquivo é importado. Batida repetida em até 10 min (celular com celular ou com o EzPoint) conta uma vez só. '
+    + '<p class="nota">As batidas do EzPoint aparecem com “EZ” depois que o arquivo é importado. Batida repetida em até ' + ptDupMin() + ' min (celular com celular ou com o EzPoint) conta uma vez só. '
     + '“Batida faltando” aparece 15 min depois do horário esperado (o almoço é livre: a volta é esperada 1h15 depois da saída). '
     + 'O funcionário recebe o mesmo lembrete no celular, com o app aberto.</p>';
   corpo.innerHTML = h;
@@ -6196,14 +6204,14 @@ async function ptFotosDia(usuario, dia){
     if (!L.length){ el.innerHTML = '<p class="nota">Nenhuma batida do TapField neste dia.</p>'; return; }
     const MET = { pin: 'PIN', digital: 'digital', destravado: 'app destravado há menos de 5 min', escritorio: 'pelo escritório' };
     el.innerHTML = '<div class="ptFotos">' + L.map((b, i) => '<figure class="ptFig"><div class="ptFoto" id="ptF' + i + '">'
-        + (b.foto ? 'carregando…' : (!b.lat && !b.sem_localizacao ? 'apagada (prazo de guarda, P27)' : 'sem foto')) + '</div><figcaption><b>' + esc(b.h) + '</b> · ' + esc(b.tipo_rot)
+        + (b.foto ? 'carregando…' : (!b.lat && !b.sem_localizacao ? 'apagada (prazo de guarda)' : 'sem foto')) + '</div><figcaption><b>' + esc(b.h) + '</b> · ' + esc(b.tipo_rot)
         + (b.tipo_mudado ? ' (tipo mudado pelo funcionário)' : '') + (b.situacao !== 'valida' ? ' · <span class="ptSem">' + esc(b.motivo_situacao || b.situacao) + '</span>' : '')
         + '<br><small>confirmado por ' + esc(MET[b.metodo] || b.metodo) + (b.offline ? ' · sem internet: tocou ' + esc(b.hora_celular) + ', subiu ' + esc(b.recebida_em) : '')
         + (b.relogio_divergente ? ' · <span class="ptSem">relógio do celular divergente</span>' : '') + '</small><br>'
-        + (b.sem_localizacao ? '<span class="ptSem">sem localização</span>' : !b.lat ? '<small>localização apagada (prazo de guarda, P27)</small>'
+        + (b.sem_localizacao ? '<span class="ptSem">sem localização</span>' : !b.lat ? '<small>localização apagada (prazo de guarda)</small>'
           : '<a href="https://www.google.com/maps?q=' + encodeURIComponent(b.lat + ',' + b.lng) + '" target="_blank" rel="noopener">ver no mapa</a> <small>(precisão ' + esc(String(b.precisao_m || '?')) + ' m)</small>')
         + (b.observacao ? '<br><small>Motivo: “' + esc(b.observacao) + '”</small>' : '') + '</figcaption></figure>').join('') + '</div>'
-      + '<p class="nota">Fotos guardadas por 5 anos (P27), só para mostrar quem bateu: sem reconhecimento facial.</p>';
+      + '<p class="nota">Fotos guardadas por 5 anos, só para mostrar quem bateu: sem reconhecimento facial.</p>';
     const cfg = window.TF_CONFIG || {};
     L.forEach((b, i) => { if (!b.foto) return;
       Nucleo.storage.pedir(cfg.SUPABASE_URL + '/storage/v1/object/authenticated/ponto/' + b.foto.split('/').map(encodeURIComponent).join('/'), {})   // RH16 · issue 142
@@ -6227,7 +6235,7 @@ async function ptEscalas(corpo){
       + esc((e.dias || []).map(n => PT_SEM[n]).join(', ')) + ' · ' + esc(String(e.entrada).slice(0, 5)) + '–' + esc(String(e.saida).slice(0, 5)) + '</small>';
   let h = '<div class="rhBarra">' + (semEscala ? '<button class="btn pri" type="button" id="ptPadrao">Criar a escala padrão para '
       + semEscala + (semEscala === 1 ? ' pessoa' : ' pessoas') + '</button>' : '')
-    + '<span class="nota">Escala padrão (P17): segunda a sexta, 08:00–17:00, 8h por dia, almoço livre de 1h a 2h. Só CLT bate ponto; '
+    + '<span class="nota">Escala padrão: segunda a sexta, 08:00–17:00, 8h por dia, almoço livre de 1h a 2h. Só CLT bate ponto; '
     + 'estagiário e sócios ficam fora.</span></div>'
     + '<div class="rhfdWrap"><table class="tbl ptTab"><thead><tr><th>Pessoa</th><th>Vínculo</th><th>CPF</th><th>Escala de hoje</th><th>Acordo de banco</th>' + (OR ? '<th>Orientação do almoço</th>' : '') + '<th></th></tr></thead><tbody>'
     + P.map(p => '<tr' + (p.situacao !== 'ativo' ? ' class="ptFolga"' : '') + '><td><b>' + esc(p.nome) + '</b>'
@@ -6252,7 +6260,7 @@ async function ptEscalas(corpo){
     + '<label class="ptLargo">Endereço do local<input id="ptEmpE" maxlength="200"></label>'
     + '<button class="btn pri" type="button" id="ptEmpS">Salvar</button></div>'
     + '<h3 class="ptH3">Quem aprova o ponto</h3><p class="nota">' + esc((PT.cfg.aprovadores || []).map(a => a.nome).join(' e ') || 'ninguém')
-    + '. Veem o ponto de todos, aprovam os pedidos e importam o EzPoint (P18, P34).</p>';
+    + '. Veem o ponto de todos, aprovam os pedidos e importam o EzPoint.</p>';
   corpo.innerHTML = h;
   document.getElementById('ptEmpN').value = PT.cfg.empresa_nome || '';
   document.getElementById('ptEmpC').value = PT.cfg.empresa_cnpj || '';
@@ -6478,7 +6486,7 @@ async function ptFechamento(corpo){
     catch(e){ toast(e.message, 'err'); }
   })));
   corpo.querySelectorAll('[data-resp]').forEach(b => b.addEventListener('click', () => abrirModal('Responder ao “Discordo”',
-    '<p class="nota">A resposta aparece para o funcionário no celular e vai no PDF do mês, junto com o texto dele (P35).</p><textarea id="pfResp" rows="4" maxlength="2000" style="width:100%"></textarea>',
+    '<p class="nota">A resposta aparece para o funcionário no celular e vai no PDF do mês, junto com o texto dele.</p><textarea id="pfResp" rows="4" maxlength="2000" style="width:100%"></textarea>',
     [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Responder', pri: true, onClick: async () => {
       try{ await rpc('tf_ponto_fech_responder', { p_id: b.dataset.resp, p_texto: document.getElementById('pfResp').value }); fecharModal(); toast('Resposta gravada.'); ptFechamento(corpo); }
       catch(e){ toast(e.message, 'err'); } } }])));
@@ -6585,7 +6593,7 @@ async function ptFechPdf(p){
           + 'Opção do mês: ' + int + '. Horas pagas do banco como hora extra de 50%: ' + ptHm(C.pagas_efetivas_min || 0)
           + (Number(C.vencido_min) ? '; lote vencido pago com 50%: ' + ptHm(C.vencido_min) : '') + '. Saldo do banco no fim do mês: ' + (C.acordo ? ptSaldo(C.banco_fim_min) : 'sem acordo') + '.',
         fontSize: 8, lineHeight: 1.3 } ]
-      .concat((D.contestacoes || []).length ? [{ text: 'DISCORDO (P35)', bold: true, fontSize: 8.5, color: '#B42318', margin: [0, 10, 0, 2] }]
+      .concat((D.contestacoes || []).length ? [{ text: 'DISCORDO', bold: true, fontSize: 8.5, color: '#B42318', margin: [0, 10, 0, 2] }]
         .concat(D.contestacoes.map(c => ({ text: '“' + c.texto + '” (' + dataBR(String(c.em).slice(0, 10)) + ')' + (c.resposta ? '\nResposta' + (c.por ? ' de ' + c.por : '') + ': “' + c.resposta + '”' : '\nSem resposta.'), fontSize: 7.5, margin: [0, 0, 0, 4] }))) : [])
       .concat([{ columns: [assin(rub[p.usuario_id], P0.nome_completo || p.nome, 'Funcionário', selo(P0.nome_completo || p.nome, D.assinado_em, D.assinado_metodo) + (D.assinado_tarde ? ' · depois do prazo' : '')),
           assin(D.empresa_em ? rub[Object.keys(rub).find(k => k !== p.usuario_id)] : null, cfgE.empresa_nome || 'Engetap', 'Empresa' + (D.empresa_nome ? ' · ' + D.empresa_nome : ''), selo(D.empresa_nome || 'a empresa', D.empresa_em, D.empresa_metodo))],
@@ -6619,7 +6627,7 @@ const PT_AVISO = { almoco_3: '3º almoço com menos de 1h no mês (o funcionári
   almoco_5: '5º almoço com menos de 1h: termo de ciência enviado ao celular',
   sem_orientacao: '5 almoços curtos, mas falta a orientação escrita do almoço assinada: o termo de ciência não foi gerado (informe a data em Escalas e regras)',
   advertencia: 'Repetiu no mês seguinte ao termo de ciência: a advertência está preparada para você decidir',
-  longo_12: 'Dia acima de 12h (P11)', saida_cedo: 'Almoço curto e saída antes do horário no mesmo dia (P37)' };
+  longo_12: 'Dia acima de 12h', saida_cedo: 'Almoço curto e saída antes do horário no mesmo dia' };
 async function ptSaude(corpo){
   PT.smes = PT.smes || isoHoje().slice(0, 7) + '-01';
   let P0, S;
@@ -6638,7 +6646,7 @@ async function ptSaude(corpo){
   const ant = (() => { const d = new Date(PT.smes + 'T12:00'); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 7) + '-01'; })();
   let h = '<div class="rhBarra"><label class="ptCampo">Mês <select id="psMes">' + meses.map(m => '<option value="' + m + '"' + (m === PT.smes ? ' selected' : '') + '>' + esc(ptMesRot(m)) + '</option>').join('')
     + '</select></label><span class="nota">' + (atual ? 'Até ontem (' + esc(ptDia(isoHoje())) + ' entra amanhã). ' : '') + (nVerm ? '<b>' + nVerm + (nVerm === 1 ? ' pessoa' : ' pessoas') + ' fora da regra.</b> ' : '')
-    + 'Cada funcionário vê só a dele, no celular, logo abaixo do botão de bater. Nunca em tela comum (P38).</span></div>'
+    + 'Cada funcionário vê só a dele, no celular, logo abaixo do botão de bater. Nunca em tela comum.</span></div>'
     + '<div class="ptCards">'
     + cart('Almoço menor que 1h', T.alm || 0, 'de verdade na equipe · ' + (T.quase || 0) + ' “quase” (55–59 min)', (T.alm || 0) ? '#A62D18' : '#1E7A42', tend('alm', true))
     + cart('Batidas esquecidas', T.esq || 0, 'pedidos de ajuste e batidas faltando', (T.esq || 0) ? '#8A5A12' : '#1E7A42', tend('esq', true))
@@ -6689,9 +6697,9 @@ async function ptSaude(corpo){
   h += '<h3 class="ptH3">Como as cores são calculadas (no mês)</h3><div class="ptRegras nota">'
     + '<p><b>Almoço menor que 1h</b> (jornada acima de 6h): até ' + (S0.almoco || [2, 4])[0] + ' em dia · até ' + (S0.almoco || [2, 4])[1] + ' atenção · acima, fora da regra. De 55 a 59 min é “quase”: aparece, mas não conta (TST Tema 14). Justificativa aceita tira o dia; aguardando, não conta até a decisão; recusada, conta.</p>'
     + '<p><b>Esqueceu de bater</b>: até ' + (S0.esquecidas || [2, 5])[0] + ' em dia · até ' + (S0.esquecidas || [2, 5])[1] + ' atenção. Conta o pedido “esqueci” e o dia com batida faltando sem pedido.</p>'
-    + '<p><b>Mais de 10h no dia</b>: até ' + (S0.mais10h || [1, 2])[0] + ' em dia · até ' + (S0.mais10h || [1, 2])[1] + ' atenção. Só os sem motivo de serviço inadiável (art. 61); o celular pede o motivo. Acima de 12h vira aviso vermelho (P11).</p>'
+    + '<p><b>Mais de 10h no dia</b>: até ' + (S0.mais10h || [1, 2])[0] + ' em dia · até ' + (S0.mais10h || [1, 2])[1] + ' atenção. Só os sem motivo de serviço inadiável (art. 61); o celular pede o motivo. Acima de 12h vira aviso vermelho.</p>'
     + '<p><b>A cor da pessoa</b> é a pior das três; espelho do mês anterior sem assinatura depois do 5º dia útil deixa em atenção. Os limites ficam em Parâmetros.</p>'
-    + '<p><b>Regra do almoço (P37)</b>: 3ª vez = aviso; 5ª vez = termo de ciência automático no celular (só com a orientação escrita assinada); se repetir no mês seguinte, o sistema prepara a advertência e você decide. Suspensão e justa causa nunca são automáticas.</p></div>';
+    + '<p><b>Regra do almoço</b>: 3ª vez = aviso; 5ª vez = termo de ciência automático no celular (só com a orientação escrita assinada); se repetir no mês seguinte, o sistema prepara a advertência e você decide. Suspensão e justa causa nunca são automáticas.</p></div>';
   corpo.innerHTML = h;
   document.getElementById('psMes').addEventListener('change', ev => { PT.smes = ev.target.value; ptSaude(corpo); });
   corpo.querySelectorAll('[data-visto]').forEach(b => b.addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => {
@@ -6835,7 +6843,7 @@ async function ptEzComparar(){
   let M = []; try{ M = await rpc('tf_ponto_ez_meses', {}); }catch(e){ el.innerHTML = /tf_ponto_ez_meses/.test(e.message) ? '<p class="nota">A comparação com o EzPoint ainda não abre: falta uma atualização do sistema: avise o administrador.</p>' : ''; return; }
   if (!M.length){ el.innerHTML = ''; return; }
   const mesAtual = isoHoje().slice(0, 7) + '-01', pad = M.find(m => m < mesAtual) || M[0];
-  el.innerHTML = '<h3 class="ptH3">Comparar com o EzPoint (P13)</h3><p class="nota">Recalcula o mês com as regras do ponto próprio (tolerância de 10 min por dia, '
+  el.innerHTML = '<h3 class="ptH3">Comparar com o EzPoint</h3><p class="nota">Recalcula o mês com as regras do ponto próprio (tolerância de 10 min por dia, '
     + 'domingo e feriado a 100% fora do banco) e compara, dia a dia, com o que o EzPoint lançou no banco. Só compara: o saldo antigo continua o do EzPoint (lote antigo). '
     + 'Os espelhos em PDF assinados continuam no Drive como prova.</p>'
     + '<div class="rhBarra"><label class="ptCampo">Mês <select id="ptEzM">' + M.map(m => '<option value="' + m + '"' + (m === pad ? ' selected' : '') + '>' + esc(ptMesRot(m)) + '</option>').join('') + '</select></label>'
@@ -6949,7 +6957,7 @@ function ptRescisaoModal(p){
             + (Number(B.negativo_min) < 0 ? lin('· desconto na rescisão (até 1 salário)', ptHm(B.desconto_min), 'art. 477 §5º; teto de ' + ptHm(B.teto_min) + ' = jornada semanal × 5'
                 + (Number(B.acima_teto_min) ? '; ' + ptHm(B.acima_teto_min) + ' acima do teto não se descontam' : '')) : '')
           : lin('Banco de horas', 'sem acordo', 'sem banco: o período aberto vira hora extra') + lin('· a mais no período aberto (hora extra de 50%)', ptHm(A.sem_acordo_mais_min), '')
-            + lin('· a menos no período aberto', ptHm(A.sem_acordo_menos_min), 'o escritório decide (P19)'))
+            + lin('· a menos no período aberto', ptHm(A.sem_acordo_menos_min), 'o escritório decide'))
         + lin('Almoço que faltou (pagar com 50%)', ptHm(A.almoco_pagar_min), 'art. 71 §4º · desde ' + esc(dataBR(R.aberto_desde)))
         + lin('Domingo e feriado trabalhados (100%)', ptHm(A.extra100_min), 'desde ' + esc(dataBR(R.aberto_desde)))
         + lin('Folgas compensatórias que não serão tiradas (100%)', ptHm(R.folgas_pendentes_min), (R.folgas_pendentes || []).map(f => ptDia(f.dia_trabalhado)).join(', '))
@@ -6990,7 +6998,7 @@ async function ptRescisaoPdf(R){
 async function ptGuarda(div){
   let G; try{ G = await rpc('tf_ponto_guarda_resumo', {}); }catch(e){ div.innerHTML = /tf_ponto_guarda_resumo/.test(e.message) ? '<p class="nota">A guarda ainda não abre: falta uma atualização do sistema: avise o administrador.</p>' : '<p class="nota">' + esc(e.message) + '</p>'; return; }
   div.innerHTML = '<p class="nota">Foto e localização da batida ficam <b>5 anos depois do mês</b>; de quem saiu, <b>pelo menos 2 anos depois da saída</b> (vale o que acabar por último). '
-    + 'Depois disso são apagadas; a batida, o comprovante e o espelho ficam (P27; LGPD art. 16). Guardadas hoje: ' + G.fotos + ' fotos e ' + G.locais + ' localizações'
+    + 'Depois disso são apagadas; a batida, o comprovante e o espelho ficam (LGPD art. 16). Guardadas hoje: ' + G.fotos + ' fotos e ' + G.locais + ' localizações'
     + (G.apagadas ? '; já apagadas: ' + G.apagadas : '') + '.</p>'
     + (G.n_vencidas ? '<div class="rhBarra"><button class="btn pri" type="button" id="ptGdA">Apagar ' + G.n_vencidas + ' vencida' + (G.n_vencidas > 1 ? 's' : '') + '</button>'
         + '<span class="nota">' + (G.n_vencidas > 500 ? 'Vai de 500 em 500.' : '') + '</span></div>'
@@ -7016,7 +7024,7 @@ function ptAcordoModal(p){
     '<p class="nota">O banco só liga para quem tem o acordo individual escrito (CLT art. 59 §5º). Use a data em que a pessoa '
     + '<b>assinou</b> (nunca uma data anterior). Nesse dia nasce o lote antigo: o saldo do EzPoint em 31/10/2026 mais todas as horas '
     + 'desde 01/11/2026 até a véspera da assinatura (cláusula 11ª). Sem acordo, o saldo positivo do mês é hora extra de 50% '
-    + 'e o negativo o escritório decide (P2, P19). O PDF assinado vai em Documentos, na ficha do RH.</p>'
+    + 'e o negativo o escritório decide. O PDF assinado vai em Documentos, na ficha do RH.</p>'
     + '<label class="ptCampo">Assinado em<input type="date" id="ptAcD" max="' + esc(isoHoje()) + '" value="' + esc(p.acordo_banco_em || '') + '"></label>'
     + '<p class="nota" id="ptAcMsg" style="color:var(--crit)"></p>',
     [{ label: 'Cancelar', onClick: fecharModal },
@@ -7049,14 +7057,14 @@ async function ptParametros(corpo){
     + campo('ppNf', 'até', String(P.noturno_fim || '05:00').slice(0, 5), 'type="time"', 'CLT art. 73. O resumo mostra as horas no relógio e as horas noturnas (52min30s).')
     + '</div><h3 class="ptH3">Hora extra</h3><div class="ptForm">'
     + '<label class="chk"><input type="checkbox" id="pp70"' + (P.faixa70_ligada ? ' checked' : '') + '> Faixa de 70% ligada</label>'
-    + campo('pp70a', 'A partir de quantas horas a mais no dia (min)', P.faixa70_apos_min, 'type="number" min="1" max="600"', 'Desligada (P33): só 50% (hora extra e almoço curto) e 100% (domingo e feriado). A faixa de 70% é escolha da empresa; não há lei.')
+    + campo('pp70a', 'A partir de quantas horas a mais no dia (min)', P.faixa70_apos_min, 'type="number" min="1" max="600"', 'Desligada: só 50% (hora extra e almoço curto) e 100% (domingo e feriado). A faixa de 70% é escolha da empresa; não há lei.')
     + '</div><h3 class="ptH3">Banco de horas</h3><div class="ptForm">'
-    + campo('ppPz', 'Prazo do lote (meses)', P.banco_prazo_meses, 'type="number" min="1" max="6"', 'Acordo individual: até 6 meses (art. 59 §5º). O lote vencido é pago como hora extra de 50% no fechamento do mês em que venceu (P3).')
+    + campo('ppPz', 'Prazo do lote (meses)', P.banco_prazo_meses, 'type="number" min="1" max="6"', 'Acordo individual: até 6 meses (art. 59 §5º). O lote vencido é pago como hora extra de 50% no fechamento do mês em que venceu.')
     + campo('ppAv', 'Aviso antes de vencer (dias)', P.banco_aviso_dias, 'type="number" min="1" max="90"')
     + campo('ppFc', 'Folga compensatória de domingo e feriado (dias corridos)', P.folga_comp_dias, 'type="number" min="1" max="7"', 'A folga sai em até 7 dias corridos depois do dia trabalhado (Lei 605/49 art. 9º; OJ 410 TST).')
     + '</div><p class="nota">Cálculo desde <b>' + esc(dataBR(P.calculo_inicio)) + '</b>; o saldo do EzPoint em <b>' + esc(dataBR(P.ez_data_base))
     + '</b> entra no banco na data do acordo de cada um: em lotes por dia de origem, se informados em Escalas e regras › Lotes antigos; senão, num lote só.</p>'
-    + '<h3 class="ptH3">Saúde do ponto (limites do semáforo, P36)</h3><div class="ptForm">'
+    + '<h3 class="ptH3">Saúde do ponto (limites do semáforo)</h3><div class="ptForm">'
     + campo('psA1', 'Almoço curto: em dia até', par('almoco', 0)) + campo('psA2', 'atenção até', par('almoco', 1), null, 'Acima disso: fora da regra. O “quase” (55 a 59 min) conta à parte.')
     + campo('psE1', 'Batidas esquecidas: em dia até', par('esquecidas', 0)) + campo('psE2', 'atenção até', par('esquecidas', 1))
     + campo('psM1', 'Mais de 10h sem motivo: em dia até', par('mais10h', 0)) + campo('psM2', 'atenção até', par('mais10h', 1))
@@ -7066,7 +7074,7 @@ async function ptParametros(corpo){
   h += '<h3 class="ptH3">Datas de folga a negociar pelo banco</h3>';
   if (!neg.length) h += '<p class="nota">Nenhuma data marcada como “folga a negociar” daqui para a frente. Marque em Cadastros › Configurações › Feriados.</p>';
   else h += neg.map(x => '<div class="ptNeg" data-neg="' + esc(x.no_ano) + '"><b>' + esc(dataBR(x.no_ano)) + ' · ' + esc(x.nome) + '</b><div class="nota">Carregando…</div></div>').join('');
-  h += '<h3 class="ptH3">Prazo de guarda das fotos e localizações (P27)</h3><div id="ptGuarda"><p class="nota">Carregando…</p></div>';
+  h += '<h3 class="ptH3">Prazo de guarda das fotos e localizações</h3><div id="ptGuarda"><p class="nota">Carregando…</p></div>';
   corpo.innerHTML = h;
   ptGuarda(document.getElementById('ptGuarda'));   // 2D (609)
   const num = id => { const v = document.getElementById(id).value; return v === '' ? null : Number(v); };

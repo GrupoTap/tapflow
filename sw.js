@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H18-S196';   // S196: Rodada R5 da auditoria (padrões de todas as telas) (issues 108, 109, 126, 144, 169, 110, 119, 122, 128, 155): núcleo N13, propostas PR2, TapFlow S196, TapCRM 7, TapRH 17, TapSeg 8, Cadastros 8, TapFin 26, Pessoas e acessos A11, hub H18
+const VERSAO = 'H18-S197';   // S197: Rodada R6 da auditoria (celular: ponto e diária; issues 140, 141, 143 e 166): Field S64 e TapRH 18
+// const VERSAO = 'H18-S196';   // S196: Rodada R5 da auditoria (padrões de todas as telas) (issues 108, 109, 126, 144, 169, 110, 119, 122, 128, 155): núcleo N13, propostas PR2, TapFlow S196, TapCRM 7, TapRH 17, TapSeg 8, Cadastros 8, TapFin 26, Pessoas e acessos A11, hub H18
 // const VERSAO = 'H17-S195';   // S195: Rodada R4 da auditoria — núcleo N12 (issues 142, 146, 153, 154, 167 e 189): hub H17, TapFlow S195, TapRH RH16, TapFin F25, TapSeg G7, Cadastros CAD7, Field S62, documentos.js D2
 // const VERSAO = 'H16-S194';   // S194: Rodada R3 da auditoria — o ponto no banco (617, issues 139, 203, 204 e 205): TapRH RH15 e Field S61
 // const VERSAO = 'H16-S191';   // S191: Rodada R2 da auditoria (issues 200, 202 e 208): TapFlow S191, Cadastros CAD6 e TapFin F24 pegam os parâmetros do Drive pela função (215); o TapFlow aceita o script do Drive v3
