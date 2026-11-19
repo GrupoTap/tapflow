@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapRH 14 · Recursos Humanos</title>
+<title>TapRH 15 · Recursos Humanos</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2434,7 +2434,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'RH14';   // TapRH 14 (S156): issue 1 (passo 2) — a folga a negociar manda marcar em Cadastros › Configurações › Feriados (onde a tela está desde o S134), não mais no "Manager"
+const APP_VERSION = 'RH15';   // TapRH 15 (S194): Rodada R3 da auditoria (issues 139, 203, 204 e 205): horas pagas sem teto de 24 h e "valer a escolha"; avisos do Fechamento (limite do IR, batida faltando, batida depois de liberar, 100% de mês anterior); espelho congelado; resumo do contador com as faltas separadas (617)
+// const APP_VERSION = 'RH14';   // TapRH 14 (S156): issue 1 (passo 2) — a folga a negociar manda marcar em Cadastros › Configurações › Feriados (onde a tela está desde o S134), não mais no "Manager"
 // const APP_VERSION = 'RH13';   // TapRH 13 (S142): item 38 da lista: o atestado anexado à ausência (foto, PDF ou Ctrl+V), em Documentos do Funcionário, guarda de 5 anos (616)
 // const APP_VERSION = 'RH12';   // TapRH 12 (S139): item 26 da lista: a caixa do espelho esconde também as batidas repetidas
 // const APP_VERSION = 'RH11';   // TapRH 11 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
@@ -5774,6 +5775,10 @@ function ptEspelhoDesenhar(){
     + (pend.length ? '<button class="btn pri" type="button" id="ptAprTodos">Aprovar todos os pedidos do mês (' + pend.length + ')</button>' : '')
     + (pdfs.length ? '<span class="nota">PDF salvo: ' + pdfs.map(x => '<a href="#" data-pdf="' + esc(x.pdf_path) + '" data-arq="' + esc(x.arquivo || '') + '">v' + x.versao + ' · '
         + esc(dataBR(String(x.gerado_em).slice(0, 10))) + '</a>').join(' · ') + '</span>' : '') + '</div>'
+    // RH15 · issue 203 (5): mês liberado mostra o congelado (o mesmo do documento assinado); a batida que chegou depois fica à parte
+    + (E.congelado ? '<p class="nota"><b>Mês liberado' + (E.congelado.em ? ' em ' + esc(dataBR(String(E.congelado.em).slice(0, 10))) : '') + ': este é o espelho congelado</b> (o mesmo do documento assinado).'
+        + ((E.congelado.batidas_depois || []).length ? ' <b class="ptMenos">Chegou batida depois de liberar (' + E.congelado.batidas_depois.map(esc).join(', ')
+          + '): ela não conta até reabrir o mês em Fechamento.</b>' : '') + '</p>' : '')
     + '<div class="ptCards">'
     + cartao('Trabalhadas', ptHm(T.feitos_min))
     + cartao('Carga dos dias úteis', ptHm(T.carga_min))
@@ -5827,7 +5832,7 @@ function ptEspelhoDesenhar(){
       + '<td>' + (temTf ? '<button class="btn mini" type="button" data-fotos="' + esc(d.dia) + '" aria-label="Ver fotos e locais do dia">📷</button>' : '') + '</td>'
       + '<td class="ptDiaC"><b>' + ptDia(d.dia) + '</b> <small>' + PT_SEM[Number(d.sem)] + '</small></td><td class="ptBats">'
       + bats.map(b => '<i class="ptB ' + ((PT_ORIGEM[b.origem] || {}).cls || 'ptO') + '"'
-          + (b.motivo ? ' title="' + esc(b.motivo) + '"' : '') + '>' + esc(b.h) + (b.offline ? ' OFF' : '') + '</i>').join('')
+          + (b.motivo ? ' title="' + esc(b.motivo) + '"' : (b.outro_dia ? ' title="do dia seguinte: fecha a jornada que passou da meia-noite"' : '')) + '>' + esc(b.h) + (b.outro_dia ? ' (+1)' : '') + (b.offline ? ' OFF' : '') + '</i>').join('')
       + peds.filter(x => x.tipo === 'esqueci' && (x.status === 'pendente' || x.status === 'aguardando_funcionario'))
           .map(x => '<i class="ptB ptP" title="' + esc(x.texto_final) + '">' + esc(x.hora) + '</i>').join('')
       + (!d.futuro ? '<button class="btn mini ptMais1" type="button" data-incl="' + esc(d.dia) + '" aria-label="Incluir batida em ' + ptDia(d.dia) + '">+</button>' : '')
@@ -5862,7 +5867,7 @@ const PT_PTIPO = { esqueci: 'Esqueci de bater', justificar: 'Justificativa', ate
 // RH5 · o cálculo do dia (606)
 const PT_TDIA = { feriado: 'feriado', dispensa: 'dispensa dada pela Engetap', folga_banco: 'folga a negociar', domingo: 'domingo' };
 const PT_ALERTA = { mais_10h: 'mais de 10h', mais_2h_extra: 'mais de 2h a mais (art. 59)', almoco_curto: 'almoço menor que 1h',
-  almoco_quase: 'almoço quase 1h (55 a 59 min)', almoco_longo: 'almoço maior que 2h', sem_intervalo_6h: 'mais de 6h seguidas sem intervalo',
+  almoco_quase: 'almoço quase 1h (55 a 59 min)', almoco_longo: 'almoço maior que 2h', sem_intervalo_6h: 'mais de 6h seguidas sem intervalo', sem_intervalo_15: 'de 4h a 6h sem os 15 min de intervalo (art. 71 §1º)',
   descanso_11h: 'menos de 11h de descanso (art. 66)', batida_faltando: 'batida faltando', falta: 'falta', trabalhou_na_folga: 'trabalhou no dia em que escolheu folgar' };
 /** RH9 · item #7 da lista: a célula "Banco" do dia — o acumulado depois do dia (615), e as linhas
  *  "venceu" (lote com mais de 6 meses, pago com 50%) e "pago na folha" (no último dia do mês). */
@@ -6306,7 +6311,7 @@ function ptGovSecao(GV){
   const ok = t => GV.filter(p => (p[t] || {}).situacao === 'aceito').length;
   return '<h3 class="ptH3">Documentos do gov.br</h3>'
     + '<p class="nota">Cada CLT baixa no TapField o acordo de banco de horas e o termo de adesão já preenchidos, assina no gov.br e envia de volta. '
-    + 'Confira e aceite: a data da assinatura entra sozinha em "Acordo de banco" e em "Orientação do almoço". Prazo: 30/11. '
+    + 'Confira e aceite: a data da assinatura entra sozinha em "Acordo de banco" e em "Orientação do almoço". Prazo: 30 dias depois da admissão (quem já estava: 30/11/2026). '
     + 'Acordos aceitos: <b>' + ok('acordo') + ' de ' + GV.length + '</b> · termos de adesão aceitos: <b>' + ok('adesao') + ' de ' + GV.length + '</b>.</p>'
     + '<div class="rhfdWrap"><table class="tbl ptTab"><thead><tr><th>Pessoa</th><th>Acordo de banco de horas</th><th>Termo de adesão</th></tr></thead><tbody>'
     + GV.map(p => '<tr><td><b>' + esc(p.nome) + '</b></td><td>' + ptGovCel(p, 'acordo') + '</td><td>' + ptGovCel(p, 'adesao') + '</td></tr>').join('')
@@ -6393,7 +6398,7 @@ async function ptFechamento(corpo){
     + (abertos ? '<button class="btn" type="button" id="pfTodos">Liberar os ' + abertos + ' que faltam (vale a intenção)</button>' : '')
     + (L.signatario && semEmpresa.length ? '<button class="btn pri" type="button" id="pfEmp">Assinar pela empresa (' + semEmpresa.length + ')</button>' : '') + '</div>'
     + '<p class="nota">Prazos: intenção do funcionário até <b>' + ptDataBR(Z.intencao_ate) + '</b> · resumo para o contador no 2º dia útil (' + ptDataBR(Z.resumo_em) + ') · '
-    + 'horas pagas lançadas até <b>' + ptDataBR(Z.pagas_ate) + '</b> (sem lançamento, vale a intenção e o mês libera sozinho) · assinatura até <b>' + ptDataBR(Z.assinar_ate)
+    + 'horas pagas lançadas até <b>' + ptDataBR(Z.pagas_ate) + '</b> (sem lançamento, vale a intenção e o mês libera sozinho, menos “até o limite do IR”, que espera o número do contador) · assinatura até <b>' + ptDataBR(Z.assinar_ate)
     + '</b> (5º dia útil). Liberar congela o mês: as batidas e os ajustes dele travam até alguém reabrir. Quem assina pela empresa: <b>' + esc(L.signatario_nome || '—') + '</b>. '
     + 'O sistema não guarda salário nem calcula IR: quantas horas pagar é do contador. Lote vencido é pago com 50% mesmo acima do limite.</p>'
     + '<div class="rhfdWrap"><table class="tbl ptTab ptFech"><thead><tr><th>Pessoa</th><th>Situação</th><th class="num">Banco no fim do mês</th><th>Intenção</th>'
@@ -6402,13 +6407,24 @@ async function ptFechamento(corpo){
     const st = PT_FST[p.situacao] || [p.situacao, ''], C = p.calculo || {}, M = p.mes || {};
     const intTxt = !p.acordo ? '<span class="ptSem">sem acordo</span>' : p.intencao ? esc(PT_INT[p.intencao] + (p.intencao === 'horas' ? ptHm(p.intencao_min) : ''))
       : '<span class="ptSem">' + (hoje <= Z.intencao_ate ? 'ainda não escolheu' : 'não escolheu: banco') + '</span>';
+    // RH15 · issue 139: quantidade de horas (sem o teto de 23:59 do campo de hora); vazio nunca vira 0
+    const pagIni = p.pagas_min !== null && p.pagas_min !== undefined && p.pagas_origem === 'escritorio' ? Number(p.pagas_min) : p.intencao === 'horas' ? Number(p.intencao_min) : null;
+    const dispo = Number(p.disponivel_min ?? p.positivo_min) || 0, restoMin = dispo % 60;
     const pagas = p.situacao === 'aberto' && p.acordo
-      ? '<input type="time" class="pfPag" data-u="' + esc(p.usuario_id) + '" step="1800" value="' + (p.intencao === 'horas' ? ptHm(p.intencao_min) : '00:00') + '" aria-label="Horas pagas de ' + esc(p.nome) + '">'
-        + ' <button class="btn mini pri" type="button" data-lanc="' + esc(p.usuario_id) + '">Lançar e liberar</button>'
+      ? '<span class="pfPagW"><input type="number" class="pfPagH" data-u="' + esc(p.usuario_id) + '" min="0" step="1" inputmode="numeric" style="width:64px" value="'
+          + (pagIni === null ? '' : Math.floor(pagIni / 60)) + '" aria-label="Horas pagas de ' + esc(p.nome) + '"> h <select class="pfPagM" data-u="' + esc(p.usuario_id) + '" aria-label="Minutos">'
+          + [0, 30].concat(restoMin && restoMin !== 30 ? [restoMin] : []).map(m => '<option value="' + m + '"' + (pagIni !== null && pagIni % 60 === m ? ' selected' : '') + '>'
+          + String(m).padStart(2, '0') + '</option>').join('') + '</select> min</span>'
+        + (p.pagas_origem === 'escritorio' && p.pagas_min !== null && p.pagas_min !== undefined ? '<br><small>lançado antes: ' + ptHm(p.pagas_min) + '</small>' : '')
+        + (p.espera_numero ? '<br><small class="ptMenos">escolheu “até o limite do IR”: lance o número do contador (não libera sozinho)</small>' : '')
+        + '<br><button class="btn mini pri" type="button" data-lanc="' + esc(p.usuario_id) + '">Lançar e liberar</button>'
+        + (p.intencao !== 'limite_ir' ? ' <button class="btn mini" type="button" data-lanc="' + esc(p.usuario_id) + '" data-esc="1">Valer a escolha do funcionário</button>' : '')
       : p.situacao === 'aberto' ? '<button class="btn mini pri" type="button" data-lanc="' + esc(p.usuario_id) + '" data-zero="1">Liberar</button>'
       : p.situacao === 'em_andamento' ? '—' : ptHm(C.pagas_efetivas_min || 0) + (p.pagas_origem === 'intencao' ? ' <small>(pela intenção)</small>' : p.pagas_por ? ' <small>por ' + esc(p.pagas_por) + '</small>' : '');
     const extras = [Number(M.vencido) ? 'vencido ' + ptHm(M.vencido) + ' (50%)' : '', !p.acordo && Number(M.sem_acordo_mais) ? 'a mais ' + ptHm(M.sem_acordo_mais) + ' (50%)' : '',
-      Number(C.extra100_pagar_min) ? '100%: ' + ptHm(C.extra100_pagar_min) : ''].filter(Boolean).join(' · ');
+      Number(C.extra100_pagar_min) ? '100%: ' + ptHm(C.extra100_pagar_min) : '',
+      Number(p.extra100_anteriores_min) ? 'inclui 100% de mês anterior: ' + ptHm(p.extra100_anteriores_min) + ' (folga não tirada depois de liberar)' : '',
+      Number(p.dias_impares) ? p.dias_impares + (Number(p.dias_impares) === 1 ? ' dia' : ' dias') + ' com batida faltando' : ''].filter(Boolean).join(' · ');
     const ass = ['aberto', 'em_andamento'].includes(p.situacao) ? '—'
       : (p.assinado_em ? '✓ funcionário ' + ptDataBR(String(p.assinado_em).slice(0, 10)) + ' (' + (p.assinado_metodo === 'digital' ? 'digital' : 'PIN') + (p.assinado_tarde ? ', depois do prazo' : '') + ')' : '<span class="ptSem">funcionário não assinou</span>')
         + '<br>' + (p.empresa_em ? '✓ empresa ' + ptDataBR(String(p.empresa_em).slice(0, 10)) : '<span class="ptSem">empresa não assinou</span>');
@@ -6418,8 +6434,9 @@ async function ptFechamento(corpo){
     if (!['aberto', 'em_andamento'].includes(p.situacao)) acoes.push('<button class="btn mini" type="button" data-pdfa="' + esc(p.usuario_id) + '">PDF assinado</button>', '<button class="btn mini" type="button" data-reab="' + esc(p.usuario_id) + '">Reabrir</button>');
     h += '<tr><td><b>' + esc(p.nome) + '</b>' + (p.funcao ? '<br><small>' + esc(p.funcao) + '</small>' : '') + '</td>'
       + '<td><span class="ptSt ' + st[1] + '">' + esc(st[0]) + '</span></td>'
-      + '<td class="num">' + (p.acordo ? ptSaldo(C.banco_fim_min ?? p.saldo_min) + (p.situacao === 'aberto' ? '<br><small>disponível ' + ptHm(p.positivo_min || 0) + '</small>' : '') : '—')
-      + (extras ? '<br><small>' + esc(extras) + '</small>' : '') + '</td>'
+      + '<td class="num">' + (p.acordo ? ptSaldo(C.banco_fim_min ?? p.saldo_min) + (p.situacao === 'aberto' ? '<br><small>disponível ' + ptHm(p.disponivel_min ?? p.positivo_min ?? 0) + '</small>' : '') : '—')
+      + (extras ? '<br><small>' + esc(extras) + '</small>' : '')
+      + (Number(p.batidas_depois) ? '<br><small class="ptMenos">chegou ' + p.batidas_depois + (Number(p.batidas_depois) === 1 ? ' batida' : ' batidas') + ' depois de liberar: não conta até reabrir</small>' : '') + '</td>'
       + '<td>' + intTxt + '</td><td>' + pagas + '</td><td><small>' + ass + '</small></td><td class="ptAcoes">' + acoes.join(' ') + '</td></tr>';
     (p.contestacoes || []).forEach(c => {
       h += '<tr class="ptCont"><td></td><td colspan="6"><b>Discordo</b> (' + ptDataBR(String(c.em).slice(0, 10)) + '): “' + esc(c.texto) + '”'
@@ -6432,17 +6449,36 @@ async function ptFechamento(corpo){
   document.getElementById('pfCsv').addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, () => ptResumoContador('csv')));
   document.getElementById('pfPdfC').addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, () => ptResumoContador('pdf')));
   const bT = document.getElementById('pfTodos');
-  if (bT) bT.addEventListener('click', () => abrirModal('Liberar os que faltam', '<p>Os ' + abertos + ' que ainda não têm as horas pagas lançadas vão ser liberados valendo a intenção de cada um: '
-      + '“em dinheiro: X horas” paga essas horas (até o que houver no banco); “até o limite do IR” sem o número do contador e “tudo no banco” ficam no banco. O mês congela e trava os ajustes.</p>',
+  const espera = P.filter(p => p.situacao === 'aberto' && p.espera_numero), impTodos = P.filter(p => p.situacao === 'aberto' && !p.espera_numero).reduce((t, p) => t + (Number(p.dias_impares) || 0), 0);
+  if (bT) bT.addEventListener('click', () => abrirModal('Liberar os que faltam', '<p>Os que ainda não têm as horas pagas lançadas vão ser liberados valendo a intenção de cada um: '
+      + '“em dinheiro: X horas” paga essas horas (até o que houver no banco); “tudo no banco” e sem escolha ficam no banco. O mês congela e trava os ajustes.</p>'
+      + (espera.length ? '<p><b>Ficam de fora</b> (escolheram “até o limite do IR” e esperam o número do contador): ' + espera.map(p => esc(p.nome)).join(', ') + '.</p>' : '')
+      + (impTodos ? '<p class="ptMenos"><b>Há ' + impTodos + (impTodos === 1 ? ' dia' : ' dias') + ' com batida faltando.</b> Enquanto o ajuste não é aprovado, cada um entra no banco com a carga do dia a menos. Liberar mesmo assim?</p>' : ''),
     [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Liberar', pri: true, onClick: async () => {
       try{ const n = await rpc('tf_ponto_fech_liberar_todos', { p_mes: PT.fmes }); fecharModal(); toast(n + ' liberado(s).'); ptFechamento(corpo); }catch(e){ toast(e.message, 'err'); } } }]));
   corpo.querySelectorAll('[data-lanc]').forEach(b => b.addEventListener('click', () => {
-    const u = b.dataset.lanc, inp = corpo.querySelector('.pfPag[data-u="' + u + '"]'), p = P.find(x => x.usuario_id === u);
-    const [hh, mm] = String(inp ? inp.value : '00:00').split(':').map(Number), min = (hh || 0) * 60 + (mm || 0);
-    abrirModal('Lançar e liberar · ' + p.nome, '<p>' + (inp ? 'Horas pagas do banco: <b>' + ptHm(min) + '</b> (o que o contador pagou). Saem dos lotes mais antigos. ' : '')
-      + 'Depois de liberar, o mês congela: ' + esc(p.nome.split(' ')[0]) + ' confere e assina no celular até ' + ptDataBR(Z.assinar_ate) + ', e os ajustes do mês travam.</p>',
-      [{ label: 'Cancelar', onClick: fecharModal }, { label: 'Lançar e liberar', pri: true, onClick: async () => {
-        try{ await rpc('tf_ponto_fech_lancar', { p_usuario: u, p_mes: PT.fmes, p_pagas_min: min }); fecharModal(); toast('Liberado para assinar.'); ptFechamento(corpo); }
+    const u = b.dataset.lanc, p = P.find(x => x.usuario_id === u), escolha = b.dataset.esc === '1', zero = b.dataset.zero === '1';
+    const iH = corpo.querySelector('.pfPagH[data-u="' + u + '"]'), iM = corpo.querySelector('.pfPagM[data-u="' + u + '"]');
+    let min = 0;
+    if (iH && !escolha){
+      // RH15 · issue 139: campo vazio não vira 0 (antes, mais de 23:59 ficava vazio e gravava 0)
+      if (String(iH.value).trim() === '' || !/^\d+$/.test(String(iH.value).trim())){ toast('Informe as horas pagas (0 se nada foi pago do banco) ou use “Valer a escolha do funcionário”.', 'err'); iH.focus(); return; }
+      min = Number(iH.value) * 60 + (Number(iM && iM.value) || 0);
+    }
+    const dispo = Number(p.disponivel_min ?? p.positivo_min) || 0;
+    if (iH && !escolha && min > dispo){ toast('O banco tem só ' + ptHm(dispo) + ' no fim do mês: não dá para pagar mais que isso.', 'err'); return; }
+    const intTxt = p.intencao ? PT_INT[p.intencao] + (p.intencao === 'horas' ? ptHm(p.intencao_min) : '') : 'tudo no banco (sem escolha)';
+    const imp = Number(p.dias_impares) || 0;
+    abrirModal((escolha ? 'Valer a escolha · ' : zero ? 'Liberar · ' : 'Lançar e liberar · ') + p.nome, '<p>'
+      + (iH && !escolha ? 'Pagar <b>' + ptHm(min) + '</b> de <b>' + ptHm(dispo) + '</b> do banco (o que o contador pagou). Saem dos lotes mais antigos. ' : '')
+      + (escolha ? 'Vale a escolha de ' + esc(p.nome.split(' ')[0]) + ': <b>' + esc(intTxt) + '</b>' + (p.intencao === 'horas' ? ' (até o que houver no banco)' : '') + '. ' : '')
+      + 'Depois de liberar, o mês congela: ' + esc(p.nome.split(' ')[0]) + ' confere e assina no celular até ' + ptDataBR(Z.assinar_ate) + ', e os ajustes do mês travam.</p>'
+      + (imp ? '<p class="ptMenos"><b>' + imp + (imp === 1 ? ' dia está' : ' dias estão') + ' com batida faltando.</b> Enquanto o ajuste não é aprovado, cada um entra no banco com a carga do dia a menos. Liberar mesmo assim?</p>' : ''),
+      [{ label: 'Cancelar', onClick: fecharModal }, { label: escolha ? 'Valer a escolha e liberar' : zero ? 'Liberar' : 'Lançar e liberar', pri: true, onClick: async () => {
+        try{
+          if (escolha) await rpc('tf_ponto_fech_liberar', { p_usuario: u, p_mes: PT.fmes });
+          else await rpc('tf_ponto_fech_lancar', { p_usuario: u, p_mes: PT.fmes, p_pagas_min: min });
+          fecharModal(); toast('Liberado para assinar.'); ptFechamento(corpo); }
         catch(e){ toast(e.message, 'err'); } } }]);
   }));
   corpo.querySelectorAll('[data-cob]').forEach(b => b.addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => {
@@ -6502,8 +6538,8 @@ const PT_RES_COL = [['nome', 'Funcionário'], ['matricula', 'Matrícula'], ['sit
   ['banco_credito_min', 'Banco: crédito no mês'], ['banco_debito_min', 'Banco: débito no mês'], ['banco_fim_min', 'Banco no fim do mês'],
   ['intencao', 'Intenção'], ['he50_banco_pagas_min', 'HE 50% · pagas do banco'], ['he50_vencido_min', 'HE 50% · lote vencido'],
   ['he50_sem_acordo_min', 'HE 50% · sem acordo'], ['almoco_50_min', 'Almoço a pagar (50%)'], ['he100_min', 'HE 100% (domingo/feriado)'],
-  ['he100_folga_pendente_min', '100% com folga pendente'], ['noturno_relogio_min', 'Noturno (relógio)'], ['noturno_reduzido_min', 'Noturno (hora reduzida)'],
-  ['faltas_sem_acordo_min', 'A menos sem acordo (decidir)'], ['faltas_dias', 'Faltas (dias)']];
+  ['he100_anteriores_min', 'HE 100% de meses anteriores (folga não tirada)'], ['he100_folga_pendente_min', '100% com folga pendente'], ['noturno_relogio_min', 'Noturno (relógio)'], ['noturno_reduzido_min', 'Noturno (hora reduzida)'],
+  ['faltas_sem_acordo_min', 'A menos sem acordo (decidir)'], ['faltas_dias_banco', 'Faltas (dias) · já no banco'], ['faltas_dias_decidir', 'Faltas (dias) · decidir']];
 async function ptResumoContador(tipo){
   let R; try{ R = await rpc('tf_ponto_resumo_contador', { p_mes: PT.fmes }); }catch(e){ toast(e.message, 'err'); return; }
   const val = (p, k) => k === 'intencao' ? (p.acordo ? (p.intencao ? PT_INT[p.intencao] + (p.intencao === 'horas' ? ptHm(p.intencao_min) : '') : 'banco') : 'sem acordo')
@@ -6521,7 +6557,7 @@ async function ptResumoContador(tipo){
     const doc = { pageSize: 'A4', pageOrientation: 'landscape', pageMargins: [20, 24, 20, 24], content: [
       { text: (R.empresa || 'Engetap') + ' · Resumo do ponto de ' + ptMesRot(PT.fmes), bold: true, fontSize: 12 },
       { text: 'Horas em hh:mm. HE = hora extra. O banco de horas é por lote (acordo individual, CLT art. 59 §5º); “pagas do banco” é o que o funcionário pediu em dinheiro e o escritório lançou. '
-          + 'Adicional noturno em hora de relógio e em hora reduzida de 52min30s (art. 73 §1º). Gerado em ' + dataBR(String(R.gerado_em).slice(0, 10)) + '.', fontSize: 7.5, color: '#3D4852', margin: [0, 4, 0, 8] },
+          + 'Adicional noturno em hora de relógio e em hora reduzida de 52min30s (art. 73 §1º). Faltas “já no banco”: quem tem acordo de banco já teve a falta descontada do banco (não descontar de novo do salário); “decidir”: sem acordo. Gerado em ' + dataBR(String(R.gerado_em).slice(0, 10)) + '.', fontSize: 7.5, color: '#3D4852', margin: [0, 4, 0, 8] },
       { table: { headerRows: 1, widths: PT_RES_COL.map((c, i) => i === 0 ? 80 : '*'), body }, layout: 'lightHorizontalLines' } ] };
     const blob = await new Promise(ok => pm.createPdf(doc).getBlob(ok));
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome + '.pdf';
