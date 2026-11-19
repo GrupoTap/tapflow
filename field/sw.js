@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S62-T46';   // S195: Field S62 e núcleo N12 (Rodada R4 da auditoria: issues 142, 146, 153, 154, 167 e 189)
+const VERSAO = 'S63-T47';   // S196: Field S63 e núcleo N13 (Rodada R5 da auditoria (padrões de todas as telas))
+// const VERSAO = 'S62-T46';   // S195: Field S62 e núcleo N12 (Rodada R4 da auditoria: issues 142, 146, 153, 154, 167 e 189)
 // const VERSAO = 'S61-T45';   // S194: Field S61 (R3 da auditoria: o prazo do gov.br por pessoa, o espelho congelado, a saída da madrugada; 617)
 // const VERSAO = 'S60-T44';   // S191: Field S60 (os parâmetros do Drive pela função tf_drive_parametros, 215)
 // const VERSAO = 'S59-T43';   // S175: TapDoc 31 (issues 48, 49, 50, 51 e 53: toques que apagavam respostas, a pressão sem casas quebradas, mensagens, acessórios e ajustes pequenos; sem SQL)
@@ -69,9 +70,9 @@ const ESSENCIAIS = [
   // IDÊNTICO ao do <script> do index.html, com o ?v= (c.match compara a consulta inteira).
   // Sem isto o Field sem sinal abriria sem o núcleo. Trocou o ?v= no index.html? Troque aqui também.
   // S34: N2 (fila de envios e utilitários)
-  '../nucleo/nucleo.js?v=N12',
-  '../nucleo/nucleo.css?v=N12',
-  '../nucleo/config.js?v=N12',
+  '../nucleo/nucleo.js?v=N13',
+  '../nucleo/nucleo.css?v=N13',
+  '../nucleo/config.js?v=N13',
   // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo"
   '../nucleo/modulos.js?v=M4',
   // S35 · TapDoc 1: a coleta da inspeção (página própria, abre sem sinal)

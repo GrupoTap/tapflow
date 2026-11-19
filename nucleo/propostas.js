@@ -1,5 +1,5 @@
 /* ============================================================================
- * nucleo/propostas.js — PR1 · as PROPOSTAS, comuns ao Manager (aba Proposta da OS)
+ * nucleo/propostas.js — PR2 · as PROPOSTAS, comuns ao Manager (aba Proposta da OS)
  * e ao TapCRM (crm/, ficha do negócio)
  * ----------------------------------------------------------------------------
  * Decisão do Bruno (C2, 03/11/2026): as propostas ficam num arquivo só, para
@@ -18,6 +18,11 @@
  * Carregar ANTES do <script> da página, com ?v= igual ao do sw.js da raiz.
  * ========================================================================== */
 'use strict';
+
+/** PR2 (S196, issue 128): a situação da proposta com o nome que a pessoa lê (o banco guarda o nome interno). */
+const ROTULO_SITUACAO_PROPOSTA = { rascunho:'Rascunho', emitida:'Emitida', enviada:'Enviada', aprovada:'Aprovada',
+  aprovada_parcial:'Aprovada em parte', reprovada:'Não aprovada', vencida:'Vencida' };
+function rotuloSituacaoProposta(s){ return ROTULO_SITUACAO_PROPOSTA[s] || String(s || ''); }
 
 let _jszip = null;
 
@@ -62,12 +67,10 @@ async function baixarModelo(path){
   let r = await pega();
   if (r.status === 401 && sessao.refresh && await renovarToken()) r = await pega();
   if (r.status === 400 || r.status === 404)
-    throw new Error('O modelo "' + path + '" não está no bucket `modelos`. '
-      + 'Suba o arquivo pelo painel do Supabase (Storage → modelos).');
+    throw new Error('O modelo de proposta não foi encontrado no sistema. Avise o administrador.');
   if (r.status === 403)
-    throw new Error('Sem permissão para ler o bucket `modelos`. '
-      + 'Falta a política de leitura — veja o fim do 23_gerador_modelos.sql.');
-  if (!r.ok) throw new Error('Não consegui baixar o modelo (HTTP ' + r.status + ').');
+    throw new Error('Sem permissão para abrir os modelos de proposta: ' + 'falta uma atualização do sistema: avise o administrador.');
+  if (!r.ok) throw new Error('Não consegui baixar o modelo de proposta. Tente de novo.');
   const b = await r.arrayBuffer();
   _modelosCache[path] = b;
   return b;
@@ -749,7 +752,7 @@ function htmlAnexoGerador(est, idChk){
   if (a === undefined) return '<p class="dica" style="margin:0 0 14px">Conferindo os vasos da proposta…</p>';
   if (!a) return '';
   if (a.erro) return '<div class="aviso" style="margin:0 0 14px">A tabela de vasos não pôde ser montada: '
-    + esc(a.erro) + (/tf_anexo_vasos/.test(a.erro) ? ' — falta rodar o <b>58_ajustes_s38.sql</b> no Supabase.' : '')
+    + esc(a.erro) + (/tf_anexo_vasos/.test(a.erro) ? ' — falta uma atualização do sistema: avise o administrador.' : '')
     + ' O documento sai sem ele.</div>';
   const ls = a.linhas || [];
   if (!ls.length) return '<p class="dica" style="margin:0 0 14px">Sem a tabela de vasos: nenhum vaso desta '
@@ -917,7 +920,7 @@ function pintarPlanosGerador(el, est, idSel, desligado){
   const pl = est.planosPar;
   if (!pl){
     el.innerHTML = '<div class="aviso" style="margin:0 0 14px">Este modelo tem os <b>três planos</b>, mas os '
-      + 'parâmetros não vieram (Configurações › Planos). Falta rodar o <b>51_ajustes_s29.sql</b>? '
+      + 'parâmetros não vieram (TapCRM › Configurações › Planos; pode ser que falta uma atualização do sistema: avise o administrador). '
       + 'Sem eles, o documento sai só com a primeira tabela preenchida.</div>';
     return;
   }
@@ -925,7 +928,7 @@ function pintarPlanosGerador(el, est, idSel, desligado){
   const P = montarPlanos(est.itens, est.idxPlano, pl);
   if (!P){
     el.innerHTML = '<div class="aviso" style="margin:0 0 14px">Os itens vieram sem os números que a conta '
-      + 'dos planos precisa. Falta rodar o <b>51_ajustes_s29.sql</b>.</div>';
+      + 'dos planos precisa: falta uma atualização do sistema: avise o administrador.</div>';
     return;
   }
   const qtd = est.itens[est.idxPlano].qtd;
@@ -1166,7 +1169,7 @@ async function modalAprovacao(ctx, tipoInicial, prForcada){
   if (!pr.enviada_em){
     abrirModal(MSG_ENVIO_PRIMEIRO,
       '<p>A proposta <b>' + esc(rotuloProposta(pr.numero, pr.versao)) + '</b> ainda não tem o envio '
-      + 'registrado no TapFlow.</p><p class="nota">A resposta do cliente só é registrada depois do envio: '
+      + 'registrado no TapHub.</p><p class="nota">A resposta do cliente só é registrada depois do envio: '
       + 'quem mandou a proposta (por e-mail, WhatsApp…) registra o envio assim que manda.</p>',
       [{ label:'Fechar', onClick: fecharModal },
        { label:'Registrar o envio agora', pri:true, onClick: () => { fecharModal(); modalEnvioProposta(ctx, pr); } }]);

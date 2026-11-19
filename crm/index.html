@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapCRM 6 · Comercial</title>
+<title>TapCRM 7 · Comercial</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2302,13 +2302,13 @@ th.num .tfThFixo{text-align:right}
 <!-- S63 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js.
      S76 · ?v=N2, igual ao hub e ao Field (o N2 aceita tudo do N1: o Manager já rodava o N2 com o
      endereço ?v=N1). O sw.js da raiz guarda estes três endereços: trocou aqui, troca lá (é do central). -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N12">
-<script src="../nucleo/config.js?v=N12"></script>
-<script src="../nucleo/nucleo.js?v=N12"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N13">
+<script src="../nucleo/config.js?v=N13"></script>
+<script src="../nucleo/nucleo.js?v=N13"></script>
 <!-- S82 · H10: a tabela única dos módulos (cor, miniatura, menu "Trocar de módulo"). Mudou o ?v=? Troque no sw.js da raiz também (é do central). -->
 <script src="../nucleo/modulos.js?v=M4"></script>
 <!-- CRM1 · C2: as propostas (comuns com o Manager). Mudou o ?v=? Troque no sw.js da raiz também. -->
-<script src="../nucleo/propostas.js?v=PR1"></script>
+<script src="../nucleo/propostas.js?v=PR2"></script>
 </head>
 <body data-app="tapcrm">
 
@@ -2395,7 +2395,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'CRM6';   // TapCRM 6 (S159): issue 11 — com proposta aprovada esperando OS, a aba Ações não abre OS (manda para a aba Proposta); o banco (701) também recusa
+const APP_VERSION = 'CRM7';   // TapCRM 7 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 126 (o motivo de trocar/desligar o cliente vai para o histórico) e 128 (textos, situação da proposta com o nome que se lê, o exemplo sem empresa de verdade, Sair pela janela); propostas.js PR2; núcleo N13
+// const APP_VERSION = 'CRM6';   // TapCRM 6 (S159): issue 11 — com proposta aprovada esperando OS, a aba Ações não abre OS (manda para a aba Proposta); o banco (701) também recusa
 // const APP_VERSION = 'CRM5';   // TapCRM 5 (S139): item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
 // const APP_VERSION = 'CRM4';   // TapCRM 4 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const APP_VERSION = 'CRM3';   // TapCRM 3 (S134): os Cadastros abrem no TapHub (cadastros/) e "Configurações" do comercial (Planos e Serviços do negócio, só admin), vindas do Manager (K3/K6)
@@ -3110,7 +3111,7 @@ function chipLeadSemContato(dias){
   const d = Math.max(0, Number(dias || 0));
   const m = (PEND && PEND.comercial && PEND.comercial.motivos && PEND.comercial.motivos.lead_sem_contato) || {};
   const dica = 'Lead sem nenhum contato registrado' + (m.dias ? ' há ' + m.dias + ' dias ou mais' : '')
-    + ' (prazo em Configurações › Alertas).\nPróximo passo: fazer o primeiro contato e anotar no Histórico.';
+    + ' (prazo em TapFlow › Configurações › Alertas do menu).\nPróximo passo: fazer o primeiro contato e anotar no Histórico.';
   return '<span class="mini dsi fucsia" title="' + esc(dica) + '">' + d + (d === 1 ? ' dia' : ' dias') + ' sem contato</span>';
 }
 
@@ -3481,8 +3482,7 @@ async function negAgenda(n, b){
     // tinham equipe, seguem aparecendo — só não se cria mais visita nova assim.
     + '<div class="campo"><label for="agL">Local</label><input id="agL" type="text"></div>'
     + '<button class="btn pri" id="agOk" style="width:100%">Agendar</button>'
-    + '<p class="nota">O compromisso fica preso a este negócio. A agenda do Google continua '
-    + 'sendo a do celular — o espelho para lá entra numa próxima rodada.</p>'
+    + '<p class="nota">O compromisso fica preso a este negócio. Ele não vai para a agenda do Google do celular.</p>'
     + '<div class="secTit">Já agendado</div><div id="agLista"></div>';
 
   ligarDuracaoVisita('agDur');
@@ -3600,7 +3600,7 @@ async function negPropostas(n, b){
       +  '<th>Itens</th><th>Documento</th><th></th></tr></thead><tbody>'
       + props.map(p => '<tr>'
           + '<td class="mono">' + esc(p.numero_exibicao || rotuloProposta(p.numero, p.versao)) + '</td>'
-          + '<td>' + esc(p.status) + (p.os ? ' · OS ' + esc(p.os) : '') + '</td>'
+          + '<td>' + esc(rotuloSituacaoProposta(p.status)) + (p.os ? ' · OS ' + esc(p.os) : '') + '</td>'
           + '<td class="num">' + BRL(p.valor_total) + '</td>'
           + '<td class="num">' + p.itens + '</td>'
           // S28: "Registrar envio" continua aparecendo sem documento (a proposta
@@ -3641,8 +3641,8 @@ async function negPropostas(n, b){
 
   // ── montar uma nova ──
   h += '<div class="secTit">Montar uma proposta</div>'
-    +  '<p class="nota">A proposta é feita no sistema de sempre; aqui se registra o número '
-    +  'e o que foi ofertado. É esse escopo que a resposta do cliente aplica, item a item.</p>'
+    +  '<p class="nota">A proposta é montada e gerada aqui: o número, o que foi ofertado e o documento. '
+    +  'É esse escopo que a resposta do cliente aplica, item a item.</p>'
     +  '<div id="npMonta"></div>';
 
   b.innerHTML = h;
@@ -3748,8 +3748,7 @@ async function montarGeradorNegocio(caixa, n, props){
   try{ modelos = await listarModelos(); }
   catch(e){ caixa.innerHTML = '<p class="dica">Não consegui ler os modelos: ' + esc(e.message) + '</p>'; return; }
   if (!modelos.length){
-    caixa.innerHTML = '<p class="dica">Nenhum modelo cadastrado. Rode o <b>23_gerador_modelos.sql</b> '
-      + 'e suba os .docx no bucket <b>modelos</b>.</p>';
+    caixa.innerHTML = '<p class="dica">Nenhum modelo de proposta cadastrado: falta uma atualização do sistema: avise o administrador.</p>';
     return;
   }
   sel.innerHTML = modelos.map(m => '<option value="' + m.id + '">' + esc(m.titulo) + '</option>').join('');
@@ -4211,7 +4210,7 @@ async function montarProposta(n, props){
 
   document.getElementById('npAddPlano').addEventListener('click', async () => {
     const pl = await carregarPlanos(true);
-    if (!pl){ toast('Os parâmetros dos planos não vieram — falta rodar o 51_ajustes_s29.sql?','err'); return; }
+    if (!pl){ toast('Os parâmetros dos planos não vieram. Pode ser que falta uma atualização do sistema: avise o administrador.','err'); return; }
     const desc = descricaoLinhaPlano(pl);
     if (_propItens.some(i => norm(i.descricao).trim() === norm(desc).trim())){
       toast('A linha do plano já está na proposta.','err'); return;
@@ -4890,7 +4889,7 @@ async function buscarTrocaCliente(n, termo){
           + 'texto que têm (a proposta congela o que foi ofertado), mas perdem o vínculo com '
           + 'os equipamentos do cliente anterior — eles não são desta empresa.</p>'
           + '<div class="campo"><label for="tcMot">Por quê? (opcional, vai para o histórico)</label>'
-          + '<input id="tcMot" type="text" placeholder="Ex.: conferi o CNPJ, é a Bekaert"></div>',
+          + '<input id="tcMot" type="text" placeholder="Ex.: conferi o CNPJ, é a Metalúrgica Exemplo"></div>',
           'Trocar', true, 'tcMot');
         if (!ok) return;
         await definirClienteDoNegocio(n, bt.dataset.troca, ok.texto);
@@ -5005,7 +5004,7 @@ async function negAcoes(n, b){
   const bDR = document.getElementById('ngDesfRetro');
   if (bDR) bDR.addEventListener('click', () => abrirModal('Desfazer o lançamento de ' + (n.numero_exibicao || n.numero),
       '<p>O negócio e a proposta lançados somem do quadro. O registro fica no livro das exclusões '
-    + '(Configurações › Exclusões), com o número da proposta.</p>'
+    + '(TapHub › Cadastros › Configurações › Exclusões), com o número da proposta.</p>'
     + '<div class="campo"><label for="drM">Por quê?</label><input id="drM" type="text" autocomplete="off" '
     + 'name="drm_nofill" placeholder="ex.: número digitado errado"></div>',
     [{ label:'Cancelar', onClick: fecharModal },
@@ -5166,7 +5165,7 @@ async function formNegocio(){
         + '(Configurações › Serviços do negócio).</div></div>'
       : '<div class="campo"><label for="nnT">O que o cliente quer</label>'
         + '<input id="nnT" type="text" placeholder="Ex.: acessórios NR-13 para a caldeira">'
-        + (SERV_NEG_ERRO ? '<div class="dica aviso">A lista de serviços não veio (falta rodar o 61_ajustes_s41.sql?) — '
+        + (SERV_NEG_ERRO ? '<div class="dica aviso">A lista de serviços não veio (pode ser que falta uma atualização do sistema: avise o administrador) — '
             + 'por enquanto, texto livre.</div>' : '') + '</div>')
     + '<div class="campo"><label for="nnObs">Observação no card (opcional)</label>'
     + '<input id="nnObs" type="text" maxlength="80" autocomplete="off" name="nno_nofill" '
@@ -5211,7 +5210,7 @@ async function formNegocio(){
     try{
       const extra = selS ? { p_servico_id: selS.value, p_observacao_card: obsNovo || null } : {};
       // sem a lista (banco sem o 61) a observação não tem onde morar — só avisa
-      if (!selS && obsNovo) toast('A observação fica para depois de rodar o 61_ajustes_s41.sql.', 'err');
+      if (!selS && obsNovo) toast('A observação não foi gravada: falta uma atualização do sistema: avise o administrador.', 'err');
       const r = DEMO ? {numero:'NEG-DEMO'} : await rpc('tf_criar_negocio', Object.assign({
         p_titulo: t || null,
         p_cliente_id: selC.value || null,
@@ -5624,8 +5623,8 @@ function ligarBusca(){
   });
 }
 
-function sairDaConta(){
-  if (!confirm('Sair da conta?')) return;
+async function sairDaConta(){
+  if (!await confirmar('Sair da conta?', '<p>Para voltar, entre de novo com e-mail e senha.</p>', 'Sair')) return;
   try{ localStorage.removeItem('tf_sessao'); localStorage.removeItem('tapflow_sessao'); }catch(e){}
   if (NO_SERVIDOR){ location.href = '../'; return; }
   location.reload();
@@ -5742,7 +5741,7 @@ function pintarConfigCRM(){
   const board = document.getElementById('board');
   if (!sessao.admin){
     board.innerHTML = '<div class="painel"><h3>Configurações</h3>'
-      + '<p class="nota">Esta área é do perfil admin. Fale com o Fernando ou o Bruno.</p></div>';
+      + '<p class="nota">Esta área é do perfil admin. Fale com o administrador.</p></div>';
     return;
   }
   if (!['planos','servneg'].includes(abaCfgCRM)) abaCfgCRM = 'planos';
@@ -5773,7 +5772,7 @@ async function cfgServicosNegocio(){
   c.innerHTML = '<p class="nota">Carregando…</p>';
   await carregarServicosNeg(true);
   if (!SERV_NEG){
-    c.innerHTML = '<div class="aviso">Não deu para ler a lista (falta rodar o <b>61_ajustes_s41.sql</b>?): '
+    c.innerHTML = '<div class="aviso">Não deu para ler a lista (pode ser que falta uma atualização do sistema: avise o administrador): '
       + esc(SERV_NEG_ERRO || '') + '</div>'; return;
   }
   c.innerHTML = '<div class="painel"><h3 style="margin-top:0">Serviços do negócio</h3>'
@@ -5831,7 +5830,7 @@ async function cfgPlanos(){
   if (!pl){
     c.innerHTML = '<div class="painel"><h3>Planos da proposta</h3><div class="aviso"></div></div>';
     c.querySelector('.aviso').textContent = 'Os parâmetros dos planos não vieram'
-      + (erro ? ': ' + erro : '') + ' — falta rodar o 51_ajustes_s29.sql no Supabase.';
+      + (erro ? ': ' + erro : '') + ' — falta uma atualização do sistema: avise o administrador.';
     return;
   }
   const campo = (id, rot, v, dica, extra) => '<div class="campo"><label for="' + id + '">' + rot + '</label>'

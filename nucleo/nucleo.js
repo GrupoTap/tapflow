@@ -1,14 +1,15 @@
 /* ============================================================================
- * TAPHUB · NÚCLEO COMUM — N12 (N7: o celular da empresa; N11: a fila avisa quando o aparelho está sem espaço;
- *   N12: renovar devolve ok/recusado/sem rede; a fila não trava no erro do servidor; os leitores únicos de valor e de .xlsx)
+ * TAPHUB · NÚCLEO COMUM — N13 (N7: o celular da empresa; N11: a fila avisa quando o aparelho está sem espaço;
+ *   N12: renovar devolve ok/recusado/sem rede; a fila não trava no erro do servidor; os leitores únicos de valor e de .xlsx;
+ *   N13: a janela devolve o campo digitado e não fecha por engano com algo digitado)
  * ----------------------------------------------------------------------------
  * Código que serve a mais de um módulo e por isso NÃO mora dentro de nenhum:
  * sessão, conexão com o banco, PIN e a trava. Regra de negócio nunca entra
  * aqui (fica no módulo e nas funções tf_*). Sem framework, sem build.
  *
  * COMO UM MÓDULO USA (duas linhas no <head> e uma no boot):
- *   <script src="../nucleo/config.js?v=N12"></script>
- *   <script src="../nucleo/nucleo.js?v=N12"></script>
+ *   <script src="../nucleo/config.js?v=N13"></script>
+ *   <script src="../nucleo/nucleo.js?v=N13"></script>
  *   ...
  *   const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
  *   if (g === 'hub') { irParaHub(Nucleo.recado); return; }     // ANTES do iniciar()
@@ -41,7 +42,8 @@
   'use strict';
   if (window.Nucleo && window.Nucleo.versao) return;
 
-  var VERSAO = 'N12';   // N12 (S195): Rodada R4 da auditoria — issues 142, 146, 153, 154, 167 e 189 (renovar com 3 respostas, fila que não trava, aviso fixo, relato com rascunho, janela no X = Cancelar, destraves só apagados depois de enviados, storage.pedir, util.lerValor, planilha.lerXLSX)
+  var VERSAO = 'N13';   // N13 (S196): Rodada R5 da auditoria — issues 108, 109, 126, 144, 169 (a janela devolve o campo digitado e confere o obrigatório/CONFIRMO; com algo digitado não fecha clicando fora e o X/Esc pede 2º toque; o Esc fecha a janela em todas as páginas)
+  // var VERSAO = 'N12';   // N12 (S195): Rodada R4 da auditoria — issues 142, 146, 153, 154, 167 e 189 (renovar com 3 respostas, fila que não trava, aviso fixo, relato com rascunho, janela no X = Cancelar, destraves só apagados depois de enviados, storage.pedir, util.lerValor, planilha.lerXLSX)
   // var VERSAO = 'N11';   // N11 (S171): issue 35 — a fila avisa em vermelho quando o aparelho está sem espaço (nada some calado); quem tem dado guardado ajuda a liberar espaço (fila.aoFaltarEspaco)
   // var VERSAO = 'N10';   // N10 (S160): issue 29 — confirmarPessoa({ soDigital:true }): sem o teclado do PIN (aprovar o laudo); Nucleo.temDigital()
   // var VERSAO = 'N9';   // N9 (S157): issue 10 — o acesso vencido ("exp" claim) é renovado antes de enviar a fila e no envio das fotos
@@ -287,7 +289,7 @@
             throw erro('Sua sessão expirou.', 401);
           });
         }
-        if (!r.ok) throw erro((j && (j.message || j.error_description || j.msg || j.hint)) || ('Erro ' + r.status), r.status);
+        if (!r.ok) throw erro((j && (j.message || j.error_description || j.msg || j.hint)) || ('O servidor deu erro (código ' + r.status + '). Tente de novo.'), r.status);
         return j;
       });
     }, function () { throw erroSemSinal(); });
@@ -510,7 +512,7 @@
   }
 
   var MSG_PIN_VENCIDO = 'O PIN provisório venceu (24 horas). Toque em "Esqueci o PIN: pedir um novo".';
-  var MSG_PEDIDO_PIN = 'Pedido enviado ao Bruno e ao Fernando. Quando receber o PIN provisório, digite aqui.';
+  var MSG_PEDIDO_PIN = 'Pedido enviado a quem autoriza os acessos. Quando receber o PIN provisório, digite aqui.';   // N13 (issue 155): sem nomes fixos (quem recebe é a caixa "Autoriza acesso")
   /** N4 · "Esqueci o PIN: pedir um novo" (decisão 2). h = a tela do PIN. */
   function pedirPinNovo(h) {
     h.msg('Enviando o pedido…');
@@ -906,7 +908,7 @@
           if (ssGet('tf_dig_pedido') === '1' || sit.pedido_pendente) return 'nao';
           ssSet('tf_dig_pedido', '1');
           return telaBotoes('Digital em aparelho novo',
-            'Você já usou a digital em outro aparelho. Para cadastrar neste, o Bruno ou o Fernando precisam liberar (troca ou perda de celular).',
+            'Você já usou a digital em outro aparelho. Para cadastrar neste, quem autoriza os acessos precisa liberar (troca ou perda de celular).',
             [{ txt: 'Pedir a liberação', pri: true, fn: function (h, b) {
                 b.disabled = true;
                 rpc('tf_digital_pedir').then(function () { h.fechar('pedido'); toast('Pedido enviado. Quando liberarem, abra "Meus aparelhos e digital".', 'ok'); },
@@ -921,7 +923,7 @@
               cadastrarDigital(s, c, pin).then(function (r) {
                 if (r.status === 'ok') { h.fechar('ok'); toast('Digital cadastrada neste aparelho.', 'ok'); return; }
                 b.disabled = false;
-                h.msg(r.status === 'precisa_autorizacao' ? 'Este aparelho precisa de liberação do Bruno ou do Fernando.'
+                h.msg(r.status === 'precisa_autorizacao' ? 'Este aparelho precisa de liberação de quem autoriza os acessos.'
                       : r.status === 'bloqueado' ? 'PIN travado. Tente mais tarde.' : 'Não deu para cadastrar. Tente de novo.', true);
               }, function (e) { b.disabled = false; h.msg(e.message, true); });
             } },
@@ -967,8 +969,8 @@
         else if (aqui.digital) h += '<p><b>Digital ligada</b> desde ' + esc(quando(aqui.digital_em)) + '. A trava pede a digital; o PIN continua valendo.</p>' +
           '<button type="button" class="tf-bt" data-acao="remover" data-ap="' + esc(aqui.id) + '">Remover a digital deste aparelho</button>';
         else if (d.ja_cadastrou && !d.liberada) h += d.pedido_pendente
-          ? '<p>Pedido de liberação enviado. Quando o Bruno ou o Fernando liberarem, volte aqui para cadastrar (a liberação vale 24 horas).</p>'
-          : '<p>Você já usou a digital em outro aparelho. Para cadastrar neste, o Bruno ou o Fernando precisam liberar.</p>' +
+          ? '<p>Pedido de liberação enviado. Quando quem autoriza os acessos liberar, volte aqui para cadastrar (a liberação vale 24 horas).</p>'
+          : '<p>Você já usou a digital em outro aparelho. Para cadastrar neste, quem autoriza os acessos precisa liberar.</p>' +
             '<button type="button" class="tf-bt pri" data-acao="pedir">Pedir a liberação</button>';
         else h += '<p>' + (d.liberada ? 'Liberado para cadastrar a digital neste aparelho. ' : '') + 'Destrave com a digital ou o rosto em vez de digitar o PIN.</p>' +
           '<button type="button" class="tf-bt pri" data-acao="cadastrar">' + ICONE_DIGITAL + '<span>Usar digital neste aparelho</span></button>';
@@ -1042,7 +1044,7 @@
                     cadastrarDigital(s, c, pin).then(function (r) {
                       if (r.status === 'ok') { h.fechar('ok'); meusAparelhos(); toast('Digital cadastrada neste aparelho.', 'ok'); return; }
                       bt.disabled = false;
-                      h.msg(r.status === 'precisa_autorizacao' ? 'Este aparelho precisa de liberação do Bruno ou do Fernando.' : 'Não deu para cadastrar.', true);
+                      h.msg(r.status === 'precisa_autorizacao' ? 'Este aparelho precisa de liberação de quem autoriza os acessos.' : 'Não deu para cadastrar.', true);
                     }, function (x) { bt.disabled = false; h.msg(x.message, true); });
                   } },
                  { txt: 'Cancelar', fn: function (h) { h.fechar('nao'); meusAparelhos(); } }]);
@@ -1193,7 +1195,7 @@
       return perguntar('Você não está na lista deste celular', msg, ['Pedir para entrar', 'Voltar']).then(function (i) {
         if (i !== 0) return 'fora';
         return rpc('tf_aparelho_empresa_pedir', { p_empresa: emp.id }).then(function () {
-          return perguntar('Pedido enviado', 'O Bruno e o Fernando recebem o pedido. Quando incluírem você, entre de novo neste celular.', ['Entendi']);
+          return perguntar('Pedido enviado', 'Quem autoriza os acessos recebe o pedido. Quando incluir você, entre de novo neste celular.', ['Entendi']);
         }, function () {}).then(function () { return 'fora'; });
       });
     });
@@ -1203,7 +1205,7 @@
     return rpc('tf_aparelho_empresa_opcoes').then(function (L) {
       L = Array.isArray(L) ? L : [];
       if (!L.length) {
-        return perguntar('Celular da empresa', 'Você não está na lista de nenhum celular da empresa. Peça ao Bruno ou ao Fernando para incluir você em Pessoas e acessos › Celulares da empresa.', ['Voltar'])
+        return perguntar('Celular da empresa', 'Você não está na lista de nenhum celular da empresa. Peça a quem autoriza os acessos para incluir você em Pessoas e acessos › Celulares da empresa.', ['Voltar'])
           .then(function () { return null; });
       }
       return perguntar('Qual celular é este?', 'Escolha o nome do celular da empresa que está na sua mão. Nele não há digital, ponto, EPI nem dados pessoais.',
@@ -1218,7 +1220,7 @@
   /** N4 · a pessoa tem PIN provisório (207): digita o provisório e cria o dela.
    *  Devolve o PIN novo, ou null ("Agora não"). */
   function trocarPinProvisorio() {
-    var t = abrirTela({ titulo: 'Digite o PIN provisório', sub: 'O que o Bruno ou o Fernando te passou. Depois você cria o seu.',
+    var t = abrirTela({ titulo: 'Digite o PIN provisório', sub: 'O que quem autoriza os acessos te passou. Depois você cria o seu.',
       links: [{ txt: 'Esqueci o PIN: pedir um novo', fn: function (h) { pedirPinNovo(h); } },
               { txt: 'Agora não', fn: function (h) { h.cancelar(); } }] });
     return (function laco() {
@@ -1677,17 +1679,55 @@
   // perguntou (confirmarJanela, ou abrirJanela com { aoFechar }) recebe a resposta e nada fica esperando para sempre.
   // Vale também nas páginas que já têm o #modal delas (o fechar é delas; o "Cancelar" é avisado daqui).
   var aoFecharJanela = null, janelaVigiada = false;
+  // N13 (S196, issue 169): janela com algo digitado não fecha por engano. Clicar fora não fecha; o X (ou o Esc)
+  // pede um 2º toque ("Descartar o que foi digitado?"). "Mexida" = a pessoa digitou ou trocou algum campo
+  // da janela desde que ela abriu (o que o programa preenche sozinho não conta). Vale em toda página que usa
+  // a janela do núcleo, inclusive as que têm o #modal delas (o fechar é delas; a trava é daqui).
+  var janelaMexida = false, descarteArmado = 0;
   function cancelarJanela() { var f = aoFecharJanela; aoFecharJanela = null; if (f) { try { f(); } catch (e) {} } }
+  function avisoDescartar(porFora) {
+    var b = document.getElementById('mBody'); if (!b) return;
+    var a = document.getElementById('tfnDescartar');
+    if (!a) { a = document.createElement('div'); a.id = 'tfnDescartar'; a.className = 'tfn-descartar'; a.setAttribute('role', 'alert'); b.insertBefore(a, b.firstChild); }
+    a.textContent = porFora
+      ? 'Há coisa digitada nesta janela: clicar fora não fecha. Use os botões de baixo, ou o X para descartar.'
+      : 'Descartar o que foi digitado? Toque no X de novo (ou aperte Esc) para descartar.';
+    try { a.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+  }
+  // devolve true quando a janela pode fechar agora (e já avisou quem perguntou: "Cancelar")
+  function podeFecharPorFora(porFora) {
+    var m = document.getElementById('modal');
+    if (!m || m.hidden) return true;
+    if (janelaMexida) {
+      if (porFora) { avisoDescartar(true); return false; }
+      if (Date.now() - descarteArmado > 6000) { descarteArmado = Date.now(); avisoDescartar(false); return false; }
+    }
+    cancelarJanela();
+    return true;
+  }
   function vigiarJanela() {
     if (janelaVigiada) return; janelaVigiada = true;
     document.addEventListener('click', function (e) {
       var t = e.target;
-      if (t && t.closest && (t.closest('#mX') || t.id === 'mScrim')) cancelarJanela();
+      if (!t || !t.closest) return;
+      var noX = !!t.closest('#mX'), fora = t.id === 'mScrim';
+      if (!noX && !fora) return;
+      if (!podeFecharPorFora(fora)) { e.stopPropagation(); e.preventDefault(); }
     }, true);
     document.addEventListener('keydown', function (e) {
       var m = document.getElementById('modal');
-      if (e.key === 'Escape' && m && !m.hidden && !document.documentElement.hasAttribute('data-tf-trava')) cancelarJanela();
+      if (e.key !== 'Escape' || !m || m.hidden || document.documentElement.hasAttribute('data-tf-trava')) return;
+      e.stopPropagation(); e.preventDefault();
+      if (podeFecharPorFora(false)) fecharJanela();           // N13: o Esc fecha a janela em todas as páginas (antes, nas que têm o #modal delas, só respondia "Cancelar")
     }, true);
+    var mexeu = function (e) {
+      var b = document.getElementById('mBody'), m = document.getElementById('modal');
+      if (!b || !m || m.hidden || !e.target || !b.contains(e.target)) return;
+      if (e.isTrusted === false) return;
+      janelaMexida = true;
+    };
+    document.addEventListener('input', mexeu, true);
+    document.addEventListener('change', mexeu, true);
   }
   function garantirJanela() {
     vigiarJanela();
@@ -1702,15 +1742,14 @@
     document.body.appendChild(sc); document.body.appendChild(m);
     sc.addEventListener('click', fecharJanela);
     document.getElementById('mX').addEventListener('click', fecharJanela);
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && !document.getElementById('modal').hidden) fecharJanela();
-    });
   }
   function abrirJanela(titulo, corpoHtml, botoes, opcoes) {
     garantirJanela();
     cancelarJanela();                                   // a janela anterior que ainda esperava resposta: "Cancelar"
     aoFecharJanela = (opcoes && typeof opcoes.aoFechar === 'function') ? opcoes.aoFechar : null;
-    focoAntes = document.activeElement;
+    janelaMexida = false; descarteArmado = 0;
+    var mm = document.getElementById('modal');
+    if (!mm || mm.hidden) focoAntes = document.activeElement;   // janela trocada por outra: o foco volta para quem abriu a 1ª
     document.getElementById('mTit').textContent = titulo;
     document.getElementById('mBody').innerHTML = corpoHtml;
     delete document.getElementById('mBody').dataset.ausOk;
@@ -1732,19 +1771,46 @@
   }
   function fecharJanela() {
     aoFecharJanela = null;                              // fechou por um botão: quem perguntou já teve a resposta
+    janelaMexida = false; descarteArmado = 0;
     var sc = document.getElementById('mScrim'), m = document.getElementById('modal');
     if (sc) sc.hidden = true;
     if (m) { m.hidden = true; m.classList.remove('largo'); }
     if (focoAntes && document.body.contains(focoAntes)) { try { focoAntes.focus(); } catch (e) {} }
     focoAntes = null;
   }
-  function confirmarJanela(titulo, corpoHtml, rotuloSim, perigo) {
+  // N13 (S196, issues 126, 144, 108, 122): a janela pode trazer um campo. confirmarJanela(t, html, sim, perigo, campo):
+  //   campo = o id do campo (string) ou { campo: 'id', obrigatorio: 'mensagem se vazio', minimo: 5 (letras),
+  //           igual: 'CONFIRMO' (tem de digitar isso; maiúscula/acento não importam), validar: function (texto) → mensagem ou '' }.
+  //   Com campo, o "sim" devolve { texto } (o que foi digitado, sem espaços nas pontas); o resto devolve false.
+  //   Falta ou erro: a janela NÃO fecha e mostra o motivo em vermelho dentro dela.
+  function normTxt(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase(); }
+  function confirmarJanela(titulo, corpoHtml, rotuloSim, perigo, campo) {
+    var op = typeof campo === 'string' ? { campo: campo } : (campo || null);
     return new Promise(function (ok) {
       abrirJanela(titulo, corpoHtml, [
         { label: 'Cancelar', onClick: function () { fecharJanela(); ok(false); } },
-        { label: rotuloSim || 'Confirmar', pri: !perigo, onClick: function () { fecharJanela(); ok(true); } }
+        { label: rotuloSim || 'Confirmar', pri: !perigo, cls: perigo ? 'perigo' : '', onClick: function () {
+          if (!op) { fecharJanela(); ok(true); return; }
+          var el = op.campo ? document.getElementById(op.campo) : null;
+          var texto = el ? String(el.value || '').trim() : '';
+          var erro = '';
+          if (op.obrigatorio && !texto) erro = op.obrigatorio === true ? 'Preencha o campo para continuar.' : op.obrigatorio;
+          else if (op.minimo && texto.replace(/\s/g, '').length < op.minimo) erro = 'Escreva pelo menos ' + op.minimo + ' letras.';
+          else if (op.igual && normTxt(texto) !== normTxt(op.igual)) erro = 'Para continuar, digite ' + op.igual + '.';
+          else if (typeof op.validar === 'function') erro = op.validar(texto) || '';
+          if (erro) { erroNaJanela(erro, el); return; }
+          fecharJanela(); ok({ texto: texto });
+        } }
       ], { aoFechar: function () { ok(false); } });
     });
+  }
+  // N13: o motivo de não poder seguir, em vermelho, dentro da janela (sem fechar)
+  function erroNaJanela(msg, campoEl) {
+    var b = document.getElementById('mBody'); if (!b) return;
+    var a = document.getElementById('tfnErroJanela');
+    if (!a) { a = document.createElement('div'); a.id = 'tfnErroJanela'; a.className = 'tfn-erro-janela'; a.setAttribute('role', 'alert'); b.appendChild(a); }
+    a.textContent = msg;
+    try { (campoEl || a).focus(); a.scrollIntoView({ block: 'nearest' }); } catch (e) {}
   }
 
   /* ── conexão no jeito do Manager (req/get/rpc) ───────────────────────────
@@ -1805,11 +1871,12 @@
           s.token ? { Authorization: 'Bearer ' + s.token } : {}, opts.headers || {})
       })).then(function (r) {
         return r.text().then(function (txt) {
-          if (txt.trim().charAt(0) === '<') throw new Error('O servidor devolveu HTML — verifique a URL do projeto');
+          if (txt.trim().charAt(0) === '<') { anotarErro('servidor devolveu HTML em ' + caminho); throw Object.assign(new Error('O servidor respondeu de um jeito inesperado. Tente de novo; se continuar, avise o administrador.'), { estranho: true }); }   // N13 (issue 155): o detalhe vai só para o relato
           var corpo = null;
-          if (txt) { try { corpo = JSON.parse(txt); } catch (e) { throw new Error('Resposta inválida: ' + txt.slice(0, 80)); } }
+          if (txt) { try { corpo = JSON.parse(txt); } catch (e) { anotarErro('resposta inválida: ' + txt.slice(0, 80)); throw Object.assign(new Error('O servidor respondeu de um jeito inesperado. Tente de novo; se continuar, avise o administrador.'), { estranho: true }); } }
           if (!r.ok) {
-            var msg = (corpo && (corpo.message || corpo.error_description || corpo.error || corpo.hint)) || ('HTTP ' + r.status);
+            var msg = (corpo && (corpo.message || corpo.error_description || corpo.error || corpo.hint)) || ('O servidor deu erro (código ' + r.status + '). Tente de novo.');
+            if (/^permission denied/i.test(msg)) { anotarErro(msg); msg = 'Você não tem permissão para isso. Se precisar, avise o administrador.'; }   // N13 (issue 155)
             var err = new Error(msg); err.negocio = (r.status >= 400 && r.status < 500); err.status = r.status;
             if (tokenVencido(err) && autor && autor !== String(sessao().email || '').toLowerCase()) {
               // a sessão de quem fez venceu: renova a cópia dela; sem jeito, o envio espera a pessoa entrar
@@ -1844,7 +1911,7 @@
         }
         var transitorio = ehTimeout(e) || !!e.semSinal || (!e.negocio && (
           /Failed to fetch|NetworkError|Load failed/i.test(e.message) ||
-          /devolveu HTML/.test(e.message) || /^HTTP 5\d\d$/.test(e.message)));
+          !!e.estranho || /^O servidor deu erro \(código 5\d\d\)/.test(e.message)));
         if (transitorio) ultimo.rede = true;
         if (!transitorio || i === tentativas || (escrita && !opts.idempotente)) {
           if (transitorio && typeof api_.aoFalharRede === 'function') { try { api_.aoFalharRede(ultimo); } catch (x) {} }
@@ -2320,7 +2387,7 @@
       '<input type="file" id="tfRelImg" accept="image/*" multiple>' +
       '<div id="tfRelImgs" class="tf-rel-mini"></div>' +
       '<p>Vai junto, sem você digitar: o módulo e a tela em que você está, a versão do app e o tipo de aparelho. ' +
-      'Só você e quem cuida dos relatos (Bruno e Fernando) veem o que você mandar.</p>' +
+      'Só você e quem cuida dos relatos (a caixa "Recebe relatos" em Pessoas e acessos) veem o que você mandar.</p>' +
       '<button type="button" class="tf-bt pri" id="tfRelEnviar">Enviar</button></section>' +
       '<section class="tf-meus-sec"><h3>Seus relatos</h3><div id="tfRelLista">Carregando…</div></section></div>';
     if (!document.getElementById('tf-rel-css')) {
@@ -2463,7 +2530,7 @@
                 lerValor: lerValor, lerValorDetalhe: lerValorDetalhe, valorEntendido: valorEntendido, mostrarValor: mostrarValor };   // N12 (167, 189)
   api_.planilha = { lerXLSX: lerXLSX, linhasDoXml: linhasDoXml };   // N12 (146)
   api.req = req; api.get = getM; api.rpc = rpcM;
-  api_.janela = { abrir: abrirJanela, fechar: fecharJanela, confirmar: confirmarJanela };
+  api_.janela = { abrir: abrirJanela, fechar: fecharJanela, confirmar: confirmarJanela, erro: erroNaJanela, mexida: function (v) { if (v !== undefined) { janelaMexida = !!v; descarteArmado = 0; } return janelaMexida; } };
   api_.fila = {
     guardarFoto: function (blob) {
       var chave = 'f2-' + uidNovo();
