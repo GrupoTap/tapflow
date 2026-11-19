@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapField · S60</title>
+<title>TapField · S61</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -681,7 +681,8 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S60';   // S60 (S191): os parâmetros do Drive pela função tf_drive_parametros (215, issue 200); nada muda na tela
+const APP_VERSION = 'S61';   // S61 (S194): Rodada R3 da auditoria (issues 203, 204 e 205): o prazo do gov.br de cada pessoa; o espelho de mês fechado é o congelado; a saída da madrugada "(+1)"; o aviso dos 15 min de intervalo (617)
+// const APP_VERSION = 'S60';   // S60 (S191): os parâmetros do Drive pela função tf_drive_parametros (215, issue 200); nada muda na tela
 // const APP_VERSION = 'S59';   // S59 (S171): só o núcleo N11 (issue 35: a fila avisa em vermelho quando o aparelho está sem espaço)
 // const APP_VERSION = 'S58';   // S58 (S157): issue 10 — o acesso vencido ("exp" claim) renovado no envio das fotos (núcleo N9 e o canhoto do cartão)
 // const APP_VERSION = 'S57';   // S57 (S145): rodada E (A8): a confirmação da participação nas inspeções, com a digital, na aba Eu · TapDoc 18
@@ -5584,7 +5585,7 @@ const ptHmF = m => { if (m === null || m === undefined) return '—'; m = Number
   return (m < 0 ? '−' : '') + String(Math.floor(a / 60)).padStart(2, '0') + ':' + String(a % 60).padStart(2, '0'); };
 const ptSaldoF = m => (m === null || m === undefined) ? '—' : (Number(m) > 0 ? '+' : '') + ptHmF(m);
 const PT_ALERTA_F = { mais_10h: 'mais de 10h', almoco_curto: 'almoço menor que 1h', almoco_quase: 'almoço quase 1h',
-  almoco_longo: 'almoço maior que 2h', sem_intervalo_6h: 'mais de 6h sem intervalo', descanso_11h: 'menos de 11h de descanso',
+  almoco_longo: 'almoço maior que 2h', sem_intervalo_6h: 'mais de 6h sem intervalo', sem_intervalo_15: 'sem os 15 min de intervalo', descanso_11h: 'menos de 11h de descanso',
   batida_faltando: 'batida faltando', falta: 'falta', trabalhou_na_folga: 'trabalhou no dia de folga' };
 let PT_MES_SEL = null;
 async function pintarPontoMeuMes(mes){
@@ -5606,7 +5607,10 @@ async function pintarPontoMeuMes(mes){
   const ant = new Date(d0.getFullYear(), d0.getMonth() - 1, 1), prox = new Date(d0.getFullYear(), d0.getMonth() + 1, 1);
   const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01';
   let h = '<div class="ptMesNav"><button type="button" class="btn sm" id="ptMA" aria-label="Mês anterior">‹</button><b>' + esc(MES_F(PT_MES_SEL))
-    + '</b><button type="button" class="btn sm" id="ptMP" aria-label="Mês seguinte"' + (iso(prox) > hoje ? ' disabled' : '') + '>›</button></div>';
+    + '</b><button type="button" class="btn sm" id="ptMP" aria-label="Mês seguinte"' + (iso(prox) > hoje ? ' disabled' : '') + '>›</button></div>'
+    // S61 · 203 (5): mês fechado pelo escritório mostra o congelado (o mesmo que você assina)
+    + (E.congelado ? '<p class="ptDica" style="text-align:left">Mês fechado pelo escritório: este é o espelho que vale (o mesmo que você assina).'
+        + ((E.congelado.batidas_depois || []).length ? ' Uma batida sua chegou depois do fechamento; o escritório vai conferir.' : '') + '</p>' : '');
   // o banco (P3): saldo, lote antigo e o que vence em breve
   if (B){
     if (!B.acordo) h += '<div class="painel ptBancoF"><b>Banco de horas</b><p class="ptDica" style="text-align:left">Você ainda não tem o acordo de banco de horas assinado. '
@@ -5632,7 +5636,7 @@ async function pintarPontoMeuMes(mes){
     + card('Horas do mês', esc(ptSaldoF(T.saldo_min)), Number(T.saldo_min) < 0 ? 'neg' : Number(T.saldo_min) > 0 ? 'pos' : '', 'só informativo, não somar')   // S50 · item #19
     + (Number(T.extra100_min) ? card('Domingo e feriado', esc(ptHmF(T.extra100_min)) + ' a 100%') : '') + '</div>';
   h += '<div class="ptDias">' + (E.dias || []).filter(d => !d.futuro || d.hoje).map(d => {
-      const bats = (d.batidas || []).filter(b => b.valida).map(b => b.h);
+      const bats = (d.batidas || []).filter(b => b.valida).map(b => b.h + (b.outro_dia ? ' (+1)' : ''));   // S61 · 204 (3): a saída da madrugada fecha o dia anterior
       const obs = [];
       if (d.feriado) obs.push(d.feriado + (d.tipo_dia === 'folga_banco' && d.escolha ? ' · ' + (d.escolha === 'folgar' ? 'você folgou' : 'você trabalhou') : ''));
       (d.ausencia || []).forEach(a => obs.push({ ferias: 'férias', folga: 'folga', atestado: 'atestado', recesso: 'recesso' }[a.tipo] || a.tipo));
@@ -5921,6 +5925,8 @@ async function ptCarregarGov(){
 }
 const PT_GOV_SIT = { para_assinar: ['para assinar', '#8A5A12'], enviado: ['enviado · aguardando o escritório', '#515252'],
                      aceito: ['aceito', '#1E7A42'], recusado: ['recusado · envie de novo', '#A62D18'] };
+// S61 · issue 205 (1): o prazo é de cada pessoa (30 dias depois da admissão; quem já estava, 30/11/2026)
+function ptGovPrazo(){ const z = String((PT_GOV && PT_GOV.prazo) || '2026-11-30'); return z.slice(8, 10) + '/' + z.slice(5, 7); }
 /** O cartão no Eu: aparece enquanto faltar algum documento aceito. */
 function painelGovPonto(){
   const D = (PT_GOV && PT_GOV.docs) || [];
@@ -5929,7 +5935,7 @@ function painelGovPonto(){
   const p = document.createElement('div'); p.className = 'painel ptFechF ptGovF';
   p.innerHTML = '<b>Documentos para assinar no gov.br</b>'
     + '<p class="ptDica" style="text-align:left">' + (falta ? (falta === 2 ? 'O acordo de banco de horas e o termo de adesão esperam a sua assinatura.' : 'Falta 1 documento.')
-        + ' Baixe, assine no gov.br e envie aqui até 30/11.' : 'Enviados. O escritório está conferindo.') + '</p>'
+        + ' Baixe, assine no gov.br e envie aqui até ' + esc(ptGovPrazo()) + '.' : 'Enviados. O escritório está conferindo.') + '</p>'
     + D.map(d => '<p class="ptGovL"><span>' + esc(d.nome) + '</span><b style="color:' + PT_GOV_SIT[d.situacao][1] + '">' + esc(PT_GOV_SIT[d.situacao][0]) + '</b></p>').join('')
     + '<button type="button" class="btn sm ' + (falta ? 'pri' : '') + '">Abrir</button>';
   p.querySelector('button').addEventListener('click', pintarPontoGov);
@@ -5945,7 +5951,7 @@ async function pintarPontoGov(){
   if (tela !== 'pontoGov') return;
   const D = (PT_GOV && PT_GOV.docs) || [];
   m.innerHTML = '<div class="painel"><p class="ptDica" style="text-align:left;margin:0">Para cada documento: <b>1.</b> baixe o PDF (já sai com os seus dados); '
-    + '<b>2.</b> abra o Assinador gov.br, entre com a sua conta (prata ou ouro) e assine o PDF; <b>3.</b> envie aqui o PDF assinado que o gov.br devolveu. Prazo: 30/11.</p></div>'
+    + '<b>2.</b> abra o Assinador gov.br, entre com a sua conta (prata ou ouro) e assine o PDF; <b>3.</b> envie aqui o PDF assinado que o gov.br devolveu. Prazo: ' + esc(ptGovPrazo()) + '.</p></div>'
     + (PT_GOV && PT_GOV.tem_cpf === false ? '<p class="ptLembrete">Seu CPF não está na ficha do RH. Peça ao escritório para incluir antes de assinar.</p>' : '')
     + D.map((d, i) => {
         const s = PT_GOV_SIT[d.situacao];
