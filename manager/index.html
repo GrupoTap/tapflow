@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow · S196</title>
+<title>TapFlow · S198</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -987,6 +987,10 @@ button.s49L{cursor:pointer} button.s49L:hover{background:var(--surface-2)} .s49L
 .s49MiniB{padding:0;border:0;background:none;cursor:zoom-in}
 .s49DetDoc{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:start}
 .ositemQ{width:58px;text-align:right}
+/* S198 (issue 170): o campo que está gravando fica esmaecido, sem perder o foco de quem digita */
+.tbl input.gravando,.tbl select.gravando{opacity:.6}
+/* S198 (issue 173): o aviso de dado incompleto dos Relatórios */
+.relAviso{margin:0 0 12px}
 .ositemNota{font-size:11.5px;color:var(--ink-3);margin:2px 0 0}
 .ositemNota.troca{color:var(--accent-ink)}
 @media (max-width:700px){
@@ -2415,7 +2419,8 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S196';   // S196: Rodada R5 da auditoria (padrões de todas as telas) — issues 108 (excluir OS pela janela do TapHub, com motivo e o número digitado), 109 (custo e Sair pela janela), 169 (a janela é a do núcleo: com algo digitado não fecha clicando fora; o RDO que falta algo fica aberto) e 110 (textos sem nome de arquivo, sem nomes fixos, TapField); núcleo N13
+const APP_VERSION = 'S198';   // S198: Rodada R7 da auditoria (TapFlow escritório) — issues 112 (a OS da proposta aprovada já vem sem o orçamento, banco 310), 170 (a aba Itens grava sem redesenhar a tabela; "Comprar" e o desconto geral de uma vez), 171 (preço e desconto travados depois da resposta do cliente), 172 (Relatório Comercial com as propostas sem OS e sem somar as revisões), 173 (Relatórios: aviso de dado incompleto, cancelada à parte, etapa com o nome da tela, Financeiro pela medição, rótulo do período e %) e 174 (planilha com R$, total e data)
+// const APP_VERSION = 'S196';   // S196: Rodada R5 da auditoria (padrões de todas as telas) — issues 108 (excluir OS pela janela do TapHub, com motivo e o número digitado), 109 (custo e Sair pela janela), 169 (a janela é a do núcleo: com algo digitado não fecha clicando fora; o RDO que falta algo fica aberto) e 110 (textos sem nome de arquivo, sem nomes fixos, TapField); núcleo N13
 // const APP_VERSION = 'S195';   // S195: Rodada R4 da auditoria (issue 167): os números dos contratos pelo leitor único do núcleo ("2.5" = 2,5; "1500.50" = 1.500,50; "R$ 100,00" = 100); o campo mostra como entendeu e recusa o que não é número; núcleo N12, documentos.js D2
 // const APP_VERSION = 'S191';   // S191: Rodada R2 da auditoria (issues 200 e 208): os parâmetros do Drive pela função tf_drive_parametros (215); aceita o script do Drive v3
 // const APP_VERSION = 'S184';   // S184: issue 90: a T16 "Emitir boleto / nota fiscal" da inspeção comum abre junto com a OS (309); com a medição (T06B) ainda aberta, "medição em aberto" (com o aviso) junto do "faturar no TapFin" na linha da T16
@@ -3807,6 +3812,7 @@ const HIST_ROT = {
   documento_gerado:'Documento gerado', numero_reservado:'Número reservado',
   tarefa_status:'Tarefa', os_concluida:'OS concluída', proposta_corrigida:'Proposta corrigida',
   item_retirado:'Item tirado da OS', item_devolvido:'Item devolvido à OS',
+  item_alterado:'Item mudado depois da resposta do cliente',   // S198 (issue 171)
   perfis_tarefa:'Quem faz a tarefa',
   // S39
   venda_adicional:'Venda adicional', venda_adicional_resposta:'Resposta da venda adicional',
@@ -5684,6 +5690,20 @@ async function pintarItens(){
   // Perfil de campo VÊ a aba inteira, mas não grava: o RLS de `os_itens` é do
   // escritório, e a tela não oferece o que ele recusaria (S26, item 5).
   const soLeitura = !podeEscritorio();
+  // S198 (issue 171): depois da resposta do cliente, preço e desconto só mudam numa revisão da proposta (o banco
+  // recusa desde a 310). Custo, de onde vem e fornecedor continuam abertos: a mudança vai para o histórico da OS.
+  const respondido = it => it.aprovado != null;
+  const TRAVA_RESP = 'O cliente já respondeu por este item: o preço e o desconto só mudam numa revisão da proposta.';
+  // S198 (issue 170): os totais, o aviso de baixo e o "Comprar" se refazem sem redesenhar a tabela
+  let resumir = () => {};
+  let _etapaT = null;
+  const conferirEtapa = () => {
+    clearTimeout(_etapaT);
+    _etapaT = setTimeout(() => {
+      if (!osAberta || !osAberta.card || osAberta.card.os_id !== card.os_id || abaDrawer !== 'itens') return;
+      refrescar().catch(() => {});
+    }, 700);
+  };
   // ── ITEM 4 (S27): O DESCONTO PASSA A TER ONDE SER DIGITADO ──────────────
   // `os_itens.desconto_pct` existe desde o 01_schema, e `total_venda` já é
   // calculado com ele pelo banco — mas nenhuma tela oferecia o campo. Na
@@ -5837,50 +5857,78 @@ async function pintarItens(){
     if (it.elegivel && !(Number(it.preco_unitario) > 0)) pi.classList.add('falta');
     tr.querySelector('.m').textContent = it.margem_valor != null ? BRL(it.margem_valor) : '—';
     if (!it.elegivel || soLeitura){ [oi,fi,ci,pi,di].forEach(x => x.disabled = true); }
+    else if (respondido(it)){ [pi,di].forEach(x => { x.disabled = true; x.title = TRAVA_RESP; }); }
 
-    const grava = (campo, el, numerico) => el.addEventListener('change', async () => {
+    // S198 (issue 170): grava o campo e acerta SÓ a linha e os totais. Antes cada campo relia o quadro inteiro e
+    // redesenhava a aba ("Carregando itens…"): o cursor se perdia e o que já se digitava no campo seguinte sumia.
+    // O campo não é desligado enquanto grava (desligar tira o foco de quem está nele); a etapa da OS se confere
+    // por trás, só depois dos campos que fecham etapa (de onde vem, custo, preço).
+    const mc = tr.querySelector('.m');
+    const aplicar = linha => {
+      if (linha) Object.assign(it, linha);
+      mc.textContent = it.margem_valor != null ? BRL(it.margem_valor) : '—';
+      oi.classList.toggle('falta', !!(it.elegivel && !it.origem && !it.e_servico));
+      ci.classList.toggle('falta', !!(it.elegivel && !(Number(it.custo_unitario) > 0)));
+      pi.classList.toggle('falta', !!(it.elegivel && !(Number(it.preco_unitario) > 0)));
+      resumir();
+    };
+    const gravar = async (el, campo, valor, voltar, etapa) => {
+      el.classList.add('gravando');
+      try{
+        let linha;
+        if (DEMO){ demoGravarItem(card.os_id, it.id, campo, valor); linha = demoItens(card.os_id).find(x => x.id === it.id); }
+        else linha = (await patch('os_itens', 'id=eq.' + it.id, { [campo]: valor }))[0];
+        aplicar(linha);
+        if (etapa) conferirEtapa();
+      }catch(e){ toast(e.message,'err'); voltar(); }
+      finally{ el.classList.remove('gravando'); }
+    };
+    const grava = (campo, el, numerico, etapa) => el.addEventListener('change', () => {
       const bruto = el.value.trim();
       const valor = numerico ? (bruto === '' ? null : Number(bruto)) : (bruto || null);
-      if (numerico && bruto !== '' && !(valor >= 0)){ toast('Valor inválido.','err'); return; }
-      el.disabled = true;
-      try{
-        if (DEMO) demoGravarItem(card.os_id, it.id, campo, valor);
-        else await patch('os_itens', 'id=eq.' + it.id, { [campo]: valor });
-        await refrescar();
-        pintarItens();
-      }catch(e){ toast(e.message,'err'); el.disabled = false; }
+      const voltar = () => { el.value = it[campo] != null ? it[campo] : ''; };
+      if (numerico && bruto !== '' && !(valor >= 0)){ toast('Valor inválido.','err'); voltar(); return; }
+      gravar(el, campo, valor, voltar, etapa);
     });
-    grava('origem', oi, false);
-    grava('fornecedor', fi, false);
-    grava('custo_unitario', ci, true);
-    grava('preco_unitario', pi, true);
+    grava('origem', oi, false, true);
+    grava('fornecedor', fi, false, false);
+    grava('custo_unitario', ci, true, true);
+    grava('preco_unitario', pi, true, true);
     // vazio = 0: o banco tem `not null default 0` com check de 0 a 100, e
     // mandar null daria erro de constraint na cara de quem apagou o campo
-    di.addEventListener('change', async () => {
+    di.addEventListener('change', () => {
       const v = di.value.trim() === '' ? 0 : Number(di.value);
-      if (!(v >= 0 && v <= 100)){ toast('O desconto vai de 0 a 100%.','err'); return; }
-      di.disabled = true;
-      try{
-        if (DEMO) demoGravarItem(card.os_id, it.id, 'desconto_pct', v);
-        else await patch('os_itens', 'id=eq.' + it.id, { desconto_pct: v });
-        await refrescar(); pintarItens();
-      }catch(e){ toast(e.message,'err'); di.disabled = false; }
+      const voltar = () => { di.value = Number(it.desconto_pct) ? it.desconto_pct : ''; };
+      if (!(v >= 0 && v <= 100)){ toast('O desconto vai de 0 a 100%.','err'); voltar(); return; }
+      gravar(di, 'desconto_pct', v, voltar, false);
     });
     tb.appendChild(tr);
   });
 
   const el = itens.filter(i => i.elegivel);
-  const somaC = el.reduce((s,i)=>s+Number(i.total_custo||0),0);
-  const somaV = el.reduce((s,i)=>s+Number(i.total_venda||0),0);
-  const somaM = somaV - somaC;
   const t = document.createElement('div'); t.className = 'totais';
   t.innerHTML = '<div><div class="k">Custo</div><div class="v"></div></div>'
               + '<div><div class="k">Venda</div><div class="v"></div></div>'
-              + '<div><div class="k">Margem</div><div class="v ' + (somaM>=0?'pos':'neg') + '"></div></div>';
-  t.querySelectorAll('.v')[0].textContent = BRL(somaC);
-  t.querySelectorAll('.v')[1].textContent = BRL(somaV);
-  t.querySelectorAll('.v')[2].textContent = BRL(somaM) + (somaV>0 ? '  ·  ' + Math.round(somaM/somaV*100) + '%' : '');
+              + '<div><div class="k">Margem</div><div class="v"></div></div>';
+  const pintarTotais = () => {
+    const somaC = el.reduce((s,i)=>s+Number(i.total_custo||0),0);
+    const somaV = el.reduce((s,i)=>s+Number(i.total_venda||0),0);
+    const somaM = somaV - somaC;
+    const v = t.querySelectorAll('.v');
+    v[0].textContent = BRL(somaC);
+    v[1].textContent = BRL(somaV);
+    v[2].textContent = BRL(somaM) + (somaV>0 ? '  ·  ' + Math.round(somaM/somaV*100) + '%' : '');
+    v[2].className = 'v ' + (somaM>=0?'pos':'neg');
+  };
+  pintarTotais();
   body.appendChild(t);
+  // S198 (issue 171): o motivo de preço e desconto estarem desligados, dito uma vez embaixo da tabela
+  if (!soLeitura && el.some(respondido)){
+    const tv = document.createElement('p'); tv.className = 'nota itensTrava';
+    tv.textContent = 'Preço e desconto travados nos itens que o cliente já respondeu: para mudar, faça uma revisão da proposta. '
+      + 'Custo, de onde vem e fornecedor continuam abertos, e a mudança fica no histórico da OS.';
+    body.appendChild(tv);
+  }
   // S49 · item 4: o item que faltou no levantamento entra pelo escritório
   if (comS49 && !soLeitura && card.status_os !== 'concluida'){
     const ba = document.createElement('button'); ba.type = 'button'; ba.className = 'btn';
@@ -5893,14 +5941,23 @@ async function pintarItens(){
   // "3% pedidos, 3% concedidos" é um número só, sobre tudo. Digitá-lo item a
   // item é onde se esquece uma linha e o total sai errado. O ajuste fino
   // continua existindo: depois de aplicado, cada item ainda se edita.
-  if (el.length && !soLeitura){
+  // S198 (issues 170 e 171): só os itens que o cliente ainda não respondeu, gravados todos de uma vez
+  const elAbertos = el.filter(i => !respondido(i));
+  if (elAbertos.length && !soLeitura){
     // S28: o mesmo bloco do negócio (item 3) — %, R$ ou valor final
     const dg = document.createElement('div');
     dg.style.marginTop = '14px';
     body.appendChild(dg);
-    montarDescontoGeral(dg, {
+    if (elAbertos.length < el.length){
+      const nd = document.createElement('p'); nd.className = 'nota'; nd.style.margin = '0 0 4px';
+      nd.textContent = 'O desconto geral vale só para os itens que o cliente ainda não respondeu.';
+      dg.appendChild(nd);
+    }
+    const dgCx = document.createElement('div');
+    dg.appendChild(dgCx);
+    montarDescontoGeral(dgCx, {
       id: 'dgOs',
-      linhas: () => el.map(i => ({ preco: Number(i.preco_unitario) || 0,
+      linhas: () => elAbertos.map(i => ({ preco: Number(i.preco_unitario) || 0,
                                    qtd: Number(i.quantidade) || 0,
                                    desc: Number(i.desconto_pct) || 0 })),
       // S31: chega um percentual POR LINHA (null nas que ficam de fora). O
@@ -5908,17 +5965,19 @@ async function pintarItens(){
       // proporção — quem já tinha desconto próprio continua com mais.
       aplicar: async (pcts) => {
         try{
-          let n = 0;
-          for (let k = 0; k < el.length; k++){
+          const lote = [];
+          for (let k = 0; k < elAbertos.length; k++){
             const p = pcts[k];
             if (p === null || p === undefined) continue;
-            const i = el[k];
-            if (DEMO) demoGravarItem(card.os_id, i.id, 'desconto_pct', p);
-            else await patch('os_itens', 'id=eq.' + i.id, { desconto_pct: p });
-            n++;
+            lote.push({ id: elAbertos[k].id, desconto_pct: p });
           }
+          if (!lote.length){ toast('Nenhum item para aplicar o desconto.','err'); return; }
+          // S198 (issue 170): uma chamada só — ou grava em todos, ou em nenhum (antes era um por vez, e uma falha no
+          // meio deixava metade com desconto)
+          if (DEMO) lote.forEach(x => demoGravarItem(card.os_id, x.id, 'desconto_pct', x.desconto_pct));
+          else await rpc('tf_os_itens_gravar', { p_os_id: card.os_id, p_itens: lote });
           await refrescar();
-          toast(n + ' item(ns) com o desconto gravado.', 'ok');
+          toast(lote.length + ' item(ns) com o desconto gravado.', 'ok');
           pintarItens();
         }catch(e){ toast(e.message,'err'); }
       }
@@ -5928,24 +5987,24 @@ async function pintarItens(){
   // Atalho do caso comum: numa OS de fornecimento a maioria das peças é para
   // comprar. Responder quatro selects um a um para depois cotar é atrito que a
   // etapa não precisa ter — e é atrito que faz o campo parar de responder.
-  const semOrigem = el.filter(i => !i.origem && !i.e_servico);
+  const semOrigemAgora = () => el.filter(i => !i.origem && !i.e_servico);
+  const semOrigem = semOrigemAgora();
+  let bo = null;
   if (semOrigem.length > 1 && !DEMO && !soLeitura){
-    const bo = document.createElement('button');
+    bo = document.createElement('button');
     bo.className = 'btn'; bo.type = 'button';
     bo.style.cssText = 'width:100%;margin-top:12px';
     bo.textContent = 'Marcar as ' + semOrigem.length + ' peças sem resposta como "Comprar"';
     bo.addEventListener('click', function(){
       _semDuploEnvio_(this, async () => {
+        const alvo = semOrigemAgora();
+        if (!alvo.length){ toast('Todas as peças já têm de onde vêm.','ok'); return; }
         try{
-          for (const i of semOrigem)
-            await patch('os_itens', 'id=eq.' + i.id, { origem: 'compra' });
-          const colAntes = card.coluna;
-          await carregar({silencioso:true});
-          const novo = cards.find(x => x.os_id === card.os_id);
-          if (novo){ osAberta.card = novo;
-            toast(novo.coluna !== colAntes
-              ? 'Etapa concluída — o card foi para "' + rotuloCol(novo) + '".'
-              : 'Origem definida.', 'ok'); }
+          // S198 (issue 170): uma chamada só — ou todas viram "Comprar", ou nenhuma
+          await rpc('tf_os_itens_gravar', { p_os_id: card.os_id,
+            p_itens: alvo.map(i => ({ id: i.id, origem: 'compra' })) });
+          toast(alvo.length + ' peça(s) marcada(s) como "Comprar".', 'ok');
+          await refrescar();
           pintarItens();
         }catch(e){ toast(e.message,'err'); }
       });
@@ -6023,20 +6082,33 @@ async function pintarItens(){
     body.appendChild(cx);
   }
 
-  const falta = el.filter(i => !(Number(i.custo_unitario)>0)).length;
-  const faltaP = el.filter(i => !(Number(i.preco_unitario)>0)).length;
-  const faltaO = semOrigem.length;
   const n = document.createElement('p');
   n.style.cssText = 'font-size:12.5px;color:var(--ink-3);margin:12px 0 0;line-height:1.5';
-  n.textContent = faltaO ? faltaO + ' item(ns) sem responder de onde vêm — é esta resposta que '
-      + 'decide se a peça vira pedido de compra, e a etapa só fecha no último.'
-    : falta ? falta + ' item(ns) ainda sem custo — a etapa de cotação só fecha no último.'
-    : faltaP ? faltaP + ' item(ns) sem preço de venda — a etapa de precificação fecha quando todos tiverem.'
-    : faltaC ? faltaC + ' item(ns) aprovado(s) ainda sem número de certificado — '
-             + 'a etapa "Calibrar e lacrar" fecha quando todos tiverem.'
-    : faltaL ? faltaL + ' item(ns) aprovado(s) ainda sem número de lacre.'
-    : 'Todos os itens elegíveis têm origem, custo e preço.';
+  const pintarFalta = () => {
+    const falta = el.filter(i => !(Number(i.custo_unitario)>0)).length;
+    const faltaP = el.filter(i => !(Number(i.preco_unitario)>0)).length;
+    const faltaO = semOrigemAgora().length;
+    n.textContent = faltaO ? faltaO + ' item(ns) sem responder de onde vêm — é esta resposta que '
+        + 'decide se a peça vira pedido de compra, e a etapa só fecha no último.'
+      : falta ? falta + ' item(ns) ainda sem custo — a etapa de cotação só fecha no último.'
+      : faltaP ? faltaP + ' item(ns) sem preço de venda — a etapa de precificação fecha quando todos tiverem.'
+      : faltaC ? faltaC + ' item(ns) aprovado(s) ainda sem número de certificado — '
+               + 'a etapa "Calibrar e lacrar" fecha quando todos tiverem.'
+      : faltaL ? faltaL + ' item(ns) aprovado(s) ainda sem número de lacre.'
+      : 'Todos os itens elegíveis têm origem, custo e preço.';
+  };
+  pintarFalta();
   body.appendChild(n);
+  // S198 (issue 170): o que muda quando um campo grava, sem redesenhar a aba
+  resumir = () => {
+    pintarTotais();
+    pintarFalta();
+    if (bo){
+      const k = semOrigemAgora().length;
+      bo.hidden = k < 2;
+      bo.textContent = 'Marcar as ' + k + ' peças sem resposta como "Comprar"';
+    }
+  };
   if (soLeitura) avisoSoLeitura(body);
 }
 
@@ -8782,7 +8854,7 @@ function demoRel(){
   const hoje = isoHoje();
   const cli = { c1:'Alimentos Exemplo Indústria Ltda', c2:'Fundição Modelo', c3:'Siderúrgica Exemplo — Unidade 1' };
   return {
-    cli,
+    cli, avisos: [],
     os:[
       // Os nomes aqui TEM que ser os do banco. Quando eram inventados, a demo passava
       // verde e o modo real quebrava — foi assim que o relatório foi ao ar quebrado.
@@ -8792,22 +8864,20 @@ function demoRel(){
        data_abertura:hoje,encerrada_em:hoje+'T18:00:00Z',cliente_id:'c2'},
       {id:'d3',numero:'OS-26005',status:'aberta',descricao:'Inspeção',
        data_abertura:hoje,encerrada_em:null,cliente_id:'c1'},
+      {id:'d4',numero:'OS-26004',status:'cancelada',descricao:'Inspeção (cancelada)',
+       data_abertura:hoje,encerrada_em:null,cliente_id:'c2'},
     ],
-    itens:[
-      {os_id:'d1',descricao:'Manômetro 63mm',quantidade:4,custo_unitario:148,preco_unitario:265,
-       total_custo:592,total_venda:1060,elegivel:true,aprovado:true,origem:'compra',
-       fornecedor:'Wika',pedido_numero:'PC-2026-0002',pedido_em:hoje,previsto_para:hoje,recebido_em:null},
-      {os_id:'d3',descricao:'Válvula de segurança 1"',quantidade:2,custo_unitario:420,preco_unitario:720,
-       total_custo:840,total_venda:1440,elegivel:true,aprovado:true,origem:'compra',
-       fornecedor:'Famabras',pedido_numero:'PC-2026-0001',pedido_em:hoje,previsto_para:'2026-08-20',recebido_em:null},
+    // S198 (issue 173): os itens atrasados (foto de hoje) no lugar da lista inteira de itens
+    atrasados:[
+      {os_id:'d3',descricao:'Válvula de segurança 1"',fornecedor:'Famabras',pedido_numero:'PC-2026-0001',
+       previsto_para:'2026-08-20',recebido_em:null},
     ],
+    // S198 (issue 172): o formato da tf_rel_propostas (uma linha por número, a última revisão)
     props:[
-      {id:'p1',numero:'26007',versao:1,status:'emitida',cliente:cli.c3,
-       os_numero:'OS-26007',emitida_em:hoje,valor_total:4200},
-      {id:'p2',numero:'26005',versao:2,status:'aprovada',cliente:cli.c1,
-       os_numero:'OS-26005',emitida_em:hoje,valor_total:7340},
-      {id:'p3',numero:'26006',versao:1,status:'reprovada',cliente:cli.c2,
-       os_numero:'OS-26006',emitida_em:hoje,valor_total:2900,motivo_perda:'preço'},
+      {numero:'26007',versao:1,status:'enviada',cliente:cli.c3,os_numero:null,emitida_em:hoje,valor_total:4200},
+      {numero:'26005',versao:2,status:'aprovada',cliente:cli.c1,os_numero:'OS-26005',emitida_em:hoje,valor_total:7340},
+      {numero:'26006',versao:1,status:'reprovada',cliente:cli.c2,os_numero:null,emitida_em:hoje,valor_total:2900,
+       motivo_perda:'Preço acima do esperado'},
     ],
     negs:[{coluna:'Proposta enviada'},{coluna:'Primeiro contato'},{coluna:'Proposta enviada'}],
     peds:[
@@ -8816,11 +8886,16 @@ function demoRel(){
       {numero:'PC-2026-0002',fornecedor:'Wika',cliente:cli.c3,os_numero:'OS-26007',
        emitido_em:hoje,valor:592,itens:1,recebidos:0,previsto_para:hoje},
     ],
-    margens:[
-      {os_id:'d1',numero:'OS-26007',cliente:cli.c3,venda:1060,custo_itens:592,
-       margem_bruta:468,custos_extras:120,margem_real:348,margem_pct:33},
-      {os_id:'d3',numero:'OS-26005',cliente:cli.c1,venda:1440,custo_itens:840,
-       margem_bruta:600,custos_extras:0,margem_real:600,margem_pct:42},
+    // S198 (issue 173): o formato da tf_rel_os_valores (a venda que a OS fatura, com a fonte)
+    valores:[
+      {os_id:'d1',numero:'OS-26007',status:'aberta',cliente:cli.c3,qtd_itens:1,venda:1060,fonte:'itens',
+       custo_itens:592,custos_extras:120,frete:120,margem_real:348,margem_pct:32.8},
+      {os_id:'d2',numero:'OS-26006',status:'concluida',cliente:cli.c2,qtd_itens:0,venda:2500,fonte:'medição',
+       custo_itens:0,custos_extras:0,frete:0,margem_real:2500,margem_pct:100},
+      {os_id:'d3',numero:'OS-26005',status:'aberta',cliente:cli.c1,qtd_itens:1,venda:1440,fonte:'itens',
+       custo_itens:840,custos_extras:0,frete:0,margem_real:600,margem_pct:41.7},
+      {os_id:'d4',numero:'OS-26004',status:'cancelada',cliente:cli.c2,qtd_itens:0,venda:0,fonte:'itens',
+       custo_itens:0,custos_extras:0,frete:0,margem_real:0,margem_pct:null},
     ],
   };
 }
@@ -11056,9 +11131,10 @@ async function abrirOSPorId(osId){
 // ════════════════════════════════════════════════════════════════════════════
 const REL = {
   qual:'operacional',
-  de:null, ate:null, chave:null,   // S48 · chave = o período escolhido na lista
+  de:null, ate:null, chave:null,   // S48 · chave = o período escolhido na lista ("mes", "ult30"…)
   dados:null,      // cache do que foi buscado, por período
-  chave:null,
+  cache:null,      // S198 (issue 173): de|ate do que está em `dados`. Antes era a mesma `chave` do período, e o
+                   // botão perdia o "(Este mês)" ao trocar de relatório
 };
 const REL_TIPOS = [
   ['operacional','Operacional', 'OS por período, etapa e responsável'],
@@ -11142,44 +11218,89 @@ async function pintarRelatorios(){
   document.getElementById('relXLS').addEventListener('click', e => _semDuploEnvio_(e.target, () => relXLSX(m)));
 }
 
-/** Busca os dados uma vez por período — trocar de relatório não vai ao banco. */
-async function relCarregar(){
-  const chave = REL.de + '|' + REL.ate;
-  if (REL.dados && REL.chave === chave) return;
-  if (DEMO){ REL.dados = demoRel(); REL.chave = chave; return; }
-  const [os, itens, props, negs, peds, margens] = await Promise.all([
-    // As colunas sao data_abertura (DATE) e encerrada_em (TIMESTAMPTZ) — conferidas
-    // contra o information_schema, nao contra a memoria. Ver auditar_consultas.py.
-    get('ordens_servico?select=id,numero,status,descricao,data_abertura,encerrada_em,cliente_id,modo_entrega'
-        + '&data_abertura=gte.' + REL.de + '&data_abertura=lte.' + REL.ate + '&order=data_abertura'),
-    get('os_itens?select=os_id,descricao,quantidade,custo_unitario,preco_unitario,total_custo,total_venda,'
-        + 'elegivel,aprovado,origem,fornecedor,pedido_numero,pedido_em,previsto_para,recebido_em&limit=5000'),
-    get('v_propostas?select=*&limit=2000'),
-    get('v_negocios_kanban?select=*&limit=2000').catch(() => []),
-    get('v_pedidos_compra?select=*&limit=2000').catch(() => []),
-    get('v_os_margem?select=*&limit=2000').catch(() => []),
-  ]);
-  const cli = {};
-  try{ (await get('clientes?select=id,razao_social&limit=2000')).forEach(c => cli[c.id] = c.razao_social); }catch(e){}
-  REL.dados = { os, itens, props, negs, peds, margens, cli };
-  REL.chave = chave;
+/** S198 (issue 173): lê tudo, de 1000 em 1000. O servidor devolve no máximo um tanto de linhas por pedido e
+ *  corta calado o que passa; aqui se pede a página seguinte até vir menos do que já veio. Teto de 50 páginas:
+ *  passou disso, o que ficou de fora vira aviso (nunca número menor sem dizer). */
+async function relLerTudo(q, rot, avisos){
+  const PAG = 1000, TETO = 50;
+  let out = [], off = 0, maior = 0;
+  for (let k = 0; k < TETO; k++){
+    const r = (await get(q + '&limit=' + PAG + '&offset=' + off)) || [];
+    out = out.concat(r);
+    if (!r.length || r.length < maior) return out;
+    maior = Math.max(maior, r.length); off += r.length;
+  }
+  if (avisos) avisos.push(rot + ': passou de ' + out.length + ' linhas, e só essas entraram');
+  return out;
 }
 
-const _dentro = (d) => !d ? false : (String(d).slice(0,10) >= REL.de && String(d).slice(0,10) <= REL.ate);
+/** Busca os dados uma vez por período — trocar de relatório não vai ao banco.
+ *  S198 (issues 172 e 173): só o que é do período; as propostas (com e sem OS, a última revisão de cada número) e
+ *  o que cada OS vende e custa vêm do banco prontos (tf_rel_propostas, tf_rel_os_valores: uma resposta só, sem
+ *  teto de linhas). O que não pôde ser lido vira aviso na tela e no PDF — antes um `.catch(() => [])` deixava o
+ *  número menor, sem dizer nada. */
+async function relCarregar(){
+  const chave = REL.de + '|' + REL.ate;
+  if (REL.dados && REL.cache === chave) return;
+  if (DEMO){ REL.dados = demoRel(); REL.cache = chave; return; }
+  const avisos = [];
+  const tenta = (rot, p) => p.catch(e => { avisos.push(rot + ' não pôde ser lido (' + (e.message || e) + ')'); return null; });
+  // o pedido de compra tem data e hora: o dia é o de Brasília
+  const diaSeg = d => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + 1); return isoHoje(x); };
+  const de = encodeURIComponent(REL.de + 'T00:00:00-03:00'), ate = encodeURIComponent(diaSeg(REL.ate) + 'T00:00:00-03:00');
+  const [os, peds, atrasados, negs, props, valores] = await Promise.all([
+    // As colunas sao data_abertura (DATE) e encerrada_em (TIMESTAMPTZ) — conferidas
+    // contra o information_schema, nao contra a memoria. Ver auditar_consultas.py.
+    relLerTudo('ordens_servico?select=id,numero,status,descricao,data_abertura,encerrada_em,cliente_id,modo_entrega'
+        + '&data_abertura=gte.' + REL.de + '&data_abertura=lte.' + REL.ate + '&order=data_abertura,id', 'As OS do período', avisos),
+    tenta('Os pedidos de compra', relLerTudo('v_pedidos_compra?select=*&emitido_em=gte.' + de + '&emitido_em=lt.' + ate
+        + '&order=emitido_em,id', 'Os pedidos de compra', avisos)),
+    // atrasado é foto de hoje (não do período): pedido feito, não recebido, com a data prevista vencida
+    tenta('Os itens atrasados', relLerTudo('os_itens?select=id,os_id,descricao,fornecedor,pedido_numero,previsto_para,recebido_em'
+        + '&pedido_numero=not.is.null&recebido_em=is.null&previsto_para=lt.' + isoHoje() + '&order=previsto_para,id',
+        'Os itens atrasados', avisos)),
+    tenta('O funil comercial', relLerTudo('v_negocios_kanban?select=id,coluna&order=id', 'O funil comercial', avisos)),
+    tenta('As propostas', rpc('tf_rel_propostas', { p_de: REL.de, p_ate: REL.ate })),
+    tenta('Os valores das OS', rpc('tf_rel_os_valores', { p_de: REL.de, p_ate: REL.ate })),
+  ]);
+  const cli = {};
+  const ids = [...new Set(os.map(o => o.cliente_id).filter(Boolean))];
+  await tenta('O nome dos clientes', (async () => {
+    for (let k = 0; k < ids.length; k += 80)
+      (await get('clientes?select=id,razao_social&id=in.(' + ids.slice(k, k + 80).join(',') + ')') || [])
+        .forEach(c => cli[c.id] = c.razao_social);
+  })());
+  REL.dados = { os, peds: peds || [], atrasados: atrasados || [], negs: negs || [], props, valores, cli, avisos };
+  REL.cache = chave;
+}
+
+/** O MODELO, com o aviso de dado incompleto (S198, issue 173) em todos os relatórios. */
+function relModelo(){
+  const m = relModeloBase();
+  const av = (REL.dados && REL.dados.avisos) || [];
+  m.aviso = av.length ? 'Dados incompletos: ' + av.join('; ') + '. Os números abaixo podem estar menores do que são.' : '';
+  return m;
+}
+const relPct = v => v == null || v === '' || !isFinite(Number(v)) ? '—'
+  : Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%';
 
 /**
  * O MODELO. Uma função, um objeto, três saídas.
  * { titulo, subtitulo, kpis:[{rot,val}], blocos:[{titulo,colunas,linhas,nota}] }
  */
-function relModelo(){
+function relModeloBase(){
   const D = REL.dados || {};
   const per = 'de ' + dataBR(REL.de) + ' a ' + dataBR(REL.ate);
 
   if (REL.qual === 'operacional'){
-    const os = (D.os || []);
-    const porOS = {};
-    (D.itens || []).forEach(i => { (porOS[i.os_id] = porOS[i.os_id] || []).push(i); });
-    const abertas = os.filter(o => o.status !== 'concluida' && o.status !== 'cancelada');
+    // S198 (issue 173): a cancelada conta à parte e aparece como "cancelada" (era "aberta"); a venda é a que a OS
+    // fatura (tf_rel_os_valores), a mesma do Financeiro
+    const todas = (D.os || []);
+    const canceladas = todas.filter(o => o.status === 'cancelada');
+    const os = todas.filter(o => o.status !== 'cancelada');
+    const val = {}; (D.valores || []).forEach(v => { val[v.os_id] = v; });
+    const temVal = Array.isArray(D.valores);
+    const abertas = os.filter(o => o.status !== 'concluida');
     const fechadas = os.filter(o => o.status === 'concluida');
     // Dia contra dia: encerrada_em e instante, data_abertura e data pura. Misturar os
     // dois em new Date() come um dia em Brasilia (o mesmo defeito do dataBR).
@@ -11187,8 +11308,9 @@ function relModelo(){
     const dias = fechadas.filter(o => o.encerrada_em && o.data_abertura)
       .map(o => (new Date(soDia(o.encerrada_em)+'T12:00') - new Date(soDia(o.data_abertura)+'T12:00')) / 864e5);
     const medio = dias.length ? (dias.reduce((a,b)=>a+b,0) / dias.length) : null;
+    // S198 (issue 173): o nome da coluna como está no quadro (rotuloCol), não o nome interno da etapa
     const colunaDe = {};
-    cards.forEach(c => { colunaDe[c.os_id] = c.coluna; });
+    cards.forEach(c => { colunaDe[c.os_id] = rotuloCol(c); });
     const porColuna = {};
     abertas.forEach(o => { const c = colunaDe[o.id] || '(fora do quadro)';
       porColuna[c] = (porColuna[c] || 0) + 1; });
@@ -11198,6 +11320,7 @@ function relModelo(){
         { rot:'OS abertas no período', val:String(os.length) },
         { rot:'Concluídas', val:String(fechadas.length) },
         { rot:'Em andamento', val:String(abertas.length) },
+        { rot:'Canceladas', val:String(canceladas.length) },
         { rot:'Tempo médio até fechar', val: medio == null ? '—' : medio.toFixed(1) + ' dias' },
       ],
       blocos:[
@@ -11205,29 +11328,34 @@ function relModelo(){
           colunas:['Etapa','OS'],
           linhas:Object.entries(porColuna).sort((a,b)=>b[1]-a[1]).map(([k,v]) => [k, v]),
           numericas:[1],
-          nota:'A etapa é derivada da primeira tarefa não resolvida — não é campo digitado.' },
+          nota:'A etapa é a coluna do quadro em que a OS está (a da primeira tarefa não resolvida) — não é campo digitado.' },
         { titulo:'OS do período',
-          colunas:['OS','Cliente','Descrição','Aberta em','Situação','Itens','Venda'],
-          linhas:os.map(o => {
-            const its = (porOS[o.id] || []).filter(i => i.elegivel);
-            return [o.numero, D.cli[o.cliente_id] || '', o.descricao || '', dataBR(o.data_abertura),
-              o.status === 'concluida' ? 'concluída' : (colunaDe[o.id] || 'aberta'),
-              its.length, its.reduce((a,i)=>a+Number(i.total_venda||0),0)];
-          }), numericas:[5,6], moeda:[6] },
+          colunas: temVal ? ['OS','Cliente','Descrição','Aberta em','Situação','Itens','Venda'] : ['OS','Cliente','Descrição','Aberta em','Situação'],
+          linhas:todas.map(o => {
+            const v = val[o.id] || {};
+            const l = [o.numero, D.cli[o.cliente_id] || '', o.descricao || '', dataBR(o.data_abertura),
+              o.status === 'cancelada' ? 'cancelada' : o.status === 'concluida' ? 'concluída' : (colunaDe[o.id] || 'aberta')];
+            return temVal ? l.concat([Number(v.qtd_itens || 0), Number(v.venda || 0)]) : l;
+          }), numericas: temVal ? [5,6] : [], moeda: temVal ? [6] : [],
+          nota: (temVal ? 'Venda = o que a OS fatura (a medição, quando há; senão os itens aprovados). ' : '')
+            + 'A OS cancelada aparece na lista, mas não entra nas contas de cima.' },
       ]
     };
   }
 
   if (REL.qual === 'comercial'){
-    const props = (D.props || []).filter(p => _dentro(p.emitida_em || p.created_at));
-    const val = s => props.filter(p => p.status === s).reduce((a,p)=>a+Number(p.valor_total||0),0);
-    const n = s => props.filter(p => p.status === s).length;
+    // S198 (issue 172): todas as propostas (com e sem OS), uma linha por número com a última revisão (valor e
+    // situação); a data é a da 1ª emissão do número. Antes só a proposta com OS entrava e cada revisão contava
+    // como proposta nova: a taxa de aprovação saía perto de 100% e a lista de perdas, quase vazia.
+    const props = (D.props || []);
+    const ehAprov = p => p.status === 'aprovada' || p.status === 'aprovada_parcial';
+    const soma = l => l.reduce((a,p)=>a+Number(p.valor_total||0),0);
     const emitidas = props.length;
-    const aprov = n('aprovada'), rep = n('reprovada');
+    const aprov = props.filter(ehAprov).length, rep = props.filter(p => p.status === 'reprovada').length;
     const conv = (aprov + rep) ? Math.round(aprov / (aprov + rep) * 100) : null;
     const porMotivo = {};
     props.filter(p => p.status === 'reprovada').forEach(p => {
-      const m = p.motivo_perda || p.motivo_perda_id || '(não informado)';
+      const m = p.motivo_perda || '(não informado)';
       porMotivo[m] = (porMotivo[m] || 0) + 1;
     });
     const funil = {};
@@ -11235,23 +11363,25 @@ function relModelo(){
     return {
       titulo:'Relatório comercial', subtitulo:'Propostas emitidas ' + per,
       kpis:[
-        { rot:'Propostas emitidas', val:String(emitidas) },
-        { rot:'Valor emitido', val:BRL(props.reduce((a,p)=>a+Number(p.valor_total||0),0)) },
-        { rot:'Aprovadas', val:aprov + (conv != null ? ' · ' + conv + '%' : '') },
-        { rot:'Valor aprovado', val:BRL(val('aprovada')) },
+        { rot:'Propostas emitidas', val: D.props ? String(emitidas) : '—' },
+        { rot:'Valor emitido', val: D.props ? BRL(soma(props)) : '—' },
+        { rot:'Aprovadas', val: D.props ? aprov + (conv != null ? ' · ' + conv + '%' : '') : '—' },
+        { rot:'Valor aprovado', val: D.props ? BRL(soma(props.filter(ehAprov))) : '—' },
       ],
       blocos:[
         { titulo:'Propostas do período',
           // S29: "Rev. NN" no número, sem a coluna do contador interno
-          colunas:['Número','Cliente','OS','Status','Emitida em','Valor'],
-          linhas:props.map(p => [rotuloProposta(p.numero, p.versao), p.cliente || '', p.os_numero || p.os || '',
-            p.status, p.emitida_em ? dataBR(p.emitida_em) : '', Number(p.valor_total||0)]),
-          numericas:[5], moeda:[5] },
+          colunas:['Número','Cliente','OS','Situação','Emitida em','Valor'],
+          linhas:props.map(p => [rotuloProposta(p.numero, p.versao), p.cliente || '', p.os_numero || 'sem OS',
+            rotuloSituacaoProposta(p.status), p.emitida_em ? dataBR(p.emitida_em) : '', Number(p.valor_total||0)]),
+          numericas:[5], moeda:[5],
+          nota:'Uma linha por proposta, com o valor e a situação da última revisão; a data é a da 1ª emissão. '
+             + 'Entra também a que ainda não virou OS. Aprovadas (%) = aprovadas ÷ (aprovadas + não aprovadas).' },
         { titulo:'Por que se perde',
           colunas:['Motivo','Propostas'],
           linhas:Object.entries(porMotivo).sort((a,b)=>b[1]-a[1]),
           numericas:[1],
-          nota:!rep ? 'Nenhuma proposta reprovada no período.' : '' },
+          nota:!rep ? 'Nenhuma proposta não aprovada no período.' : '' },
         { titulo:'Funil comercial hoje',
           colunas:['Etapa','Negócios'], linhas:Object.entries(funil), numericas:[1],
           nota:'Foto de agora, não do período — o funil é um estado, não um acumulado.' },
@@ -11260,36 +11390,43 @@ function relModelo(){
   }
 
   if (REL.qual === 'financeiro'){
-    const idsPeriodo = new Set((D.os || []).map(o => o.id));
-    const m = (D.margens || []).filter(x => idsPeriodo.has(x.os_id));
+    // S198 (issue 173): a venda é a que a OS fatura (a visita de contrato pela medição; a OS comum com a medição
+    // fechada pelo executado), e a OS cancelada fica de fora. A coluna "%" sai com o sinal.
+    const temVal = Array.isArray(D.valores);
+    const m = (D.valores || []).filter(x => x.status !== 'cancelada');
     const soma = k => m.reduce((a,x) => a + Number(x[k]||0), 0);
     const venda = soma('venda'), custo = soma('custo_itens'), extras = soma('custos_extras');
     const real = soma('margem_real');
+    const tr = v => temVal ? v : '—';
     return {
       titulo:'Relatório financeiro', subtitulo:'Margem das OS abertas ' + per,
       kpis:[
-        { rot:'Venda', val:BRL(venda) },
-        { rot:'Custo dos itens', val:BRL(custo) },
-        { rot:'Frete e outros', val:'−' + BRL(extras) },
-        { rot:'Margem real', val:BRL(real) + (venda ? ' · ' + Math.round(real/venda*100) + '%' : '') },
+        { rot:'Venda (o que a OS fatura)', val:tr(BRL(venda)) },
+        { rot:'Custo dos itens', val:tr(BRL(custo)) },
+        { rot:'Frete e outros', val:tr('−' + BRL(extras)) },
+        { rot:'Margem real', val:tr(BRL(real) + (venda ? ' · ' + relPct(Math.round(real/venda*1000)/10) : '')) },
       ],
       blocos:[
         { titulo:'Margem por OS',
-          colunas:['OS','Cliente','Venda','Custo itens','Frete e outros','Margem real','%'],
-          linhas:m.map(x => [x.numero, x.cliente || '', Number(x.venda||0), Number(x.custo_itens||0),
-            Number(x.custos_extras||0), Number(x.margem_real||0), x.margem_pct]),
-          numericas:[2,3,4,5,6], moeda:[2,3,4,5],
-          nota:'Margem real = venda − custo dos itens − o que não é item (frete, deslocamento, terceiro). '
-             + 'É a conta que some quando o frete fica no WhatsApp.' },
+          colunas:['OS','Cliente','Venda','De onde vem a venda','Custo itens','Frete e outros','Margem real','%'],
+          linhas:m.map(x => [x.numero, x.cliente || '', Number(x.venda||0), x.fonte || '', Number(x.custo_itens||0),
+            Number(x.custos_extras||0), Number(x.margem_real||0), x.margem_pct == null ? null : Number(x.margem_pct)]),
+          numericas:[2,4,5,6,7], moeda:[2,4,5,6], pct:[7],
+          nota: temVal
+            ? 'Venda = o que a OS fatura: na visita de contrato, a medição (em aberto, a conta dela até agora); na OS '
+              + 'com a medição fechada, o executado; nas outras, os itens aprovados. Margem real = venda − custo dos itens '
+              + '− o que não é item (frete, deslocamento, terceiro). OS cancelada fica de fora.'
+            : 'Os valores das OS não puderam ser lidos (veja o aviso acima).' },
       ]
     };
   }
 
   // compras
-  const peds = (D.peds || []).filter(p => _dentro(p.emitido_em));
-  const itens = (D.itens || []).filter(i => i.pedido_numero);
+  // S198 (issue 173): os pedidos já vêm só do período e os atrasados só os de hoje (o banco filtra; antes se lia
+  // a lista inteira de itens de todas as OS com teto de linhas, e o que passava ficava de fora calado)
+  const peds = (D.peds || []);
   const hoje = isoHoje();
-  const atrasados = itens.filter(i => !i.recebido_em && i.previsto_para && i.previsto_para < hoje);
+  const atrasados = (D.atrasados || []).filter(i => i.pedido_numero && !i.recebido_em && i.previsto_para && i.previsto_para < hoje);
   const porForn = {};
   peds.forEach(p => {
     const f = p.fornecedor || '(sem fornecedor)';
@@ -11332,7 +11469,7 @@ function relModelo(){
 
 function relPintarCorpo(m){
   const el = document.getElementById('relCorpo');
-  let h = '<div class="relKpis">' + m.kpis.map(k =>
+  let h = (m.aviso ? '<div class="aviso relAviso">⚠ ' + esc(m.aviso) + '</div>' : '') + '<div class="relKpis">' + m.kpis.map(k =>
     '<div class="relKpi"><b>' + esc(k.val) + '</b><span>' + esc(k.rot) + '</span></div>').join('') + '</div>';
   m.blocos.forEach(b => {
     const corte = b.linhas.slice(0, 60);
@@ -11350,6 +11487,7 @@ function relPintarCorpo(m){
             // contagem e dinheiro são os dois numéricos, e formatar pelo tipo do
             // valor erra: 1060 reais é inteiro e sairia "1060" na cara do leitor
             const txt = (b.moeda||[]).includes(i) ? BRL(Number(v)||0)
+              : (b.pct||[]).includes(i) ? relPct(v)
               : (num && typeof v === 'number' ? String(v) : esc(v ?? ''));
             return '<td class="' + (num ? 'num' : '') + '">' + txt + '</td>';
           }).join('') + '</tr>').join('')
@@ -11384,6 +11522,11 @@ async function relPDF(m){
   doc.text(m.subtitulo, M, y); y += 4.5;
   doc.text('Emitido em ' + dataBR() + (sessao.nome ? ' por ' + sessao.nome : ''), M, y);
   doc.setTextColor(0); y += 6;
+  if (m.aviso){   // S198 (issue 173): o dado incompleto também sai no papel
+    doc.setTextColor(170, 30, 30); doc.setFontSize(8);
+    const t = doc.splitTextToSize('Atenção: ' + m.aviso, 210 - 2*M);
+    doc.text(t, M, y); y += t.length * 3.4 + 2; doc.setTextColor(0);
+  }
   doc.setDrawColor(180); doc.line(M, y, 210-M, y); y += 7;
 
   const lk = (210 - 2*M) / m.kpis.length;
@@ -11411,7 +11554,7 @@ async function relPDF(m){
     // A largura sai do CONTEÚDO, não de um peso fixo: com peso fixo o "R$
     // 1.060,00" quebrava em duas linhas enquanto a coluna de data sobrava.
     const larg = 210 - 2*M;
-    const txtDe = (v, i) => (b.moeda||[]).includes(i) ? BRL(Number(v)||0) : String(v ?? '');
+    const txtDe = (v, i) => (b.moeda||[]).includes(i) ? BRL(Number(v)||0) : (b.pct||[]).includes(i) ? relPct(v) : String(v ?? '');
     const amostra = b.linhas.slice(0, 200);
     const pesos = b.colunas.map((c, i) => {
       let mx = String(c).length;
@@ -11440,6 +11583,7 @@ async function relPDF(m){
       l.forEach((v,i) => {
         const num = (b.numericas||[]).includes(i);
         const txt = (b.moeda||[]).includes(i) ? BRL(Number(v)||0)
+          : (b.pct||[]).includes(i) ? relPct(v)
           : (num && typeof v === 'number' ? String(v) : String(v ?? ''));
         const linhas = doc.splitTextToSize(txt, ws[i] - 2).slice(0, 2);
         alt = Math.max(alt, linhas.length * 3.4);
@@ -11457,19 +11601,35 @@ async function relPDF(m){
  * A planilha sai sem biblioteca: um .xlsx é um ZIP com cinco XMLs, e escrever à
  * mão evita 900 KB de CDN para uma função que roda uma vez por semana. Número
  * vai como NÚMERO — planilha em que tudo é texto é um PDF com grade.
+ * S198 (issue 174, a regra da moeda de 29/10): dinheiro é número com o formato R$ (soma no Excel); total por
+ * fórmula no fim de cada aba (nas colunas de dinheiro); "DD/MM/AAAA" vira data de verdade (ordena e filtra);
+ * a coluna `pct` sai como porcentagem; cabeçalho em negrito e fixo; largura da coluna pelo conteúdo.
+ * ⚠ Cópia IGUAL em manager/ e rh/: trocou numa, troque na outra.
  */
 async function relXLSX(m){
   const JSZipLib = await carregarJSZip();
   const zip = new JSZipLib();
   const esc_ = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const col = n => { let s = ''; n++; while (n > 0){ const r = (n-1) % 26; s = String.fromCharCode(65+r) + s; n = Math.floor((n-1)/26); } return s; };
+  // "DD/MM/AAAA" → o número de dias do Excel (1º/01/1900 = 1; a conta parte de 30/12/1899)
+  const dataXL = v => {
+    const x = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(v ?? '').trim());
+    if (!x) return null;
+    const t = Date.UTC(+x[3], +x[2] - 1, +x[1]);
+    const d = new Date(t);
+    if (isNaN(t) || d.getUTCDate() !== +x[1] || d.getUTCMonth() !== +x[2] - 1) return null;
+    return Math.round((t - Date.UTC(1899, 11, 30)) / 864e5);
+  };
+  const ehNum = v => typeof v === 'number' && isFinite(v);
+  const moedaTxt = v => 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const abas = m.blocos.filter(b => b.linhas.length).map((b, bi) => ({
     nome: (b.titulo || ('Bloco ' + (bi+1))).replace(/[\\\/\?\*\[\]:]/g,'').slice(0,28),
     colunas: b.colunas,
     linhas: b.linhas,
     numericas: b.numericas || [],
-    moeda: b.moeda || []
+    moeda: b.moeda || [],
+    pct: b.pct || []
   }));
   if (!abas.length){ toast('Nada no período para exportar.','err'); return; }
 
@@ -11494,28 +11654,63 @@ async function relXLSX(m){
     '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
     + abas.map((_,i) => '<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>').join('')
     + '<Relationship Id="rIdS" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+  // estilos: 0 normal · 1 negrito · 2 R$ · 3 data · 4 % · 5 R$ em negrito (o total)
   xl.file('styles.xml',
     '<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<numFmts count="3"><numFmt numFmtId="164" formatCode="&quot;R$ &quot;#,##0.00;\\-&quot;R$ &quot;#,##0.00"/>'
+    + '<numFmt numFmtId="165" formatCode="dd/mm/yyyy"/><numFmt numFmtId="166" formatCode="0.0%"/></numFmts>'
     + '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font>'
     + '<font><b/><sz val="11"/><name val="Calibri"/></font></fonts>'
     + '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
     + '<borders count="1"><border/></borders>'
     + '<cellStyleXfs count="1"><xf/></cellStyleXfs>'
-    + '<cellXfs count="2"><xf xfId="0"/><xf xfId="0" fontId="1" applyFont="1"/></cellXfs></styleSheet>');
+    + '<cellXfs count="6"><xf xfId="0"/><xf xfId="0" fontId="1" applyFont="1"/>'
+    + '<xf xfId="0" numFmtId="164" applyNumberFormat="1"/><xf xfId="0" numFmtId="165" applyNumberFormat="1"/>'
+    + '<xf xfId="0" numFmtId="166" applyNumberFormat="1"/><xf xfId="0" numFmtId="164" fontId="1" applyFont="1" applyNumberFormat="1"/>'
+    + '</cellXfs></styleSheet>');
 
   const ws = xl.folder('worksheets');
   abas.forEach((a, i) => {
-    const linhas = [a.colunas].concat(a.linhas);
-    const xml = linhas.map((l, ri) =>
-      '<row r="'+(ri+1)+'">' + l.map((v, ci) => {
-        const ref = col(ci) + (ri+1);
-        const num = ri > 0 && a.numericas.includes(ci) && typeof v === 'number' && isFinite(v);
-        if (num) return '<c r="'+ref+'"><v>'+v+'</v></c>';
-        return '<c r="'+ref+'" t="inlineStr"'+(ri===0?' s="1"':'')+'><is><t xml:space="preserve">'+esc_(v)+'</t></is></c>';
-      }).join('') + '</row>').join('');
+    const larg = a.colunas.map(c => String(c).length);
+    const mede = (ci, t) => { larg[ci] = Math.max(larg[ci], String(t).length); };
+    const celula = (ref, v, ci) => {
+      if (a.moeda.includes(ci) && ehNum(v)){ mede(ci, moedaTxt(v)); return '<c r="'+ref+'" s="2"><v>'+v+'</v></c>'; }
+      if (a.pct.includes(ci) && ehNum(v)){ mede(ci, v + ' %'); return '<c r="'+ref+'" s="4"><v>'+(v / 100)+'</v></c>'; }
+      if (a.numericas.includes(ci) && ehNum(v)){
+        const n = Math.round(v * 10000) / 10000; mede(ci, String(n)); return '<c r="'+ref+'"><v>'+n+'</v></c>';
+      }
+      const d = dataXL(v);
+      if (d != null){ mede(ci, '00/00/0000'); return '<c r="'+ref+'" s="3"><v>'+d+'</v></c>'; }
+      mede(ci, v ?? '');
+      return '<c r="'+ref+'" t="inlineStr"><is><t xml:space="preserve">'+esc_(v)+'</t></is></c>';
+    };
+    let xml = '<row r="1">' + a.colunas.map((c, ci) =>
+      '<c r="'+col(ci)+'1" t="inlineStr" s="1"><is><t xml:space="preserve">'+esc_(c)+'</t></is></c>').join('') + '</row>';
+    a.linhas.forEach((l, li) => {
+      const r = li + 2;
+      xml += '<row r="'+r+'">' + l.map((v, ci) => celula(col(ci) + r, v, ci)).join('') + '</row>';
+    });
+    // o total, por fórmula, nas colunas de dinheiro (o valor já vai calculado para quem abre sem recalcular)
+    if (a.moeda.length){
+      const r = a.linhas.length + 2, ult = r - 1;
+      let t = '';
+      a.colunas.forEach((_, ci) => {
+        const ref = col(ci) + r;
+        if (a.moeda.includes(ci)){
+          const s = a.linhas.reduce((x, l) => x + (ehNum(l[ci]) ? l[ci] : 0), 0);
+          t += '<c r="'+ref+'" s="5"><f>SUM('+col(ci)+'2:'+col(ci)+ult+')</f><v>'+(Math.round(s * 100) / 100)+'</v></c>';
+        } else if (ci === 0){
+          t += '<c r="'+ref+'" t="inlineStr" s="1"><is><t>Total</t></is></c>';
+        }
+      });
+      xml += '<row r="'+r+'">' + t + '</row>';
+    }
+    const cols = '<cols>' + larg.map((w, ci) => '<col min="'+(ci+1)+'" max="'+(ci+1)+'" width="'
+      + Math.min(Math.max(w + 2, 8), 60) + '" customWidth="1"/>').join('') + '</cols>';
     ws.file('sheet'+(i+1)+'.xml',
       '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-      + '<sheetData>' + xml + '</sheetData></worksheet>');
+      + '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+      + cols + '<sheetData>' + xml + '</sheetData></worksheet>');
   });
 
   const blob = await zip.generateAsync({ type:'blob',
