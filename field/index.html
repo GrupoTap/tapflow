@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapField · S62</title>
+<title>TapField · S64</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -417,6 +417,7 @@ details.termo.faq{margin-top:6px}
 .diaTog button{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:16px 14px;border:2px solid var(--rule);
   border-radius:7px;background:var(--surface);text-align:left}
 .diaTog button b{font-size:16.5px}
+.diaTog button.fila{border-style:dashed}   /* S64 (issue 166): guardado no celular, ainda não subiu */
 .diaTog button small{font-size:13px;color:var(--ink-3);white-space:nowrap}
 .diaTog button.on{border-color:var(--accent);background:var(--accent-soft)}
 .diaTog button.on small{color:var(--accent-ink);font-weight:700}
@@ -603,6 +604,9 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 .ptReg small{font-size:13px;color:var(--ink-2)}.ptReg b{font-size:15px}.ptRelG{font-size:20px!important}
 .ptReg select{max-width:46%;min-height:40px;font:inherit;font-size:14px}
 .ptOk{text-align:center}.ptOkT{font-size:20px;display:block;margin-bottom:4px}.ptOkH{font-size:28px;font-weight:800;margin:4px 0 8px}
+/* S64 (issues 140 e 141): não guardou / recusada (vermelho) e não conferida (amarelo) */
+.ptOk.ptErro{background:#FFF4F1;border:1px solid #F1C9BE}.ptOk.ptErro .ptOkT{color:#B42318}.ptOk.ptAviso{background:#FFF8E6;border:1px solid #F3D9A4}
+.ptPassos{text-align:left;margin:8px 0 0;padding-left:20px;font-size:14px;line-height:1.45}.ptPassos li{margin:3px 0}
 .ptCam{position:fixed;inset:0;background:#000;z-index:9999;display:flex;flex-direction:column}
 .ptCam video{flex:1;width:100%;object-fit:cover;min-height:0}.ptCamB{display:flex;gap:10px;padding:14px;background:#111}.ptCamB .btn{flex:1}
 .ptFalt .ptFaltL{display:flex;width:100%;gap:10px;align-items:center;text-align:left;background:none;border:0;border-bottom:1px solid var(--line,#E3E7EA);padding:10px 2px;font:inherit;color:inherit;cursor:pointer}
@@ -681,7 +685,8 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S63';   // S63 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 109 (as confirmações pela janela do TapHub, com o motivo dentro dela), 110 ("sem sinal, na fila" em amarelo; a T06 com o nome) e nomes fixos trocados por "o escritório"; núcleo N13
+const APP_VERSION = 'S64';   // S64 (S197): Rodada R6 da auditoria (celular: ponto e diária) — issue 140 (aparelho cheio: a batida não diz "registrado", o rascunho fica e, com sinal, vai direto), 141 (recusada aparece como recusada, com o motivo; o ajuste leva a hora do toque e a foto), 143 (sem códigos internos; o tempo da repetida pelo parâmetro; horas de 30 em 30) e 166 (diária sem sinal pela fila)
+// const APP_VERSION = 'S63';   // S63 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 109 (as confirmações pela janela do TapHub, com o motivo dentro dela), 110 ("sem sinal, na fila" em amarelo; a T06 com o nome) e nomes fixos trocados por "o escritório"; núcleo N13
 // const APP_VERSION = 'S62';   // S62 (S195): Rodada R4 da auditoria — issue 142 (o espelho assinado, o documento do RH e a foto do canhoto abrem com o acesso vencido: renova também no HTTP 400) e 167/189 (o valor do canhoto pelo leitor único do núcleo: "2.5" = 2,50; "1.250" = 1.250,00); núcleo N12
 // const APP_VERSION = 'S61';   // S61 (S194): Rodada R3 da auditoria (issues 203, 204 e 205): o prazo do gov.br de cada pessoa; o espelho de mês fechado é o congelado; a saída da madrugada "(+1)"; o aviso dos 15 min de intervalo (617)
 // const APP_VERSION = 'S60';   // S60 (S191): os parâmetros do Drive pela função tf_drive_parametros (215, issue 200); nada muda na tela
@@ -1186,7 +1191,7 @@ function pintarFilaParada(){
   const L = (window.Nucleo && Nucleo.fila) ? Nucleo.fila.listar().filter(x => x.parado) : [];
   if (!L.length){ m.innerHTML = '<div class="painel"><p style="margin:0">Nada parado. Tudo certo.</p></div>'; pintarFila(); return; }
   const intro = document.createElement('p'); intro.className = 'ptDica'; intro.style.textAlign = 'left';
-  intro.textContent = 'O servidor não aceitou o envio abaixo. Leia o motivo: tente de novo ou, no ponto, descarte e peça o ajuste da batida.';
+  intro.textContent = 'O servidor não aceitou o envio abaixo. Leia o motivo: tente de novo ou, no ponto, peça o ajuste da batida com a hora em que você tocou.';
   m.appendChild(intro);
   L.forEach(x => {
     const pay = (x.rpc && x.rpc.payload) || {}, ponto = x.tipo === 'ponto' && pay.p_hora_celular;
@@ -1196,7 +1201,7 @@ function pintarFilaParada(){
     c.innerHTML = '<b>' + esc(x.rotulo || x.tipo || 'Envio') + '</b>' + (d ? '<small>' + esc(dataBR(dia)) + '</small>' : '')
       + '<p class="ptLembrete esqueceu">' + esc(x.motivo || 'O servidor recusou, sem dizer o motivo.') + '</p>'
       + '<div class="ptDuas"><button type="button" class="btn" data-de-novo>Tentar de novo</button>'
-      + (ponto ? '<button type="button" class="btn pri" data-ajuste>Descartar e pedir ajuste</button>' : '<button type="button" class="btn" data-descartar>Descartar</button>') + '</div>';
+      + (ponto ? '<button type="button" class="btn pri" data-ajuste>Pedir ajuste com esta hora</button>' : '<button type="button" class="btn" data-descartar>Descartar</button>') + '</div>';
     c.querySelector('[data-de-novo]').addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => {
       try{ await Nucleo.fila.retomar(x.grupo); }catch(e){}
       const ainda = Nucleo.fila.listar().find(y => y.assinatura === x.assinatura);
@@ -1209,12 +1214,8 @@ function pintarFilaParada(){
       Nucleo.fila.descartar(x.assinatura); pintarFila(); pintarFilaParada();
     });
     const ba = c.querySelector('[data-ajuste]');
-    if (ba) ba.addEventListener('click', () => {
-      const hh = ptHM(d), rot = ptRot(pay.p_tipo).toLowerCase();
-      Nucleo.fila.descartar(x.assinatura); pintarFila();
-      pintarPontoPedidos({ tipo: 'esqueci', dia, tipo_batida: pay.p_tipo, hora: hh, categoria: 'Outro motivo',
-        texto: 'Bati a ' + rot + ' às ' + hh + ' pelo TapField, mas a batida ficou parada no celular (' + (x.motivo || 'recusada') + ').' });
-    });
+    // S64 (issue 141): a batida só sai da fila depois que o pedido (com a foto dela) foi guardado
+    if (ba) ba.addEventListener('click', () => ptPedirAjusteDaFila(x));
     m.appendChild(c);
   });
   pintarFila();
@@ -5509,6 +5510,9 @@ const ptAgora = () => new Date(Date.now() + (ptDifConhecida() || 0) * 1000);   /
 // S48 · a conta do almoço em minutos inteiros, como a tela e o espelho mostram (12:16 → 13:16 = 60 min, sem os segundos)
 const ptMinInt = t => Math.floor((t instanceof Date ? t.getTime() : t) / 6e4);
 const ptNaFila = () => (window.Nucleo && Nucleo.fila) ? Nucleo.fila.listar({ grupo: 'ponto' }) : [];
+const ptParadas = () => ptNaFila().filter(e => e.parado);   // S64 (issue 141): recusadas (ou paradas atrás de uma recusada)
+/** S64 (issue 143): o tempo da batida repetida vem do parâmetro do escritório (1 a 15 min), não fixo. */
+const ptDupMinF = () => { const v = Number(((PONTO || {}).limites || {}).duplicada_min); return v >= 1 && v <= 15 ? v : 10; };
 const ptHojeIso = () => { const d = ptAgora(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 
 /** As batidas de hoje: as do servidor + as que ainda estão na fila (sem sinal). */
@@ -5517,6 +5521,7 @@ function ptBatidasHoje(){
   if (PONTO && PONTO.hoje === ptHojeIso())   // S48 · 613: vêm também as do EzPoint (origem 'ezpoint')
     (PONTO.batidas || []).filter(b => b.situacao === 'valida').forEach(b => L.push({ h: b.h, tipo: b.tipo, t: new Date(b.momento).getTime(), nsr: b.nsr, fila: false, ez: b.origem === 'ezpoint' }));
   ptNaFila().forEach(e => { const p = (e.rpc || {}).payload || {}; if (!p.p_hora_celular) return;
+    if (e.parado) return;   // S64 (issue 141): recusada pelo servidor não é batida feita (aparece à parte, em vermelho)
     const d = new Date(p.p_hora_celular); if (ptHojeIso() !== (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'))) return;
     if (L.some(x => x.uid === p.p_client_uid)) return;
     L.push({ h: ptHM(d), tipo: p.p_tipo, t: d.getTime(), fila: true, uid: p.p_client_uid }); });
@@ -5526,7 +5531,7 @@ function ptBatidasHoje(){
 /** P14 e P37 (parte 2): o lembrete e o aviso do almoço, com o app aberto. */
 function ptLembrete(){
   if (!PONTO || !PONTO.bate_ponto || !PONTO.dia_de_escala || PONTO.hoje !== ptHojeIso()) return null;
-  if (ptNaFila().length) return null;          // há batida guardada esperando sinal: não lembra (P14)
+  if (ptNaFila().some(e => !e.parado)) return null;   // há batida guardada esperando sinal: não lembra (a recusada não segura o lembrete: issue 141)
   const L = ptBatidasHoje(), E = PONTO.escala || {}, lim = (PONTO.limites || {}).lembrete_min || 15, agora = ptAgora();
   const hoje = ptHojeIso(), emHora = hhmm => new Date(hoje + 'T' + String(hhmm).slice(0, 5) + ':00');
   if (!L.length && agora > new Date(emHora(E.entrada).getTime() + lim * 6e4))
@@ -5567,6 +5572,8 @@ function painelPonto(){
     + (!PONTO.dia_de_escala ? '<p class="ptFolga">' + (PONTO.feriado ? 'Hoje é feriado (' + esc(PONTO.feriado) + ').' : PONTO.ausencia ? 'Você está de ausência hoje.' : 'Hoje não é dia da sua escala.')
         + ' Se trabalhar, bata normalmente.</p>' : '')
     + (lem ? '<p class="ptLembrete ' + lem.tipo + '">' + esc(lem.txt) + (lem.tipo === 'esqueceu' ? ' <a href="#" id="ptLemPed">Esqueci de bater: pedir ajuste</a>' : '') + '</p>' : '')
+    + (ptParadas().length ? '<p class="ptLembrete esqueceu"><b>' + ptParadas().length + (ptParadas().length === 1 ? ' batida recusada' : ' batidas recusadas')
+        + ' pelo servidor</b>: não ' + (ptParadas().length === 1 ? 'conta' : 'contam') + ' até ser resolvida. <a href="#" id="ptParVer">Ver o motivo</a></p>' : '')
     + ((PT_FALT || []).length ? '<p class="ptLembrete esqueceu">' + PT_FALT.length + (PT_FALT.length === 1 ? ' dia' : ' dias') + ' com batida faltando neste mês. <a href="#" id="ptFaltPed">Ver e pedir o ajuste</a></p>' : '')
     + '<button type="button" class="btn pri ptBater" id="ptBater">Registrar ponto</button>'
     + '<p class="ptDica">' + dica + '</p>'
@@ -5578,6 +5585,7 @@ function painelPonto(){
   p.querySelector('#ptBater').addEventListener('click', () => ptIniciar());
   p.querySelector('#ptPed').addEventListener('click', () => pintarPontoPedidos());
   const fpd = p.querySelector('#ptFaltPed'); if (fpd) fpd.addEventListener('click', e => { e.preventDefault(); pintarPontoPedidos(); });
+  const fpv = p.querySelector('#ptParVer'); if (fpv) fpv.addEventListener('click', e => { e.preventDefault(); pintarFilaParada(); });
   const lp = p.querySelector('#ptLemPed');
   if (lp) lp.addEventListener('click', e => { e.preventDefault(); const sg = ptSug(L.length);
     pintarPontoPedidos({ tipo: 'esqueci', dia: ptHojeIso(), tipo_batida: sg }); });
@@ -5724,11 +5732,14 @@ async function pintarPontoFechar(){
     + (B.acordo ? lin('Banco no fim do mês', esc(ptSaldoF(C.banco_fim_min !== undefined ? C.banco_fim_min : B.saldo_min)), '') : lin('Banco', 'sem acordo assinado')) + '</div>';
   if (F.pode_intencao){
     const disp = Math.max(0, Number(B.positivo_min) || 0), ini = F.intencao || 'banco';
-    let mins = F.intencao === 'horas' ? Number(F.intencao_min) : Math.min(disp, 60);
+    // S64 (issue 143): as horas pagas vão de 30 em 30 min. O começo é arredondado para baixo, e a opção só aparece com 30 min no banco
+    const max30 = Math.floor(disp / 30) * 30, comHoras = max30 >= 30 || ini === 'horas';
+    let mins = F.intencao === 'horas' && Number(F.intencao_min) >= 30 ? Number(F.intencao_min) : Math.max(30, Math.min(max30, 60));
     h += '<div class="painel ptFechI"><div class="sec" style="margin:0 0 6px">O QUE FAZER COM AS HORAS DO BANCO (' + esc(ptHmF(disp)) + ')</div>'
       + [['banco', 'Tudo no banco', 'vira folga; cada lote vence em 6 meses'], ['limite_ir', 'Em dinheiro até o limite do IR', 'o contador diz quanto dá sem passar do limite; o resto fica no banco'],
-         ['horas', 'Em dinheiro: escolher as horas', 'hora extra com 50%']].map(([k, t, sub]) =>
+         ['horas', 'Em dinheiro: escolher as horas', 'hora extra com 50%']].filter(([k]) => k !== 'horas' || comHoras).map(([k, t, sub]) =>
         '<label class="ptOp"><input type="radio" name="ptInt" value="' + k + '"' + (ini === k ? ' checked' : '') + '><span><b>' + t + '</b><small>' + sub + '</small></span></label>').join('')
+      + (comHoras ? '' : '<p class="ptDica" style="text-align:left" id="ptSemHoras">“Em dinheiro: escolher as horas” aparece quando o banco tem pelo menos 30 min (as horas vão de 30 em 30 min).</p>')
       + '<div class="ptPasso" id="ptPasso"' + (ini === 'horas' ? '' : ' hidden') + '><button type="button" class="btn sm" id="ptMenos" aria-label="Menos 30 minutos">−</button><b id="ptMins">'
       + esc(ptHmF(mins)) + '</b><button type="button" class="btn sm" id="ptMais" aria-label="Mais 30 minutos">+</button></div>'
       + '<p class="ptDica" style="text-align:left">Sem escolha até ' + esc(ptDiaF(Z.intencao_ate)) + ', tudo fica no banco. Depois, o escritório lança o que foi pago e você confere e assina até '
@@ -5737,9 +5748,10 @@ async function pintarPontoFechar(){
     const passo = m.querySelector('#ptPasso'), lb = m.querySelector('#ptMins');
     m.querySelectorAll('[name=ptInt]').forEach(r => r.addEventListener('change', () => { passo.hidden = r.value !== 'horas' || !r.checked; }));
     m.querySelector('#ptMenos').addEventListener('click', () => { mins = Math.max(30, mins - 30); lb.textContent = ptHmF(mins); });
-    m.querySelector('#ptMais').addEventListener('click', () => { mins = Math.min(Math.floor(disp / 30) * 30 || 30, mins + 30); lb.textContent = ptHmF(mins); });
+    m.querySelector('#ptMais').addEventListener('click', () => { mins = Math.min(Math.max(30, max30), mins + 30); lb.textContent = ptHmF(mins); });
     m.querySelector('#ptIntS').addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => {
       const tipo = (m.querySelector('[name=ptInt]:checked') || {}).value || 'banco';
+      if (tipo === 'horas' && (mins < 30 || mins % 30)){ toast('As horas vão de 30 em 30 minutos.', 'err'); return; }
       try{ PT_FECH = await rpc1('tf_ponto_fech_intencao', { p_mes: F.competencia, p_tipo: tipo, p_min: tipo === 'horas' ? mins : null }); LS.set('tff_ponto_fech', PT_FECH);
            toast('Escolha salva.', 'ok'); pintarEu(); }catch(e){ toast(e.message, 'err'); }
     }));
@@ -6348,7 +6360,7 @@ function ptCamera(o){
 /** 9b: a hora e o local ficam guardados no toque; se o celular fechar o app no meio, o Eu oferece "Terminar agora / Descartar". */
 const K_PONTO_RASC = 'tff_ponto_rascunho';
 function ptFotoEConfirmar(R, modo){
-  if (R.negado){ toast('Sem a permissão de localização o ponto não é registrado (P23). Libere a localização para o TapField no celular e tente de novo.', 'err'); return; }
+  if (R.negado){ toast('Sem a permissão de localização o ponto não é registrado. Libere a localização para o TapField no celular e tente de novo.', 'err'); return; }
   if (!R.pos && !R.semLoc){ toast('Ainda procurando a localização. Espere uns segundos.', 'err'); return; }
   const obs = modo === 'explicar' ? (document.getElementById('ptObs') || {}).value || '' : '';
   if (modo === 'explicar' && obs.trim().length < 5){ toast('Escreva o motivo para voltar antes de 1h.', 'err'); return; }
@@ -6372,9 +6384,11 @@ async function ptTerminarRascunho(rasc, R){
       metodo = c.metodo; aparelho = c.aparelho || null;
       LS.set('tff_ponto_conf', Date.now());
     }
-    LS.del(K_PONTO_RASC);
-    await ptEnfileirar({ tipo: rasc.tipo, sug: rasc.sug, pos: rasc.pos }, new Date(rasc.toque), blob, metodo, aparelho, rasc.obs,
+    // S64 (issue 140): o rascunho só sai DEPOIS que a fila confirmou que guardou (ou o servidor recebeu direto).
+    // Antes ele saía aqui, e com o aparelho cheio a batida sumia e a tela dizia "Ponto registrado".
+    const ok = await ptEnfileirar({ tipo: rasc.tipo, sug: rasc.sug, pos: rasc.pos }, new Date(rasc.toque), blob, metodo, aparelho, rasc.obs,
                        Math.max(0, Math.round((Date.now() - rasc.toque) / 1000)));
+    if (ok) LS.del(K_PONTO_RASC);
   }catch(e){ R.enviando = false; toast(e.message, 'err'); }
 }
 /** O cartão do rascunho no alto do Eu (9b). */
@@ -6401,25 +6415,112 @@ async function ptEnfileirar(R, horaCel, blob, metodo, aparelho, obs, toqueS){
     p_lat: R.pos ? Number(R.pos.latitude.toFixed(6)) : null, p_lng: R.pos ? Number(R.pos.longitude.toFixed(6)) : null,
     p_precisao: R.pos ? Math.round(R.pos.accuracy) : null, p_foto: caminho, p_metodo: metodo, p_aparelho: aparelho,
     p_toque_s: toqueS == null ? null : toqueS };   // S48 · 9d: segundos entre o toque e a confirmação
-  if (DEMO){ toast('Modo demonstração: nada foi gravado.', 'ok'); pintarEu(); return; }
-  Nucleo.fila.adicionar({ tipo: 'ponto', id: u, grupo: 'ponto', rotulo: 'Ponto · ' + ptRot(R.tipo) + ' ' + ptHM(horaCel),
-    fotos: [{ chave: await Nucleo.fila.guardarFoto(blob), bucket: 'ponto', caminho, tipo: 'image/jpeg' }],
+  if (DEMO){ toast('Modo demonstração: nada foi gravado.', 'ok'); pintarEu(); return true; }
+  // S64 (issue 140): a foto e a fila podem não caber no aparelho. A resposta da fila é conferida: null = NÃO guardou.
+  let chave = null, assin = null;
+  try{ chave = await Nucleo.fila.guardarFoto(blob); }catch(e){ chave = null; }
+  if (chave) assin = Nucleo.fila.adicionar({ tipo: 'ponto', id: u, grupo: 'ponto', rotulo: 'Ponto · ' + ptRot(R.tipo) + ' ' + ptHM(horaCel),
+    fotos: [{ chave, bucket: 'ponto', caminho, tipo: 'image/jpeg' }],
     rpc: { funcao: 'tf_ponto_bater', payload } });
+  if (!assin){
+    if (chave) IDB.del(chave).catch(() => {});   // a foto que ficou sem entrada na fila não ocupa espaço à toa
+    const deNovo = () => ptEnfileirar(R, horaCel, blob, metodo, aparelho, obs, toqueS).then(ok => { if (ok) LS.del(K_PONTO_RASC); return ok; });
+    // com sinal: vai direto ao servidor, sem passar pela fila (a mesma batida: o servidor não repete pelo identificador)
+    if (navigator.onLine !== false){
+      try{
+        const r = await ptEnviarDireto(caminho, blob, payload);
+        LS.del(K_PONTO_ESPERA);
+        pintarPontoFeito(u, R.tipo, horaCel, r);
+        return true;
+      }catch(e){ pintarPontoNaoGuardado(R.tipo, horaCel, e, deNovo); return false; }
+    }
+    pintarPontoNaoGuardado(R.tipo, horaCel, null, deNovo);
+    return false;
+  }
   LS.del(K_PONTO_ESPERA);
   pintarFila();
   pintarPontoFeito(u, R.tipo, horaCel);
   try{ await Nucleo.fila.enviarAgora(); }catch(e){}
+  return true;
 }
 
-/** Depois de bater: "Ponto registrado ✓ 13:02 · volta do almoço · comprovante nº …" (P39). */
-function pintarPontoFeito(u, tipo, horaCel){
+/** S64 (issue 140): com o aparelho cheio e com sinal, a batida vai direto: a foto para o armazenamento e depois a função.
+ *  O acesso vencido (o armazenamento responde 400 '"exp" claim') é renovado uma vez. Devolve a resposta da tf_ponto_bater. */
+async function ptEnviarDireto(caminho, blob, payload){
+  const url = SUPABASE_URL + '/storage/v1/object/ponto/' + caminho.split('/').map(encodeURIComponent).join('/');
+  const vai = () => fetch(url, { method: 'POST', body: blob, headers: Object.assign({ apikey: SUPABASE_ANON_KEY, 'Content-Type': 'image/jpeg' },
+    sessao.token ? { Authorization: 'Bearer ' + sessao.token } : {}) });
+  const semSinal = () => Object.assign(new Error('Sem sinal agora.'), { rede: true });
+  let r;
+  try{ r = await vai(); }catch(e){ throw semSinal(); }
+  if (!r.ok && sessao.refresh){
+    const txt = await r.clone().text().catch(() => '');
+    if ((r.status === 401 || r.status === 403 || (r.status === 400 && tokenVencido({ message: txt }))) && await renovarToken()){
+      try{ r = await vai(); }catch(e){ throw semSinal(); }
+    }
+  }
+  if (!r.ok){
+    const j = await r.json().catch(() => ({})), msg = String(j.message || j.error || '');
+    // "já existe" = a foto subiu numa tentativa anterior: segue para a função
+    if (!(r.status === 409 || /exist|duplicate/i.test(msg))){
+      if (r.status >= 500) throw semSinal();
+      throw new Error(tokenVencido({ status: r.status, message: msg }) ? 'Sua sessão venceu: entre de novo com internet.' : 'O servidor não aceitou a foto da batida.');
+    }
+  }
+  return rpc('tf_ponto_bater', payload);
+}
+
+/** S64 (issue 140): a batida NÃO foi registrada (não coube no aparelho e não deu para enviar direto). Tela vermelha, com o caminho. */
+function pintarPontoNaoGuardado(tipo, horaCel, err, deNovo){
   tela = 'pontoOk'; atual = null;
   document.getElementById('btnBack').hidden = false;
   document.getElementById('hTit').textContent = 'Ponto';
   const m = document.getElementById('main');
+  const recusou = err && !err.rede;
+  m.innerHTML = '<div class="painel ptOk ptErro"><b class="ptOkT">A batida NÃO foi registrada</b><p class="ptOkH">' + esc(ptHM(horaCel)) + ' · ' + esc(ptRot(tipo)) + '</p>'
+    + '<p>O celular está sem espaço para guardar a batida' + (recusou ? ', e o envio direto foi recusado: <b>' + esc(err.message) + '</b>'
+        : navigator.onLine === false || (err && err.rede) ? ' e está sem sinal agora' : '') + '. Nada foi enviado.</p>'
+    + '<ol class="ptPassos"><li>Com internet, toque em <b>Tentar de novo</b>: com sinal, a batida vai direto, sem precisar guardar no celular.</li>'
+    + '<li>Envie o que está na fila (a faixa de cima): isso libera espaço.</li>'
+    + '<li>Libere espaço no celular (fotos, vídeos, apps que não usa).</li>'
+    + '<li>Se não der, peça o ajuste desta batida com a hora em que você tocou.</li></ol></div>'
+    + '<button type="button" class="btn pri" id="ptDeNovo">Tentar de novo</button>'
+    + '<button type="button" class="btn" id="ptAjNG">Pedir ajuste com esta hora</button>'
+    + '<button type="button" class="btn" id="ptVolta">Voltar</button>';
+  m.querySelector('#ptDeNovo').addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => { try{ await deNovo(); }catch(e){ toast(e.message, 'err'); } }));
+  m.querySelector('#ptAjNG').addEventListener('click', () => {
+    const d = horaCel, dia = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'), hh = ptHM(d);
+    pintarPontoPedidos({ tipo: 'esqueci', dia, tipo_batida: tipo, hora: hh, categoria: 'Outro motivo',
+      texto: 'Toquei para bater a ' + ptRot(tipo).toLowerCase() + ' às ' + hh + ' pelo TapField, mas o celular estava sem espaço e a batida não foi guardada.' });
+  });
+  m.querySelector('#ptVolta').addEventListener('click', () => pintarEu());
+}
+
+/** S64 (issue 141): pedir o ajuste de uma batida parada, com a hora do toque e a foto dela. A batida só sai da fila
+ *  depois que o pedido foi guardado (fechar o formulário não perde nada). */
+async function ptPedirAjusteDaFila(x){
+  const pay = (x.rpc && x.rpc.payload) || {}, d = new Date(pay.p_hora_celular);
+  const dia = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'), hh = ptHM(d);
+  let foto = null;
+  try{ const ch = ((x.fotos || [])[0] || {}).chave; if (ch) foto = await IDB.get(ch); }catch(e){ foto = null; }
+  pintarPontoPedidos({ tipo: 'esqueci', dia, tipo_batida: pay.p_tipo, hora: hh, categoria: 'Outro motivo', fotoBatida: foto instanceof Blob ? foto : null,
+    descartar: x.assinatura,
+    texto: 'Bati a ' + ptRot(pay.p_tipo).toLowerCase() + ' às ' + hh + ' pelo TapField, mas o servidor recusou a batida (' + String(x.motivo || 'sem motivo').replace(/^Recusado pelo servidor: /, '') + ').' });
+}
+
+/** Depois de bater: "Ponto registrado ✓ 13:02 · volta do almoço · comprovante nº …".
+ *  S64 (issues 140 e 141): "registrado" só com a resposta do servidor na mão. Na fila: "guardado no celular" (sem sinal ou
+ *  enviando); recusada: vermelho, com o motivo, "Tentar de novo" e "Pedir ajuste com esta hora"; fora da fila e sem resposta:
+ *  "não consegui conferir" (nunca "registrado" por não estar na fila). `rDireto` = a resposta do envio direto. */
+function pintarPontoFeito(u, tipo, horaCel, rDireto){
+  tela = 'pontoOk'; atual = null;
+  document.getElementById('btnBack').hidden = false;
+  document.getElementById('hTit').textContent = 'Ponto';
+  const m = document.getElementById('main');
+  let conferiu = false;
   const desenhar = (r) => {
     if (tela !== 'pontoOk') return;
-    const naFila = ptNaFila().some(e => e.id === u);
+    const ent = ptNaFila().find(e => e.id === u);
     if (r && r.virou_pedido){   // S48 · 9d: passou de 10 min entre o toque e a confirmação
       m.innerHTML = '<div class="painel ptOk"><b class="ptOkT">Virou pedido de ajuste</b><p class="ptOkH">' + esc((r.pedido || {}).hora || ptHM(horaCel)) + ' · ' + esc(ptRot(tipo)) + '</p>'
         + '<p>Passaram mais de 10 minutos entre o toque e a confirmação. A batida foi como pedido de ajuste, com a hora do toque: o escritório aprova.</p></div>'
@@ -6427,29 +6528,53 @@ function pintarPontoFeito(u, tipo, horaCel){
       m.querySelector('#ptVolta').addEventListener('click', () => pintarPontoPedidos());
       return;
     }
-    m.innerHTML = '<div class="painel ptOk"><b class="ptOkT">' + (r && r.situacao === 'desconsiderada' ? 'Batida repetida' : naFila ? 'Ponto guardado no celular' : 'Ponto registrado ✓') + '</b>'
-      + '<p class="ptOkH">' + esc(r ? new Date(r.momento).toTimeString().slice(0, 5) : ptHM(horaCel)) + ' · ' + esc(ptRot(tipo)) + '</p>'
+    const hora = esc(r && r.momento ? new Date(r.momento).toTimeString().slice(0, 5) : ptHM(horaCel)) + ' · ' + esc(ptRot(tipo));
+    if (!r && ent && ent.parado){   // issue 141: recusada pelo servidor (ou parada atrás de uma recusada)
+      m.innerHTML = '<div class="painel ptOk ptErro"><b class="ptOkT">Batida recusada pelo servidor</b><p class="ptOkH">' + hora + '</p>'
+        + '<p class="ptLembrete esqueceu">' + esc(ent.motivo || 'O servidor recusou, sem dizer o motivo.') + '</p>'
+        + '<p>Ela <b>não conta</b> e não sobe sozinha. Corrija o que o motivo diz e toque em “Tentar de novo”, ou peça o ajuste com a hora em que você tocou (a foto vai junto).</p></div>'
+        + '<button type="button" class="btn" id="ptDeNovo">Tentar de novo</button>'
+        + '<button type="button" class="btn pri" id="ptAjF">Pedir ajuste com esta hora</button>'
+        + '<button type="button" class="btn" id="ptVolta">Voltar</button>';
+      m.querySelector('#ptDeNovo').addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => {
+        try{ await Nucleo.fila.retomar(ent.grupo); }catch(e){}
+        pintarFila(); tentar(0);
+      }));
+      m.querySelector('#ptAjF').addEventListener('click', () => ptPedirAjusteDaFila(ent));
+      m.querySelector('#ptVolta').addEventListener('click', () => pintarEu());
+      return;
+    }
+    const ok = !!(r && (r.nsr || r.id));
+    const tit = r && r.situacao === 'desconsiderada' ? 'Batida repetida' : ok ? 'Ponto registrado ✓' : ent ? 'Ponto guardado no celular' : conferiu ? 'Não consegui conferir a batida' : 'Conferindo…';
+    const semSinal = ent && (navigator.onLine === false || Number(ent.tentativas) > 0);
+    m.innerHTML = '<div class="painel ptOk' + (!ok && !ent && conferiu ? ' ptAviso' : '') + '"><b class="ptOkT">' + tit + '</b>'
+      + '<p class="ptOkH">' + hora + '</p>'
       + (r && r.nsr ? '<p>Comprovante nº <b>' + esc(String(r.nsr)) + '</b></p><button type="button" class="btn" id="ptVerC">Ver comprovante</button>'
-         : naFila ? '<p>Sem sinal agora: a batida e a foto sobem sozinhas quando voltar a internet, com a hora em que você tocou. O comprovante sai quando subir.</p>'
-         : '<p>Enviando…</p>')
-      + (r && r.situacao === 'desconsiderada' ? '<p class="ptLembrete esqueceu">Você já tinha batido há menos de 10 minutos: esta ficou guardada como repetida e não conta.</p>' : '')
+         : ent ? (semSinal ? '<p>Sem sinal agora: a batida e a foto sobem sozinhas quando voltar a internet, com a hora em que você tocou. O comprovante sai quando subir.</p>'
+                           : '<p>Enviando… O comprovante aparece aqui quando o servidor receber.</p>')
+         : conferiu ? '<p>A batida não está mais guardada no celular, mas o servidor não respondeu agora. Com internet, confira em “Meus comprovantes”; se ela não estiver lá, peça o ajuste com a hora em que você tocou.</p>'
+           + '<button type="button" class="btn" id="ptVerL">Meus comprovantes</button>'
+         : '<p>Conferindo com o servidor…</p>')
+      + (r && r.situacao === 'desconsiderada' ? '<p class="ptLembrete esqueceu">Você já tinha batido há menos de ' + ptDupMinF() + ' minutos: esta ficou guardada como repetida e não conta.</p>' : '')
       + (r && r.sem_localizacao ? '<p class="ptDica">Sem localização: o escritório vê o aviso.</p>' : '')
       + (r && r.relogio_divergente ? '<p class="ptDica">O relógio do celular está diferente do servidor: o escritório vê o aviso.</p>' : '')
       + '</div><button type="button" class="btn pri" id="ptVolta">Voltar</button>';
     m.querySelector('#ptVolta').addEventListener('click', () => pintarEu());
     const vc = m.querySelector('#ptVerC'); if (vc) vc.addEventListener('click', () => ptAbrirComprovante(r.nsr));
+    const vl = m.querySelector('#ptVerL'); if (vl) vl.addEventListener('click', () => pintarPontoComprovantes());
   };
-  desenhar(null);
   // quando a fila sobe, a resposta da função diz o NSR
   const tentar = async (k) => {
     if (tela !== 'pontoOk') return;
-    if (ptNaFila().some(e => e.id === u)){ desenhar(null); if (k < 40) setTimeout(() => tentar(k + 1), 3000); return; }
-    try{
-      await ptRecarregar();
-      const r = await rpc('tf_ponto_bater_ver', { p_client_uid: u });
-      desenhar(r);
-    }catch(e){ desenhar(null); }
+    const ent = ptNaFila().find(e => e.id === u);
+    if (ent){ desenhar(null); if (!ent.parado && k < 40) setTimeout(() => tentar(k + 1), 3000); return; }
+    let r = null;
+    try{ await ptRecarregar(); r = await rpc('tf_ponto_bater_ver', { p_client_uid: u }); }catch(e){ r = null; }
+    conferiu = true;
+    desenhar(r);
   };
+  if (rDireto){ ptRecarregar().catch(() => {}); conferiu = true; desenhar(rDireto); return; }
+  desenhar(null);
   setTimeout(() => tentar(0), 600);
 }
 
@@ -6633,7 +6758,8 @@ async function pintarPontoPedidos(pre){
     + '<div class="ptDiaBox" id="ppDiaBox"></div>'
     + '<div id="ppEsq"><div class="campo"><label for="ppTb">Qual batida faltou</label><select id="ppTb">' + optTb(hotel.some(([k]) => k === P.tipo_batida)) + '</select>'
       + '<button type="button" class="lnk" id="ppMais">' + (hotel.some(([k]) => k === P.tipo_batida) ? '' : 'mais opções (hotel)') + '</button></div>'
-      + '<div class="campo"><label for="ppHora">Horário em que você bateria</label><input type="text" id="ppHora" inputmode="numeric" autocomplete="off" maxlength="5" placeholder="HH:MM" value="' + esc(P.hora) + '"></div></div>'
+      + '<div class="campo"><label for="ppHora">Horário em que você bateria</label><input type="text" id="ppHora" inputmode="numeric" autocomplete="off" maxlength="5" placeholder="HH:MM" value="' + esc(P.hora) + '"></div>'
+      + (P.fotoBatida ? '<p class="ptDica" style="text-align:left" id="ppFotoBat">A foto que você tirou na batida vai junto com o pedido.</p>' : '') + '</div>'
     + '<div id="ppAt"><div class="campo" id="ppParteC"><label>Parte do dia (deixe em branco se foi o dia todo)</label>'
       + '<div class="ptDuas"><input type="text" id="ppHi" inputmode="numeric" maxlength="5" placeholder="das HH:MM" aria-label="Das"><input type="text" id="ppHf" inputmode="numeric" maxlength="5" placeholder="até HH:MM" aria-label="Até"></div>'
       + '<button type="button" class="lnk" id="ppSug" hidden></button></div>'
@@ -6727,16 +6853,22 @@ async function pintarPontoPedidos(pre){
     if (texto.length < 3){ toast('Escreva o motivo.', 'err'); return; }
     if (P.tipo === 'atestado' && !fotos.length){ toast('Tire ou escolha a foto do atestado.', 'err'); return; }
     const u = uid(), eu = canUid();
-    const anexos = P.tipo === 'atestado' ? fotos.map((b, i) => eu + '/pedidos/' + u + (i ? '-' + (i + 1) : '') + '.jpg') : [];
+    // S64 (issue 141): no ajuste de uma batida recusada, a foto da batida vai como anexo
+    const fotosEnv = P.tipo === 'atestado' ? fotos : P.tipo === 'esqueci' && P.fotoBatida ? [P.fotoBatida] : [];
+    const anexos = fotosEnv.map((b, i) => eu + '/pedidos/' + u + (i ? '-' + (i + 1) : '') + '.jpg');
     const payload = { p_client_uid: u, p_tipo: P.tipo, p_dia: dia, p_hora: P.tipo === 'esqueci' ? hora : null,
       p_tipo_batida: P.tipo === 'esqueci' ? tb.value : null, p_motivo: sm.value, p_texto: texto,
       p_hora_inicio: P.tipo === 'atestado' && !varios && hi ? hi : null, p_hora_fim: P.tipo === 'atestado' && !varios && hf ? hf : null,
       p_anexo: anexos[0] || null, p_dia_fim: varios ? ate : null, p_anexos: anexos.length ? anexos : null };
     if (DEMO){ toast('Modo demonstração: nada foi gravado.', 'ok'); return; }
     const fq = [];
-    for (let i = 0; i < anexos.length; i++) fq.push({ chave: await Nucleo.fila.guardarFoto(fotos[i]), bucket: 'ponto', caminho: anexos[i], tipo: 'image/jpeg' });
-    Nucleo.fila.adicionar({ tipo: 'ponto_pedido', id: u, grupo: 'ponto_pedido', rotulo: 'Pedido de ajuste · ' + ptDiaF(dia),
+    try{ for (let i = 0; i < anexos.length; i++) fq.push({ chave: await Nucleo.fila.guardarFoto(fotosEnv[i]), bucket: 'ponto', caminho: anexos[i], tipo: 'image/jpeg' }); }
+    catch(e){ fq.forEach(x => IDB.del(x.chave).catch(() => {})); toast('O celular está sem espaço para guardar o pedido: NÃO foi guardado. Envie o que está na fila ou libere espaço e tente de novo.', 'err'); return; }
+    // S64 (issue 140): a fila diz se guardou (null = não coube no aparelho: o pedido NÃO foi guardado)
+    const guardou = Nucleo.fila.adicionar({ tipo: 'ponto_pedido', id: u, grupo: 'ponto_pedido', rotulo: 'Pedido de ajuste · ' + ptDiaF(dia),
       fotos: fq, rpc: { funcao: 'tf_ponto_pedir', payload } });
+    if (!guardou){ fq.forEach(x => IDB.del(x.chave).catch(() => {})); return; }   // o aviso vermelho já saiu; o formulário continua preenchido
+    if (P.descartar && P.tipo === 'esqueci'){ Nucleo.fila.descartar(P.descartar); P.descartar = null; }   // a batida recusada vira este pedido
     pintarFila();
     try{ await Nucleo.fila.enviarAgora(); }catch(e){}
     toast(navigator.onLine === false ? 'Pedido guardado: sobe quando voltar o sinal.' : 'Pedido enviado.', 'ok');
@@ -6833,9 +6965,47 @@ const nPendDocs = () => DOCS && DOCS.tem_ficha ? (DOCS.docs || []).filter(d => d
 // ── DIÁRIAS ─────────────────────────────────────────────────────────────────
 async function carregarDiarias(dia){
   const d = dia || DIAR_DIA || isoHojeF();
-  DIAR = await rpc('tf_diarias_minhas', { p_mes: d.slice(0,7) + '-01', p_dia: d });
+  try{
+    DIAR = await rpc('tf_diarias_minhas', { p_mes: d.slice(0,7) + '-01', p_dia: d });
+    LS.set(K_DIAR_CACHE, DIAR);   // S64 (issue 166): o último carregado, para lançar sem sinal
+  }catch(e){
+    if (!(e.rede || navigator.onLine === false)) throw e;
+    DIAR = diaSemSinal(d); if (!DIAR) throw e;
+  }
   return DIAR;
 }
+// ── S64 (issue 166): DIÁRIA SEM SINAL, PELA FILA DO NÚCLEO ─────────────────────
+// Só o "marcar" entra na fila (v2, um grupo por refeição: a recusada fica "parada" com o motivo, em "Envios parados").
+// Desmarcar pela fila seria perigoso: o 2º toque desfaria a marcação. O banco responde "ja_marcada" no reenvio.
+const K_DIAR_CACHE = 'tff_diar_cache';
+const diaNaFila = () => (window.Nucleo && Nucleo.fila) ? Nucleo.fila.listar({ tipo: 'diaria' }) : [];
+const diaFilaDe = (dia, k) => diaNaFila().find(e => { const q = (e.rpc || {}).payload || {}; return q.p_data === dia && q.p_tipo === k; });
+/** Sem sinal: o dia como foi carregado por último; sem isso, o dia de hoje vazio (o servidor confere tudo ao receber). */
+function diaSemSinal(d){
+  const c = LS.get(K_DIAR_CACHE, null), hoje = isoHojeF();
+  if (c && c.dia && c.dia.data === d) return Object.assign({}, c, { offline: true });
+  if (d !== hoje) return null;
+  return { offline: true, hoje, mes: hoje.slice(0, 7) + '-01', fechado: false, pode_lancar: true, valores: (c && c.valores) || {},
+           dia: { data: hoje, fechado: false, marcadas: {}, os_agendadas: [] }, qtd: {}, dias: [], total: null };
+}
+/** Guarda o "marcar" na fila. Devolve false se não coube no aparelho (o aviso vermelho já saiu). */
+function diaGuardar(dia, k, osId){
+  const ok = Nucleo.fila.adicionar({ tipo: 'diaria', id: (meuId() || 'eu') + ':' + dia + ':' + k, grupo: 'diaria|' + dia + '|' + k,
+    rotulo: DIA_ROT_F[k] + ' de ' + dataBR(dia).slice(0, 5),
+    rpc: { funcao: 'tf_diarias_marcar', payload: { p_data: dia, p_tipo: k, p_marcar: true, p_os_id: osId || null } } });
+  if (!ok) return false;
+  pintarFila();
+  toast(DIA_ROT_F[k] + ' guardado no celular: sobe sozinho quando voltar o sinal.', 'ok');
+  return true;
+}
+try{
+  if (window.Nucleo && Nucleo.fila) Nucleo.fila.aoMudar(ev => {
+    if (ev.tipo !== 'diaria' && !(ev.situacao === 'descartado' && /^diaria\|/.test(ev.assinatura || ''))) return;
+    if (tela !== 'dia') return;
+    if (ev.situacao === 'enviado') carregarDiarias().then(desenharDiariasF).catch(() => desenharDiariasF());
+    else desenharDiariasF();
+  });
+}catch(e){}
 async function pintarDiariasF(){
   tela = 'dia'; atual = null;
   document.getElementById('btnBack').hidden = true;
@@ -6865,16 +7035,20 @@ function desenharDiariasF(){
     + '<div class="diaNav"><button type="button" class="btn sm" id="dAnt" aria-label="Dia anterior">‹</button>'
     + '<label><span>' + (dia === hoje ? 'Hoje' : esc(DIA_SEM_F(dia))) + '</span><input type="date" id="dDia" max="' + esc(hoje) + '" value="' + esc(dia) + '"></label>'
     + '<button type="button" class="btn sm" id="dPro" aria-label="Dia seguinte"' + (dia >= hoje ? ' disabled' : '') + '>›</button></div>'
+    + (D.offline ? '<p class="diaAus">Sem sinal: mostrando o que foi carregado por último. O que você marcar fica guardado no celular e sobe sozinho quando voltar a internet. Desmarcar só com internet.</p>' : '')
     + (fechado ? '<p class="diaFech">O mês de ' + esc(MES_F(dia)) + ' está <b>fechado</b>. Esqueceu algo? Fale com o escritório.</p>' : '')
     + (!D.pode_lancar ? '<p class="diaFech">Seu cadastro não está ativo para lançar diárias.</p>' : '')
     + (minhaAusEm(dia) ? '<p class="diaAus">Neste dia você está <b>' + esc(AUS_VERBO_F[minhaAusEm(dia).tipo] || 'fora')
         + '</b>: diária não se lança. Se trabalhou, avise o escritório para corrigir a ausência.</p>'
       : minhaAusParteEm(dia) ? '<p class="diaAus">Neste dia você está <b>' + esc(AUS_VERBO_F[minhaAusParteEm(dia).tipo] || 'fora')
         + ' ' + esc(horasAusF(minhaAusParteEm(dia))) + '</b>. A diária da outra parte do dia continua liberada.</p>' : '')
-    + '<div class="diaTog">' + ['cafe','almoco','jantar'].map(k => '<button type="button" data-t="' + k + '" class="' + (marc[k] ? 'on' : '') + '"'
-        + (fechado || !D.pode_lancar || (minhaAusEm(dia) && !marc[k]) ? ' disabled' : '') + ' aria-pressed="' + (marc[k] ? 'true' : 'false') + '"><b>' + DIA_ROT_F[k] + '</b><small>'
-        + (marc[k] ? '✓ ' + BRLf(marc[k].valor) + (marc[k].por_outro ? ' · lançado pelo escritório' : '') : BRLf((D.valores || {})[k]))
-        + '</small></button>').join('') + '</div>'
+    + '<div class="diaTog">' + ['cafe','almoco','jantar'].map(k => { const fq = !marc[k] && diaFilaDe(dia, k);   // S64 (issue 166): o guardado na fila aparece marcado
+        return '<button type="button" data-t="' + k + '" class="' + (marc[k] || fq ? 'on' : '') + (fq ? ' fila' : '') + '"'
+        + (fechado || !D.pode_lancar || (minhaAusEm(dia) && !marc[k] && !fq) ? ' disabled' : '') + ' aria-pressed="' + (marc[k] || fq ? 'true' : 'false') + '"><b>' + DIA_ROT_F[k] + '</b><small>'
+        + (marc[k] ? '✓ ' + BRLf(marc[k].valor) + (marc[k].por_outro ? ' · lançado pelo escritório' : '')
+           : fq ? (fq.parado ? '⚠ recusado: veja em “Envios parados”' : '⏳ guardado no celular')
+           : (D.valores || {})[k] != null ? BRLf((D.valores || {})[k]) : '')
+        + '</small></button>'; }).join('') + '</div>'
     + '<div class="campo" style="margin:12px 0 0"><label for="dOs">OS do serviço (opcional)</label><select id="dOs"'
     + (fechado ? ' disabled' : '') + '></select></div>'
     + '<p class="diaDica">Toque no que você usou. Tocar de novo desfaz. Só você lança as suas.</p>';
@@ -6895,13 +7069,21 @@ function desenharDiariasF(){
     desenharDiariasF();
   });
   p.querySelectorAll('.diaTog button').forEach(b => b.addEventListener('click', async () => {
-    const k = b.dataset.t, marcar = !marc[k];
+    const k = b.dataset.t, fq = !marc[k] && diaFilaDe(dia, k), marcar = !marc[k];
+    // S64 (issue 166): tocar no que ainda está guardado no celular tira da fila (ainda não subiu: nada a desfazer no servidor)
+    if (fq){ Nucleo.fila.descartar(fq.assinatura); pintarFila(); toast(DIA_ROT_F[k] + ' tirado (ainda não tinha subido).', 'ok'); desenharDiariasF(); return; }
+    const semSinal = D.offline || navigator.onLine === false;
+    if (!marcar && semSinal){ toast('Sem sinal: desmarcar só com internet.', 'err'); return; }
+    if (marcar && semSinal){ diaGuardar(dia, k, sel.value || null); desenharDiariasF(); return; }
     p.querySelectorAll('.diaTog button').forEach(x => x.disabled = true);
     try{
       await rpc1('tf_diarias_marcar', { p_data: dia, p_tipo: k, p_marcar: marcar, p_os_id: marcar ? (sel.value || null) : null });
       toast(marcar ? DIA_ROT_F[k] + ' lançado.' : DIA_ROT_F[k] + ' desmarcado.', 'ok');
       await carregarDiarias(dia);
-    }catch(e){ toast(e.message, 'err'); }
+    }catch(e){
+      // caiu o sinal no meio (ou o servidor não respondeu): o "marcar" vai para a fila; o banco não repete ("ja_marcada")
+      if (marcar && e.rede) diaGuardar(dia, k, sel.value || null); else toast(e.message, 'err');
+    }
     desenharDiariasF();
   }));
   const irDia = d => { DIAR_DIA = d > hoje ? hoje : d; carregarDiarias().then(desenharDiariasF).catch(e => toast(e.message, 'err')); };
@@ -6912,7 +7094,7 @@ function desenharDiariasF(){
   const q = D.qtd || {};
   const r = document.createElement('div'); r.className = 'painel';
   r.innerHTML = '<div class="et">' + esc(MES_F(D.mes)) + (D.fechado ? ' · fechado' : '') + '</div>'
-    + '<div class="diaTot"><b>' + BRLf(D.total) + '</b><small>' + (q.cafe || 0) + ' café · ' + (q.almoco || 0) + ' almoço · ' + (q.jantar || 0) + ' jantar</small></div>'
+    + '<div class="diaTot"><b>' + (D.total == null ? '—' : BRLf(D.total)) + '</b><small>' + (q.cafe || 0) + ' café · ' + (q.almoco || 0) + ' almoço · ' + (q.jantar || 0) + ' jantar</small></div>'
     + ((D.dias || []).length ? (D.dias || []).map(x => '<button type="button" class="diaLin' + (x.data === dia ? ' on' : '') + '" data-d="' + esc(x.data) + '">'
         + '<span><b>' + esc(dataBR(x.data).slice(0,5)) + '</b> ' + esc(DIA_SEM_F(x.data).slice(0,3)) + '</span>'
         + '<span>' + x.tipos.map(t => DIA_ROT_F[t].split(' ')[0]).join(' · ') + (x.os_numero ? ' <small>' + esc(x.os_numero) + '</small>' : '') + '</span>'
@@ -7289,6 +7471,7 @@ function painelLembreteDiaria(){
     if (minhaAusEm(isoHojeF())) return null;   // S24 · hoje estou fora: não há refeição na rua a lembrar
     if (new Date().getHours() < 16) return null;
     if (Object.keys(DIAR.dia.marcadas || {}).length || DIAR.dia.fechado || !DIAR.pode_lancar) return null;
+    if (diaNaFila().some(e => ((e.rpc || {}).payload || {}).p_data === isoHojeF())) return null;   // S64 (166): já guardou no celular
     const temServico = (MEU_DIA || []).some(t => t.os_id) || (DIAR.dia.os_agendadas || []).length > 0;
     if (!temServico || LS.get('tff_dia_lemb_' + isoHojeF(), false)) return null;
     const p = document.createElement('div'); p.className = 'painel diaLemb';
