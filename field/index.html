@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapField · S64</title>
+<title>TapField · S65</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -685,7 +685,8 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S64';   // S64 (S197): Rodada R6 da auditoria (celular: ponto e diária) — issue 140 (aparelho cheio: a batida não diz "registrado", o rascunho fica e, com sinal, vai direto), 141 (recusada aparece como recusada, com o motivo; o ajuste leva a hora do toque e a foto), 143 (sem códigos internos; o tempo da repetida pelo parâmetro; horas de 30 em 30) e 166 (diária sem sinal pela fila)
+const APP_VERSION = 'S65';   // S65 (S200): Rodada R8 da auditoria (cartões) — issue 187: o canhoto vai pela fila comum do celular (no celular da empresa, sobe no nome de quem tirou; aparelho cheio avisa e não perde; o recusado fica na lista, com o motivo); a foto renova o acesso antes; "Não tenho este canhoto" no pedido do escritório
+// const APP_VERSION = 'S64';   // S64 (S197): Rodada R6 da auditoria (celular: ponto e diária) — issue 140 (aparelho cheio: a batida não diz "registrado", o rascunho fica e, com sinal, vai direto), 141 (recusada aparece como recusada, com o motivo; o ajuste leva a hora do toque e a foto), 143 (sem códigos internos; o tempo da repetida pelo parâmetro; horas de 30 em 30) e 166 (diária sem sinal pela fila)
 // const APP_VERSION = 'S63';   // S63 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 109 (as confirmações pela janela do TapHub, com o motivo dentro dela), 110 ("sem sinal, na fila" em amarelo; a T06 com o nome) e nomes fixos trocados por "o escritório"; núcleo N13
 // const APP_VERSION = 'S62';   // S62 (S195): Rodada R4 da auditoria — issue 142 (o espelho assinado, o documento do RH e a foto do canhoto abrem com o acesso vencido: renova também no HTTP 400) e 167/189 (o valor do canhoto pelo leitor único do núcleo: "2.5" = 2,50; "1.250" = 1.250,00); núcleo N12
 // const APP_VERSION = 'S61';   // S61 (S194): Rodada R3 da auditoria (issues 203, 204 e 205): o prazo do gov.br de cada pessoa; o espelho de mês fechado é o congelado; a saída da madrugada "(+1)"; o aviso dos 15 min de intervalo (617)
@@ -7748,11 +7749,17 @@ async function baixarDocF(id){
 // levantamento) e o índice para o localStorage; sobe sozinha quando voltar.
 // O id do canhoto nasce aqui: o reenvio da fila não duplica no banco (113).
 // ════════════════════════════════════════════════════════════════════════════
+// S65 · issue 187: o canhoto passou para a FILA COMUM do celular (Nucleo.fila, tipo 'canhoto'), que guarda quem fez
+// (no celular da empresa, sobe com a sessão dessa pessoa: A7), avisa quando não coube no aparelho (devolve null) e
+// deixa o recusado parado, com o motivo, até a pessoa ver. A fila própria antiga ('tff_canhotos', sem autor) só
+// esvazia: no celular pessoal, o que sobrou dela passa para a fila comum sozinho; no da empresa, a pessoa escolhe.
 const K_CANH = 'tff_canhotos';
 const CAN = { meus: null, voltar: null, foto: null, pre: null, enviando: false, demo: [] };
 const CAN_TELAS = ['lista', 'eu', 'dia', 'fer', 'docs', 'seg', 'os'];
-const canFila = () => LS.get(K_CANH, []);
+const canFila = () => LS.get(K_CANH, []);                         // a antiga (só o que sobrou)
 const canFilaSet = L => LS.set(K_CANH, L);
+const canNaFila = () => (window.Nucleo && Nucleo.fila) ? Nucleo.fila.listar({ tipo: 'canhoto' }) : [];
+const canMeuEmail = () => String(sessao.email || '').toLowerCase();
 const canValTxt = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const canBRL = v => 'R$ ' + canValTxt(v);
 function canUid(){
@@ -7777,7 +7784,7 @@ function canFab(){
 }
 /** S36 · quantos canhotos pedem a pessoa (na fila, devolvidos, pedidos). */
 function canPendentes(){
-  return canFila().length + ((CAN.meus && CAN.meus.comprovantes) || []).filter(c => c.situacao === 'devolvido').length
+  return canFila().length + canNaFila().length + ((CAN.meus && CAN.meus.comprovantes) || []).filter(c => c.situacao === 'devolvido').length
        + ((CAN.meus && CAN.meus.pedidos) || []).length;
 }
 function canAtualizarFab(){
@@ -7889,26 +7896,73 @@ async function canEnviar(){
   const igual = canFila().concat(((CAN.meus && CAN.meus.comprovantes) || []).filter(c => c.situacao !== 'cancelado'))
     .find(c => Math.abs(Number(c.valor) - valor) < 0.005 && (c.data || c.data_compra) === data);
   if (igual && !await perguntar('Canhoto repetido?', '<p>Você já mandou um canhoto de R$ ' + esc(canValTxt(valor)) + ' ' + (data === canHoje() ? 'hoje' : 'nesse dia') + '. Enviar mesmo assim?</p>', 'Enviar mesmo assim')) return;
-  CAN.enviando = true;
   const id = canNovoId();
-  try{
-    await IDB.put('canhoto:' + id, CAN.foto);
-    const L = canFila(); L.push({ id, valor, frase, data, linha_id: (CAN.pre && CAN.pre.linha_id) || null, criado: new Date().toISOString() }); canFilaSet(L);
-  }catch(e){ CAN.enviando = false; toast('Não consegui guardar a foto no aparelho: ' + e.message, 'err'); return; }
+  if (DEMO){
+    CAN.demo.unshift({ id, valor, frase, data_compra: data, situacao: 'enviado', enviado_em: new Date().toISOString() });
+    toast('Enviado · ' + canBRL(valor) + (frase ? ' · ' + frase : ''), 'ok'); canVoltar(); return;
+  }
+  if (!(window.Nucleo && Nucleo.fila)){ toast('Este aparelho não tem a fila de envios: abra o TapField com internet para atualizar.', 'err'); return; }
+  const uid = canUid();
+  if (!uid){ toast('Entre de novo para mandar o canhoto (a foto continua na tela).', 'err'); return; }
+  CAN.enviando = true;
+  const r = await canPorNaFila({ id, valor, frase, data, linha_id: (CAN.pre && CAN.pre.linha_id) || null, foto: CAN.foto, uid });
   CAN.enviando = false;
-  const r = await canFlush();
-  if (r.enviados.indexOf(id) >= 0) toast('Enviado · ' + canBRL(valor) + (frase ? ' · ' + frase : ''), 'ok');
-  else if (r.recusados.indexOf(id) < 0) toast('Guardado no aparelho · sobe sozinho quando tiver sinal.', 'ok');
+  if (!r){
+    // S65 · 187 (item 2): não coube no aparelho — nada é dito como guardado; a foto e o formulário ficam na tela
+    toast('Não coube no aparelho: libere espaço (apague fotos ou vídeos) e toque em Enviar de novo. O canhoto NÃO foi guardado.', 'err');
+    return;
+  }
+  try{ await Nucleo.fila.enviarAgora(); }catch(e){}
+  const ent = canNaFila().find(x => x.id === id);
+  if (!ent) toast('Enviado · ' + canBRL(valor) + (frase ? ' · ' + frase : ''), 'ok');
+  else if (ent.recusado || ent.parado) toast('O canhoto não foi aceito: ' + (ent.motivo || 'recusado') + ' Ele ficou em “Meus canhotos”, com o motivo.', 'err');
+  else toast('Guardado no aparelho · sobe sozinho quando tiver sinal.', 'ok');
   canVoltar();
 }
 
-/** Sobe o que está na fila, um por um. Rede caiu: para e tenta depois. */
+/** S65 · issue 187: põe o canhoto na fila comum (a foto no aparelho + o registro no banco, com a sessão de quem fez).
+ *  Devolve a assinatura da entrada, ou null quando não coube (a foto guardada sai de novo). */
+async function canPorNaFila(it){
+  let chave = null;
+  try{
+    const blob = await (await fetch(it.foto)).blob();
+    chave = await Nucleo.fila.guardarFoto(blob);
+    const path = 'comprovantes/' + it.uid + '/' + it.id + '.jpg';
+    const a = Nucleo.fila.adicionar({ tipo: 'canhoto', id: it.id, grupo: 'canhoto|' + it.id,
+      rotulo: 'Canhoto · ' + canBRL(it.valor) + (it.frase ? ' · ' + it.frase : '') + ' · ' + dataBR(it.data),
+      fotos: [{ chave, bucket: 'cartoes', caminho: path, tipo: 'image/jpeg' }],
+      rpc: { funcao: 'tf_cartao_comprovante_enviar', payload: { p_id: it.id, p_valor: it.valor, p_frase: it.frase || null, p_data: it.data,
+        p_foto_path: path, p_foto_bytes: blob.size, p_linha_id: it.linha_id || null } } });
+    if (!a){ IDB.del(chave).catch(() => {}); return null; }
+    return a;
+  }catch(e){ if (chave) IDB.del(chave).catch(() => {}); return null; }
+}
+
+/** S65 · issue 187: a fila antiga ('tff_canhotos') esvazia passando para a fila comum. No celular pessoal, quem está
+ *  nele é quem tirou: passa sozinho. No da empresa a fila antiga não sabe quem tirou — só passa quando a pessoa toca em
+ *  "Enviar em meu nome" (forcar). Depois, a fila comum envia. */
 let _canFlushando = null;
-function canFlush(){
+function canFlush(forcar){
   if (_canFlushando) return _canFlushando;
   _canFlushando = (async () => {
     const out = { enviados: [], recusados: [] };
     const uid = canUid();
+    if (!DEMO && window.Nucleo && Nucleo.fila){
+      if (uid && (!EMP_F() || forcar)){
+        for (const it of canFila()){
+          if (forcar && forcar !== true && forcar !== it.id) continue;
+          const foto = await IDB.get('canhoto:' + it.id).catch(() => null);
+          if (!foto) continue;                                       // sem a foto: fica na lista para a pessoa dispensar
+          const a = await canPorNaFila({ id: it.id, valor: it.valor, frase: it.frase, data: it.data, linha_id: it.linha_id, foto, uid });
+          if (!a) break;                                             // não coube: tenta depois
+          canFilaSet(canFila().filter(x => x.id !== it.id)); IDB.del('canhoto:' + it.id).catch(() => {});
+        }
+      }
+      try{ await Nucleo.fila.enviarAgora(); }catch(e){}
+      if (canNaFila().length < 1) canAtualizar().catch(() => {});
+      canAtualizarFab();
+      return out;
+    }
     for (const it of canFila()){
       if (DEMO){ CAN.demo.unshift({ id: it.id, valor: it.valor, frase: it.frase, data_compra: it.data, situacao: 'enviado', enviado_em: new Date().toISOString() });
         out.enviados.push(it.id); canFilaSet(canFila().filter(x => x.id !== it.id)); IDB.del('canhoto:' + it.id).catch(() => {}); continue; }
@@ -7964,11 +8018,26 @@ const CAN_SIT = { enviado: ['', 'enviado — o escritório vai lançar'], lancad
 function canDesenharLista(){
   const el = document.getElementById('canLista'); if (!el) return;
   const F = canFila(), M = (CAN.meus && CAN.meus.comprovantes) || [], P = (CAN.meus && CAN.meus.pedidos) || [];
+  const N = canNaFila(), eu = canMeuEmail();
+  const quem = x => (EMP_F() && x.por && x.por !== eu) ? ' · de ' + esc(((Nucleo.empresa && Nucleo.empresa.sessaoDe && Nucleo.empresa.sessaoDe(x.por)) || {}).nome || x.por) : '';
+  const pay = x => (x.rpc && x.rpc.payload) || {};
+  const recus = N.filter(x => x.parado), espera = N.filter(x => !x.parado);
   el.innerHTML = (P.length ? '<div class="grupoTit">O escritório pediu o canhoto</div>' + P.map(x => '<div class="epiLin"><b>' + esc(x.estabelecimento) + ' · ' + esc(canBRL(x.valor)) + '</b>'
         + '<small>' + esc(dataBR(x.data) + (x.cartao ? ' · cartão ' + x.cartao : '')) + '</small><div class="linha" style="margin-top:6px">'
-        + '<button class="btn sm pri" type="button" data-ped="' + esc(x.linha_id) + '">Enviar este</button></div></div>').join('') : '')
-    + (F.length ? '<div class="grupoTit">No aparelho, esperando sinal</div>' + F.map(x => '<div class="epiLin"><b>' + esc(canBRL(x.valor)) + (x.frase ? ' · ' + esc(x.frase) : '') + '</b>'
-        + '<small>' + esc(dataBR(x.data)) + ' · sobe sozinho quando tiver sinal</small></div>').join('') : '')
+        + '<button class="btn sm pri" type="button" data-ped="' + esc(x.linha_id) + '">Enviar este</button>'
+        // S65 · 187 (item 5): quem não tem mais o canhoto responde, com o motivo (o escritório vê na fatura)
+        + '<button class="btn sm" type="button" data-pedn="' + esc(x.linha_id) + '">Não tenho este canhoto</button></div></div>').join('') : '')
+    // S65 · 187 (item 3): o recusado pelo servidor fica aqui, com o motivo, até a pessoa ver
+    + (recus.length ? '<div class="grupoTit">Não aceito pelo servidor</div>' + recus.map(x => '<div class="epiLin canRecusado"><b>' + esc(canBRL(pay(x).p_valor)) + (pay(x).p_frase ? ' · ' + esc(pay(x).p_frase) : '') + '</b>'
+        + '<small>' + esc(dataBR(pay(x).p_data)) + quem(x) + '</small><small class="canMot">' + esc(x.motivo || 'O servidor recusou, sem dizer o motivo.') + '</small>'
+        + '<div class="linha" style="margin-top:6px"><button class="btn sm" type="button" data-cantenta="' + esc(x.assinatura) + '">Tentar de novo</button>'
+        + '<button class="btn sm" type="button" data-candisp="' + esc(x.assinatura) + '">Dispensar</button></div></div>').join('') : '')
+    + (espera.length ? '<div class="grupoTit">No aparelho, esperando sinal</div>' + espera.map(x => '<div class="epiLin"><b>' + esc(canBRL(pay(x).p_valor)) + (pay(x).p_frase ? ' · ' + esc(pay(x).p_frase) : '') + '</b>'
+        + '<small>' + esc(dataBR(pay(x).p_data)) + quem(x) + ' · sobe sozinho quando tiver sinal</small>' + (x.motivo ? '<small class="canMot">' + esc(x.motivo) + '</small>' : '') + '</div>').join('') : '')
+    + (F.length ? '<div class="grupoTit">Guardados antes da atualização</div>' + F.map(x => '<div class="epiLin"><b>' + esc(canBRL(x.valor)) + (x.frase ? ' · ' + esc(x.frase) : '') + '</b>'
+        + '<small>' + esc(dataBR(x.data)) + (EMP_F() ? ' · celular da empresa: confira se este canhoto é seu antes de enviar' : ' · sobe sozinho quando tiver sinal') + '</small>'
+        + (EMP_F() ? '<div class="linha" style="margin-top:6px"><button class="btn sm pri" type="button" data-canvelho="' + esc(x.id) + '">Enviar em meu nome</button>'
+            + '<button class="btn sm" type="button" data-canvelhod="' + esc(x.id) + '">Descartar</button></div>' : '') + '</div>').join('') : '')
     + (M.length ? M.slice(0, 40).map(c => { const [cls, rot] = CAN_SIT[c.situacao] || ['', c.situacao];
         return '<div class="epiLin' + (c.situacao === 'cancelado' ? ' riscado' : '') + '"><b>' + esc(canBRL(c.valor)) + (c.frase ? ' · ' + esc(c.frase) : '') + '</b>'
           + '<small>' + esc(dataBR(c.data_compra)) + '</small><div class="chips" style="margin-top:4px"><span class="chip ' + cls + '">'
@@ -7977,7 +8046,7 @@ function canDesenharLista(){
           + '<div class="linha" style="margin-top:6px">' + (c.foto_path ? '<button class="btn sm" type="button" data-verf="' + esc(c.foto_path) + '">Ver foto</button>' : '')
           + (c.situacao === 'devolvido' ? '<button class="btn sm pri" type="button" data-denovo="' + esc(c.id) + '">Mandar de novo</button>' : '')
           + (c.situacao === 'enviado' ? '<button class="btn sm" type="button" data-canc="' + esc(c.id) + '">Cancelar</button>' : '') + '</div></div>'; }).join('')
-      : (F.length || P.length ? '' : '<p style="margin:0;font-size:13.5px">Nenhum canhoto ainda. Os que você mandar aparecem aqui, com o que o escritório fez com cada um.</p>'));
+      : (F.length || P.length || N.length ? '' : '<p style="margin:0;font-size:13.5px">Nenhum canhoto ainda. Os que você mandar aparecem aqui, com o que o escritório fez com cada um.</p>'));
   el.querySelectorAll('[data-ped]').forEach(b => b.addEventListener('click', () => {
     const x = P.find(y => y.linha_id === b.dataset.ped);
     canNovo({ linha_id: x.linha_id, valor: Number(x.valor), data: x.data, estabelecimento: x.estabelecimento });
@@ -7991,6 +8060,37 @@ function canDesenharLista(){
     catch(e){ toast(e.message, 'err'); }
   }));
   el.querySelectorAll('[data-verf]').forEach(b => b.addEventListener('click', () => canVerFoto(b.dataset.verf)));
+  // S65 · 187 (item 5): "Não tenho este canhoto", com o motivo
+  el.querySelectorAll('[data-pedn]').forEach(b => b.addEventListener('click', async () => {
+    const x = P.find(y => y.linha_id === b.dataset.pedn); if (!x) return;
+    const r = await perguntar('Não tem este canhoto?', '<p>' + esc(x.estabelecimento) + ' · ' + esc(canBRL(x.valor)) + ' · ' + esc(dataBR(x.data)) + '</p>'
+      + '<p>O escritório vê a sua resposta na fatura e decide (pedir a outra pessoa ou cancelar o pedido).</p>'
+      + '<label for="canNaoM">Motivo</label><input id="canNaoM" type="text" maxlength="200" placeholder="ex.: perdi o canhoto; a compra não foi minha">',
+      'Responder', false, { campo: 'canNaoM', obrigatorio: 'Escreva o motivo.', minimo: 5 });
+    if (!r) return;
+    try{ await rpc('tf_cartao_pedido_responder', { p_linha_id: x.linha_id, p_motivo: r.texto }); toast('Resposta enviada ao escritório.', 'ok'); await canAtualizar(); canDesenharLista(); }
+    catch(e){ toast(e.message, 'err'); }
+  }));
+  el.querySelectorAll('[data-cantenta]').forEach(b => b.addEventListener('click', () => _semDuploEnvio_(b, async () => {
+    const x = canNaFila().find(y => y.assinatura === b.dataset.cantenta); if (!x) return;
+    try{ await Nucleo.fila.retomar(x.grupo); }catch(e){}
+    const ainda = canNaFila().find(y => y.assinatura === x.assinatura);
+    toast(!ainda ? 'Enviado.' : ainda.parado ? 'Ainda não foi: ' + (ainda.motivo || 'recusado') : 'Na fila: sobe quando houver sinal.', !ainda ? 'ok' : ainda.parado ? 'err' : 'ok');
+    if (!ainda) await canAtualizar().catch(() => {});
+    canDesenharLista(); canAtualizarFab();
+  })));
+  el.querySelectorAll('[data-candisp]').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.ok !== '1'){ b.dataset.ok = '1'; b.textContent = 'Toque de novo para dispensar'; return; }
+    Nucleo.fila.descartar(b.dataset.candisp); canDesenharLista(); canAtualizarFab();
+  }));
+  el.querySelectorAll('[data-canvelho]').forEach(b => b.addEventListener('click', () => _semDuploEnvio_(b, async () => {
+    await canFlush(b.dataset.canvelho); canDesenharLista();
+  })));
+  el.querySelectorAll('[data-canvelhod]').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.ok !== '1'){ b.dataset.ok = '1'; b.textContent = 'Toque de novo para descartar'; return; }
+    canFilaSet(canFila().filter(x => x.id !== b.dataset.canvelhod)); IDB.del('canhoto:' + b.dataset.canvelhod).catch(() => {});
+    canDesenharLista(); canAtualizarFab();
+  }));
 }
 async function canVerFoto(path){
   const w = document.createElement('div'); w.className = 'docView';
@@ -7998,9 +8098,12 @@ async function canVerFoto(path){
   document.body.appendChild(w); canAtualizarFab();
   w.querySelector('.dvX').addEventListener('click', () => { w.remove(); canAtualizarFab(); });
   try{
+    // S65 · 187 (item 4): o acesso perto de vencer (ou vencido) é renovado ANTES de pedir a foto
+    try{ const p = JSON.parse(atob(String(sessao.token || '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+         if (sessao.refresh && p.exp && p.exp * 1000 - Date.now() < 120000) await renovarToken(); }catch(e){}
     const url = SUPABASE_URL + '/storage/v1/object/cartoes/' + String(path).split('/').map(encodeURIComponent).join('/');
     const r = await stoGet(url);   // S62 · issue 142
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (!r.ok) throw new Error('código ' + r.status);
     const u = URL.createObjectURL(await r.blob());
     const pag = w.querySelector('.dvPag'); pag.innerHTML = ''; const im = document.createElement('img'); im.src = u; im.alt = 'Canhoto'; im.style.width = '100%'; pag.appendChild(im);
   }catch(e){ w.querySelector('.dvMsg').textContent = 'Não consegui abrir a foto (' + e.message + '). Tente com internet.'; }
@@ -8023,8 +8126,10 @@ async function canDoEndereco(){
   canFormulario();
 }
 window.addEventListener('online', () => { canFlush().catch(() => {}); });
+try{ if (window.Nucleo && Nucleo.fila) Nucleo.fila.aoMudar(ev => { if (ev && ev.tipo === 'canhoto'){ canAtualizarFab();
+  if (ev.situacao === 'enviado') canAtualizar().then(canDesenharLista).catch(() => {}); else canDesenharLista(); } }); }catch(e){}
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') canFlush().catch(() => {}); });
-setInterval(() => { if (canFila().length) canFlush().catch(() => {}); }, 60000);
+setInterval(() => { if (canFila().length || canNaFila().length) canFlush().catch(() => {}); }, 60000);
 
 function iniciar(){
   pintarFila();
