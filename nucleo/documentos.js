@@ -1,5 +1,5 @@
 /* ============================================================================
- * nucleo/documentos.js — D1 · o gerador de documentos pelo MODELO DO CLIENTE
+ * nucleo/documentos.js — D2 · o gerador de documentos pelo MODELO DO CLIENTE
  * ----------------------------------------------------------------------------
  * Decisão do Bruno (29/10/2026, 09h41–09h45): os documentos exportados seguem
  * o padrão do cliente (o RDO em Word e o Consolidado em Excel), e os valores em
@@ -35,14 +35,22 @@
  * ========================================================================== */
 (function (raiz) {
   'use strict';
-  var VERSAO = 'D1';
+  var VERSAO = 'D2';   // D2 (S195, issue 167): num() lê texto pelo leitor único do núcleo ("1500.50" = 1.500,50; antes 150.050)
+  // var VERSAO = 'D1';
   var BASE = (function () {
     try { var s = document.currentScript && document.currentScript.src; if (s) return new URL('../', s).href; } catch (e) {}
     return '';
   })();
 
   /* ── formatos (a regra da moeda vale para todos os módulos) ─────────────── */
-  function num(v) { var n = typeof v === 'number' ? v : Number(String(v).replace(/\./g, '').replace(',', '.')); return isFinite(n) ? n : null; }
+  function num(v) {
+    if (typeof v === 'number') return isFinite(v) ? v : null;
+    if (v != null && String(v).trim() === '') return 0;          // como antes (o texto vazio contava como zero)
+    // D2 (issue 167): o mesmo leitor das telas (Nucleo.util.lerValor); sem o núcleo, o jeito de antes
+    var n = (window.Nucleo && Nucleo.util && Nucleo.util.lerValor) ? Nucleo.util.lerValor(v)
+      : Number(String(v).replace(/\./g, '').replace(',', '.'));
+    return n != null && isFinite(n) ? n : null;
+  }
   function moeda(v) {
     var n = num(v); if (n == null) return '';
     return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

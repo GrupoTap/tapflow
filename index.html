@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Início · TapHub · H16</title>
+<title>Início · TapHub · H17</title>
 <meta name="theme-color" content="#0C1420">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -35,9 +35,9 @@
 -->
 <link rel="manifest" href="manifest.webmanifest">
 <!-- H6 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
-<link rel="stylesheet" href="nucleo/nucleo.css?v=N11">
-<script src="nucleo/config.js?v=N11"></script>
-<script src="nucleo/nucleo.js?v=N11"></script>
+<link rel="stylesheet" href="nucleo/nucleo.css?v=N12">
+<script src="nucleo/config.js?v=N12"></script>
+<script src="nucleo/nucleo.js?v=N12"></script>
 <script src="nucleo/modulos.js?v=M4"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -350,7 +350,8 @@ h1{font-size:27px;margin:0 0 22px;letter-spacing:-.02em}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';
 
-const APP_VERSION = 'H16';   // H16 (S136): o celular da empresa (210): "Quem vai usar?", "Trocar de pessoa", sem "Minha área", a faixa dos celulares
+const APP_VERSION = 'H17';   // H17 (S195): issue 153 — sem sinal (ou erro passageiro do servidor) na hora de renovar não apaga o login: abre com o que estava guardado; erro de rede da entrada em português; núcleo N12
+// const APP_VERSION = 'H16';   // H16 (S136): o celular da empresa (210): "Quem vai usar?", "Trocar de pessoa", sem "Minha área", a faixa dos celulares
 // const APP_VERSION = 'H15';   // H15 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const APP_VERSION = 'H14';   // H14 (S134): só o modulos.js M3 (o card Cadastros abre o cadastros/)
 // const APP_VERSION = 'H13';   // H13 (S132): o sistema se chama TapHub nas telas (item #10 da lista); a tela de entrada é "Início"; "Relatar problema ou sugerir" (item #1, 209)
@@ -421,15 +422,27 @@ async function api(caminho, opt){
   return j;
 }
 
+/** H17 (issue 153): a renovação diz por que não deu — 'ok', 'recusado' (o servidor recusou: a sessão acabou) ou
+ *  'sem_rede' (sem sinal, demorou ou erro passageiro do servidor: o login FICA). Antes as duas viravam "false". */
 async function renovar(){
-  if (!sessao.refresh) return false;
+  if (!sessao.refresh) return 'recusado';
   try{
     const j = await api('/auth/v1/token?grant_type=refresh_token', { method:'POST', body:{ refresh_token: sessao.refresh } });
-    if (!j || !j.access_token) return false;
+    if (!j || !j.access_token) return 'recusado';
     sessao.token = j.access_token;
     if (j.refresh_token) sessao.refresh = j.refresh_token;
-    gravar(); return true;
-  }catch(e){ return false; }
+    gravar(); return 'ok';
+  }catch(e){
+    return (!e.status || e.status >= 500 || e.status === 408 || e.status === 429) ? 'sem_rede' : 'recusado';
+  }
+}
+/** H17 (issue 153): erro de rede ("Failed to fetch", tempo esgotado) vira uma frase em português. */
+function msgErro(e, padrao){
+  if (!e) return padrao || '';
+  if (!e.status || e.name === 'AbortError' || e.name === 'TypeError' || /Failed to fetch|NetworkError|Load failed|aborted/i.test(e.message || ''))
+    return 'Sem sinal. Tente de novo com internet.';
+  if (e.status >= 500) return 'O servidor não respondeu agora. Tente de novo em alguns minutos.';
+  return e.message || padrao || '';
 }
 
 /** Quem sou eu — resposta do SERVIDOR, não desta página. Uma chamada. */
@@ -821,7 +834,7 @@ document.getElementById('frm').addEventListener('submit', async ev => {
   }catch(e){
     limpar();
     er.textContent = /invalid login|credentials|grant/i.test(e.message || '')
-      ? 'E-mail ou senha inválidos.' : (e.message || 'Não deu para entrar.');
+      ? 'E-mail ou senha inválidos.' : msgErro(e, 'Não deu para entrar.');   // H17 · issue 153: sem "Failed to fetch"
   }finally{
     bt.disabled = false; bt.textContent = 'Entrar';
   }
@@ -920,13 +933,21 @@ async function entrada(){
     if (g === 'entrada' && await entrada() === 'fora'){ limpar(); telaLogin(''); return; }
     montar();
   }catch(e){
-    if (e.status === 401 && await renovar()){
-      try{ await meuAcesso(); if (g === 'entrada') await entrada(); montar(); return; }catch(e2){}
+    let ren = null;
+    if (e.status === 401){
+      ren = await renovar();
+      if (ren === 'ok'){
+        try{ await meuAcesso(); if (g === 'entrada') await entrada(); montar(); return; }
+        catch(e2){ if (!e2.status || e2.status >= 500){ if (sessao.perfil){ montar(); return; } } }
+      }
     }
-    // H6: sem sinal (erro sem status) NÃO derruba a sessão: abre com o que já estava guardado.
-    if (!e.status && sessao.perfil){ montar(); return; }
+    // H6/H17 (issue 153): sem sinal, erro passageiro do servidor (5xx) ou sem sinal na hora de RENOVAR NÃO derrubam
+    // a sessão: abre com o que já estava guardado (o resto da página avisa e tenta de novo depois).
+    const passageiro = !e.status || e.status >= 500 || e.status === 408 || e.status === 429 || ren === 'sem_rede';
+    if (passageiro && sessao.perfil){ montar(); return; }
+    if (passageiro){ telaLogin(msgErro(e.status === 401 ? {} : e, '')); return; }   // nunca abriu com sinal: não apaga o login
     limpar();
-    telaLogin(e.status === 401 ? 'Sua sessão expirou. Entre de novo.' : (e.message || ''));
+    telaLogin(e.status === 401 ? 'Sua sessão expirou. Entre de novo.' : msgErro(e, ''));
   }
 })();
 </script>

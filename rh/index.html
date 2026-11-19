@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapRH 15 · Recursos Humanos</title>
+<title>TapRH 16 · Recursos Humanos</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2362,9 +2362,9 @@ th.num .tfThFixo{text-align:right}
 <!-- S63 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js.
      S76 · ?v=N2, igual ao hub e ao Field (o N2 aceita tudo do N1: o Manager já rodava o N2 com o
      endereço ?v=N1). O sw.js da raiz guarda estes três endereços: trocou aqui, troca lá (é do central). -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N11">
-<script src="../nucleo/config.js?v=N11"></script>
-<script src="../nucleo/nucleo.js?v=N11"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N12">
+<script src="../nucleo/config.js?v=N12"></script>
+<script src="../nucleo/nucleo.js?v=N12"></script>
 <!-- S82 · H10: a tabela única dos módulos (cor, miniatura, menu "Trocar de módulo"). Mudou o ?v=? Troque no sw.js da raiz também (é do central). -->
 <script src="../nucleo/modulos.js?v=M4"></script>
 </head>
@@ -2434,7 +2434,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'RH15';   // TapRH 15 (S194): Rodada R3 da auditoria (issues 139, 203, 204 e 205): horas pagas sem teto de 24 h e "valer a escolha"; avisos do Fechamento (limite do IR, batida faltando, batida depois de liberar, 100% de mês anterior); espelho congelado; resumo do contador com as faltas separadas (617)
+const APP_VERSION = 'RH16';   // TapRH 16 (S195): Rodada R4 da auditoria (issue 142) — anexos, fotos, espelho e documentos do funcionário abrem com a página aberta há mais de 1 hora (o acesso renova também no HTTP 400); o anexo do pedido baixa com o tipo verdadeiro; núcleo N12
+// const APP_VERSION = 'RH15';   // TapRH 15 (S194): Rodada R3 da auditoria (issues 139, 203, 204 e 205): horas pagas sem teto de 24 h e "valer a escolha"; avisos do Fechamento (limite do IR, batida faltando, batida depois de liberar, 100% de mês anterior); espelho congelado; resumo do contador com as faltas separadas (617)
 // const APP_VERSION = 'RH14';   // TapRH 14 (S156): issue 1 (passo 2) — a folga a negociar manda marcar em Cadastros › Configurações › Feriados (onde a tela está desde o S134), não mais no "Manager"
 // const APP_VERSION = 'RH13';   // TapRH 13 (S142): item 38 da lista: o atestado anexado à ausência (foto, PDF ou Ctrl+V), em Documentos do Funcionário, guarda de 5 anos (616)
 // const APP_VERSION = 'RH12';   // TapRH 12 (S139): item 26 da lista: a caixa do espelho esconde também as batidas repetidas
@@ -3136,18 +3137,11 @@ const RHFD = { painel: null, limpou: false };
 
 const rhfdUrl = path => SUPABASE_URL + '/storage/v1/object/rh-docs/' + String(path).split('/').map(encodeURIComponent).join('/');
 
-/** fetch no Storage com a sessão (bucket privado: sem token não abre). Token
- *  vencido: uma chamada barata pelo núcleo renova a sessão, e repete uma vez. */
+/** N12 (issue 142): fetch no Storage pelo núcleo (Nucleo.storage.pedir): renova o acesso antes, e também
+ *  quando o armazenamento responde ao acesso vencido com HTTP 400; sessão acabada = "Sua sessão venceu:
+ *  recarregue a página"; sem sinal = "Sem sinal. Tente de novo com internet." (antes só renovava no 401/403). */
 async function rhfdFetch(url, opts){
-  const vai = () => fetch(url, Object.assign({}, opts, { headers: Object.assign({ apikey: SUPABASE_ANON_KEY },
-    sessao.token ? { Authorization: 'Bearer ' + sessao.token } : {}, (opts && opts.headers) || {}) }));
-  let r = await vai();
-  if ((r.status === 401 || r.status === 403) && sessao.refresh){
-    const antes = sessao.token;
-    try{ await Nucleo.api.rpc('tf_rh_autorizado', {}); }catch(e){}
-    if (sessao.token && sessao.token !== antes) r = await vai();
-  }
-  return r;
+  return Nucleo.storage.pedir(url, opts || {});
 }
 
 
@@ -5948,15 +5942,22 @@ async function ptIncluirModal(usuario, dia){
   sm.addEventListener('change', pad); st.addEventListener('change', porTipo); porTipo();
 }
 
-/** Baixa um arquivo do bucket ponto (só quem aprova, ou o dono). */
+/** Baixa um arquivo do bucket ponto (só quem aprova, ou o dono).
+ *  RH16 (issue 142): pelo núcleo (renova o acesso vencido, também no HTTP 400); `nome` sem extensão ganha a do
+ *  arquivo de verdade (o anexo do pedido baixava sempre "anexo.jpg", mesmo sendo PDF). */
+const PT_EXT = { 'application/pdf': '.pdf', 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/heic': '.heic' };
 async function ptBaixarArq(caminho, nome){
   const cfg = window.TF_CONFIG || {};
   try{
-    const r = await fetch(cfg.SUPABASE_URL + '/storage/v1/object/authenticated/ponto/' + caminho.split('/').map(encodeURIComponent).join('/'),
-                          { headers: { apikey: cfg.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + sessao.token } });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const r = await Nucleo.storage.pedir(cfg.SUPABASE_URL + '/storage/v1/object/authenticated/ponto/' + caminho.split('/').map(encodeURIComponent).join('/'), {});
+    if (!r.ok) throw new Error('o arquivo não está no armazenamento (HTTP ' + r.status + ')');
     const bl = await r.blob(), a = document.createElement('a');
-    a.href = URL.createObjectURL(bl); a.download = nome || caminho.split('/').pop(); document.body.appendChild(a); a.click();
+    let n = nome || caminho.split('/').pop();
+    if (!/\.[a-z0-9]{2,5}$/i.test(n)){
+      const ext = (caminho.match(/\.[a-z0-9]{2,5}$/i) || [])[0] || PT_EXT[String(bl.type || '').split(';')[0]] || '';
+      n += ext;
+    }
+    a.href = URL.createObjectURL(bl); a.download = n; document.body.appendChild(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
   }catch(e){ toast('Não consegui baixar: ' + e.message, 'err'); }
 }
@@ -6144,7 +6145,7 @@ async function ptPedidos(corpo){
     catch(e){ toast(e.message, 'err'); } });
   corpo.querySelectorAll('[data-banco]').forEach(b => b.addEventListener('click', () => decl(b, 'banco')));
   corpo.querySelectorAll('[data-abonar]').forEach(b => b.addEventListener('click', () => decl(b, 'abonar')));
-  corpo.querySelectorAll('[data-anexo]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); ptBaixarArq(a.dataset.anexo, 'anexo.jpg'); }));
+  corpo.querySelectorAll('[data-anexo]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); ptBaixarArq(a.dataset.anexo, 'anexo'); }));   // RH16 · issue 142: a extensão vem do arquivo
   corpo.querySelectorAll('[data-cat]').forEach(sl => sl.addEventListener('change', async () => {
     try{ await rpc('tf_ponto_pedido_categoria', { p_id: sl.dataset.cat, p_motivo: sl.value }); toast('Categoria corrigida.'); ptPedidos(corpo); }
     catch(e){ toast(e.message, 'err'); ptPedidos(corpo); }
@@ -6212,10 +6213,9 @@ async function ptFotosDia(usuario, dia){
           : '<a href="https://www.google.com/maps?q=' + encodeURIComponent(b.lat + ',' + b.lng) + '" target="_blank" rel="noopener">ver no mapa</a> <small>(precisão ' + esc(String(b.precisao_m || '?')) + ' m)</small>')
         + (b.observacao ? '<br><small>Motivo: “' + esc(b.observacao) + '”</small>' : '') + '</figcaption></figure>').join('') + '</div>'
       + '<p class="nota">Fotos guardadas por 5 anos (P27), só para mostrar quem bateu: sem reconhecimento facial.</p>';
-    const cfg = window.TF_CONFIG || {}, tok = sessao.token;
+    const cfg = window.TF_CONFIG || {};
     L.forEach((b, i) => { if (!b.foto) return;
-      fetch(cfg.SUPABASE_URL + '/storage/v1/object/authenticated/ponto/' + b.foto.split('/').map(encodeURIComponent).join('/'),
-            { headers: { apikey: cfg.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + tok } })
+      Nucleo.storage.pedir(cfg.SUPABASE_URL + '/storage/v1/object/authenticated/ponto/' + b.foto.split('/').map(encodeURIComponent).join('/'), {})   // RH16 · issue 142
         .then(r => r.ok ? r.blob() : Promise.reject(new Error('HTTP ' + r.status)))
         .then(bl => { const d = document.getElementById('ptF' + i); if (d) d.innerHTML = '<img alt="Foto da batida das ' + esc(b.h) + '" src="' + URL.createObjectURL(bl) + '">'; })
         .catch(e => { const d = document.getElementById('ptF' + i); if (d) d.textContent = 'foto ainda não subiu (' + e.message + ')'; }); });

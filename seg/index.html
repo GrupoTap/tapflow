@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapSeg 6 · Segurança do Trabalho</title>
+<title>TapSeg 7 · Segurança do Trabalho</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2302,9 +2302,9 @@ th.num .tfThFixo{text-align:right}
 <!-- S63 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js.
      S76 · ?v=N2, igual ao hub e ao Field (o N2 aceita tudo do N1: o Manager já rodava o N2 com o
      endereço ?v=N1). O sw.js da raiz guarda estes três endereços: trocou aqui, troca lá (é do central). -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N11">
-<script src="../nucleo/config.js?v=N11"></script>
-<script src="../nucleo/nucleo.js?v=N11"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N12">
+<script src="../nucleo/config.js?v=N12"></script>
+<script src="../nucleo/nucleo.js?v=N12"></script>
 <!-- S82 · H10: a tabela única dos módulos (cor, miniatura, menu "Trocar de módulo"). Mudou o ?v=? Troque no sw.js da raiz também (é do central). -->
 <script src="../nucleo/modulos.js?v=M4"></script>
 </head>
@@ -2373,7 +2373,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'G6';   // G6 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
+const APP_VERSION = 'G7';   // G7 (S195): Rodada R4 da auditoria (issue 142) — o RG/CNH do Kit do cliente baixa com a página aberta há mais de 1 hora; núcleo N12
+// const APP_VERSION = 'G6';   // G6 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
 // const APP_VERSION = 'G5';   // G5 (S134) · Clientes, Catálogo e Duplicados abrem no TapHub (cadastros/), não mais no Manager (K6)
 // const APP_VERSION = 'G4';   // G4 (626, S132) · ajustes do uniforme: previsto "1 de 3" na ficha, no painel e na nova entrega (item #14), estoque de uniforme em peças (#15), "item" nas mensagens (#17); TapHub nas telas (#10)
 // const APP_VERSION = 'G3';   // G3 (S131) · Uniforme (U1–U8): catálogo de EPI e uniforme, tamanhos em dois blocos, uniformes recebidos, previstos com quantidade · G2 (S118) · "Ficha do RH →" abre o TapRH (rh/) · G1 = TapSeg 1 (separado do Manager S114) — o S## da publicação é da rodada que publica
@@ -2827,18 +2828,11 @@ function rhDemo(board, titulo){
 
 const rhfdUrl = path => SUPABASE_URL + '/storage/v1/object/rh-docs/' + String(path).split('/').map(encodeURIComponent).join('/');
 
-/** fetch no Storage com a sessão (bucket privado: sem token não abre). Token
- *  vencido: uma chamada barata pelo núcleo renova a sessão, e repete uma vez. */
+/** N12 (issue 142): fetch no Storage pelo núcleo (Nucleo.storage.pedir): renova o acesso antes, e também
+ *  quando o armazenamento responde ao acesso vencido com HTTP 400; sessão acabada = "Sua sessão venceu:
+ *  recarregue a página"; sem sinal = "Sem sinal. Tente de novo com internet." (antes só renovava no 401/403). */
 async function rhfdFetch(url, opts){
-  const vai = () => fetch(url, Object.assign({}, opts, { headers: Object.assign({ apikey: SUPABASE_ANON_KEY },
-    sessao.token ? { Authorization: 'Bearer ' + sessao.token } : {}, (opts && opts.headers) || {}) }));
-  let r = await vai();
-  if ((r.status === 401 || r.status === 403) && sessao.refresh){
-    const antes = sessao.token;
-    try{ await Nucleo.api.rpc('tf_rh_autorizado', {}); }catch(e){}
-    if (sessao.token && sessao.token !== antes) r = await vai();
-  }
-  return r;
+  return Nucleo.storage.pedir(url, opts || {});
 }
 
 
@@ -5490,7 +5484,7 @@ async function rhImgParaPdf(jsPDF, dataUrl, mime){
 async function rhKitBytes(jsPDF, i){
   if (!i.storage_path) return rhArqParaPdf(jsPDF, i.arquivo_id);
   const r = await rhfdFetch(rhfdUrl(i.storage_path), {});
-  if (!r.ok) throw new Error('Não consegui baixar o RG/CNH do armazenamento (HTTP ' + r.status + ').');
+  if (!r.ok) throw new Error('Não consegui baixar o RG/CNH do armazenamento. Tente de novo.');   // G7 · issue 142: sem o código
   const blob = await r.blob();
   if (i.mime === 'application/pdf') return new Uint8Array(await blob.arrayBuffer());
   const url = await new Promise((ok, er) => { const fr = new FileReader(); fr.onload = () => ok(fr.result);

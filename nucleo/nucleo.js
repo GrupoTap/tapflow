@@ -1,13 +1,14 @@
 /* ============================================================================
- * TAPHUB · NÚCLEO COMUM — N11 (N7: o celular da empresa; N11: a fila avisa quando o aparelho está sem espaço)
+ * TAPHUB · NÚCLEO COMUM — N12 (N7: o celular da empresa; N11: a fila avisa quando o aparelho está sem espaço;
+ *   N12: renovar devolve ok/recusado/sem rede; a fila não trava no erro do servidor; os leitores únicos de valor e de .xlsx)
  * ----------------------------------------------------------------------------
  * Código que serve a mais de um módulo e por isso NÃO mora dentro de nenhum:
  * sessão, conexão com o banco, PIN e a trava. Regra de negócio nunca entra
  * aqui (fica no módulo e nas funções tf_*). Sem framework, sem build.
  *
  * COMO UM MÓDULO USA (duas linhas no <head> e uma no boot):
- *   <script src="../nucleo/config.js?v=N11"></script>
- *   <script src="../nucleo/nucleo.js?v=N11"></script>
+ *   <script src="../nucleo/config.js?v=N12"></script>
+ *   <script src="../nucleo/nucleo.js?v=N12"></script>
  *   ...
  *   const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
  *   if (g === 'hub') { irParaHub(Nucleo.recado); return; }     // ANTES do iniciar()
@@ -40,7 +41,8 @@
   'use strict';
   if (window.Nucleo && window.Nucleo.versao) return;
 
-  var VERSAO = 'N11';   // N11 (S171): issue 35 — a fila avisa em vermelho quando o aparelho está sem espaço (nada some calado); quem tem dado guardado ajuda a liberar espaço (fila.aoFaltarEspaco)
+  var VERSAO = 'N12';   // N12 (S195): Rodada R4 da auditoria — issues 142, 146, 153, 154, 167 e 189 (renovar com 3 respostas, fila que não trava, aviso fixo, relato com rascunho, janela no X = Cancelar, destraves só apagados depois de enviados, storage.pedir, util.lerValor, planilha.lerXLSX)
+  // var VERSAO = 'N11';   // N11 (S171): issue 35 — a fila avisa em vermelho quando o aparelho está sem espaço (nada some calado); quem tem dado guardado ajuda a liberar espaço (fila.aoFaltarEspaco)
   // var VERSAO = 'N10';   // N10 (S160): issue 29 — confirmarPessoa({ soDigital:true }): sem o teclado do PIN (aprovar o laudo); Nucleo.temDigital()
   // var VERSAO = 'N9';   // N9 (S157): issue 10 — o acesso vencido ("exp" claim) é renovado antes de enviar a fila e no envio das fotos
   // var VERSAO = 'N8';   // N8 (S142): no Relatar, o print colado com Ctrl+V (item 37 da lista)
@@ -117,27 +119,22 @@
     if (atual.email && String(atual.email).toLowerCase() === k) return atual;
     return m[k] || null;
   }
-  /** Renova o token de uma pessoa que NÃO está usando o celular (só a cópia dela). */
+  /** Renova o token de uma pessoa que NÃO está usando o celular (só a cópia dela).
+   *  N12 (issue 153): devolve true/false como antes; `renovarEmpEstado` diz 'ok' | 'recusado' | 'sem_rede'. */
   var renovandoEmp = {};
-  function renovarEmp(email) {
+  function renovarEmpEstado(email) {
     var k = String(email || '').toLowerCase(), m = sessoesEmp(), s = m[k];
-    if (!s || !s.refresh) return Promise.resolve(false);
+    if (!s || !s.refresh) return Promise.resolve('recusado');
     if (renovandoEmp[k]) return renovandoEmp[k];
-    var c = cfgDoBanco();
-    renovandoEmp[k] = fetch(c.url + '/auth/v1/token?grant_type=refresh_token', {
-      method: 'POST', headers: { apikey: c.anon, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: s.refresh }), signal: comPrazo(12000)
-    }).then(function (r) { return r.json().then(function (j) { return [r.ok, j]; }); })
-      .then(function (x) {
-        if (!x[0] || !x[1] || !x[1].access_token) return false;
-        var m2 = sessoesEmp(); if (!m2[k]) return false;
-        m2[k].token = x[1].access_token; if (x[1].refresh_token) m2[k].refresh = x[1].refresh_token;
-        gravarSessoesEmp(m2); return true;
-      })
-      .catch(function () { return false; })
-      .then(function (ok) { setTimeout(function () { delete renovandoEmp[k]; }, 0); return ok; });
+    renovandoEmp[k] = pedirRenovacao(s.refresh).then(function (x) {
+      if (x.estado !== 'ok') return x.estado;
+      var m2 = sessoesEmp(); if (!m2[k]) return 'recusado';
+      m2[k].token = x.j.access_token; if (x.j.refresh_token) m2[k].refresh = x.j.refresh_token;
+      gravarSessoesEmp(m2); return 'ok';
+    }).then(function (e) { setTimeout(function () { delete renovandoEmp[k]; }, 0); return e; });
     return renovandoEmp[k];
   }
+  function renovarEmp(email) { return renovarEmpEstado(email).then(function (e) { return e === 'ok'; }); }
   /** "Quem vai usar?": quem já entrou neste celular (sem quem saiu de vez). */
   function pessoasEmp() {
     var m = sessoesEmp(), L = [];
@@ -235,25 +232,42 @@
   }
   function erro(msg, status, rede) { var e = new Error(msg); e.status = status; e.rede = !!rede; return e; }
 
-  var renovando = null;
-  function renovar() {
-    var s = sessao();
-    if (!s.refresh) return Promise.resolve(false);
-    if (renovando) return renovando;
+  /** N12 (issue 153): a renovação do acesso diz POR QUE não deu.
+   *   'ok'       → renovou;
+   *   'recusado' → o servidor respondeu e recusou (sessão acabou de verdade: login de novo);
+   *   'sem_rede' → não deu para falar com o servidor (sem sinal, demorou ou erro passageiro 5xx):
+   *                o login FICA; tenta de novo depois. Antes as duas viravam "false" e a queda de
+   *                sinal na hora errada apagava o login. */
+  function pedirRenovacao(refresh) {
     var c = cfgDoBanco();
-    renovando = fetch(c.url + '/auth/v1/token?grant_type=refresh_token', {
+    if (!refresh) return Promise.resolve({ estado: 'recusado' });
+    return fetch(c.url + '/auth/v1/token?grant_type=refresh_token', {
       method: 'POST', headers: { apikey: c.anon, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: s.refresh }), signal: comPrazo(12000)
-    }).then(function (r) { return r.json().then(function (j) { return [r.ok, j]; }); })
-      .then(function (x) {
-        if (!x[0] || !x[1] || !x[1].access_token) return false;
-        var n = sessao(); n.token = x[1].access_token; if (x[1].refresh_token) n.refresh = x[1].refresh_token;
-        gravarSessao(n); return true;
-      })
-      .catch(function () { return false; })
-      .then(function (ok) { setTimeout(function () { renovando = null; }, 0); return ok; });
+      body: JSON.stringify({ refresh_token: refresh }), signal: comPrazo(12000)
+    }).then(function (r) {
+      return r.json().catch(function () { return null; }).then(function (j) {
+        if (r.ok && j && j.access_token) return { estado: 'ok', j: j };
+        if (r.status >= 500 || r.status === 408 || r.status === 429) return { estado: 'sem_rede' };
+        return { estado: 'recusado' };
+      });
+    }, function () { return { estado: 'sem_rede' }; });
+  }
+  var renovando = null;
+  function renovarEstado() {
+    var s = sessao();
+    if (!s.refresh) return Promise.resolve('recusado');
+    if (renovando) return renovando;
+    renovando = pedirRenovacao(s.refresh).then(function (x) {
+      if (x.estado !== 'ok') return x.estado;
+      var n = sessao(); n.token = x.j.access_token; if (x.j.refresh_token) n.refresh = x.j.refresh_token;
+      gravarSessao(n); return 'ok';
+    }).then(function (e) { setTimeout(function () { renovando = null; }, 0); return e; });
     return renovando;
   }
+  /** O de antes (true/false), para quem só quer saber se renovou. */
+  function renovar() { return renovarEstado().then(function (e) { return e === 'ok'; }); }
+  var MSG_SEM_SINAL = 'Sem sinal. Tente de novo com internet.';
+  function erroSemSinal() { return Object.assign(erro(MSG_SEM_SINAL, 0, true), { semSinal: true }); }
 
   /** chamada ao PostgREST/Auth. 401 → renova o token e tenta de novo uma vez. */
   function api(caminho, opt, _jaRenovou) {
@@ -267,15 +281,16 @@
     }).then(function (r) {
       return r.json().catch(function () { return null; }).then(function (j) {
         if (r.status === 401 && !_jaRenovou) {
-          return renovar().then(function (ok) {
-            if (ok) return api(caminho, opt, true);
+          return renovarEstado().then(function (e) {
+            if (e === 'ok') return api(caminho, opt, true);
+            if (e === 'sem_rede') throw erroSemSinal();      // N12 (issue 153): sem sinal não é sessão vencida
             throw erro('Sua sessão expirou.', 401);
           });
         }
         if (!r.ok) throw erro((j && (j.message || j.error_description || j.msg || j.hint)) || ('Erro ' + r.status), r.status);
         return j;
       });
-    }, function () { throw erro('Sem sinal.', 0, true); });
+    }, function () { throw erroSemSinal(); });
   }
   function rpc(nome, corpo) { return api('/rest/v1/rpc/' + nome, { method: 'POST', body: corpo || {} }); }
 
@@ -346,14 +361,31 @@
   /* ── a tela do PIN ─────────────────────────────────────────────────────── */
   function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   var tela = null;
+  // N12 (issue 154, item 3): a tela do relato não é destruída quando a trava do PIN entra por cima (voltar da
+  // galeria depois de 5 min): ela fica escondida, guardada aqui, e volta igual (texto e prints) quando a trava sai.
+  var telaGuardada = null;
 
   function fecharTela() {
     if (!tela) return;
-    document.removeEventListener('keydown', tela.teclado, true);
-    if (tela.el && tela.el.parentNode) tela.el.parentNode.removeChild(tela.el);
+    var t = tela; tela = null;
+    document.removeEventListener('keydown', t.teclado, true);
+    if (t.guardar && !t.fechando && !telaGuardada) {
+      if (t.el) t.el.style.display = 'none';
+      telaGuardada = t;
+      return;                                   // quem abriu a tela nova (a trava) já vai cobrir a página
+    }
+    if (t.el && t.el.parentNode) t.el.parentNode.removeChild(t.el);
     document.documentElement.removeAttribute('data-tf-trava');
-    if (tela.foco && tela.foco.focus) { try { tela.foco.focus(); } catch (e) {} }
-    tela = null;
+    if (telaGuardada && telaGuardada !== t) {
+      var g = telaGuardada; telaGuardada = null;
+      if (g.el && document.body.contains(g.el)) {
+        g.el.style.display = ''; tela = g;
+        document.addEventListener('keydown', g.teclado, true);
+        document.documentElement.setAttribute('data-tf-trava', '1');
+        return;
+      }
+    }
+    if (t.foco && t.foco.focus) { try { t.foco.focus(); } catch (e) {} }
   }
 
   /**
@@ -633,10 +665,26 @@
       throw e;
     });
   }
+  // N12 (issue 154, item 5): cada registro só sai da fila DEPOIS de enviado (antes a fila era apagada antes do
+  // envio e, se ele falhasse, o registro se perdia). Um envio por vez; o que falhar fica para a próxima.
+  var esvaziandoDestraves = false;
   function esvaziarFilaDestraves() {
+    if (esvaziandoDestraves) return;
     var f = jget(K_DFILA) || []; if (!f.length) return;
-    lsDel(K_DFILA);
-    f.forEach(function (x) { rpc('tf_destrave_registrar', { p_metodo: x.m, p_aparelho: x.ap, p_credencial: null, p_em: x.em }).catch(function () {}); });
+    esvaziandoDestraves = true;
+    function tirar(x) {
+      var g = jget(K_DFILA) || [];
+      var i = -1;
+      for (var k = 0; k < g.length; k++) if (g[k] && g[k].em === x.em && g[k].m === x.m) { i = k; break; }
+      if (i >= 0) g.splice(i, 1);
+      if (g.length) lsSet(K_DFILA, JSON.stringify(g)); else lsDel(K_DFILA);
+    }
+    f.reduce(function (p, x) {
+      return p.then(function () {
+        return rpc('tf_destrave_registrar', { p_metodo: x.m, p_aparelho: x.ap, p_credencial: null, p_em: x.em }).then(function () { tirar(x); },
+          function (e) { if (!e || !e.rede) tirar(x); else throw e; });   // recusado pelo banco: reenviar não adianta
+      });
+    }, Promise.resolve()).catch(function () {}).then(function () { esvaziandoDestraves = false; });
   }
 
   /* ── a tela de trava com digital ──────────────────────────────────────────── */
@@ -1306,7 +1354,7 @@
     });
     window.addEventListener('storage', function (e) {      // outra aba travou/destravou
       if (e.key === K_TRAVADO && e.newValue === '1') avaliar();
-      if (e.key === K_TRAVADO && e.newValue === null && tela && tela.el && !destravando) fecharTela();
+      if (e.key === K_TRAVADO && e.newValue === null && tela && tela.el && !tela.guardar && !destravando) fecharTela();
     });
     setInterval(avaliar, 30000);
   }
@@ -1382,6 +1430,160 @@
    * duplicação é temporária e aceita (decisão F1, 22/10).
    * ════════════════════════════════════════════════════════════════════════ */
   function BRL(v) { return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+
+  /* ── N12 (issues 167 e 189): UM SÓ leitor de valor digitado ────────────────────
+     Antes cada tela tinha o seu: o dos contratos tirava todos os pontos ("2.5" virava 25, "1500.50" virava
+     150.050) e o da Conta corrente Proper e dos Cartões tratava o ponto como centavos quando não havia vírgula
+     ("1.250" virava 1,25). A regra agora, para todas:
+       · tira "R$", espaços; aceita negativo ("-10", "(10)", "10-");
+       · com vírgula: a vírgula é o decimal e os pontos são milhar ("1.500,50", "1500,50", "0,5");
+       · sem vírgula e com UM ponto seguido de exatamente 3 algarismos e um começo de 1 a 3 algarismos sem zero na
+         frente: milhar ("1.250" = 1.250; "12.500" = 12.500);
+       · sem vírgula e com vários pontos: só se forem de milhar ("1.250.000");
+       · sem vírgula e com um ponto no resto dos casos: o ponto é o decimal ("2.5", "0.5", "1500.50", "0.125");
+       · qualquer outra coisa (letras, "1.5,0", duas vírgulas) não é número.
+     lerValor(t) devolve o número, null (campo vazio) ou NaN (não é número). lerValorDetalhe(t) devolve
+     { n, vazio, invalido, milharSemVirgula, pontoDecimal } para a tela avisar como entendeu. */
+  function lerValorDetalhe(v) {
+    if (typeof v === 'number') return isFinite(v) ? { n: v } : { n: NaN, invalido: true };
+    var t = String(v == null ? '' : v).replace(/R\$|\s|\u00a0/g, '');
+    if (!t) return { n: null, vazio: true };
+    var inval = { n: NaN, invalido: true }, neg = false;
+    if (/^\(.*\)$/.test(t)) { neg = true; t = t.slice(1, -1); }
+    if (/^[-\u2212]/.test(t)) { neg = !neg; t = t.slice(1); }
+    else if (/^\+/.test(t)) t = t.slice(1);
+    else if (/-$/.test(t)) { neg = !neg; t = t.slice(0, -1); }
+    if (!/^[0-9.,]+$/.test(t) || !/\d/.test(t)) return inval;
+    var virgulas = t.split(',').length - 1, inteiro, dec = '', milhar = false, pontoDec = false;
+    if (virgulas > 1) return inval;
+    if (virgulas === 1) {
+      var p = t.split(','); inteiro = p[0]; dec = p[1];
+      if (dec.indexOf('.') >= 0) return inval;
+      if (inteiro.indexOf('.') >= 0) { if (!/^\d{1,3}(\.\d{3})+$/.test(inteiro)) return inval; inteiro = inteiro.replace(/\./g, ''); }
+    } else {
+      var pontos = t.split('.').length - 1;
+      if (pontos === 0) inteiro = t;
+      else if (pontos > 1) { if (!/^\d{1,3}(\.\d{3})+$/.test(t)) return inval; inteiro = t.replace(/\./g, ''); milhar = true; }
+      else {
+        var q = t.split('.');
+        if (/^[1-9]\d{0,2}$/.test(q[0]) && /^\d{3}$/.test(q[1])) { inteiro = q[0] + q[1]; milhar = true; }
+        else { inteiro = q[0]; dec = q[1]; pontoDec = true; }
+      }
+    }
+    if (inteiro === '' && dec === '') return inval;
+    var n = Number((inteiro || '0') + (dec ? '.' + dec : ''));
+    if (!isFinite(n)) return inval;
+    return { n: neg && n !== 0 ? -n : n, milharSemVirgula: milhar, pontoDecimal: pontoDec };
+  }
+  function lerValor(v) { return lerValorDetalhe(v).n; }
+  /** Como o sistema entendeu o valor, para mostrar ao lado do campo: tipo 'moeda' ("R$ 1.500,50"), 'm3' ("2,5 m³") ou 'num'. */
+  function valorEntendido(v, tipo) {
+    var d = lerValorDetalhe(v);
+    if (d.vazio) return { txt: '', ok: true };
+    if (d.invalido) return { txt: 'Não é um número: use só algarismos, com vírgula nos decimais (ex.: 1.500,50).', ok: false };
+    var t = tipo === 'moeda' ? BRL(d.n)
+      : d.n.toLocaleString('pt-BR', { maximumFractionDigits: 4 }) + (tipo === 'm3' ? ' m³' : '');
+    return { txt: 'Entendi: ' + t, ok: true, n: d.n };
+  }
+  // Campos com data-valor="moeda|m3|num" ganham, embaixo, "Entendi: …" enquanto se digita (issue 167, item 2).
+  function mostrarValor(inp) {
+    if (!inp || !inp.getAttribute) return;
+    var tipo = inp.getAttribute('data-valor'); if (!tipo) return;
+    var r = valorEntendido(inp.value, tipo);
+    var sm = inp.nextElementSibling;
+    if (!sm || !sm.classList || !sm.classList.contains('tfn-valor')) {
+      sm = document.createElement('small'); sm.className = 'tfn-valor'; sm.setAttribute('aria-live', 'polite');
+      sm.style.cssText = 'display:block;font-size:11.5px;margin-top:3px';
+      inp.parentNode.insertBefore(sm, inp.nextSibling);
+    }
+    sm.textContent = r.txt;
+    sm.style.color = r.ok ? 'var(--ink-3,#78838A)' : 'var(--crit,#A62D18)';
+  }
+  document.addEventListener('input', function (e) { if (e.target && e.target.hasAttribute && e.target.hasAttribute('data-valor')) mostrarValor(e.target); }, true);
+  document.addEventListener('focusin', function (e) { if (e.target && e.target.hasAttribute && e.target.hasAttribute('data-valor')) mostrarValor(e.target); }, true);
+
+  /* ── N12 (issue 146): UM SÓ leitor de planilha .xlsx (Cadastros › Importar do TapWeb e TapFin › Conta corrente).
+     O de antes (copiado nas duas páginas) procurava "<c …>…</c>": a célula VAZIA mas formatada ("<c r="B2" s="1"/>")
+     não tem "</c>" e ele seguia até o fim da próxima célula, pondo o valor dela na coluna da vazia. O mesmo com a
+     linha vazia ("<row …/>"), que engolia a de baixo. Agora a vazia é lida primeiro, e cada linha vai para o
+     número dela (r="7" é a 7ª), com as linhas que faltam vazias. Número sai como número; texto, como texto.
+     `JSZipLib` é a biblioteca que a página já carrega (carregarJSZip). */
+  function xmlTexto(t) {
+    return String(t == null ? '' : t)
+      .replace(/&#x([0-9a-fA-F]+);/g, function (_, h) { return String.fromCodePoint(parseInt(h, 16)); })
+      .replace(/&#(\d+);/g, function (_, d) { return String.fromCodePoint(parseInt(d, 10)); })
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+  }
+  function colDaRef(ref) {
+    var n = 0, l = String(ref).replace(/\d+/g, '');
+    for (var i = 0; i < l.length; i++) n = n * 26 + (l.charCodeAt(i) - 64);
+    return n - 1;
+  }
+  /** Lê o XML de uma aba (e os textos compartilhados) e devolve as linhas: [[célula, …], …]. Separada para o teste. */
+  function linhasDoXml(wsXml, compart) {
+    compart = compart || [];
+    var linhas = [];
+    (wsXml.match(/<row\b[^>]*?\/>|<row\b[^>]*>[\s\S]*?<\/row>/g) || []).forEach(function (row) {
+      var cels = [];
+      var cab = (row.match(/^<row\b[^>]*>/) || [''])[0];
+      var nr = Number((cab.match(/\sr="(\d+)"/) || [])[1]);
+      if (!/\/>$/.test(cab)) {
+        (row.match(/<c\b[^>]*?\/>|<c\b[^>]*>[\s\S]*?<\/c>/g) || []).forEach(function (c) {
+          var abre = (c.match(/^<c\b[^>]*>/) || [''])[0];
+          var ref = (abre.match(/\sr="([A-Z]+\d+)"/) || [])[1];
+          var tipo = (abre.match(/\st="([^"]+)"/) || [])[1];
+          var v = null;
+          if (!/\/>$/.test(abre)) {
+            if (tipo === 'inlineStr') {
+              var is = (c.match(/<is>[\s\S]*?<\/is>/) || [''])[0];
+              v = xmlTexto((is.match(/<t[^>]*>[\s\S]*?<\/t>/g) || []).map(function (x) { return x.replace(/<[^>]+>/g, ''); }).join(''));
+            } else {
+              var bruto = (c.match(/<v>([\s\S]*?)<\/v>/) || [])[1];
+              if (bruto == null) v = null;
+              else if (tipo === 's') v = compart[Number(bruto)] != null ? compart[Number(bruto)] : '';
+              else if (tipo === 'str' || tipo === 'e') v = xmlTexto(bruto);
+              else v = /^-?\d+(\.\d+)?([eE][-+]?\d+)?$/.test(bruto) ? Number(bruto) : xmlTexto(bruto);
+            }
+          }
+          cels[ref ? colDaRef(ref) : cels.length] = v;
+        });
+      }
+      for (var k = 0; k < cels.length; k++) if (cels[k] === undefined) cels[k] = null;
+      var idx = (nr >= 1) ? nr - 1 : linhas.length;
+      while (linhas.length < idx) linhas.push([]);
+      linhas[idx] = cels;
+    });
+    return linhas;
+  }
+  function lerXLSX(file, JSZipLib) {
+    if (!JSZipLib || !JSZipLib.loadAsync) return Promise.reject(new Error('A biblioteca de planilha não carregou. Tente de novo com internet.'));
+    return JSZipLib.loadAsync(file).then(function (zip) {
+      function textoDe(nome) { var f = zip.file(nome); return f ? f.async('string') : Promise.resolve(null); }
+      return Promise.all([textoDe('xl/sharedStrings.xml'), textoDe('xl/workbook.xml'), textoDe('xl/_rels/workbook.xml.rels')]).then(function (x) {
+        var compart = [];
+        (x[0] && x[0].match(/<si>[\s\S]*?<\/si>/g) || []).forEach(function (si) {
+          // o texto da célula, sem a pronúncia fonética (<rPh>) que o Excel japonês põe junto
+          var sem = si.replace(/<rPh\b[\s\S]*?<\/rPh>/g, '');
+          compart.push(xmlTexto((sem.match(/<t[^>]*>([\s\S]*?)<\/t>|<t[^>]*\/>/g) || []).map(function (t) { return t.replace(/<[^>]+>/g, ''); }).join('')));
+        });
+        // a PRIMEIRA aba pela ordem do workbook (não "sheet1.xml", que nem sempre é a primeira)
+        var alvo = 'xl/worksheets/sheet1.xml', wb = x[1], rel = x[2];
+        if (wb && rel) {
+          var rid = (wb.match(/<sheet\b[^>]*\sr:id="([^"]+)"/) || [])[1];
+          if (rid) {
+            var re = new RegExp('<Relationship\\b[^>]*Id="' + rid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"[^>]*Target="([^"]+)"');
+            var re2 = new RegExp('<Relationship\\b[^>]*Target="([^"]+)"[^>]*Id="' + rid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"');
+            var alvoRel = (rel.match(re) || rel.match(re2) || [])[1];
+            if (alvoRel) alvo = 'xl/' + alvoRel.replace(/^\/?xl\//, '').replace(/^\//, '');
+          }
+        }
+        return textoDe(alvo).then(function (ws) { return ws || textoDe('xl/worksheets/sheet1.xml'); }).then(function (ws) {
+          if (!ws) throw new Error('Não achei nenhuma planilha dentro do arquivo.');
+          return linhasDoXml(ws, compart);
+        });
+      });
+    });
+  }
   function dataBR(d) {
     if (!d) return new Date().toLocaleDateString('pt-BR');
     var t = String(d);
@@ -1414,13 +1616,29 @@
     document.body.appendChild(el);
     return el;
   }
-  function toast(msg, tipo) {
+  /** N12 (issue 154, item 2): aviso de ERRO longo (mais de TOAST_LONGO letras) ou com { fixo:true } fica na tela até
+   *  a pessoa tocar em "Entendi" (o de "aparelho sem espaço" sumia em 4 s, sem dar tempo de ler). O resto some sozinho. */
+  var TOAST_LONGO = 120;
+  function toast(msg, tipo, opt) {
     var el = garantirToast();
     var meu = el.classList.contains('tfn-toast');
+    var fixo = !!(opt && opt.fixo) || (tipo === 'err' && String(msg == null ? '' : msg).length > TOAST_LONGO);
+    var base = 'toast' + (meu ? ' tfn-toast' : '');
+    function some() { el.className = base; el.style.pointerEvents = ''; el.removeAttribute('data-fixo'); }
     el.textContent = msg;
     el.className = 'toast on' + (tipo ? ' ' + tipo : '') + (meu ? ' tfn-toast' : '');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { el.className = 'toast' + (meu ? ' tfn-toast' : ''); }, 4200);
+    if (fixo) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'tfn-entendi'; b.textContent = 'Entendi';
+      b.style.cssText = 'display:block;margin:8px 0 0 auto;padding:6px 14px;border:1px solid rgba(255,255,255,.7);border-radius:3px;background:transparent;color:inherit;font:inherit;font-weight:600;cursor:pointer';
+      b.addEventListener('click', function (e) { e.stopPropagation(); some(); });
+      el.appendChild(b);
+      el.style.pointerEvents = 'auto'; el.setAttribute('data-fixo', '1');
+      return;
+    }
+    el.style.pointerEvents = ''; el.removeAttribute('data-fixo');
+    toastTimer = setTimeout(some, 4200);
   }
   function copiarVelho(texto, feito) {
     try {
@@ -1450,7 +1668,24 @@
   }
 
   var focoAntes = null;
+  // N12 (issue 154, item 4): fechar a janela pelo X, pela tecla Esc ou clicando fora vale como "Cancelar": quem
+  // perguntou (confirmarJanela, ou abrirJanela com { aoFechar }) recebe a resposta e nada fica esperando para sempre.
+  // Vale também nas páginas que já têm o #modal delas (o fechar é delas; o "Cancelar" é avisado daqui).
+  var aoFecharJanela = null, janelaVigiada = false;
+  function cancelarJanela() { var f = aoFecharJanela; aoFecharJanela = null; if (f) { try { f(); } catch (e) {} } }
+  function vigiarJanela() {
+    if (janelaVigiada) return; janelaVigiada = true;
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      if (t && t.closest && (t.closest('#mX') || t.id === 'mScrim')) cancelarJanela();
+    }, true);
+    document.addEventListener('keydown', function (e) {
+      var m = document.getElementById('modal');
+      if (e.key === 'Escape' && m && !m.hidden && !document.documentElement.hasAttribute('data-tf-trava')) cancelarJanela();
+    }, true);
+  }
   function garantirJanela() {
+    vigiarJanela();
     if (document.getElementById('modal')) return;
     var sc = document.createElement('div');
     sc.className = 'mScrim tfn-scrim'; sc.id = 'mScrim'; sc.hidden = true;
@@ -1466,8 +1701,10 @@
       if (e.key === 'Escape' && !document.getElementById('modal').hidden) fecharJanela();
     });
   }
-  function abrirJanela(titulo, corpoHtml, botoes) {
+  function abrirJanela(titulo, corpoHtml, botoes, opcoes) {
     garantirJanela();
+    cancelarJanela();                                   // a janela anterior que ainda esperava resposta: "Cancelar"
+    aoFecharJanela = (opcoes && typeof opcoes.aoFechar === 'function') ? opcoes.aoFechar : null;
     focoAntes = document.activeElement;
     document.getElementById('mTit').textContent = titulo;
     document.getElementById('mBody').innerHTML = corpoHtml;
@@ -1489,6 +1726,7 @@
     });
   }
   function fecharJanela() {
+    aoFecharJanela = null;                              // fechou por um botão: quem perguntou já teve a resposta
     var sc = document.getElementById('mScrim'), m = document.getElementById('modal');
     if (sc) sc.hidden = true;
     if (m) { m.hidden = true; m.classList.remove('largo'); }
@@ -1500,7 +1738,7 @@
       abrirJanela(titulo, corpoHtml, [
         { label: 'Cancelar', onClick: function () { fecharJanela(); ok(false); } },
         { label: rotuloSim || 'Confirmar', pri: !perigo, onClick: function () { fecharJanela(); ok(true); } }
-      ]);
+      ], { aoFechar: function () { ok(false); } });
     });
   }
 
@@ -1570,14 +1808,17 @@
             var err = new Error(msg); err.negocio = (r.status >= 400 && r.status < 500); err.status = r.status;
             if (tokenVencido(err) && autor && autor !== String(sessao().email || '').toLowerCase()) {
               // a sessão de quem fez venceu: renova a cópia dela; sem jeito, o envio espera a pessoa entrar
-              if (!jaRenovou && s.refresh) { jaRenovou = true; return renovarEmp(autor).then(function (ok) { if (ok) return uma(i); throw autorFora(autor); }); }
+              if (!jaRenovou && s.refresh) { jaRenovou = true; return renovarEmpEstado(autor).then(function (e) {
+                if (e === 'ok') return uma(i); if (e === 'sem_rede') { jaRenovou = false; throw erroSemSinal(); } throw autorFora(autor); }); }
               throw autorFora(autor);
             }
             if (tokenVencido(err)) {
               if (!jaRenovou && s.refresh) {
                 jaRenovou = true;
-                return renovar().then(function (ok) {
-                  if (ok) return uma(i);
+                return renovarEstado().then(function (e) {
+                  if (e === 'ok') return uma(i);
+                  // N12 (issue 153): sem sinal na hora de renovar NÃO derruba o login: o envio espera o sinal
+                  if (e === 'sem_rede') { jaRenovou = false; throw erroSemSinal(); }
                   sessaoExpirou();
                   throw Object.assign(new Error('Sua sessão expirou. Entre de novo — nada se perdeu.'), { negocio: true, sessaoMorta: true });
                 });
@@ -1596,7 +1837,7 @@
             + (escrita ? ' — a operação pode NÃO ter sido gravada.' : '.'));
           ultimo.rede = true;
         }
-        var transitorio = ehTimeout(e) || (!e.negocio && (
+        var transitorio = ehTimeout(e) || !!e.semSinal || (!e.negocio && (
           /Failed to fetch|NetworkError|Load failed/i.test(e.message) ||
           /devolveu HTML/.test(e.message) || /^HTTP 5\d\d$/.test(e.message)));
         if (transitorio) ultimo.rede = true;
@@ -1757,11 +1998,12 @@
           var vencido = r.status === 401 || r.status === 403 || /token/i.test(m) || RX_ACESSO_VENCIDO.test(m);   // N9 (issue 10)
           if (vencido && autor) {
             if (_jaRenovou || !s.refresh) throw autorFora(autor);
-            return renovarEmp(autor).then(function (ok) { if (ok) return storageEnviar(bucket, caminho, blob, true, autor); throw autorFora(autor); });
+            return renovarEmpEstado(autor).then(function (e) { if (e === 'ok') return storageEnviar(bucket, caminho, blob, true, autor); if (e === 'sem_rede') throw erroSemSinal(); throw autorFora(autor); });
           }
           if (vencido && !_jaRenovou && s.refresh) {
-            return renovar().then(function (ok) {
-              if (ok) return storageEnviar(bucket, caminho, blob, true);
+            return renovarEstado().then(function (e) {
+              if (e === 'ok') return storageEnviar(bucket, caminho, blob, true);
+              if (e === 'sem_rede') throw erroSemSinal();   // N12 (issue 153)
               throw Object.assign(new Error('Sua sessão expirou. Entre de novo — nada se perdeu.'), { sessaoMorta: true, status: 401 });
             });
           }
@@ -1776,6 +2018,49 @@
       }, function (e) {
         throw Object.assign(new Error(ehTimeout(e) ? 'O armazenamento não respondeu.' : 'Sem sinal.'), { rede: true });
       });
+  }
+
+  /** N12 (issue 142): abrir, baixar, enviar ou apagar um arquivo do armazenamento (Storage) com o acesso em dia.
+   *  `url` é o endereço completo do objeto (…/storage/v1/object/…). O acesso vence a cada hora e o armazenamento
+   *  responde ao vencido com HTTP 400 ('"exp" claim timestamp check failed'), não só 401/403: antes os módulos só
+   *  renovavam no 401/403 e a página aberta há mais de 1 hora dizia "O arquivo não está no armazenamento (HTTP 400)".
+   *  Agora: renova antes se o acesso vence em 2 minutos; se a resposta for de acesso vencido, renova e tenta UMA vez
+   *  de novo. Devolve a resposta (Response) para quem chamou ler; se a sessão acabou de verdade, recusa com
+   *  "Sua sessão venceu: recarregue a página." e, sem sinal, com "Sem sinal. Tente de novo com internet.". */
+  var MSG_SESSAO_VENCEU = 'Sua sessão venceu: recarregue a página.';
+  function storagePedir(url, opts, _jaRenovou) {
+    opts = opts || {};
+    var c = cfgDoBanco();
+    var antes = _jaRenovou ? Promise.resolve() : garantirAcesso();
+    return antes.then(function () {
+      var s = sessao();
+      return fetch(url, Object.assign({}, opts, {
+        headers: Object.assign({ apikey: c.anon }, s.token ? { Authorization: 'Bearer ' + s.token } : {}, opts.headers || {})
+      })).then(null, function (e) {
+        throw Object.assign(new Error(ehTimeout(e) ? 'O armazenamento não respondeu. Tente de novo.' : MSG_SEM_SINAL), { rede: true, semSinal: true });
+      });
+    }).then(function (r) {
+      if (r.ok || (r.status !== 400 && r.status !== 401 && r.status !== 403)) return r;
+      return r.clone().text().catch(function () { return ''; }).then(function (txt) {
+        var vencido = r.status === 401 || RX_ACESSO_VENCIDO.test(txt);
+        var talvez = vencido || r.status === 403;          // o 403 sem texto de acesso vencido: renova e tenta uma vez (como antes)
+        if (!talvez) return r;
+        if (_jaRenovou) {
+          if (vencido) throw Object.assign(new Error(MSG_SESSAO_VENCEU), { status: r.status, sessaoVencida: true });
+          return r;
+        }
+        if (!sessao().refresh) {
+          if (vencido) throw Object.assign(new Error(MSG_SESSAO_VENCEU), { status: r.status, sessaoVencida: true });
+          return r;
+        }
+        return renovarEstado().then(function (e) {
+          if (e === 'ok') return storagePedir(url, opts, true);
+          if (e === 'sem_rede') throw erroSemSinal();
+          if (vencido) throw Object.assign(new Error(MSG_SESSAO_VENCEU), { status: r.status, sessaoVencida: true });
+          return r;
+        });
+      });
+    });
   }
 
   var ouvintes = [];
@@ -1820,6 +2105,7 @@
   }
 
   var enviando = false;
+  var FILA_ERROS_SERVIDOR = 5;   // N12 (issue 154): erros internos seguidos do servidor até a entrada ficar "parada, com o motivo"
   function filaEnviar() {
     var trabalho = function () {
       if (enviando) return Promise.resolve();
@@ -1868,6 +2154,24 @@
                 }
               });
             }
+            return proxima();
+          }
+          if (err && err.status >= 500 && !err.semSinal) {
+            // N12 (issue 154, item 1): o servidor respondeu com ERRO INTERNO (não é falta de sinal nem recusa de regra).
+            // Antes isso parava a fila inteira e era tentado de novo para sempre, segurando os envios de todos os
+            // assuntos. Agora só o grupo dele espera; depois de FILA_ERROS_SERVIDOR seguidas, ele fica "parado, com
+            // o motivo" (como o recusado: nada se perde) e a fila segue com os outros.
+            var n = 0;
+            filaTrocar(assin, function (y) {
+              y.tentativas = (y.tentativas || 0) + 1; y.errosServidor = (y.errosServidor || 0) + 1; n = y.errosServidor;
+              if (n >= FILA_ERROS_SERVIDOR) {
+                y.parado = true; y.erroServidor = true;
+                y.motivo = 'Parado: o servidor deu erro ' + n + ' vezes seguidas (' + err.message + '). Toque em "Tentar de novo"; se repetir, avise o escritório.';
+              }
+              return y;
+            });
+            if (e.grupo) bloqueados[e.grupo] = true;
+            avisar({ assinatura: assin, tipo: e.tipo, situacao: n >= FILA_ERROS_SERVIDOR ? 'parado' : 'erro_servidor', erro: err.message });
             return proxima();
           }
           filaTrocar(assin, function (y) { y.tentativas = (y.tentativas || 0) + 1; return y; });
@@ -1956,6 +2260,7 @@
      prints da galeria (R5), no bucket privado `relatos`. Cada um vê só os seus,
      com a resposta (R6). */
   var ERROS = [];
+  var K_RELATO = 'tf_relato_rascunho';   // N12 (issue 154): o rascunho do relato neste aparelho
   function anotarErro(m) {
     try {
       var t = String(m || '').replace(/\s+/g, ' ').slice(0, 300);
@@ -1992,6 +2297,7 @@
     o = o || {};
     var s = sessao();
     if (!s.token) { toast('Entre no sistema para relatar.', 'err'); return; }
+    if ((tela && tela.relato) || (telaGuardada && telaGuardada.relato)) return;   // já está aberto
     fecharTela();
     var el = document.createElement('div');
     el.id = 'tfPin'; el.className = 'tf-pin tf-meus tf-relato';
@@ -2026,11 +2332,47 @@
     }
     document.body.appendChild(el);
     document.documentElement.setAttribute('data-tf-trava', '1');
-    var teclado = function (e) { if (e.key === 'Escape') fecharTela(); };
-    tela = { el: el, teclado: teclado, foco: document.activeElement };
+    // N12 (issue 154, item 3): o texto é guardado no aparelho enquanto se digita (rascunho) e volta ao abrir de novo;
+    // fechar (botão ou Esc) com texto ou print pede um 2º toque; a trava do PIN só esconde esta tela (fecharTela).
+    var minha = { el: el, teclado: null, foco: document.activeElement, guardar: true, relato: true };
+    var kRel = K_RELATO + ':' + String(s.email || '').toLowerCase();   // por pessoa (celular da empresa é de várias)
+    function rascunho() { return jget(kRel) || {}; }
+    function guardarRascunho() {
+      var t = el.querySelector('#tfRelTxt').value, tp = (el.querySelector('input[name=tfRelTipo]:checked') || {}).value || 'problema';
+      if (t.trim()) lsSet(kRel, JSON.stringify({ texto: t, tipo: tp, em: new Date().toISOString() })); else lsDel(kRel);
+    }
+    var querFechar = false;
+    function fechar() {
+      var temAlgo = el.querySelector('#tfRelTxt').value.trim() || imgs.length;
+      if (temAlgo && !querFechar) {
+        querFechar = true;
+        el.querySelector('#tfRelFechar').textContent = 'Fechar mesmo assim';
+        msg('Fechar sem enviar? O texto fica guardado neste aparelho para a próxima vez' + (imgs.length ? ' (os prints não)' : '') + '. Toque em "Fechar mesmo assim" para fechar.', true);
+        return;
+      }
+      guardarRascunho();
+      minha.fechando = true;
+      if (tela === minha) fecharTela();
+    }
+    var teclado = function (e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fechar(); } };
+    minha.teclado = teclado;
+    tela = minha;
     document.addEventListener('keydown', teclado, true);
     function msg(t, e) { var m = el.querySelector('#tfPinMsg'); m.textContent = t || ''; m.className = 'tf-msg' + (e ? ' erro' : ''); }
-    el.querySelector('#tfRelFechar').addEventListener('click', function () { fecharTela(); });
+    el.querySelector('#tfRelFechar').addEventListener('click', function () { fechar(); });
+    (function () {
+      var r = rascunho();
+      if (r.texto) {
+        el.querySelector('#tfRelTxt').value = r.texto;
+        var rb = el.querySelector('input[name=tfRelTipo][value="' + (r.tipo === 'sugestao' ? 'sugestao' : 'problema') + '"]'); if (rb) rb.checked = true;
+        msg('Voltou o texto que você tinha começado.');
+      }
+    })();
+    el.querySelector('#tfRelTxt').addEventListener('input', function () {
+      guardarRascunho();
+      if (querFechar) { querFechar = false; el.querySelector('#tfRelFechar').textContent = 'Fechar'; msg(''); }
+    });
+    el.addEventListener('change', function (e) { if (e.target && e.target.name === 'tfRelTipo') guardarRascunho(); });
     var SIT = { novo: 'enviado', respondido: 'respondido', melhoria: 'virou melhoria', descartado: 'encerrado' };
     function lista() {
       var cx = el.querySelector('#tfRelLista');
@@ -2098,6 +2440,7 @@
       }).then(function () {
         var tinha = imgs.length;
         el.querySelector('#tfRelTxt').value = ''; el.querySelector('#tfRelImg').value = ''; imgs = []; miniaturas('');
+        lsDel(kRel); querFechar = false; el.querySelector('#tfRelFechar').textContent = 'Fechar';
         msg('Relato enviado. Obrigado! A resposta aparece aqui embaixo' + (tinha && !caminhos.length ? ' (o print não subiu)' : '') + '.');
         toast('Relato enviado.', 'ok');
         lista();
@@ -2111,7 +2454,9 @@
 
   api_.versao = VERSAO;
   api_.util = { esc: esc, toast: toast, BRL: BRL, dataBR: dataBR, isoHoje: isoHoje, copiar: copiar,
-                arquivoParaBase64: arquivoParaBase64, semDuploEnvio: semDuploEnvio };
+                arquivoParaBase64: arquivoParaBase64, semDuploEnvio: semDuploEnvio,
+                lerValor: lerValor, lerValorDetalhe: lerValorDetalhe, valorEntendido: valorEntendido, mostrarValor: mostrarValor };   // N12 (167, 189)
+  api_.planilha = { lerXLSX: lerXLSX, linhasDoXml: linhasDoXml };   // N12 (146)
   api.req = req; api.get = getM; api.rpc = rpcM;
   api_.janela = { abrir: abrirJanela, fechar: fecharJanela, confirmar: confirmarJanela };
   api_.fila = {
@@ -2133,7 +2478,7 @@
     contar: function () { return filaLer().length; },
     retomar: function (grupo) {
       filaLer().forEach(function (x) {
-        if (x && x.v === 2 && x.grupo === grupo && x.parado) filaTrocar(x.assinatura, function (y) { y.parado = false; delete y.motivo; delete y.recusado; return y; });
+        if (x && x.v === 2 && x.grupo === grupo && x.parado) filaTrocar(x.assinatura, function (y) { y.parado = false; delete y.motivo; delete y.recusado; delete y.erroServidor; y.errosServidor = 0; return y; });
       });
       return filaEnviar();
     },
@@ -2146,7 +2491,7 @@
     aoMudar: function (fn) { if (typeof fn === 'function') ouvintes.push(fn); }
   };
   api_.foto = { reduzir: reduzirFoto };
-  api_.storage = { enviar: storageEnviar };
+  api_.storage = { enviar: storageEnviar, pedir: storagePedir, msgSessaoVenceu: MSG_SESSAO_VENCEU };   // N12 (issue 142): pedir
   api_.tarefas = {
     abrirCom: function (tipo, endereco) { ABRE_COM[String(tipo)] = String(endereco); },
     destino: destinoDaTarefa

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapField · S61</title>
+<title>TapField · S62</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -617,9 +617,9 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 #filaTxt{cursor:pointer}
 </style>
 <!-- S33 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N11">
-<script src="../nucleo/config.js?v=N11"></script>
-<script src="../nucleo/nucleo.js?v=N11"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N12">
+<script src="../nucleo/config.js?v=N12"></script>
+<script src="../nucleo/nucleo.js?v=N12"></script>
 <script src="../nucleo/modulos.js?v=M4"></script>
 </head>
 <body>
@@ -681,7 +681,8 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S61';   // S61 (S194): Rodada R3 da auditoria (issues 203, 204 e 205): o prazo do gov.br de cada pessoa; o espelho de mês fechado é o congelado; a saída da madrugada "(+1)"; o aviso dos 15 min de intervalo (617)
+const APP_VERSION = 'S62';   // S62 (S195): Rodada R4 da auditoria — issue 142 (o espelho assinado, o documento do RH e a foto do canhoto abrem com o acesso vencido: renova também no HTTP 400) e 167/189 (o valor do canhoto pelo leitor único do núcleo: "2.5" = 2,50; "1.250" = 1.250,00); núcleo N12
+// const APP_VERSION = 'S61';   // S61 (S194): Rodada R3 da auditoria (issues 203, 204 e 205): o prazo do gov.br de cada pessoa; o espelho de mês fechado é o congelado; a saída da madrugada "(+1)"; o aviso dos 15 min de intervalo (617)
 // const APP_VERSION = 'S60';   // S60 (S191): os parâmetros do Drive pela função tf_drive_parametros (215, issue 200); nada muda na tela
 // const APP_VERSION = 'S59';   // S59 (S171): só o núcleo N11 (issue 35: a fila avisa em vermelho quando o aparelho está sem espaço)
 // const APP_VERSION = 'S58';   // S58 (S157): issue 10 — o acesso vencido ("exp" claim) renovado no envio das fotos (núcleo N9 e o canhoto do cartão)
@@ -6789,11 +6790,31 @@ function ptEscolherSemBatida(dia){
   m.insertBefore(p, m.firstChild);
   p.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+/** S62 (issue 142): GET no armazenamento com o acesso em dia. O armazenamento responde ao acesso vencido com
+ *  HTTP 400 ('"exp" claim timestamp check failed'), não só 401/403: renova e tenta UMA vez de novo. Usa a sessão
+ *  do próprio Field (renovarToken), como o resto da página. Sessão acabada: "Sua sessão venceu: recarregue a página". */
+async function stoGet(url){
+  const vai = () => fetch(url, { headers: Object.assign({ apikey: SUPABASE_ANON_KEY }, sessao.token ? { Authorization: 'Bearer ' + sessao.token } : {}) });
+  let r;
+  try{ r = await vai(); }catch(e){ throw new Error('Sem sinal. Tente de novo com internet.'); }
+  if (r.ok || (r.status !== 400 && r.status !== 401 && r.status !== 403)) return r;
+  const txt = await r.clone().text().catch(() => '');
+  const vencido = r.status === 401 || tokenVencido({ message: txt });
+  if (!vencido && r.status !== 403) return r;
+  if (sessao.refresh && await renovarToken()){
+    try{ r = await vai(); }catch(e){ throw new Error('Sem sinal. Tente de novo com internet.'); }
+    if (r.ok) return r;
+    const t2 = await r.clone().text().catch(() => '');
+    if (r.status === 401 || tokenVencido({ message: t2 })) throw new Error('Sua sessão venceu: recarregue a página.');
+    return r;
+  }
+  if (vencido) throw new Error(navigator.onLine === false ? 'Sem sinal. Tente de novo com internet.' : 'Sua sessão venceu: recarregue a página.');
+  return r;
+}
 async function ptBaixarF(caminho, nome){
   try{
-    const r = await fetch(SUPABASE_URL + '/storage/v1/object/authenticated/ponto/' + caminho.split('/').map(encodeURIComponent).join('/'),
-                          { headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + sessao.token } });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const r = await stoGet(SUPABASE_URL + '/storage/v1/object/authenticated/ponto/' + caminho.split('/').map(encodeURIComponent).join('/'));   // S62 · issue 142
+    if (!r.ok) throw new Error('o arquivo não está no armazenamento (HTTP ' + r.status + ')');
     const bl = await r.blob(), a = document.createElement('a'); a.href = URL.createObjectURL(bl); a.download = nome || caminho.split('/').pop();
     document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
   }catch(e){ toast('Não consegui abrir: ' + e.message, 'err'); }
@@ -7381,9 +7402,7 @@ async function verDocPessoalF(d){
     if (a.conteudo) blob = await (await fetch(a.conteudo)).blob();
     else {
       const url = SUPABASE_URL + '/storage/v1/object/rh-docs/' + String(a.storage_path).split('/').map(encodeURIComponent).join('/');
-      const vai = () => fetch(url, { headers: Object.assign({ apikey: SUPABASE_ANON_KEY }, sessao.token ? { Authorization: 'Bearer ' + sessao.token } : {}) });
-      let r = await vai();
-      if ((r.status === 401 || r.status === 403) && sessao.refresh && await renovarToken()) r = await vai();
+      const r = await stoGet(url);   // S62 · issue 142: renova também no HTTP 400 do acesso vencido
       if (!r.ok) throw new Error('Não consegui abrir o arquivo (HTTP ' + r.status + '). Tente de novo com internet.');
       blob = await r.blob();
     }
@@ -7663,7 +7682,9 @@ function canFormulario(){
   document.getElementById('canEnv').addEventListener('click', canEnviar);
   if (CAN.foto && !pre.valor) setTimeout(() => v.focus(), 80);
 }
-const carNumF = t => { const s = String(t || '').replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, ''); const n = Number(s); return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0; };
+/** S62 (issues 167 e 189): o leitor único do núcleo. Antes tirava todos os pontos ("2.5" virava 25). 0 = vazio ou não é número. */
+const carNumF = t => { const n = (window.Nucleo && Nucleo.util && Nucleo.util.lerValor) ? Nucleo.util.lerValor(t) : Number(String(t || '').replace(/\./g, '').replace(',', '.'));
+  return n != null && isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0; };
 
 async function canEnviar(){
   if (CAN.enviando) return;
@@ -7787,8 +7808,7 @@ async function canVerFoto(path){
   w.querySelector('.dvX').addEventListener('click', () => { w.remove(); canAtualizarFab(); });
   try{
     const url = SUPABASE_URL + '/storage/v1/object/cartoes/' + String(path).split('/').map(encodeURIComponent).join('/');
-    const vai = () => fetch(url, { headers: Object.assign({ apikey: SUPABASE_ANON_KEY }, sessao.token ? { Authorization: 'Bearer ' + sessao.token } : {}) });
-    let r = await vai(); if ((r.status === 401 || r.status === 403) && sessao.refresh && await renovarToken()) r = await vai();
+    const r = await stoGet(url);   // S62 · issue 142
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const u = URL.createObjectURL(await r.blob());
     const pag = w.querySelector('.dvPag'); pag.innerHTML = ''; const im = document.createElement('img'); im.src = u; im.alt = 'Canhoto'; im.style.width = '100%'; pag.appendChild(im);

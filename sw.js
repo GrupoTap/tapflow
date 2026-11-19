@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H16-S194';   // S194: Rodada R3 da auditoria — o ponto no banco (617, issues 139, 203, 204 e 205): TapRH RH15 e Field S61
+const VERSAO = 'H17-S195';   // S195: Rodada R4 da auditoria — núcleo N12 (issues 142, 146, 153, 154, 167 e 189): hub H17, TapFlow S195, TapRH RH16, TapFin F25, TapSeg G7, Cadastros CAD7, Field S62, documentos.js D2
+// const VERSAO = 'H16-S194';   // S194: Rodada R3 da auditoria — o ponto no banco (617, issues 139, 203, 204 e 205): TapRH RH15 e Field S61
 // const VERSAO = 'H16-S191';   // S191: Rodada R2 da auditoria (issues 200, 202 e 208): TapFlow S191, Cadastros CAD6 e TapFin F24 pegam os parâmetros do Drive pela função (215); o TapFlow aceita o script do Drive v3
 // const VERSAO = 'H16-S190';   // S190: Rodada R1 da auditoria — as portas do banco (214, issues 197, 198 e 199); nenhuma tela mudou
 // const VERSAO = 'H16-S189';   // S189: TapGestão GE4 — a aba Reunião (bloco Financeiro, com os quadros do TapFin, a meta de recebimento e a ata); TapFin F23 e nucleo/fin-painel FP2 (524, 152)
@@ -98,13 +99,13 @@ const ESSENCIAIS = [
   // O núcleo comum. O endereço tem que ser IDÊNTICO ao do <script>, com o ?v=
   // (o cache compara a consulta inteira). Trocou o ?v= nas páginas? Troque aqui também.
   // S76: hub, Manager, Field e fin/ pedem todos ?v=N2 — saíram as linhas ?v=N1. S123: todos pedem ?v=N3 (Passkey 1). S124: ?v=N4. S131: ?v=N5 (IndexedDB do iPhone).
-  './nucleo/nucleo.js?v=N11',
-  './nucleo/nucleo.css?v=N11',
-  './nucleo/config.js?v=N11',
+  './nucleo/nucleo.js?v=N12',
+  './nucleo/nucleo.css?v=N12',
+  './nucleo/config.js?v=N12',
   // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo" (mesmo ?v= das páginas)
   './nucleo/modulos.js?v=M4',
   // S110 · o gerador de documentos (o Manager o pede com ?v=D1; o jszip e o pdfmake vêm sob demanda)
-  './nucleo/documentos.js?v=D1',
+  './nucleo/documentos.js?v=D2',
   './nucleo/fin-painel.js?v=FP2',   // S188 · os quadros do Painel do TapFin (TapFin e TapGestão)
   './nucleo/fin-painel.css?v=FP2',
   // S74 · TapFin: a página (S76 · TapFin 2: o plano B fin/util.js saiu)
