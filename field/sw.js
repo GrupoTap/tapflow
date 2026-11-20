@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S64-T48';   // S197: Field S64 (Rodada R6 da auditoria: celular, ponto e diária; issues 140, 141, 143 e 166)
+const VERSAO = 'S65-T49';   // S200: Field S65 (Rodada R8 da auditoria, cartões: o canhoto pela fila comum; issue 187)
+// const VERSAO = 'S64-T48';   // S197: Field S64 (Rodada R6 da auditoria: celular, ponto e diária; issues 140, 141, 143 e 166)
 // const VERSAO = 'S63-T47';   // S196: Field S63 e núcleo N13 (Rodada R5 da auditoria (padrões de todas as telas))
 // const VERSAO = 'S62-T46';   // S195: Field S62 e núcleo N12 (Rodada R4 da auditoria: issues 142, 146, 153, 154, 167 e 189)
 // const VERSAO = 'S61-T45';   // S194: Field S61 (R3 da auditoria: o prazo do gov.br por pessoa, o espelho congelado, a saída da madrugada; 617)
