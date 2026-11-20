@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Início · TapHub · H18</title>
+<title>Início · TapHub · H19</title>
 <meta name="theme-color" content="#0C1420">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -35,9 +35,9 @@
 -->
 <link rel="manifest" href="manifest.webmanifest">
 <!-- H6 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
-<link rel="stylesheet" href="nucleo/nucleo.css?v=N14">
-<script src="nucleo/config.js?v=N14"></script>
-<script src="nucleo/nucleo.js?v=N14"></script>
+<link rel="stylesheet" href="nucleo/nucleo.css?v=N15">
+<script src="nucleo/config.js?v=N15"></script>
+<script src="nucleo/nucleo.js?v=N15"></script>
 <script src="nucleo/modulos.js?v=M4"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -269,7 +269,7 @@ h1{font-size:27px;margin:0 0 22px;letter-spacing:-.02em}
   <a class="pedidos" id="faixaRelatos" href="acessos/#relatos" hidden></a>
   <a class="pedidos" id="faixaCelulares" href="acessos/#celulares" hidden></a>
   <div class="cards" id="cards"></div>
-  <a class="adm-acessos" id="admAcessos" href="acessos/" hidden><b>Pessoas e acessos</b><span>quem vê cada módulo e o PLH · só o admin</span></a>
+  <a class="adm-acessos" id="admAcessos" href="acessos/" hidden><b>Pessoas e acessos</b><span id="admAcessosTxt">quem vê cada módulo e o PLH · só o admin</span></a>
   <div id="semNada" hidden>
     <div class="aviso">
       <b>Seu acesso ainda não foi liberado.</b>
@@ -349,7 +349,8 @@ h1{font-size:27px;margin:0 0 22px;letter-spacing:-.02em}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';
 
-const APP_VERSION = 'H18';   // H18 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 155 (a entrada sem nomes fixos e sem recado de programador: o pedido vai para quem autoriza os acessos); núcleo N13
+const APP_VERSION = 'H19';   // H19 (S205): Rodada R12 da auditoria (TapHub) — issue 156 (quem tem um módulo só fica no início quando volta de propósito; as faixas se atualizam a cada minuto; o "Sair" do núcleo, que encerra também no servidor) e 152 (o link "Pessoas e acessos" para quem tem "Autoriza acesso" ou "Recebe relatos"); núcleo N15
+// const APP_VERSION = 'H18';   // H18 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 155 (a entrada sem nomes fixos e sem recado de programador: o pedido vai para quem autoriza os acessos); núcleo N13
 // const APP_VERSION = 'H17';   // H17 (S195): issue 153 — sem sinal (ou erro passageiro do servidor) na hora de renovar não apaga o login: abre com o que estava guardado; erro de rede da entrada em português; núcleo N12
 // const APP_VERSION = 'H16';   // H16 (S136): o celular da empresa (210): "Quem vai usar?", "Trocar de pessoa", sem "Minha área", a faixa dos celulares
 // const APP_VERSION = 'H15';   // H15 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
@@ -499,6 +500,37 @@ function liberada(p, s){
 }
 
 let autoIndo = null;
+/* H19 (S205, issue 156, item 1): quem tem um módulo só vai sozinho para ele SÓ logo depois de entrar (o login, ou o app
+   aberto agora). Quem volta de propósito (o botão "Início" ou o menu "Trocar de módulo" de um módulo) fica: é aqui que
+   estão "Sair", "Meus aparelhos e digital" e "Trocar de pessoa". Antes a tela voltava sozinha para o módulo em 1,4 s. */
+let acabouDeEntrar = false;
+function irSozinho(){
+  if (acabouDeEntrar) return true;
+  try{
+    const r = document.referrer ? new URL(document.referrer) : null;
+    if (!r || r.origin !== location.origin) return true;                  // o app aberto agora (ou vindo de fora)
+    const raiz = new URL('./', location.href).pathname;
+    return r.pathname === raiz || r.pathname === raiz + 'index.html';      // recarregou o próprio início
+  }catch(e){ return true; }
+}
+/* H19 (issue 152): o link "Pessoas e acessos" e o que ele diz, pela caixa de cada um */
+async function pintarLinkAcessos(){
+  const a = document.getElementById('admAcessos'), t = document.getElementById('admAcessosTxt');
+  if (DEMO || !sessao.token){ a.hidden = !(sessao.admin && !DEMO); return; }
+  if (sessao.admin){ t.textContent = 'quem vê cada módulo e o PLH · só o admin'; a.hidden = false; return; }
+  let aut = false, rel = false;
+  try{
+    [aut, rel] = await Promise.all([
+      api('/rest/v1/rpc/tf_tem_poder', { method:'POST', body:{ p_poder:'digital' } }),
+      api('/rest/v1/rpc/tf_tem_poder', { method:'POST', body:{ p_poder:'relatos' } })
+    ]);
+  }catch(e){ aut = false; rel = false; }
+  const partes = [];
+  if (aut) partes.push('pedidos de senha e PIN, digital e celulares da empresa');
+  if (rel) partes.push('relatos da equipe');
+  t.textContent = partes.join(' · ');
+  a.hidden = !partes.length;
+}
 let resumo = {};
 let timerResumo = null;
 
@@ -556,8 +588,9 @@ function montar(){
     });
   }
 
-  // H11 (S88): "Pessoas e acessos" só para o admin (o banco também recusa os outros)
-  document.getElementById('admAcessos').hidden = !(sessao.admin && !DEMO);
+  // H11 (S88): "Pessoas e acessos" para o admin; H19 (S205, issue 152): também para quem tem "Autoriza acesso" ou
+  // "Recebe relatos" (cada um vê lá só a parte dele; o banco recusa o resto)
+  pintarLinkAcessos();
   pintarPedidos();
   document.getElementById('semNada').hidden = abertas.length > 0;
   // H10: sem o nucleo/modulos.js (publicação pela metade, cache velho) não há cards:
@@ -595,9 +628,9 @@ function montar(){
   if (p){
     const quais = ALIAS[p] || [p];
     for (const k of quais){ direto = abertas.find(x => x.chave === k); if (direto) break; }
-  } else if (abertas.length === 1) direto = abertas[0];
+  } else if (abertas.length === 1 && irSozinho()) direto = abertas[0];
   // H11: voltar de "Pessoas e acessos" (sessão travada e destravada aqui) leva de volta para lá
-  if (p === 'acessos' && sessao.admin && !DEMO){ location.href = 'acessos/'; return; }
+  if (p === 'acessos' && !DEMO){ location.href = 'acessos/'; return; }   // H19 (issue 152): também quem autoriza ou recebe relatos (a página mostra a parte de cada um)
   if (direto){
     const aviso = document.createElement('p');
     aviso.className = 'indo';
@@ -615,7 +648,8 @@ function montar(){
 
   resumoGuardado(); pintarResumo(); carregarResumo();
   if (timerResumo) clearInterval(timerResumo);
-  timerResumo = setInterval(() => { if (!document.hidden) carregarResumo(); }, 60000);
+  // H19 (S205, issue 156, item 2): as faixas (pedidos, relatos, celulares) também, junto com os números dos cards
+  timerResumo = setInterval(() => { if (!document.hidden){ carregarResumo(); pintarPedidos(); } }, 60000);
 }
 
 function telaLogin(recado){
@@ -761,6 +795,7 @@ document.getElementById('frmTroca').addEventListener('submit', async ev => {
     senhaProvisoria = '';
     await meuAcesso();
     await entrada();
+    acabouDeEntrar = true;
     montar();
   }catch(e){
     if (e.status === 401){ limpar(); telaLogin('A sessão venceu. Entre de novo com a senha provisória.'); }
@@ -828,6 +863,7 @@ document.getElementById('frm').addEventListener('submit', async ev => {
     if (tr && tr.senha === 'pendente'){ pedirTroca(senha); return; }
     await meuAcesso();
     if (await entrada() === 'fora'){ limpar(); telaLogin(''); return; }   // H16: fora da lista do celular da empresa
+    acabouDeEntrar = true;                                                  // H19 (issue 156): acabou de entrar: vai sozinho
     montar();
   }catch(e){
     limpar();
@@ -854,7 +890,9 @@ document.getElementById('btTrocar').addEventListener('click', () => {
 
 document.getElementById('btSair').addEventListener('click', async () => {
   if (autoIndo){ clearTimeout(autoIndo); autoIndo = null; }
-  // H16 · celular da empresa: "Sair deste celular" tira a pessoa do "Quem vai usar?" e desconecta o aparelho dela
+  // H19 (S205, issue 156, item 3): o "Sair" do núcleo, o mesmo de todas as páginas (pergunta, encerra o acesso no
+  // servidor e volta para a entrada). H16 · celular da empresa: "Sair deste celular" tira a pessoa do "Quem vai usar?"
+  if (window.Nucleo && Nucleo.sairDaConta){ await Nucleo.sairDaConta({ deste: !!EMP(), depois: limpar }); return; }
   if (EMP()){ try{ await Nucleo.empresa.sairDeste(sessao.email); }catch(e){} }
   limpar(); telaLogin('');
 });
