@@ -35,7 +35,8 @@
  * ========================================================================== */
 (function (raiz) {
   'use strict';
-  var VERSAO = 'D2';   // D2 (S195, issue 167): num() lê texto pelo leitor único do núcleo ("1500.50" = 1.500,50; antes 150.050)
+  var VERSAO = 'D3';   // D3 (S203, issue 111): o saldo sem previsto sai "—" (antes negativo), na linha e no quadro de controle
+  // var VERSAO = 'D2';   // D2 (S195, issue 167): num() lê texto pelo leitor único do núcleo ("1500.50" = 1.500,50; antes 150.050)
   // var VERSAO = 'D1';
   var BASE = (function () {
     try { var s = document.currentScript && document.currentScript.src; if (s) return new URL('../', s).href; } catch (e) {}
@@ -284,7 +285,7 @@
         tot.J += J; tot.K += K; tot.L += L; tot.M += M; tot.N += N;
         linhas.push([{ text: texto(it.item), fontSize: 7, alignment: 'center' }, { text: texto(c.codigo), bold: true, fontSize: 7.5, alignment: 'center' }, { text: texto(c.texto), bold: true, fontSize: 7, alignment: 'center' },
           { text: texto(it.un || 'UN.'), fontSize: 7, alignment: 'center' }, R(p), Q(prev, { fillColor: CINZA }), Q(ant), Q(mes, { fillColor: CINZA }), Q(acum),
-          R(J, { fillColor: AM }), R(K), R(L, { fillColor: AM }), R(M), R(N, { fillColor: AM }), { text: prev ? Math.round(acum / prev * 100) + '%' : '', fontSize: 7, alignment: 'right', fillColor: AM }]);
+          R(J, { fillColor: AM }), R(K), R(L, { fillColor: AM }), R(M), prev ? R(N, { fillColor: AM }) : { text: '—', alignment: 'center', fontSize: 7, fillColor: AM }, { text: prev ? Math.round(acum / prev * 100) + '%' : '', fontSize: 7, alignment: 'right', fillColor: AM }]);
       });
       var vazio = function (n) { var a = []; for (var i = 0; i < n; i++) a.push({}); return a; };
       var cab = [
@@ -299,11 +300,11 @@
         [th('Item', { rowSpan: 2 }), th('Código', { rowSpan: 2 }), th('DESCRIÇÃO DO ITEM', { rowSpan: 2 }), th('UNID. MED.', { rowSpan: 2 }), th('PREÇO UNITÁRIO', { rowSpan: 2 }), th('QUANTITATIVOS', { colSpan: 4 }), {}, {}, {}, th('VALORES EM REAIS', { colSpan: 5 }), {}, {}, {}, {}, th('EXEC.%', { rowSpan: 2 })],
         [{}, {}, {}, {}, {}, th('TOTAL PREVISTO'), th('ACUMULADO ANTERIOR'), th('DO MÊS'), th('TOTAL ACUMULADO'), th('ACUMULADO ANTERIOR'), th('DO MÊS'), th('TOTAL ACUMULADO'), th('PREVISTO CONTRATO'), th('SALDO'), {}]
       ];
-      var corpo = cab.concat(linhas, [[{ text: '', colSpan: 9, fillColor: '#A6A6A6' }].concat(vazio(8), [R(tot.J, { bold: true }), R(tot.K, { bold: true }), R(tot.L, { bold: true }), R(tot.M, { bold: true }), R(tot.N, { bold: true }), { text: '' }])]);
+      var corpo = cab.concat(linhas, [[{ text: '', colSpan: 9, fillColor: '#A6A6A6' }].concat(vazio(8), [R(tot.J, { bold: true }), R(tot.K, { bold: true }), R(tot.L, { bold: true }), R(tot.M, { bold: true }), tot.M ? R(tot.N, { bold: true }) : { text: '—', alignment: 'center', bold: true }, { text: '' }])]);
       var meds = []; for (var i = 1; i <= 20; i++) meds.push(d['med_' + (i < 10 ? '0' : '') + i]);
       var medCel = function (i) { return [{ text: 'MED ' + (i < 9 ? '0' : '') + (i + 1), fontSize: 6.5 }, { text: meds[i] == null ? '' : moeda(meds[i]), fontSize: 6.5, alignment: 'right' }]; };
       var quadro = [[{ text: 'QUADRO DE CONTROLE', colSpan: 10, alignment: 'center', fontSize: 7, bold: true }].concat(vazio(9))];
-      var rotQ = [['VALOR CONTRATUAL (R$):', moeda(d.valor_contratual)], ['VALOR MEDIDO ACUMULADO (R$):', moeda(tot.L)], ['SALDO CONTRATUAL (R$):', moeda((num(d.valor_contratual) || 0) - tot.L)], ['DATA INÍCIO DO CONTRATO:', data(d.data_inicio)], ['DATA TÉRMINO DO CONTRATO:', data(d.data_termino)]];
+      var rotQ = [['VALOR CONTRATUAL (R$):', moeda(d.valor_contratual)], ['VALOR MEDIDO ACUMULADO (R$):', moeda(tot.L)], ['SALDO CONTRATUAL (R$):', num(d.valor_contratual) ? moeda(num(d.valor_contratual) - tot.L) : '—'], ['DATA INÍCIO DO CONTRATO:', data(d.data_inicio)], ['DATA TÉRMINO DO CONTRATO:', data(d.data_termino)]];
       for (var q = 0; q < 5; q++) quadro.push([{ text: rotQ[q][0], fontSize: 6.5, bold: true }, { text: rotQ[q][1], fontSize: 6.5, alignment: 'right' }].concat(medCel(q), medCel(q + 5), medCel(q + 10), medCel(q + 15)));
       var se = (d.servicos || []).map(function (s, k) { var c = cod[String(s.item)] || {};
         return [{ text: texto(s.item), fontSize: 7, alignment: 'center' }, { text: texto(c.codigo), fontSize: 7, alignment: 'center' }, { text: texto(c.texto), fontSize: 7 }, { text: texto(s.servico), fontSize: 7 }, { text: texto(s.rdo), fontSize: 7, alignment: 'center' }, { text: data(s.data), fontSize: 7, alignment: 'center' }, { text: texto(s.equipe), fontSize: 7, alignment: 'center' }]; });
