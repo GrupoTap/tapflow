@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapField · S66</title>
+<title>TapField · S67</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -514,6 +514,7 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 .mdSit{margin:8px 0 0;font-size:14px;font-weight:600}
 .mdSit.ok{color:var(--ok)} .mdSit.warn{color:var(--warn)}
 .mdFila{margin:8px 0 0;font-size:13px;color:var(--crit);font-weight:600}
+.mdLin.mdPend{outline:2px solid var(--crit);outline-offset:2px;border-radius:4px}   /* S67 (207): quantidade mudada sem o porquê */
 .mdLin{border-top:1px solid var(--rule);padding:10px 0}
 .mdLin:first-of-type{border-top:0}
 .mdLin.adic{background:var(--warn-soft);margin:0 -12px;padding:10px 12px}
@@ -621,9 +622,9 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 #filaTxt{cursor:pointer}
 </style>
 <!-- S33 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N13">
-<script src="../nucleo/config.js?v=N13"></script>
-<script src="../nucleo/nucleo.js?v=N13"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N14">
+<script src="../nucleo/config.js?v=N14"></script>
+<script src="../nucleo/nucleo.js?v=N14"></script>
 <script src="../nucleo/modulos.js?v=M4"></script>
 </head>
 <body>
@@ -685,7 +686,8 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S66';   // S66 (S201): Rodada R9 da auditoria (TapRH) — issue 165 (Folga e férias com "Carregando…" e as abas; Diárias: dois toques na seta voltam dois dias, com "Carregando…") e 141 parte 2 (o celular conta ao escritório a batida parada na fila)
+const APP_VERSION = 'S67';   // S67 (S202): Rodada R10 da auditoria (TapFlow celular) — issues 106 (a foto da fila renova o acesso antes e não se perde com a sessão vencida; as que ficaram no aparelho voltam), 107 e 177 (levantamento, extras, execução e fotos pela fila do núcleo: o recusado fica em "Envios parados" com o motivo; o rascunho fecha quando vai para a fila; o "já recebi" com outra quantidade avisa), 178 (trocar foto e cancelar não perde a foto; fotos sem dono saem do aparelho; o catálogo volta para o formulário; TAG digitada no levantamento) e 207 (a medição avisa a quantidade sem o porquê; sem sinal o boletim é rascunho; o PDF não se repete; a assinatura sai do aparelho depois de subir)
+// const APP_VERSION = 'S66';   // S66 (S201): Rodada R9 da auditoria (TapRH) — issue 165 (Folga e férias com "Carregando…" e as abas; Diárias: dois toques na seta voltam dois dias, com "Carregando…") e 141 parte 2 (o celular conta ao escritório a batida parada na fila)
 // const APP_VERSION = 'S65';   // S65 (S200): Rodada R8 da auditoria (cartões) — issue 187: o canhoto vai pela fila comum do celular (no celular da empresa, sobe no nome de quem tirou; aparelho cheio avisa e não perde; o recusado fica na lista, com o motivo); a foto renova o acesso antes; "Não tenho este canhoto" no pedido do escritório
 // const APP_VERSION = 'S64';   // S64 (S197): Rodada R6 da auditoria (celular: ponto e diária) — issue 140 (aparelho cheio: a batida não diz "registrado", o rascunho fica e, com sinal, vai direto), 141 (recusada aparece como recusada, com o motivo; o ajuste leva a hora do toque e a foto), 143 (sem códigos internos; o tempo da repetida pelo parâmetro; horas de 30 em 30) e 166 (diária sem sinal pela fila)
 // const APP_VERSION = 'S63';   // S63 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 109 (as confirmações pela janela do TapHub, com o motivo dentro dela), 110 ("sem sinal, na fila" em amarelo; a T06 com o nome) e nomes fixos trocados por "o escritório"; núcleo N13
@@ -956,7 +958,8 @@ const IDB = {
   },
   put(k, v){ return this._tx('readwrite', st => st.put(v, k)); },
   get(k){    return this._tx('readonly',  st => st.get(k)); },
-  del(k){    return this._tx('readwrite', st => st.delete(k)); }
+  del(k){    return this._tx('readwrite', st => st.delete(k)); },
+  chaves(){  return this._tx('readonly',  st => st.getAllKeys()); }   // S67 (178): a varredura das fotos sem dono
 };
 
 /** Reduz para caber na rede da planta: 1600px no maior lado, JPEG 0.72. */
@@ -1016,23 +1019,46 @@ const driveLigado = () => DEMO || !!(PARAM.drive_url && PARAM.drive_chave);
  * Sem cabeçalho customizado de propósito: assim o navegador não dispara o
  * preflight OPTIONS, que o Apps Script não responde.
  */
+/** S67 (106): o acesso vence em 1 hora; quem decide se ele está vencido (ou perto) é o próprio token. */
+function tokenPerto(tok){
+  try{ const j = JSON.parse(atob(String(tok).split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); return !j.exp || j.exp * 1000 - Date.now() < 120000; }
+  catch(e){ return false; }
+}
 async function subirArquivo(dataUrl, meta, autor){
   if (DEMO) return { drive_url:'https://drive.google.com/demo', file_id:'demo' };
   if (!driveLigado()) throw Object.assign(new Error('O Drive ainda não foi configurado.'), {negocio:true});
-
-  const r = await fetch(PARAM.drive_url, {
-    method:'POST', redirect:'follow', signal: sinal(true),
-    body: JSON.stringify({
-      chave: PARAM.drive_chave, token: autor ? ((Nucleo.empresa.sessaoDe(autor) || {}).token || '') : sessao.token,
-      client_uid: meta.client_uid, cliente: meta.cliente, os_numero: meta.os_numero,
-      categoria: meta.categoria, nome: meta.nome, mime:'image/jpeg', base64: dataUrl
-    })
-  });
-  const j = await r.json().catch(() => null);
-  if (!j) throw new Error('O serviço de arquivos não respondeu como esperado.');
-  if (j.status !== 'ok') throw Object.assign(new Error(j.mensagem || 'Falha ao gravar no Drive'),
-                                             { negocio: j.codigo === 'CHAVE' || j.codigo === 'TOKEN' });
-
+  const tok = () => autor ? ((Nucleo.empresa.sessaoDe(autor) || {}).token || '') : sessao.token;
+  const renovar = () => autor ? Nucleo.empresa.renovarDe(autor) : renovarToken();
+  // S67 (106): renova ANTES de mandar a foto (a fila pode subir horas depois, com o acesso já vencido) e, se o
+  // serviço do Drive disser "sessão expirada", renova e tenta UMA vez de novo. Se ainda assim não der, a foto
+  // FICA na fila (antes saía dela como "recusada" e se perdia).
+  if (tokenPerto(tok())) { try{ await renovar(); }catch(e){} }
+  let j = null;
+  for (let tent = 0; tent < 2; tent++){
+    let r;
+    try{
+      r = await fetch(PARAM.drive_url, {
+        method:'POST', redirect:'follow', signal: sinal(true),
+        body: JSON.stringify({
+          chave: PARAM.drive_chave, token: tok(),
+          client_uid: meta.client_uid, cliente: meta.cliente, os_numero: meta.os_numero,
+          categoria: meta.categoria, nome: meta.nome, mime:'image/jpeg', base64: dataUrl
+        })
+      });
+    }catch(e){ throw Object.assign(new Error(ehTO(e) ? 'O serviço de arquivos não respondeu.' : 'Sem sinal.'), { rede: true }); }
+    j = await r.json().catch(() => null);
+    if (!j) throw Object.assign(new Error('O serviço de arquivos não respondeu como esperado.'), { rede: true });
+    if (j.status === 'ok') break;
+    const sessaoVencida = j.codigo === 'TOKEN' || /sess[aã]o.*(inv[aá]lida|expirad)/i.test(j.mensagem || '');
+    if (sessaoVencida && tent === 0){
+      let ok = false; try{ ok = await renovar(); }catch(e){}
+      if (ok) continue;
+    }
+    if (sessaoVencida)   // não é recusa da foto: espera o acesso voltar (com sinal, "Tentar de novo")
+      throw Object.assign(new Error('O acesso deste aparelho venceu antes de a foto subir. Ela continua guardada e sobe quando o acesso for renovado.'), { rede: true });
+    // outra falha do serviço: conta como erro do servidor (5 seguidas e fica parada, com o motivo; não trava a fila)
+    throw Object.assign(new Error(j.mensagem || 'Falha ao gravar no Drive'), { negocio: j.codigo === 'CHAVE', status: j.codigo === 'CHAVE' ? 400 : 500 });
+  }
   await req('/rest/v1/rpc/tf_registrar_anexo', { method:'POST', autor, body: JSON.stringify({
     p_os_id: meta.os_id, p_categoria: meta.categoria, p_nome: meta.nome,
     p_client_uid: meta.client_uid, p_drive_file_id: j.file_id, p_drive_url: j.url,
@@ -1050,95 +1076,120 @@ async function subirArquivo(dataUrl, meta, autor){
 // mesmo envio reenviado SUBSTITUI o da fila em vez de virar dois.
 // Nada é descartado em silêncio — o que não sai fica visível na barra vermelha.
 // ════════════════════════════════════════════════════════════════════════════
+// S67 (S202, issues 106, 107 e 177): os envios antigos do TapField (levantamento, extras, registro da execução e as
+// fotos que vão ao Drive) passaram para a FILA DO NÚCLEO. O que o servidor recusa fica em "Envios parados", com o
+// motivo, "Tentar de novo" e "Descartar" (2 toques) — antes saía da fila com um aviso de poucos segundos. Quem envia
+// é o tratador 'field' (abaixo), que o núcleo chama: aberta outra página (TapRH, TapDoc), a entrada só espera.
+// A fila antiga (`v` ausente) é convertida uma vez, no mesmo lugar (fieldMigrarFila).
 const filaLer = () => LS.get(K_FILA, []);
-const filaGravar = f => LS.set(K_FILA, f);
+/** A entrada da fila no formato de antes (tipo, osId, rotulo…), para as telas que contam o que está na fila. */
+const filaItem = e => (e && e.v === 2 && e.envio === 'field') ? Object.assign({}, e.dados || {}, { tipo: e.tipo, assinatura: e.assinatura, parado: !!e.parado, v: 2 }) : e;
+const filaDoField = () => filaLer().map(filaItem).filter(Boolean);
+const FILA_TIPOS = { levantamento: 1, extras: 1, execucao: 1, anexo: 1 };
 
-function filaAdd(entrada){
-  // S34 · N2 (decisão Q3, 22/10): a mesma assinatura SUBSTITUI no mesmo lugar.
-  // Antes ia para o fim da fila, e um item que depende de outro podia passar
-  // na frente dele.
-  const f = filaLer();
-  // S53 · A7: quem fez (no celular da empresa o envio sai com a sessão dessa pessoa)
-  const novo = Object.assign({ tentativas:0, em: new Date().toISOString(), por: String(sessao.email || '').toLowerCase() || null }, entrada);
-  const i = f.findIndex(e => e.assinatura === entrada.assinatura);
-  if (i >= 0) f[i] = novo; else f.push(novo);
-  filaGravar(f); pintarFila();
-}
-function filaRemover(assinatura){
-  filaGravar(filaLer().filter(e => e.assinatura !== assinatura)); pintarFila();
-}
-
-let flushEmVoo = false;
-async function flushFila(){
-  if (DEMO || flushEmVoo) return;
-  const f = filaLer(); if (!f.length) return;
-  flushEmVoo = true;
-  try{
-    for (const e of f){
-      // S34 · N2: entrada nova (v2, de qualquer módulo) é enviada pelo NÚCLEO,
-      // não por aqui — este laço só conhece os tipos antigos do Field.
-      if (e && e.v === 2) continue;
-      // S53 · A7: no celular da empresa, o que outra pessoa fez sobe com a sessão DELA
-      const autor = (EMP_F() && e.por && e.por !== String(sessao.email || '').toLowerCase()) ? e.por : null;
-      const rpcE = (fn, p) => autor ? req('/rest/v1/rpc/' + fn, { method:'POST', body: JSON.stringify(p||{}), autor }) : rpc(fn, p);
-      try{
-        if (e.tipo === 'anexo'){
-          const dataUrl = await IDB.get(e.idbKey);
-          if (!dataUrl){ filaRemover(e.assinatura); continue; }   // já subiu ou sumiu
-          await subirArquivo(dataUrl, e.meta, autor);
-          await IDB.del(e.idbKey);
-          filaRemover(e.assinatura);
-        } else if (e.tipo === 'execucao'){
-          // registro da volta ao cliente: não tem rascunho nem foto atrelada
-          await rpcE(e.funcao, e.payload);
-          filaRemover(e.assinatura);
-          // se a tela da execução está aberta, o item deixa de ser "no aparelho"
-          if (exec && exec.osId === e.osId){
-            const it = exec.itens.find(x => x.id === e.payload.p_os_item_id);
-            if (it) delete it._fila;
-          }
-          toast('Registro da ' + e.rotulo + ' enviado.', 'ok');
-        } else {
-          const r = await rpcE(e.funcao, e.payload);
-          filaRemover(e.assinatura);
-          LS.del(e.draftKey || (K_DRAFT + e.osId));
-          await enfileirarFotosDoEnvio(e, r);
-          toast(e.tipo === 'extras'
-            ? 'Extras da ' + e.rotulo + ' enviados ao comercial' + (r && r.numero ? ' (' + r.numero + ')' : '') + '.'
-            : 'Levantamento da ' + e.rotulo + ' enviado.', 'ok');
-        }
-      }catch(err){
-        if (err.autorFora) continue;   // S53: a sessão de quem fez venceu: espera a pessoa entrar neste celular
-        if (err.negocio){
-          // o servidor RECUSOU por regra — reenviar não resolve. Sai da fila e avisa.
-          filaRemover(e.assinatura);
-          toast('A ' + e.rotulo + ' foi recusada: ' + err.message, 'err');
-        } else {
-          e.tentativas = (e.tentativas||0) + 1;
-          filaGravar(filaLer().map(x => x.assinatura === e.assinatura ? e : x));
-          break;   // sem rede: para de tentar os próximos
-        }
-      }
+/** Converte a fila antiga (S66 e antes) para a do núcleo, no mesmo lugar e sem perder nada. Roda no começo. */
+function fieldMigrarFila(){
+  let f; try{ f = JSON.parse(localStorage.getItem(K_FILA) || '[]'); }catch(e){ return; }
+  if (!Array.isArray(f) || !f.some(e => e && !e.v && FILA_TIPOS[e.tipo])) return;
+  const novo = f.map(e => {
+    if (!e || e.v || !FILA_TIPOS[e.tipo]) return e;
+    const id = e.tipo === 'anexo' ? ((e.meta || {}).client_uid || e.assinatura) : e.tipo === 'execucao' ? ((e.payload || {}).p_os_item_id || e.assinatura)
+      : (e.osId + '|' + ((e.payload || {}).p_client_uid || e.assinatura));
+    const dados = Object.assign({}, e); delete dados.tentativas; delete dados.em; delete dados.por; delete dados.assinatura;
+    if (e.tipo === 'levantamento' || e.tipo === 'extras'){
+      dados.client_uid = (e.payload || {}).p_client_uid; dados.draftKey = e.draftKey || ((e.tipo === 'extras' ? K_EXTRA : K_DRAFT) + e.osId);
     }
-  } finally {
-    flushEmVoo = false; pintarFila();
-    // S34 · N2: depois dos tipos antigos, o núcleo envia as entradas v2
-    try{ if (window.Nucleo && Nucleo.fila) Nucleo.fila.enviarAgora().then(pintarFila, pintarFila); }catch(e){}
-    // a tela da execução conta a fila para decidir se o fechar acende — quando
-    // a fila esvazia, ela precisa saber disso sem o inspetor sair e voltar
-    if (tela === 'exec' && exec && !execForm) pintarExecucao();
+    return { v: 2, assinatura: e.tipo + '|' + id, tipo: e.tipo, id, grupo: 'f|' + e.tipo + '|' + id,
+             rotulo: fieldRotulo(e.tipo, e.rotulo), fotos: [], rpc: null, envio: 'field', dados,
+             guardados: e.tipo === 'anexo' && e.idbKey ? [e.idbKey] : [], tentativas: e.tentativas || 0,
+             em: e.em || new Date().toISOString(), parado: false, por: e.por || null };
+  });
+  try{ localStorage.setItem(K_FILA, JSON.stringify(novo)); }catch(e){ return; }
+  // o rascunho que continuou depois do envio (o S66 deixava): o que já foi na fila sai dele; o resto vira um envio novo
+  novo.forEach(e => {
+    if (!e || e.envio !== 'field' || !(e.tipo === 'levantamento' || e.tipo === 'extras')) return;
+    const d = e.dados, dr = LS.get(d.draftKey, null);
+    if (!dr || dr.client_uid !== d.client_uid) return;
+    const ja = (d.payload.p_itens || []).map(x => [x.descricao, Number(x.quantidade), x.equipamento_id || ''].join('|'));
+    const resto = (dr.itens || []).filter(i => { const k = [i.descricao, Number(i.quantidade), i.equipamento_id || ''].join('|'), p = ja.indexOf(k); if (p >= 0){ ja.splice(p, 1); return false; } return true; });
+    if (resto.length) LS.set(d.draftKey, Object.assign({}, dr, { client_uid: uid(), itens: resto })); else LS.del(d.draftKey);
+  });
+}
+const fieldRotulo = (tipo, os) => ({ levantamento: 'Levantamento', extras: 'Extras', execucao: 'Registro da execução', anexo: 'Foto' }[tipo] || 'Envio') + (os ? ' da ' + os : '');
+
+/** Põe um envio do TapField na fila do núcleo. Devolve a assinatura, ou null (não coube no aparelho: o aviso já saiu). */
+function filaAdd(tipo, id, dados, guardados){
+  if (!(window.Nucleo && Nucleo.fila)){ toast('Este aparelho está sem a fila de envios. Tente com sinal.', 'err'); return null; }
+  const a = Nucleo.fila.adicionar({ tipo, id, grupo: 'f|' + tipo + '|' + id, rotulo: fieldRotulo(tipo, dados.rotulo),
+                                    envio: 'field', dados, guardados: guardados || [] });
+  if (a && Nucleo.fila.ler(a) && Nucleo.fila.ler(a).parado) Nucleo.fila.retomar('f|' + tipo + '|' + id).catch(() => {});   // registro corrigido: vai de novo
+  pintarFila();
+  return a;
+}
+function filaRemover(assinatura){ try{ if (window.Nucleo && Nucleo.fila) Nucleo.fila.descartar(assinatura); }catch(e){} pintarFila(); }
+
+/** O envio direto e o da fila conferem a mesma coisa: o servidor que diz "já recebi" com outra quantidade não gravou o de agora. */
+function conferirDuplicado(tipo, payload, r){
+  if (!r || !r.duplicate) return;
+  const mandei = (payload.p_itens || []).length;
+  const tinha = tipo === 'extras' ? (r.itens_ids || []).length : Number(r.itens);
+  if (tinha === mandei) return;
+  throw Object.assign(new Error('O sistema já tinha recebido este lançamento com ' + tinha + ' item(ns) e não gravou os '
+    + mandei + ' de agora. Os itens continuam guardados: toque em "Corrigir no rascunho", confira o que já foi e envie de novo.'),
+    { negocio: true, duplicado: true });
+}
+
+/** O tratador 'field' do núcleo: envia uma entrada do TapField. Recusa (negócio) = parada com o motivo; sem sinal = espera. */
+async function fieldEnviar(e, autor){
+  const d = e.dados || {};
+  const rpcE = (fn, p) => autor ? req('/rest/v1/rpc/' + fn, { method:'POST', body: JSON.stringify(p || {}), autor }) : rpc(fn, p);
+  if (e.tipo === 'anexo'){
+    const dataUrl = await IDB.get(d.idbKey);
+    if (!dataUrl) throw Object.assign(new Error('A foto não está mais neste aparelho (apagada ou já enviada). Pode descartar.'), { negocio: true });
+    await subirArquivo(dataUrl, d.meta, autor);
+    return { ok: true };
   }
+  if (e.tipo === 'execucao'){
+    const r = await rpcE(d.funcao, d.payload);
+    if (exec && exec.osId === d.osId){ const it = exec.itens.find(x => x.id === d.payload.p_os_item_id); if (it) delete it._fila; }
+    toast('Registro da ' + d.rotulo + ' enviado.', 'ok');
+    return r;
+  }
+  // levantamento / extras
+  const r = await rpcE(d.funcao, d.payload);
+  conferirDuplicado(e.tipo, d.payload, r);
+  if (!(await enfileirarFotosDoEnvio(d, r, e.por)))
+    throw Object.assign(new Error('Enviado, mas o aparelho está sem espaço para guardar as fotos do envio. Libere espaço: o app tenta de novo.'), { rede: true });
+  // 177: o rascunho só sai se for o MESMO que foi enviado (o que foi lançado depois é outro envio)
+  const dr = LS.get(d.draftKey, null);
+  if (dr && dr.client_uid === d.client_uid) LS.del(d.draftKey);
+  toast(e.tipo === 'extras'
+    ? 'Extras da ' + d.rotulo + ' enviados ao comercial' + (r && r.numero ? ' (' + r.numero + ')' : '') + '.'
+    : 'Levantamento da ' + d.rotulo + ' enviado.', 'ok');
+  return r;
+}
+try{ if (window.Nucleo && Nucleo.fila && Nucleo.fila.tratador) Nucleo.fila.tratador('field', fieldEnviar); }catch(e){}
+
+/** Envia o que está na fila (a do núcleo envia tudo, inclusive o do TapField pelo tratador acima). */
+async function flushFila(){
+  if (DEMO) return;
+  try{ if (window.Nucleo && Nucleo.fila) await Nucleo.fila.enviarAgora(); }catch(e){}
+  pintarFila();
+  // a tela da execução conta a fila para decidir se o fechar acende
+  if (tela === 'exec' && exec && !execForm) pintarExecucao();
 }
 
 /**
  * Depois que o levantamento sobe, o servidor devolve os ids dos itens criados —
  * na mesma ordem em que foram enviados. É com eles que cada foto encontra o
  * seu item. Sem isso, a foto do manômetro ficaria solta na OS.
+ * Devolve false se alguma foto não coube na fila (o aviso vermelho já saiu).
  */
-async function enfileirarFotosDoEnvio(entrada, resposta){
+async function enfileirarFotosDoEnvio(entrada, resposta, por){
   const fotos = entrada.fotos || [];
-  if (!fotos.length) return;
+  if (!fotos.length || DEMO) return true;
   const ids = (resposta && resposta.itens_ids) || [];
+  let ok = true;
   for (const f of fotos){
     const meta = Object.assign({}, f.meta, { os_item_id: ids[f.indice] || null });
     // S39 · o extra lançado na inspeção vira item de OUTRA OS (a da venda
@@ -1147,43 +1198,111 @@ async function enfileirarFotosDoEnvio(entrada, resposta){
     if (resposta && resposta.os_id && entrada.tipo === 'extras'){
       meta.os_id = resposta.os_id; meta.os_numero = resposta.numero || meta.os_numero;
     }
-    filaAdd({ tipo:'anexo', assinatura:'anx|'+meta.client_uid, osId: entrada.osId,
-              rotulo: entrada.rotulo, idbKey: f.idbKey, meta, por: entrada.por || null });
+    const a = Nucleo.fila.adicionar({ tipo: 'anexo', id: meta.client_uid, grupo: 'f|anexo|' + meta.client_uid,
+      rotulo: fieldRotulo('anexo', entrada.rotulo), envio: 'field', guardados: [f.idbKey],
+      dados: { osId: entrada.osId, rotulo: entrada.rotulo, idbKey: f.idbKey, meta } });
+    if (!a) ok = false;
+    // no celular da empresa, a foto sobe com a sessão de quem fez o envio
+    else if (por){ const f2 = filaLer(); const k = f2.findIndex(x => x && x.assinatura === a); if (k >= 0 && f2[k].por !== por){ f2[k].por = por; LS.set(K_FILA, f2); } }
   }
-  flushFila().catch(()=>{});
+  pintarFila();
+  return ok;
+}
+
+// ── 106 · 178: as fotos de item que ficaram no aparelho sem dono ───────────
+// As fotos dos itens moram no banco de fotos do aparelho com a chave 'f_…'. Dono = um rascunho (levantamento ou
+// extras) ou a fila. Na 1ª abertura do S67, as que não têm dono vão para "Fotos que ficaram no aparelho" (podem ser
+// as que a fila antiga tirou por "sessão expirada": issue 106) — a pessoa escolhe a OS ou apaga. Depois disso, a foto
+// sem dono é apagada ao abrir o app (item tirado, item novo cancelado: issue 178). Catálogo e fila não são tocados.
+const K_ORFAS = 'tff_fotos_orfas';      // [{ chave, em }] — esperando a pessoa decidir
+const K_ORFAS_V = 'tff_fotos_varrido';  // a 1ª varredura já foi feita
+function fotosComDono(){
+  const dono = new Set();
+  try{
+    for (let k = 0; k < localStorage.length; k++){
+      const n = localStorage.key(k);
+      if (!(n.startsWith(K_DRAFT) || n.startsWith(K_EXTRA))) continue;
+      const d = LS.get(n, null); ((d && d.itens) || []).forEach(i => { if (i.fotoKey) dono.add(i.fotoKey); });
+    }
+  }catch(e){}
+  filaLer().forEach(e => {
+    if (!e) return;
+    (e.guardados || []).forEach(x => dono.add(x));
+    (e.fotos || []).forEach(x => { if (x && x.chave) dono.add(x.chave); if (x && x.idbKey) dono.add(x.idbKey); });
+    const d = e.dados || e; if (d.idbKey) dono.add(d.idbKey);
+    (d.fotos || []).forEach(x => { if (x && x.idbKey) dono.add(x.idbKey); });
+  });
+  LS.get(K_ORFAS, []).forEach(x => dono.add(x.chave));
+  return dono;
+}
+async function varrerFotos(){
+  if (DEMO) return;
+  let chaves = [];
+  try{ chaves = (await IDB.chaves()).filter(k => /^f_/.test(String(k))); }catch(e){ return; }
+  const dono = fotosComDono(), sem = chaves.filter(k => !dono.has(k));
+  if (!LS.get(K_ORFAS_V, false)){
+    // 1ª vez: nada se apaga — vão para a pessoa decidir (podem ser fotos presas pela fila antiga)
+    if (sem.length) LS.set(K_ORFAS, LS.get(K_ORFAS, []).concat(sem.map(chave => ({ chave, em: new Date().toISOString() }))));
+    LS.set(K_ORFAS_V, true);
+  } else {
+    for (const k of sem){ try{ await IDB.del(k); }catch(e){} }
+  }
+  pintarFila();
 }
 
 function pintarFila(){
   const f = filaLer();
+  const orfas = LS.get(K_ORFAS, []).length;
   const bar = document.getElementById('barFila');
-  bar.hidden = !f.length;
-  if (f.length){
+  bar.hidden = !f.length && !orfas;
+  if (f.length || orfas){
     const soLev = f.every(e => e.tipo === 'levantamento' || e.tipo === 'anexo');
     const rot = soLev ? ['levantamento aguardando envio','levantamentos aguardando envio']
                       : ['registro aguardando envio','registros aguardando envio'];
-    // S34 · N2: entrada parada (o servidor recusou uma anterior do mesmo grupo)
-    // não some: aparece contada, para a pessoa saber que precisa de atenção.
+    // S34 · N2: entrada parada (o servidor recusou) não some: aparece contada, para a pessoa saber que precisa de atenção.
     const parados = f.filter(e => e && e.v === 2 && e.parado).length;
     document.getElementById('filaTxt').textContent =
-      f.length + ' ' + (f.length === 1 ? rot[0] : rot[1]) + (parados ? ' · ' + parados + ' parado' + (parados > 1 ? 's' : '') : '');
+      (f.length ? f.length + ' ' + (f.length === 1 ? rot[0] : rot[1]) : '')
+      + (parados ? (f.length ? ' · ' : '') + parados + ' parado' + (parados > 1 ? 's' : '') : '')
+      + (orfas ? (f.length ? ' · ' : '') + orfas + ' foto' + (orfas > 1 ? 's' : '') + ' sem envio' : '');
     // S48: com algo parado, o botão leva à tela que mostra o motivo e as saídas ("Tentar agora" pula o parado)
-    document.getElementById('btnFlush').textContent = parados ? 'Ver o que parou' : 'Tentar agora';
+    document.getElementById('btnFlush').textContent = (parados || orfas) ? 'Ver o que parou' : 'Tentar agora';
   }
 }
 // S34 · N2: o núcleo avisa quando envia, recusa ou para algo — a faixa acompanha.
 try{
   if (window.Nucleo && Nucleo.fila) Nucleo.fila.aoMudar(ev => {
     pintarFila();
-    if (ev.situacao === 'recusado') toast('Recusado pelo servidor: ' + (ev.erro || ''), 'err');
+    if (ev.situacao === 'recusado') toast('Recusado pelo servidor: ' + (ev.erro || '') + ' Está em "Envios parados".', 'err');
   });
 }catch(e){}
+const temParado = () => filaLer().some(e => e && e.v === 2 && e.parado) || LS.get(K_ORFAS, []).length > 0;
 document.getElementById('btnFlush').addEventListener('click', () => {
-  if (filaLer().some(e => e && e.v === 2 && e.parado)) return pintarFilaParada();
+  if (temParado()) return pintarFilaParada();
   setConn('sync','enviando…'); flushFila().then(()=>carregar(true)).catch(()=>{});
 });
-document.getElementById('filaTxt').addEventListener('click', () => { if (filaLer().some(e => e && e.v === 2 && e.parado)) pintarFilaParada(); });
+document.getElementById('filaTxt').addEventListener('click', () => { if (temParado()) pintarFilaParada(); });
 
-/** S48 · o que o servidor recusou e ficou parado: o motivo, "Tentar de novo" e, no ponto, "Descartar e pedir ajuste". */
+/** Devolve os itens de um levantamento ou dos extras parados ao rascunho (com um código de envio novo) e tira da fila. */
+function filaDevolverAoRascunho(x){
+  const e = Nucleo.fila.ler(x.assinatura); if (!e) return false;
+  const d = e.dados || {}, p = d.payload || {};
+  const fotoDe = {}; (d.fotos || []).forEach(f => { fotoDe[f.indice] = f.idbKey; });
+  const itens = (d.itens && d.itens.length) ? d.itens : (p.p_itens || []).map((i, k) => ({
+    descricao: i.descricao, tipo_acessorio: i.tipo_acessorio, quantidade: i.quantidade, catalogo_item_id: i.catalogo_item_id || undefined,
+    equipamento_id: i.equipamento_id || '', tagTexto: (i.dados || {}).tag || '', requer_calibracao: !!i.requer_calibracao,
+    requer_lacre: !!i.requer_lacre, impede_operar: !!i.impede_operar, observacao: i.observacao || '', fotoKey: fotoDe[k] }));
+  const dr = LS.get(d.draftKey, null);
+  const base = dr && dr.itens ? dr : (e.tipo === 'extras' ? { modo: 'extra', fase: 1, itens: [] } : { fase: d.fase || p.p_fase || 1, itens: [] });
+  const junto = Object.assign({}, base, { client_uid: uid(), itens: itens.concat(base.itens || []) });
+  if (!LS.set(d.draftKey, junto)){ toast('Sem espaço no aparelho para devolver ao rascunho. Libere espaço e tente de novo.', 'err'); return false; }
+  // tira da fila SEM apagar as fotos (agora são do rascunho)
+  const f = filaLer().filter(y => !(y && y.assinatura === x.assinatura));
+  LS.set(K_FILA, f);
+  return true;
+}
+
+/** S48 · o que o servidor recusou e ficou parado: o motivo, "Tentar de novo" e "Descartar" (no ponto, o ajuste). */
 function pintarFilaParada(){
   tela = 'filaParada'; atual = null;
   document.getElementById('btnBack').hidden = false;
@@ -1191,25 +1310,38 @@ function pintarFilaParada(){
   document.getElementById('hSub').textContent = sessao.nome || '';
   const m = document.getElementById('main'); m.innerHTML = '';
   const L = (window.Nucleo && Nucleo.fila) ? Nucleo.fila.listar().filter(x => x.parado) : [];
-  if (!L.length){ m.innerHTML = '<div class="painel"><p style="margin:0">Nada parado. Tudo certo.</p></div>'; pintarFila(); return; }
-  const intro = document.createElement('p'); intro.className = 'ptDica'; intro.style.textAlign = 'left';
-  intro.textContent = 'O servidor não aceitou o envio abaixo. Leia o motivo: tente de novo ou, no ponto, peça o ajuste da batida com a hora em que você tocou.';
-  m.appendChild(intro);
+  const orfas = LS.get(K_ORFAS, []);
+  if (!L.length && !orfas.length){ m.innerHTML = '<div class="painel"><p style="margin:0">Nada parado. Tudo certo.</p></div>'; pintarFila(); return; }
+  if (L.length){
+    const intro = document.createElement('p'); intro.className = 'ptDica'; intro.style.textAlign = 'left';
+    intro.textContent = 'O servidor não aceitou o envio abaixo. Leia o motivo: corrija e tente de novo, ou descarte. No ponto, peça o ajuste da batida com a hora em que você tocou.';
+    m.appendChild(intro);
+  }
   L.forEach(x => {
     const pay = (x.rpc && x.rpc.payload) || {}, ponto = x.tipo === 'ponto' && pay.p_hora_celular;
     const d = ponto ? new Date(pay.p_hora_celular) : null;
     const dia = d ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') : null;
+    const rasc = x.envio === 'field' && (x.tipo === 'levantamento' || x.tipo === 'extras');
+    const n = rasc ? (((x.dados || {}).payload || {}).p_itens || []).length : 0;
     const c = document.createElement('div'); c.className = 'painel ptParado';
     c.innerHTML = '<b>' + esc(x.rotulo || x.tipo || 'Envio') + '</b>' + (d ? '<small>' + esc(dataBR(dia)) + '</small>' : '')
+      + (rasc ? '<small>' + n + ' item(ns)</small>' : '')
       + '<p class="ptLembrete esqueceu">' + esc(x.motivo || 'O servidor recusou, sem dizer o motivo.') + '</p>'
       + '<div class="ptDuas"><button type="button" class="btn" data-de-novo>Tentar de novo</button>'
-      + (ponto ? '<button type="button" class="btn pri" data-ajuste>Pedir ajuste com esta hora</button>' : '<button type="button" class="btn" data-descartar>Descartar</button>') + '</div>';
+      + (ponto ? '<button type="button" class="btn pri" data-ajuste>Pedir ajuste com esta hora</button>'
+        : (rasc ? '<button type="button" class="btn pri" data-rasc>Corrigir no rascunho</button>' : '') + '<button type="button" class="btn" data-descartar>Descartar</button>') + '</div>';
     c.querySelector('[data-de-novo]').addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => {
       try{ await Nucleo.fila.retomar(x.grupo); }catch(e){}
       const ainda = Nucleo.fila.listar().find(y => y.assinatura === x.assinatura);
       toast(!ainda ? 'Enviado.' : ainda.parado ? 'Ainda não foi: ' + (ainda.motivo || 'recusado') : 'Na fila: sobe quando houver sinal.', !ainda ? 'ok' : ainda.parado ? 'err' : 'ok');
       pintarFila(); pintarFilaParada();
     }));
+    const br = c.querySelector('[data-rasc]');
+    if (br) br.addEventListener('click', () => {
+      if (!filaDevolverAoRascunho(x)) return;
+      toast('Os itens voltaram ao rascunho da ' + ((x.dados || {}).rotulo || 'OS') + ': abra a OS, confira e envie de novo.', 'ok');
+      pintarFila(); pintarFilaParada();
+    });
     const bd = c.querySelector('[data-descartar]');
     if (bd) bd.addEventListener('click', () => {
       if (bd.dataset.ok !== '1'){ bd.dataset.ok = '1'; bd.textContent = 'Toque de novo para descartar'; return; }
@@ -1220,7 +1352,42 @@ function pintarFilaParada(){
     if (ba) ba.addEventListener('click', () => ptPedirAjusteDaFila(x));
     m.appendChild(c);
   });
+  if (orfas.length) m.appendChild(painelFotosOrfas(orfas));
   pintarFila();
+}
+
+/** 106: fotos que ficaram no aparelho sem envio (a fila antiga tirava a foto quando a sessão tinha vencido). */
+function painelFotosOrfas(orfas){
+  const p = document.createElement('div'); p.className = 'painel';
+  p.innerHTML = '<b>Fotos que ficaram no aparelho</b><p class="ptDica" style="text-align:left">Estas fotos não subiram e não se sabe mais de qual item eram. '
+    + 'Escolha a OS para enviar (vão para os arquivos da OS) ou apague.</p>';
+  const ops = '<option value="">— escolha a OS —</option>' + (listaOS || []).map(o => '<option value="' + esc(o.os_id) + '">' + esc(o.numero + ' · ' + (o.cliente || '')) + '</option>').join('');
+  orfas.forEach((x, k) => {
+    const c = document.createElement('div'); c.className = 'orfa';
+    c.style.cssText = 'display:flex;gap:10px;align-items:center;margin:10px 0;flex-wrap:wrap';
+    c.innerHTML = '<span class="fotoP" style="width:64px;height:64px;flex:0 0 64px;background:#EEF1F2;border-radius:6px;overflow:hidden"></span>'
+      + '<select aria-label="OS da foto" style="flex:1;min-width:150px">' + ops + '</select>'
+      + '<button type="button" class="btn" data-env>Enviar</button><button type="button" class="btn" data-apa>Apagar</button>';
+    IDB.get(x.chave).then(src => { if (src){ const im = document.createElement('img'); im.src = src; im.alt = 'Foto ' + (k + 1); im.style.cssText = 'width:100%;height:100%;object-fit:cover'; c.querySelector('.fotoP').appendChild(im); } }).catch(() => {});
+    const tira = () => LS.set(K_ORFAS, LS.get(K_ORFAS, []).filter(y => y.chave !== x.chave));
+    c.querySelector('[data-env]').addEventListener('click', () => {
+      const os = (listaOS || []).find(o => o.os_id === c.querySelector('select').value);
+      if (!os){ toast('Escolha a OS da foto.', 'err'); return; }
+      const meta = { os_id: os.os_id, cliente: os.cliente, os_numero: os.numero, categoria: 'outro',
+                     nome: 'foto-recuperada-' + (k + 1) + '.jpg', client_uid: 'anx-rec-' + x.chave };
+      const a = Nucleo.fila.adicionar({ tipo: 'anexo', id: meta.client_uid, grupo: 'f|anexo|' + meta.client_uid, rotulo: fieldRotulo('anexo', os.numero),
+                                        envio: 'field', guardados: [x.chave], dados: { osId: os.os_id, rotulo: os.numero, idbKey: x.chave, meta } });
+      if (!a) return;
+      tira(); toast('Foto na fila da ' + os.numero + ': sobe com sinal.', 'ok'); pintarFilaParada();
+    });
+    const bd = c.querySelector('[data-apa]');
+    bd.addEventListener('click', () => {
+      if (bd.dataset.ok !== '1'){ bd.dataset.ok = '1'; bd.textContent = 'Toque de novo para apagar'; return; }
+      IDB.del(x.chave).catch(() => {}); tira(); pintarFilaParada();
+    });
+    p.appendChild(c);
+  });
+  return p;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1805,7 +1972,7 @@ function cardOS(o, outro){
   b.className = 'osCard' + (outro ? ' outro' : '')
     + (o.situacao === 'atrasada' ? ' sitAtr' : o.situacao === 'risco' ? ' sitRis' : '');
   b.type = 'button';
-  const naFila = filaLer().some(e => e.osId === o.os_id);
+  const naFila = filaDoField().some(e => e.osId === o.os_id);
   const chips = [];
   if (naFila) chips.push('<span class="chip fila">na fila de envio</span>');
   // A urgência e o prazo estavam SÓ no roteiro. Uma OS urgente ainda não
@@ -2317,14 +2484,17 @@ function pintarOSBase(){
     m.appendChild(pa);
   }
 
-  const naFila = filaLer().find(e => e.osId === os.os_id && e.tipo === 'levantamento');
+  const naFila = filaDoField().find(e => e.osId === os.os_id && e.tipo === 'levantamento');
   if (naFila){
-    m.innerHTML = '<div class="painel"><div class="et">Aguardando envio</div>' +
-      '<h2>O levantamento está na fila</h2>' +
-      '<p>Ele foi salvo no aparelho e vai subir sozinho quando o sinal voltar. ' +
-      'Não precisa lançar de novo — se lançar, o sistema recusa o duplicado.</p>' +
-      '<button class="btn pri" id="bFl">Tentar enviar agora</button></div>';
+    // S67 (107): o levantamento recusado não fica como "vai subir sozinho": diz que parou e leva ao motivo
+    m.innerHTML = '<div class="painel"><div class="et">' + (naFila.parado ? 'Recusado pelo servidor' : 'Aguardando envio') + '</div>' +
+      (naFila.parado
+        ? '<h2>O levantamento não foi aceito</h2><p>Ele continua guardado no aparelho. Veja o motivo em "Envios parados": corrija no rascunho e envie de novo, ou descarte.</p>'
+          + '<button class="btn pri" id="bFl">Ver o motivo</button>'
+        : '<h2>O levantamento está na fila</h2><p>Ele foi salvo no aparelho e vai subir sozinho quando o sinal voltar. ' +
+          'Não precisa lançar de novo.</p><button class="btn pri" id="bFl">Tentar enviar agora</button>') + '</div>';
     document.getElementById('bFl').addEventListener('click', () => {
+      if (naFila.parado){ pintarFilaParada(); return; }
       setConn('sync','enviando…');
       flushFila().then(()=>carregar(true)).then(()=>pintarLista()).catch(()=>{});
     });
@@ -2473,7 +2643,7 @@ function pintarOSBase(){
       n.textContent = 'Você registra peça por peça o que foi feito, com o número do '
         + 'certificado e do lacre. A OS só fecha com todos os itens registrados.';
       p.appendChild(n);
-      const fq = filaLer().filter(e => e.tipo === 'execucao' && e.osId === os.os_id).length;
+      const fq = filaDoField().filter(e => e.tipo === 'execucao' && e.osId === os.os_id).length;
       if (fq){
         const w = document.createElement('p');
         w.style.cssText='font-size:13.5px;color:var(--warn);margin:9px 0 0;font-weight:600';
@@ -2790,7 +2960,7 @@ async function sincronizarFotos(){
 // ── o seletor ───────────────────────────────────────────────────────────────
 // Uma tela inteira, não um <select>: em campo, com luva e sol na tela, lista
 // grande com busca é o que funciona.
-function abrirSeletorCatalogo(aoEscolher){
+function abrirSeletorCatalogo(aoEscolher, aoVoltar){
   const m = document.getElementById('main');
   m.innerHTML = '';
   const box = document.createElement('div'); box.className = 'painel';
@@ -2835,7 +3005,7 @@ function abrirSeletorCatalogo(aoEscolher){
     el.innerHTML = '';
     if (!achados.length){
       el.innerHTML = '<p style="font-size:13px;color:var(--ink-3);padding:8px 0">'
-        + (t ? 'Nada encontrado. Use “Item fora do catálogo” para lançar mesmo assim.'
+        + (t ? 'Nada encontrado. Toque em “Voltar” e escreva a descrição à mão: o item entra mesmo fora do catálogo.'
              : 'O catálogo está vazio.') + '</p>';
       return;
     }
@@ -2876,7 +3046,8 @@ function abrirSeletorCatalogo(aoEscolher){
   }
 
   document.getElementById('cB').addEventListener('input', lista);
-  document.getElementById('cCa').addEventListener('click', pintarColeta);
+  // S67 (178): o catálogo abre por cima do formulário do item: "Voltar" volta para ele, com o que estava preenchido
+  document.getElementById('cCa').addEventListener('click', aoVoltar || pintarColeta);
   lista();
   setTimeout(() => document.getElementById('cB').focus(), 60);
 }
@@ -2914,7 +3085,7 @@ function painelExtras(){
   p.className = 'painel extras';
   const rasc = LS.get(K_EXTRA + os.os_id, null);
   const nRasc = rasc && rasc.itens ? rasc.itens.length : 0;
-  const nFila = filaLer().filter(e => e.tipo === 'extras' && e.osId === os.os_id).length;
+  const nFila = filaDoField().filter(e => e.tipo === 'extras' && e.osId === os.os_id).length;
   const ex = atual.extras;
   p.innerHTML = '<div class="et">Extras encontrados</div>'
     + '<h2 style="font-size:17px">Achou peça a trocar ou serviço a fazer?</h2>'
@@ -2953,65 +3124,6 @@ function abrirExtras(){
   salvarDraft();
   tela = 'coleta';
   pintarColeta();
-}
-
-async function enviarExtras(){
-  const { os } = atual;
-  if (!coleta.itens.length) return;
-  const itens = coleta.itens.slice();
-  const payload = {
-    p_os_origem: os.os_id,
-    p_client_uid: coleta.client_uid,
-    p_itens: itens.map(i => ({
-      descricao: i.descricao, tipo_acessorio: i.tipo_acessorio, quantidade: i.quantidade,
-      catalogo_item_id: i.catalogo_item_id || null,
-      equipamento_id: i.equipamento_id || null,
-      requer_calibracao: !!i.requer_calibracao, requer_lacre: !!i.requer_lacre,
-      impede_operar: !!i.impede_operar,
-      observacao: i.observacao || null,
-      dados: i.equipamento_id ? {} : { tag: i.tagTexto || '' }
-    }))
-  };
-  const assinatura = 'ext|' + os.os_id + '|' + coleta.client_uid;
-  const fotos = itens.map((i, indice) => !i.fotoKey ? null : ({
-    indice, idbKey: i.fotoKey,
-    meta: { os_id: os.os_id, cliente: os.cliente, os_numero: os.numero,
-            categoria: 'foto_item', nome: 'extra-' + (indice+1) + '.jpg',
-            client_uid: 'anx-' + coleta.client_uid + '-' + indice }
-  })).filter(Boolean);
-  const entrada = { tipo:'extras', funcao:'tf_lancar_extras', payload, assinatura,
-                    osId: os.os_id, rotulo: os.numero, fotos, draftKey: K_EXTRA + os.os_id };
-
-  document.querySelectorAll('#main .btn').forEach(b => b.disabled = true);
-
-  if (!DEMO && (navigator.onLine === false || !conectado)){
-    filaAdd(entrada);
-    toast('Sem sinal — os extras ficaram na fila' + (fotos.length ? ', com as fotos' : '')
-          + '. Sobem sozinhos quando conectar.', 'err');
-    voltarParaOS(); return;
-  }
-
-  setConn('sync','enviando…');
-  try{
-    const resp = DEMO ? { os_id:'demo', numero:'OS-DEMO', nova:true } : await rpc('tf_lancar_extras', payload);
-    LS.del(K_EXTRA + os.os_id);           // só depois do OK do servidor
-    coleta = null;
-    setConn('ok','conectado');
-    await enfileirarFotosDoEnvio(entrada, resp);
-    toast((resp && resp.nova ? 'Enviado ao comercial — virou a venda adicional ' : 'Enviado — somou na venda adicional ')
-          + ((resp && resp.numero) || '') + '.', 'ok');
-    await abrirOS(atual.os);
-  }catch(e){
-    if (e.negocio){
-      setConn('ok','conectado');
-      toast('Recusado: ' + e.message, 'err');
-      document.querySelectorAll('#main .btn').forEach(b => b.disabled = false);
-    } else {
-      filaAdd(entrada);
-      toast('Não deu para enviar agora — ficou na fila, nada se perdeu.', 'err');
-      voltarParaOS();
-    }
-  }
 }
 
 function abrirColeta(fase){
@@ -3087,7 +3199,9 @@ function itemEl(it, i){
   d.querySelector('small').textContent = flags.join(' · ') || (it.tipo_rotulo || '');
   d.querySelector('.x').addEventListener('click', async () => {
     if (!await perguntar('Remover o item', '<p>Remover <b>' + esc(it.descricao) + '</b> da coleta?</p>', 'Remover', true)) return;
-    coleta.itens.splice(i,1); salvarDraft(); pintarColeta();
+    coleta.itens.splice(i,1); salvarDraft();
+    if (it.fotoKey) IDB.del(it.fotoKey).catch(() => {});   // S67 (178): a foto do item tirado não fica no aparelho
+    pintarColeta();
   });
   d.querySelector('.d').addEventListener('click', () => formItem(i));
   return d;
@@ -3098,6 +3212,9 @@ function formItem(idx, preenchido){
     ? { tipo_acessorio:'manometro', descricao:'', quantidade:1, equipamento_id:'', tag:'',
         requer_calibracao:false, requer_lacre:false }
     : Object.assign({}, coleta.itens[idx]));
+  // S67 (178): a foto que o item tinha ao abrir o formulário. A trocada só substitui a antiga quando o item é salvo;
+  // "Cancelar" apaga a nova e a antiga continua.
+  if (!preenchido) it._fotoOrig = it.fotoKey || null;
 
   const m = document.getElementById('main');
   m.innerHTML = '';
@@ -3110,7 +3227,7 @@ function formItem(idx, preenchido){
                       : '<option value="">— sem equipamento —</option>'].concat(
     atual.equipamentos.map(e => '<option value="'+e.id+'">'+ esc(e.tag) +
       (e.localizacao ? ' · ' + esc(e.localizacao) : '') + '</option>'))
-    .concat(ext ? ['<option value="__outro">Outro — digitar a TAG</option>'] : []);
+    .concat(['<option value="__outro">Outro — digitar a TAG</option>']);   // S67 (178): também no levantamento
 
   // A origem do item aparece no topo: escolhido do catálogo ou digitado.
   // Sem isso o inspetor não sabe se o escritório vai receber a peça certa.
@@ -3131,8 +3248,8 @@ function formItem(idx, preenchido){
       '<input id="fQ" type="number" inputmode="numeric" min="1" step="1"></div>' +
     '<div class="campo"><label for="fE">' + (ext ? 'Vaso / equipamento' : 'Equipamento') + '</label>' +
       '<select id="fE">' + eqOpts.join('') + '</select></div>' +
-    (ext ? '<div class="campo" id="fTagC" hidden><label for="fTag">TAG do vaso</label>'
-         + '<input id="fTag" type="text" autocomplete="off" placeholder="ex.: VP-07"></div>' : '') +
+    '<div class="campo" id="fTagC" hidden><label for="fTag">TAG do vaso</label>'
+         + '<input id="fTag" type="text" autocomplete="off" placeholder="ex.: VP-07"></div>' +
     '<label class="check"><input type="checkbox" id="fC"><span>Exige aferição</span></label>' +
     '<label class="check"><input type="checkbox" id="fL"><span>Exige lacre</span></label>' +
     // S39 · "Instalado agora, em campo" SAIU. Ele tirava o item do orçamento
@@ -3167,12 +3284,14 @@ function formItem(idx, preenchido){
   document.getElementById('fE').value = it.equipamento_id || '';
   document.getElementById('fC').checked = !!it.requer_calibracao;
   document.getElementById('fL').checked = !!it.requer_lacre;
-  if (ext){
+  {
     const sel = document.getElementById('fE'), tc = document.getElementById('fTagC');
     if (!it.equipamento_id && it.tagTexto) sel.value = '__outro';
     const mostra = () => { tc.hidden = sel.value !== '__outro'; };
     sel.addEventListener('change', mostra); mostra();
     document.getElementById('fTag').value = it.tagTexto || '';
+  }
+  if (ext){
     document.getElementById('fImp').checked = !!it.impede_operar;
     document.getElementById('fObs').value = it.observacao || '';
   }
@@ -3182,6 +3301,16 @@ function formItem(idx, preenchido){
   // que é o que faz o custo e o preço de referência chegarem no orçamento.
   // O que for digitado depois continua valendo: o catálogo é o padrão, não a
   // camisa de força.
+  // S67 (178): o que já foi digitado no formulário vai junto para o catálogo e volta (quantidade, vaso, observação…)
+  const guardarForm = () => {
+    const sel = document.getElementById('fE');
+    Object.assign(it, { descricao: document.getElementById('fD').value, quantidade: document.getElementById('fQ').value,
+      equipamento_id: (sel.value && sel.value !== '__outro') ? sel.value : '',
+      tagTexto: sel.value === '__outro' ? document.getElementById('fTag').value.trim() : '',
+      requer_calibracao: document.getElementById('fC').checked, requer_lacre: document.getElementById('fL').checked });
+    if (ext){ it.impede_operar = document.getElementById('fImp').checked; it.observacao = document.getElementById('fObs').value; }
+  };
+  const abrirCat = () => { guardarForm(); abrirSeletorCatalogo(escolher, () => formItem(idx, it)); };
   const escolher = (i) => {
     Object.assign(it, {
       catalogo_item_id: i.id,
@@ -3194,11 +3323,12 @@ function formItem(idx, preenchido){
     formItem(idx, it);
   };
   const bCat = document.getElementById('fCat');
-  if (bCat) bCat.addEventListener('click', () => abrirSeletorCatalogo(escolher));
+  if (bCat) bCat.addEventListener('click', abrirCat);
   const bTro = document.getElementById('fTrocar');
-  if (bTro) bTro.addEventListener('click', () => abrirSeletorCatalogo(escolher));
+  if (bTro) bTro.addEventListener('click', abrirCat);
   const bSol = document.getElementById('fSoltar');
   if (bSol) bSol.addEventListener('click', () => {
+    guardarForm();
     delete it.catalogo_item_id; delete it.catalogo_codigo;
     formItem(idx, it);
   });
@@ -3217,12 +3347,16 @@ function formItem(idx, preenchido){
   btF.addEventListener('click', async () => {
     const d = await tirarFoto(); if (!d) return;
     const k = 'f_' + uid();
-    try{ await IDB.put(k, d); if (it.fotoKey) await IDB.del(it.fotoKey).catch(()=>{});
+    // S67 (178): a foto que o item tinha fica até "Salvar"; só a tirada AGORA (e trocada de novo) sai na hora
+    try{ await IDB.put(k, d); if (it.fotoKey && it.fotoKey !== it._fotoOrig) await IDB.del(it.fotoKey).catch(()=>{});
          it.fotoKey = k; pintaFoto(); toast('Foto guardada.','ok'); }
     catch(e){ toast('Não consegui guardar a foto no aparelho.','err'); }
   });
 
-  document.getElementById('fCa').addEventListener('click', pintarColeta);
+  document.getElementById('fCa').addEventListener('click', () => {
+    if (it.fotoKey && it.fotoKey !== it._fotoOrig) IDB.del(it.fotoKey).catch(() => {});   // a nova sai; a antiga continua no item
+    pintarColeta();
+  });
   document.getElementById('fOk').addEventListener('click', () => {
     const desc = document.getElementById('fD').value.trim();
     const q = parseInt(document.getElementById('fQ').value, 10);
@@ -3230,9 +3364,9 @@ function formItem(idx, preenchido){
     if (!q || q < 1){ toast('Quantidade tem que ser 1 ou mais.','err'); return; }
     const sel = document.getElementById('fE');
     const outro = sel.value === '__outro';
-    const tagTexto = ext && outro ? document.getElementById('fTag').value.trim() : '';
+    const tagTexto = outro ? document.getElementById('fTag').value.trim() : '';
     if (ext && !sel.value){ toast('Escolha em qual vaso está o que você achou.','err'); return; }
-    if (ext && outro && !tagTexto){ toast('Digite a TAG do vaso.','err'); return; }
+    if (outro && !tagTexto){ toast('Digite a TAG do vaso.','err'); return; }
     Object.assign(it, {
       descricao: desc, quantidade: q,
       equipamento_id: (sel.value && !outro) ? sel.value : '',
@@ -3247,74 +3381,87 @@ function formItem(idx, preenchido){
       it.observacao = document.getElementById('fObs').value.trim();
     }
     delete it.instalado_imediatamente;
+    const velha = it._fotoOrig; delete it._fotoOrig;
     if (idx == null) coleta.itens.push(it); else coleta.itens[idx] = it;
-    salvarDraft(); pintarColeta();
+    salvarDraft();
+    if (velha && velha !== it.fotoKey) IDB.del(velha).catch(() => {});   // trocada: a antiga sai só agora, com o item salvo
+    pintarColeta();
   });
 }
 
-async function enviar(){
+// S67 (S202, issue 177): o envio de um rascunho — levantamento ou extras. Com sinal: direto. Sem sinal (ou o sinal
+// caiu no meio): vai para a fila do núcleo e o rascunho FECHA — o que for lançado depois é outro envio, com outro
+// código (antes ele continuava com o mesmo código: o item novo podia sumir junto com o envio, ou o servidor dizia
+// "já recebi" e não o gravava). A fila só apaga o rascunho que é o mesmo do envio. Não coube no aparelho: o rascunho
+// fica e nada diz "salvo". O servidor que diz "já recebi" com outra quantidade de itens: aviso vermelho e os itens ficam.
+async function enviarColeta(ext){
   const { os } = atual;
-  if (!coleta.itens.length) return;
-  const payload = {
-    p_os_id: os.os_id,
-    p_client_uid: coleta.client_uid,
-    p_fase: coleta.fase,
-    p_itens: coleta.itens.map(i => ({
+  if (!coleta || !coleta.itens.length) return;
+  const itens = coleta.itens.slice(), tipo = ext ? 'extras' : 'levantamento';
+  const draftKey = (ext ? K_EXTRA : K_DRAFT) + os.os_id, funcao = ext ? 'tf_lancar_extras' : 'tf_enviar_levantamento';
+  const pItens = itens.map(i => Object.assign({
       descricao: i.descricao, tipo_acessorio: i.tipo_acessorio, quantidade: i.quantidade,
       catalogo_item_id: i.catalogo_item_id || null,
       equipamento_id: i.equipamento_id || null,
       requer_calibracao: !!i.requer_calibracao, requer_lacre: !!i.requer_lacre,
-      instalado_imediatamente: false,   // S39: nada é instalado antes do sim do cliente
-      dados: {}
-    }))
-  };
-  const assinatura = 'lev|' + os.os_id + '|' + coleta.client_uid;
-
-  // as fotos viajam à parte: primeiro o levantamento (que devolve os ids dos
-  // itens), depois cada imagem ligada ao seu item
-  const fotos = coleta.itens.map((i, indice) => !i.fotoKey ? null : ({
+      // vaso sem cadastro entra com a TAG digitada (S67, 178: também no levantamento)
+      dados: i.equipamento_id ? {} : (i.tagTexto ? { tag: i.tagTexto } : (ext ? { tag: '' } : {}))
+    }, ext ? { impede_operar: !!i.impede_operar, observacao: i.observacao || null }
+           : { instalado_imediatamente: false }));   // S39: nada é instalado antes do sim do cliente
+  const payload = ext ? { p_os_origem: os.os_id, p_client_uid: coleta.client_uid, p_itens: pItens }
+                      : { p_os_id: os.os_id, p_client_uid: coleta.client_uid, p_fase: coleta.fase, p_itens: pItens };
+  // as fotos viajam à parte: primeiro o envio (que devolve os ids dos itens), depois cada imagem ligada ao seu item
+  const fotos = itens.map((i, indice) => !i.fotoKey ? null : ({
     indice, idbKey: i.fotoKey,
     meta: { os_id: os.os_id, cliente: os.cliente, os_numero: os.numero,
-            categoria: 'foto_item', nome: 'item-' + (indice+1) + '.jpg',
+            categoria: 'foto_item', nome: (ext ? 'extra-' : 'item-') + (indice+1) + '.jpg',
             client_uid: 'anx-' + coleta.client_uid + '-' + indice }
   })).filter(Boolean);
-
-  document.querySelectorAll('#main .btn').forEach(b => b.disabled = true);
+  const dados = { osId: os.os_id, rotulo: os.numero, cliente: os.cliente, funcao, payload, fotos,
+                  itens: itens.map(i => Object.assign({}, i)), draftKey, client_uid: coleta.client_uid, fase: coleta.fase, tipo };
+  const id = os.os_id + '|' + coleta.client_uid;
+  const botoes = on => document.querySelectorAll('#main .btn').forEach(b => b.disabled = !on);
+  const depois = async () => { if (ext) voltarParaOS(); else { await carregar(true); pintarLista(); } };
+  const paraFila = (msg, cor) => {
+    if (!filaAdd(tipo, id, dados)){ botoes(true); return false; }   // não coube: o aviso vermelho já saiu; o rascunho continua
+    LS.del(draftKey); coleta = null;                                  // o rascunho fecha: a fila tem os itens e as fotos
+    toast(msg, cor); return true;
+  };
+  botoes(false);
 
   // Sem rede? nem tenta: enfileira e diz a verdade.
   if (!DEMO && (navigator.onLine === false || !conectado)){
-    filaAdd({ tipo:'levantamento', funcao:'tf_enviar_levantamento', payload, assinatura,
-              osId: os.os_id, rotulo: os.numero, fotos });
-    toast('Sem sinal — salvo e na fila' + (fotos.length ? ', com as fotos' : '') +
-          '. Sobe sozinho quando conectar.', 'warn');
-    await carregar(true); pintarLista(); return;
+    if (paraFila('Sem sinal — ' + (ext ? 'os extras ficaram' : 'o levantamento ficou') + ' na fila' + (fotos.length ? ', com as fotos' : '')
+                 + '. Sobe' + (ext ? 'm' : '') + ' sozinho' + (ext ? 's' : '') + ' quando conectar.', 'warn')) await depois();
+    return;
   }
 
   setConn('sync','enviando…');
   try{
     let resp = null;
-    if (DEMO) demoEnviar(os.os_id);
-    else resp = await rpc('tf_enviar_levantamento', payload);
-    LS.del(K_DRAFT + os.os_id);            // só depois do OK do servidor
+    if (DEMO){ if (ext) resp = { os_id:'demo', numero:'OS-DEMO', nova:true }; else demoEnviar(os.os_id); }
+    else resp = await rpc(funcao, payload);
+    if (!DEMO) conferirDuplicado(tipo, payload, resp);
+    LS.del(draftKey);                      // só depois do OK do servidor
+    coleta = null;
     setConn('ok','conectado');
-    await enfileirarFotosDoEnvio({ osId: os.os_id, rotulo: os.numero, fotos }, resp);
-    toast('Levantamento enviado — ' + coleta.itens.length + ' item(ns)' +
-          (fotos.length ? ' e ' + fotos.length + ' foto(s)' : '') + '.', 'ok');
-    await carregar(true);
-    pintarLista();
+    await enfileirarFotosDoEnvio({ tipo, osId: os.os_id, rotulo: os.numero, fotos }, resp);
+    toast(ext ? (resp && resp.nova ? 'Enviado ao comercial — virou a venda adicional ' : 'Enviado — somou na venda adicional ') + ((resp && resp.numero) || '') + '.'
+              : 'Levantamento enviado — ' + itens.length + ' item(ns)' + (fotos.length ? ' e ' + fotos.length + ' foto(s)' : '') + '.', 'ok');
+    if (ext) await abrirOS(atual.os); else { await carregar(true); pintarLista(); }
   }catch(e){
-    if (e.negocio){
-      setConn('ok','conectado');
-      toast('Recusado: ' + e.message, 'err');
-      document.querySelectorAll('#main .btn').forEach(b => b.disabled = false);
-    } else {
-      filaAdd({ tipo:'levantamento', funcao:'tf_enviar_levantamento', payload, assinatura,
-                osId: os.os_id, rotulo: os.numero, fotos });
-      toast('Não deu para enviar agora — ficou na fila, nada se perdeu.', 'err');
-      await carregar(true); pintarLista();
+    setConn('ok','conectado');
+    if (e.duplicado){
+      // o servidor já tinha este código com outros itens: o rascunho fica, com um código novo, para conferir e enviar
+      coleta.client_uid = uid(); salvarDraft();
+      toast(e.message.replace('toque em "Corrigir no rascunho", ', ''), 'err'); botoes(true); return;
     }
+    if (e.negocio){ toast('Recusado: ' + e.message, 'err'); botoes(true); return; }
+    if (paraFila('Não deu para enviar agora — ficou na fila, nada se perdeu.', 'err')) await depois();
   }
 }
+const enviarExtras = () => enviarColeta(true);
+const enviar = () => enviarColeta(false);
 
 // ════════════════════════════════════════════════════════════════════════════
 // TELA: EXECUÇÃO — a volta ao cliente
@@ -3369,7 +3516,7 @@ async function abrirExecucao(){
  */
 function progExec(){
   const its = exec.itens;
-  const naFila = filaLer().filter(e => e.tipo === 'execucao' && e.osId === exec.osId).length;
+  const naFila = filaDoField().filter(e => e.tipo === 'execucao' && e.osId === exec.osId).length;
   const feitos = its.filter(i => i.acao_executada).length;
   return { total: its.length, feitos, naFila,
            pode: its.length > 0 && feitos === its.length && naFila === 0 };
@@ -3573,7 +3720,8 @@ async function salvarExecucao(i, v){
     p_lacre: v.lacre || null,
     p_observacao: v.obs || null
   };
-  const assinatura = 'exec|' + i.id;
+  // S67 (107): pela fila do núcleo; o recusado fica parado, com o motivo
+  const dados = { osId: os.os_id, rotulo: os.numero, funcao: 'tf_registrar_execucao', payload };
   const local = () => {
     i.acao_executada = v.acao;
     i.instalado_em = v.acao === 'nao_executado' ? null : v.data;
@@ -3588,8 +3736,7 @@ async function salvarExecucao(i, v){
   if (DEMO){ local(); pintarExecucao(); toast('Registrado.','ok'); return; }
 
   if (navigator.onLine === false || !conectado){
-    filaAdd({ tipo:'execucao', funcao:'tf_registrar_execucao', payload, assinatura,
-              osId: os.os_id, rotulo: os.numero });
+    if (!filaAdd('execucao', i.id, dados)){ document.querySelectorAll('#main .btn').forEach(b => b.disabled = false); return; }
     local(); i._fila = true;
     pintarExecucao();
     toast('Sem sinal — registro salvo no aparelho. Sobe sozinho quando conectar.','err');
@@ -3601,7 +3748,7 @@ async function salvarExecucao(i, v){
     await rpc('tf_registrar_execucao', payload);
     setConn('ok','conectado');
     local(); delete i._fila;
-    filaRemover(assinatura);          // se havia versão antiga na fila, esta manda
+    if (Nucleo.fila && Nucleo.fila.ler('execucao|' + i.id)) filaRemover('execucao|' + i.id);   // se havia versão antiga na fila, esta manda
     pintarExecucao();
     toast('Registrado: ' + rotuloAcao(v.acao) + '.','ok');
   }catch(e){
@@ -3610,8 +3757,7 @@ async function salvarExecucao(i, v){
       toast('Recusado: ' + e.message,'err');
       document.querySelectorAll('#main .btn').forEach(b => b.disabled = false);
     } else {
-      filaAdd({ tipo:'execucao', funcao:'tf_registrar_execucao', payload, assinatura,
-                osId: os.os_id, rotulo: os.numero });
+      if (!filaAdd('execucao', i.id, dados)){ document.querySelectorAll('#main .btn').forEach(b => b.disabled = false); return; }
       local(); i._fila = true;
       pintarExecucao();
       toast('Não deu para enviar agora — ficou na fila, nada se perdeu.','err');
@@ -3806,9 +3952,10 @@ async function medMudar(rotulo, funcao, payload, local, opts){
   }
   if (DEMO){ local(med.v); med.v.resumo = Object.assign({}, med.v.resumo, medResumo(med.v)); medGuardar(osId, med.v); return true; }
   if (!(window.Nucleo && Nucleo.fila)){ toast('Sem sinal, e este aparelho não tem a fila de envios. Tente com sinal.', 'err'); return false; }
-  Nucleo.fila.adicionar({ tipo: 'medicao', id: opts.id || uid(), grupo: MED_GRUPO(osId),
+  const guardou = Nucleo.fila.adicionar({ tipo: 'medicao', id: opts.id || uid(), grupo: MED_GRUPO(osId),
                           rotulo: rotulo + ' (' + med.os.numero + ')', fotos: opts.fotos || [],
                           rpc: { funcao, payload } });
+  if (!guardou){ pintarFila(); return false; }   // S67 (regra da R6): não coube no aparelho — o aviso vermelho já saiu, nada diz "salvo"
   local(med.v);
   med.v.resumo = Object.assign({}, med.v.resumo, medResumo(med.v));
   medGuardar(osId, med.v);
@@ -3816,9 +3963,19 @@ async function medMudar(rotulo, funcao, payload, local, opts){
   return true;
 }
 
+/** S67 (207, item 4): a imagem da assinatura do encarregado fica no aparelho só até o fechamento subir
+ *  (num celular da empresa, ficava para o próximo que usasse). Depois, o PDF busca a imagem no servidor. */
+const medFechandoNaFila = osId => medNaFila(osId).some(x => x.rpc && x.rpc.funcao === 'tf_osmed_fechar');
+function medLimparAssinaturas(){
+  try{
+    const ks = []; for (let k = 0; k < localStorage.length; k++){ const n = localStorage.key(k); if (n.startsWith(K_MED + 'ass_')) ks.push(n); }
+    ks.forEach(n => { const os = n.slice((K_MED + 'ass_').length); if (!medFechandoNaFila(os)) LS.del(n); });
+  }catch(e){}
+}
 // quando a fila sobe algo da medição aberta, a tela relê do banco
 try{
   if (window.Nucleo && Nucleo.fila) Nucleo.fila.aoMudar(ev => {
+    if (ev.tipo === 'medicao' && ev.situacao === 'enviado') medLimparAssinaturas();
     if (!med || ev.tipo !== 'medicao' || ev.situacao !== 'enviado') return;
     if (medNaFila(med.os.os_id).length) return;
     medBuscar(med.os.os_id, false).then(v => { if (v){ med.v = v; medGuardar(med.os.os_id, v); if (tela === 'med' && !med.form) pintarMedicao(); } }).catch(() => {});
@@ -4012,7 +4169,7 @@ function medLinha(l, pode){
       if (nq === Number(l.executado) && nj === String(l.justificativa || '')) return;
       const difAgora = nq !== Number(l.previsto || 0) || l.adicional;
       j.hidden = !difAgora;
-      if (difAgora && nj.length < 3){ j.focus(); return; }   // grava quando o porquê vier
+      if (difAgora && nj.length < 3){ d.classList.add('mdPend'); j.focus(); return; }   // grava quando o porquê vier
       medMudar('Medição: ' + l.descricao, 'tf_osmed_linha', { p_item: l.id, p_quantidade: nq, p_justificativa: nj || null }, x => {
         const ll = (x.linhas || []).find(y => y.id === l.id);
         if (ll){ ll.executado = nq; ll.total = medTotal(ll.preco, nq, ll.desconto_pct); ll.justificativa = nj || ll.justificativa; ll.incluido = true; }
@@ -4020,6 +4177,17 @@ function medLinha(l, pode){
     };
     q.addEventListener('change', gravar);
     j.addEventListener('change', gravar);
+    // S67 (207, item 1): saiu da linha com a quantidade mudada e sem o porquê: avisa e a linha fica marcada (antes a
+    // quantidade se perdia calada ao sair da tela)
+    j.addEventListener('blur', () => setTimeout(() => {
+      if (!d.isConnected || d.contains(document.activeElement)) return;
+      const nq = Number(String(q.value).replace(',', '.'));
+      const difAgora = nq !== Number(l.previsto || 0) || l.adicional;
+      if (nq !== Number(l.executado) && difAgora && j.value.trim().length < 3){
+        d.classList.add('mdPend');
+        toast('Escreva o porquê para gravar a quantidade de "' + l.descricao + '" (ainda não foi gravada).', 'err');
+      } else d.classList.remove('mdPend');
+    }, 150));
     if (l.adicional){
       const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'mdTirar'; bt.textContent = 'Tirar';
       bt.addEventListener('click', () => {
@@ -4188,7 +4356,16 @@ async function medPdf(){
   try{
     pdfMake = window.pdfMake && window.pdfMake.vfs ? window.pdfMake : await medPdfLib();
   }catch(e){ toast('Não consegui carregar o gerador de PDF. Abra o app uma vez com sinal para ele ficar no aparelho.', 'err'); return; }
-  const ass = LS.get(K_MED + 'ass_' + o.os_id, null);
+  let ass = LS.get(K_MED + 'ass_' + o.os_id, null);
+  // S67 (207): a imagem já saiu do aparelho (o fechamento subiu): vem do servidor
+  if (!ass && v.assinatura === 'assinada' && v.assinatura_storage && !DEMO){
+    try{
+      const rr = await stoGet(SUPABASE_URL + '/storage/v1/object/authenticated/medicoes/' + String(v.assinatura_storage).split('/').map(encodeURIComponent).join('/'));
+      if (rr.ok){ const bl = await rr.blob(); ass = await new Promise(ok => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = () => ok(null); fr.readAsDataURL(bl); }); }
+    }catch(e){ ass = null; }
+  }
+  // S67 (207, item 2): sem sinal o fechamento vale só no aparelho: o boletim sai como RASCUNHO e não vai ao cliente
+  const rascunho = !DEMO && medFechandoNaFila(o.os_id);
   const logoCli = await medLogoCliente(v.cliente_id).catch(() => null);   // S40
   const L = (v.linhas || []).filter(l => l.incluido || !l.adicional);
   const corpo = [[{ text: 'Item', bold: true }, { text: 'Previsto', bold: true, alignment: 'right' }, { text: 'Executado', bold: true, alignment: 'right' },
@@ -4216,6 +4393,8 @@ async function medPdf(){
           logoCli ? { width: 120, image: logoCli, fit: [120, 40], alignment: 'right' }
                   : { width: 120, text: v.cliente || o.cliente || '', alignment: 'right', bold: true, fontSize: 9, margin: [0, 10, 0, 0] }],
         margin: [0, 0, 0, 12] },
+      ...(rascunho ? [{ text: 'RASCUNHO: espera o envio do fechamento ao sistema. Não vale como boletim para o cliente.', bold: true, color: '#B3261E',
+                        alignment: 'center', margin: [0, 0, 0, 10] }] : []),
       { columns: [{ text: [{ text: 'OS: ', bold: true }, o.numero, '\n', { text: 'Cliente: ', bold: true }, v.cliente || o.cliente || ''] },
                   { text: [{ text: 'Proposta: ', bold: true }, (v.propostas || []).map(p => p.rotulo).join(', ') || '—', '\n',
                            { text: 'Fechada em: ', bold: true }, v.fechada_em ? dataBR(String(v.fechada_em).slice(0, 10)) : '(em aberto)'] }],
@@ -4230,25 +4409,32 @@ async function medPdf(){
       ...blocoAss
     ]
   };
+  if (rascunho) doc.watermark = { text: 'RASCUNHO', color: '#B3261E', opacity: 0.12, bold: true };
   const blob = await new Promise((ok, err) => { try{ pdfMake.createPdf(doc).getBlob(ok); }catch(e){ err(e); } });
-  const nome = 'Medicao ' + o.numero + '.pdf';
+  const nome = (rascunho ? 'Rascunho - ' : '') + 'Medicao ' + o.numero + '.pdf';
+  // S67 (207, item 3): guarda no armazenamento só quando o conteúdo mudou (antes cada toque guardava mais um arquivo)
+  // e nunca o rascunho
+  const marca = JSON.stringify([v.situacao, v.valor, v.assinatura, v.assinante_nome, v.assinante_cargo, v.fechada_em,
+    (v.linhas || []).map(l => [l.id, l.incluido, l.executado, l.total, l.justificativa])]);
+  let hash = 0; for (let k = 0; k < marca.length; k++) hash = (hash * 31 + marca.charCodeAt(k)) | 0;
+  const jaGuardado = LS.get(K_MED + 'pdf_' + o.os_id, null) === hash;
   // guarda no bucket (pela fila: funciona sem sinal) e registra na medição
-  if (!DEMO && window.Nucleo && Nucleo.fila){
+  if (!DEMO && !rascunho && !jaGuardado && window.Nucleo && Nucleo.fila){
     try{
       const u = 'med-pdf-' + uid();
       const caminho = o.os_id + '/boletim-' + u + '.pdf';
       Nucleo.fila.adicionar({ tipo: 'medicao', id: u, grupo: MED_GRUPO(o.os_id), rotulo: 'PDF da medição (' + o.numero + ')',
         fotos: [{ chave: await Nucleo.fila.guardarFoto(blob), bucket: 'medicoes', caminho, tipo: 'application/pdf' }],
-        rpc: { funcao: 'tf_osmed_arquivos', payload: { p_os: o.os_id, p_pdf_storage: caminho } } });
+        rpc: { funcao: 'tf_osmed_arquivos', payload: { p_os: o.os_id, p_pdf_storage: caminho } } }) && LS.set(K_MED + 'pdf_' + o.os_id, hash);
       pintarFila();
     }catch(e){ /* o compartilhar não depende disto */ }
   }
-  medPdfPronto(blob, nome, o);
+  medPdfPronto(blob, nome, o, rascunho);
 }
 /** S40 · O PDF pronto: dois botões, cada um com o próprio toque. O "Compartilhar" do celular
  *  só abre logo depois de um toque; gerar o PDF antes dele podia passar do tempo e cair no
  *  download sem o WhatsApp. Assim o toque do "Enviar" abre a lista na hora. */
-function medPdfPronto(blob, nome, o){
+function medPdfPronto(blob, nome, o, rascunho){
   med.form = 'pdf';
   const arq = new File([blob], nome, { type: 'application/pdf' });
   const podeShare = !!(navigator.canShare && navigator.canShare({ files: [arq] }));
@@ -4260,12 +4446,14 @@ function medPdfPronto(blob, nome, o){
     + '<button class="btn" type="button" id="mdBaixa">Baixar o PDF</button>'
     + '<button class="btn" type="button" id="mdPv">Voltar à medição</button>';
   box.querySelector('h2').textContent = nome;
-  box.querySelector('.ds').textContent = podeShare
+  box.querySelector('.ds').textContent = rascunho
+    ? 'O fechamento ainda não subiu (sem sinal): este PDF é um RASCUNHO e não vai ao cliente. Com sinal, o fechamento sobe sozinho; depois gere o PDF de novo para enviar.'
+    : podeShare
     ? '"Enviar pelo WhatsApp" abre a lista de compartilhar do celular: escolha o WhatsApp e o contato do encarregado.'
     : 'Este aparelho não abre a lista de compartilhar. Baixe o PDF e anexe no WhatsApp.';
   m.appendChild(box);
   const bz = document.getElementById('mdZap');
-  if (!podeShare) bz.hidden = true;
+  if (!podeShare || rascunho) bz.hidden = true;   // S67 (207, item 2): enviar ao cliente só depois que o fechamento subiu
   bz.addEventListener('click', async () => {
     try{ await navigator.share({ files: [arq], title: nome, text: 'Boletim de medição da ' + o.numero }); }
     catch(e){ if (!e || e.name !== 'AbortError') toast('Não abriu o compartilhar. Use "Baixar o PDF" e anexe no WhatsApp.', 'err'); }
@@ -4319,7 +4507,7 @@ function medReabrir(){
     if (mot.length < 5){ toast('Escreva o motivo.', 'err'); return; }
     const feito = await medMudar('Reabrir', 'tf_osmed_reabrir', { p_os: med.os.os_id, p_motivo: mot },
       x => { x.situacao = 'rascunho'; x.valor = null; x.assinatura = null; x.pode_editar = true; });
-    if (feito){ LS.del(K_MED + 'ass_' + med.os.os_id); toast('Medição reaberta.', 'ok'); pintarMedicao(); }
+    if (feito){ LS.del(K_MED + 'ass_' + med.os.os_id); LS.del(K_MED + 'pdf_' + med.os.os_id); toast('Medição reaberta.', 'ok'); pintarMedicao(); }
   }));
 }
 
@@ -8172,7 +8360,10 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 setInterval(() => { if (canFila().length || canNaFila().length) canFlush().catch(() => {}); }, 60000);
 
 function iniciar(){
+  fieldMigrarFila();   // S67: a fila antiga passa para a do núcleo (uma vez, no mesmo lugar)
   pintarFila();
+  setTimeout(() => varrerFotos().catch(() => {}), 4000);   // S67 (106, 178): as fotos de item sem dono
+  medLimparAssinaturas();   // S67 (207): a assinatura do encarregado cujo fechamento já subiu
   carregarParametros().finally(() => {
     // S60 · depois da lista: o atalho/compartilhar do canhoto, a fila dele e "Meus canhotos"
     carregar().then(pintarLista).catch(()=>pintarLista())

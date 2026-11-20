@@ -1,15 +1,16 @@
 /* ============================================================================
- * TAPHUB · NÚCLEO COMUM — N13 (N7: o celular da empresa; N11: a fila avisa quando o aparelho está sem espaço;
+ * TAPHUB · NÚCLEO COMUM — N14 (N7: o celular da empresa; N11: a fila avisa quando o aparelho está sem espaço;
  *   N12: renovar devolve ok/recusado/sem rede; a fila não trava no erro do servidor; os leitores únicos de valor e de .xlsx;
- *   N13: a janela devolve o campo digitado e não fecha por engano com algo digitado)
+ *   N13: a janela devolve o campo digitado e não fecha por engano com algo digitado;
+ *   N14: a fila envia pelo tratador que a página registra, `fila.tratador`)
  * ----------------------------------------------------------------------------
  * Código que serve a mais de um módulo e por isso NÃO mora dentro de nenhum:
  * sessão, conexão com o banco, PIN e a trava. Regra de negócio nunca entra
  * aqui (fica no módulo e nas funções tf_*). Sem framework, sem build.
  *
  * COMO UM MÓDULO USA (duas linhas no <head> e uma no boot):
- *   <script src="../nucleo/config.js?v=N13"></script>
- *   <script src="../nucleo/nucleo.js?v=N13"></script>
+ *   <script src="../nucleo/config.js?v=N14"></script>
+ *   <script src="../nucleo/nucleo.js?v=N14"></script>
  *   ...
  *   const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
  *   if (g === 'hub') { irParaHub(Nucleo.recado); return; }     // ANTES do iniciar()
@@ -42,7 +43,8 @@
   'use strict';
   if (window.Nucleo && window.Nucleo.versao) return;
 
-  var VERSAO = 'N13';   // N13 (S196): Rodada R5 da auditoria — issues 108, 109, 126, 144, 169 (a janela devolve o campo digitado e confere o obrigatório/CONFIRMO; com algo digitado não fecha clicando fora e o X/Esc pede 2º toque; o Esc fecha a janela em todas as páginas)
+  var VERSAO = 'N14';   // N14 (S202): Rodada R10 da auditoria — issues 106, 107 e 177 (a fila envia também os envios antigos do TapField — levantamento, extras, execução e fotos do Drive — pelo tratador que a página registra: recusado fica parado com o motivo, nada some)
+  // var VERSAO = 'N13';   // N13 (S196): Rodada R5 da auditoria — issues 108, 109, 126, 144, 169 (a janela devolve o campo digitado e confere o obrigatório/CONFIRMO; com algo digitado não fecha clicando fora e o X/Esc pede 2º toque; o Esc fecha a janela em todas as páginas)
   // var VERSAO = 'N12';   // N12 (S195): Rodada R4 da auditoria — issues 142, 146, 153, 154, 167 e 189 (renovar com 3 respostas, fila que não trava, aviso fixo, relato com rascunho, janela no X = Cancelar, destraves só apagados depois de enviados, storage.pedir, util.lerValor, planilha.lerXLSX)
   // var VERSAO = 'N11';   // N11 (S171): issue 35 — a fila avisa em vermelho quando o aparelho está sem espaço (nada some calado); quem tem dado guardado ajuda a liberar espaço (fila.aoFaltarEspaco)
   // var VERSAO = 'N10';   // N10 (S160): issue 29 — confirmarPessoa({ soDigital:true }): sem o teclado do PIN (aprovar o laudo); Nucleo.temDigital()
@@ -2143,13 +2145,18 @@
 
   function filaAdicionar(e) {
     if (!e || !e.tipo || !e.id) throw new Error('Entrada da fila sem tipo ou sem id.');
-    if (!e.rpc && !(e.fotos && e.fotos.length)) throw new Error('Entrada da fila sem função e sem fotos.');
+    if (!e.rpc && !(e.fotos && e.fotos.length) && !e.envio) throw new Error('Entrada da fila sem função e sem fotos.');
     var ent = {
       v: 2, assinatura: e.tipo + '|' + e.id, tipo: e.tipo, id: e.id, grupo: e.grupo || null,
       rotulo: e.rotulo || e.tipo, fotos: (e.fotos || []).map(function (x) {
         return { chave: x.chave, bucket: x.bucket, caminho: x.caminho, tipo: x.tipo || 'image/jpeg', enviada: false };
       }),
       rpc: e.rpc ? { funcao: e.rpc.funcao, payload: e.rpc.payload || {} } : null,
+      // N14 (S202, issues 106, 107 e 177): `envio` = o nome do tratador que a PÁGINA registra (`fila.tratador`); ele
+      // recebe a entrada (com `dados`) e faz o envio. Página sem o tratador pula a entrada (fica na fila, sem contar
+      // tentativa). `guardados` = chaves do banco de fotos do aparelho que são desta entrada: saem com ela.
+      envio: e.envio || null, dados: e.dados || null,
+      guardados: (e.guardados || []).filter(Boolean).map(String),
       tentativas: 0, em: new Date().toISOString(), parado: false,
       por: String(sessao().email || '').toLowerCase() || null      // N7 · A7: quem fez (o envio sai com a sessão dela)
     };
@@ -2157,8 +2164,8 @@
     for (var k = 0; k < f.length; k++) {
       if (f[k] && f[k].assinatura === ent.assinatura) {
         // substitui NO MESMO LUGAR; fotos da versão anterior que saíram da lista são apagadas
-        var velhas = (f[k].fotos || []).map(function (x) { return x.chave; });
-        var novas = ent.fotos.map(function (x) { return x.chave; });
+        var velhas = (f[k].fotos || []).map(function (x) { return x.chave; }).concat(f[k].guardados || []);
+        var novas = ent.fotos.map(function (x) { return x.chave; }).concat(ent.guardados);
         velhas.forEach(function (ch) { if (ch && novas.indexOf(ch) < 0) IDB.del(ch).catch(function () {}); });
         ent.parado = !!f[k].parado;
         f[k] = ent; achou = true; break;
@@ -2176,6 +2183,7 @@
     return ent.assinatura;
   }
 
+  var tratadores = {};   // N14: nome → função(entrada, autor) que envia (registrada pela página)
   var enviando = false;
   var FILA_ERROS_SERVIDOR = 5;   // N12 (issue 154): erros internos seguidos do servidor até a entrada ficar "parada, com o motivo"
   function filaEnviar() {
@@ -2196,12 +2204,14 @@
         if (e.grupo && bloqueados[e.grupo]) return proxima();
         if (e.parado) { if (e.grupo) bloqueados[e.grupo] = true; return proxima(); }
         return enviarUma(e).then(function (resp) {
-          var fotos = (e.fotos || []).map(function (x) { return x.chave; });
+          var fotos = (e.fotos || []).map(function (x) { return x.chave; }).concat(e.guardados || []);
           filaTrocar(assin, function () { return null; });
           fotos.forEach(function (ch) { if (ch) IDB.del(ch).catch(function () {}); });
           avisar({ assinatura: assin, tipo: e.tipo, situacao: 'enviado', resposta: resp });
           return proxima();
         }, function (err) {
+          // N14: esta página não tem o tratador do envio (ex.: o envio do TapField com o TapRH aberto): pula, sem mexer
+          if (err && err.semTratador) { if (e.grupo) bloqueados[e.grupo] = true; return proxima(); }
           if (err && err.autorFora) {
             // N7: a sessão de quem fez venceu (ou a pessoa saiu de vez): o envio espera, sem travar os dos outros
             if (e.grupo) bloqueados[e.grupo] = true;
@@ -2291,6 +2301,11 @@
       });
     });
     return p.then(function () {
+      if (e.envio) {
+        var tr = tratadores[e.envio];
+        if (!tr) throw { semTratador: true };
+        return tr(JSON.parse(JSON.stringify(e)), autor);
+      }
       if (!e.rpc) return null;
       if (!autor) return rpcM(e.rpc.funcao, e.rpc.payload);
       var pl = e.rpc.payload || {};
@@ -2554,9 +2569,16 @@
       });
       return filaEnviar();
     },
+    /** N14 (S202): a página registra quem envia as entradas com `envio: nome` (ex.: o TapField, 'field'). */
+    tratador: function (nome, fn) { if (nome && typeof fn === 'function') tratadores[String(nome)] = fn; },
+    /** N14: o que a entrada guarda (para a página mostrar ou devolver ao rascunho). */
+    ler: function (assinatura) {
+      var x = filaLer().filter(function (y) { return y && y.v === 2 && y.assinatura === assinatura; })[0];
+      return x ? JSON.parse(JSON.stringify(x)) : null;
+    },
     descartar: function (assinatura) {
       var fotos = [];
-      filaTrocar(assinatura, function (y) { fotos = (y.fotos || []).map(function (x) { return x.chave; }); return null; });
+      filaTrocar(assinatura, function (y) { fotos = (y.fotos || []).map(function (x) { return x.chave; }).concat(y.guardados || []); return null; });
       fotos.forEach(function (ch) { if (ch) IDB.del(ch).catch(function () {}); });
       avisar({ assinatura: assinatura, situacao: 'descartado' });
     },
