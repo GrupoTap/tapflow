@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapRH 19 · Recursos Humanos</title>
+<title>TapRH 20 · Recursos Humanos</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2014,7 +2014,10 @@ th.num .tfThFixo{text-align:right}
 .ausMesR{position:absolute;top:6px;margin-left:4px}
 .ausHoje{position:absolute;top:0;bottom:0;border-left:2px solid var(--accent);opacity:.45}
 .ausBar{position:absolute;top:7px;height:20px;border:0;border-radius:3px;font:600 10.5px/20px Inter,sans-serif;padding:0 4px;
-  white-space:nowrap;overflow:hidden;text-align:left;cursor:pointer;min-width:3px}
+  white-space:nowrap;overflow:hidden;text-align:left;cursor:pointer;min-width:10px}
+.ausBar.meio{top:13px;height:14px;line-height:14px;opacity:.85}   /* RH20 (163): folga ou atestado de parte do dia */
+.ausVenc.passou{border-left:4px solid var(--crit)}                 /* RH20 (165, item 5): limite vencido antes do período */
+.ausDiaR{position:absolute;top:6px;margin-left:2px;font-size:9.5px}
 .ausBar.aus-ferias{background:#1B6FA9;color:#fff}
 .ausBar.aus-folga{background:#2E7D4F;color:#fff}
 .ausBar.aus-recesso{background:#6A4BA8;color:#fff}
@@ -2434,7 +2437,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'RH19';   // TapRH 19 (S198): Rodada R7 da auditoria — issue 174 (a planilha baixada com R$, total por fórmula, data de verdade e largura da coluna; a mesma relXLSX do TapFlow)
+const APP_VERSION = 'RH20';   // TapRH 20 (S201): Rodada R9 da auditoria — issues 118 (EzPoint fora dos textos; a Folha de Ponto antiga só até outubro/2026), 159 ("não postado" só de quem recebe; caixa na ficha), 160 (prazo de quem foi liberado tarde), 162 (fechar Diárias antes do fim pede FECHAR), 163 (mapa por mês/trimestre; parte do dia), 164 (linha de assinatura e o carimbo que falha), 165 (13 acertos), 120 (desligado com o login ativo), 141 parte 2 (batida parada no celular, em Ponto › Hoje); banco 618
+// const APP_VERSION = 'RH19';   // TapRH 19 (S198): Rodada R7 da auditoria — issue 174 (a planilha baixada com R$, total por fórmula, data de verdade e largura da coluna; a mesma relXLSX do TapFlow)
 // const APP_VERSION = 'RH18';   // TapRH 18 (S197): Rodada R6 da auditoria — issue 143 (sem os códigos do desenho, como "(P17)" e "parte 2B", nas telas do Ponto; o tempo da batida repetida vem do parâmetro)
 // const APP_VERSION = 'RH17';   // TapRH 17 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 119 (textos sem nome de arquivo e sem nomes fixos, TapField, o caminho certo no desligamento, Sair pela janela, sem a sobra do "Liberar novo PIN"); núcleo N13
 // const APP_VERSION = 'RH16';   // TapRH 16 (S195): Rodada R4 da auditoria (issue 142) — anexos, fotos, espelho e documentos do funcionário abrem com a página aberta há mais de 1 hora (o acesso renova também no HTTP 400); o anexo do pedido baixa com o tipo verdadeiro; núcleo N12
@@ -3287,7 +3291,8 @@ function rhfdDesenhar(){
   el.querySelectorAll('[data-atest]').forEach(b => b.addEventListener('click', () => rhfdAtestados(b.dataset.atest)));
   el.querySelectorAll('[data-ficha]').forEach(b => b.addEventListener('click', () => { RH.sel = b.dataset.ficha; RH.fichaAba = 'docs'; irPara('rhf'); }));
   // S60 · o ASO se lança pela ficha (Documentos › ASO), com as regras de sempre
-  el.querySelectorAll('[data-aso]').forEach(b => b.addEventListener('click', () => { RH.sel = b.dataset.aso; RH.fichaAba = 'docs'; RH.focoAso = true; irPara('rhf'); }));
+  // RH20 (165, item 1): o ASO é do TapSeg: abre direto o ASO da pessoa lá (antes passava pela ficha do RH)
+  el.querySelectorAll('[data-aso]').forEach(b => b.addEventListener('click', () => { if (!irParaSeg('func=' + encodeURIComponent(b.dataset.aso) + '&fa=aso')){ RH.sel = b.dataset.aso; RH.fichaAba = 'docs'; irPara('rhf'); } }));
   el.querySelectorAll('.rhfdC[data-t]').forEach(b => b.addEventListener('click', () => {
     const p = RHFD.painel.pessoas.find(x => x.usuario_id === b.dataset.u);
     rhfdModal(b.dataset.u, p ? p.nome : '', b.dataset.t, rhfdCarregar);
@@ -3435,6 +3440,7 @@ async function rhfdModal(usuarioId, nome, tipo, aoMudar){
       const f = document.getElementById('rhfdArq').files[0];
       const val = (document.getElementById('rhfdVal') || {}).value || null;
       const desc = (document.getElementById('rhfdDesc') || {}).value || null;
+      if (!f){ toast('Escolha o arquivo antes de enviar.', 'err'); return; }   // RH20 (165, item 2): sem o "Enviando…" à toa
       try{ toast('Enviando…', 'ok'); await rhfdAnexar(usuarioId, tipo, f, val, desc); await depois(subst ? 'Substituído.' : 'Anexado.'); }
       catch(e){ toast(e.message, 'err'); }
     }));
@@ -3645,7 +3651,7 @@ function demoAusLista(){
                    { id:'u4', nome:'Inspetor 2', vinculo:'clt' }, { id:'u1', nome:'Escritório 1', vinculo:'clt' },
                    { id:'u5', nome:'Estagiário', vinculo:'estagio' }];
   const it = demoAusAgenda().map(a => Object.assign({}, a, a.tipo === 'afastado'
-    ? { tipo:'atestado', rotulo:'Atestado/licença', observacao:'Lançado também no EZPoint' } : {},
+    ? { tipo:'atestado', rotulo:'Atestado/licença', observacao:'Atestado médico' } : {},
     { criado_por:'Escritório 2', criado_em: h + 'T09:12:00-03:00' }));
   it.push({ id:'da4', usuario_id:'u3', usuario:'Inspetor 1', tipo:'folga', rotulo:'Folga', inicio:agSoma(h, 6), fim:agSoma(h, 6),
             status:'cancelada', cancelado_por:'Escritório 2', cancelado_motivo:'Trocou o dia com o Escritório 1', criado_por:'Escritório 2' });
@@ -3694,7 +3700,8 @@ async function pintarAusencias(){
   board.innerHTML = '<div class="tela rhTela"><div class="telaCab"><h2>Ausências</h2>'
     + '<p>Férias, folgas do banco de horas, recesso do estágio e atestados: quem não estará na empresa, e quando. '
     + 'O funcionário pede pelo TapField; quem tem esta caixa aprova ou recusa. Só o aprovado aparece para todos na Agenda — '
-    + 'o atestado, para quem não tem esta caixa, aparece como “afastado”. O saldo de horas e o ponto continuam no EZPoint.</p>'
+    + 'o atestado, para quem não tem esta caixa, aparece como “afastado”. A folga e o atestado aprovados entram no espelho do ponto (TapRH › Ponto): '
+    + 'a folga desconta as horas do dia no banco de horas; o atestado abona o dia.</p>'
     + '<div class="agRibbon ausAbas">' + ABAS.map(([k, r]) => '<button type="button" class="agTab' + (AUS.aba === k ? ' on' : '')
         + '" data-aba="' + k + '">' + r + '</button>').join('') + '</div></div>'
     + '<div id="ausCorpo"><p class="nota">Carregando…</p></div></div>';
@@ -3859,7 +3866,11 @@ function ausDecidir(x, aprovar){
 function ausMapa(){
   const corpo = document.getElementById('ausCorpo'); if (!corpo) return;
   const D = AUS.dados || {}, P = AUS.painel || { pessoas: [] };
-  const ano = D.ano || AUS.ano, ini = ano + '-01-01', fim = ano + '-12-31';
+  const ano = D.ano || AUS.ano;
+  // RH20 (issue 163): ver o ano, um trimestre ou um mês (no mês, cada dia tem espaço para ver e tocar)
+  const z = AUS.zoom || 'ano', p2 = n => String(n).padStart(2, '0');
+  const ini = z[0] === 'T' ? ano + '-' + p2((Number(z[1]) - 1) * 3 + 1) + '-01' : z[0] === 'M' ? ano + '-' + z.slice(1) + '-01' : ano + '-01-01';
+  const fim = z[0] === 'T' ? agSoma(S49_MES_SOMA(ini, 3), -1) : z[0] === 'M' ? agSoma(S49_MES_SOMA(ini, 1), -1) : ano + '-12-31';
   const total = ausNDias(ini, fim);
   const pc = d => (Math.max(0, Math.min(total, ausNDias(ini, d) - 1)) / total * 100).toFixed(3) + '%';
   const q = (BUSCA.rhaus || '').trim();
@@ -3871,13 +3882,20 @@ function ausMapa(){
   const limite = id => {
     const p = (P.pessoas || []).find(z => String(z.id) === id);
     const per = p && (p.periodos || []).find(z => z.restantes > 0 && z.tipo === 'ferias');
-    return per && per.conc_fim >= ini && per.conc_fim <= fim ? per : null;
+    // RH20 (165, item 5): limite já vencido antes do período mostrado aparece no começo, em vermelho
+    return per && per.conc_fim <= fim ? per : null;
   };
   const MESES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-  const mesesHTML = MESES.map((m, i) => '<div class="ausMes" style="left:' + pc(ano + '-' + String(i + 1).padStart(2, '0') + '-01') + '"></div>').join('');
+  const mesesNo = MESES.map((m, i) => [m, ano + '-' + p2(i + 1) + '-01']).filter(([, d]) => d >= ini && d <= fim);
+  const diasNo = z[0] === 'M' ? Array.from({ length: total }, (_, i) => agSoma(ini, i)) : [];
+  const mesesHTML = (z[0] === 'M' ? diasNo : mesesNo.map(x => x[1])).map(d => '<div class="ausMes" style="left:' + pc(d) + '"></div>').join('');
   const hoje = D.hoje || isoHoje();
   corpo.innerHTML = '';
-  ausBarra(corpo);
+  const bz = ausBarra(corpo, '<label class="ptCampo" style="margin:0">Ver <select id="ausZoom"><option value="ano">o ano</option>'
+    + [1, 2, 3, 4].map(k => '<option value="T' + k + '">' + k + 'º trimestre</option>').join('')
+    + MESES.map((m, i) => '<option value="M' + p2(i + 1) + '">' + m + '</option>').join('') + '</select></label>');
+  const sz = bz.querySelector('#ausZoom'); sz.value = z;
+  sz.addEventListener('change', () => { AUS.zoom = sz.value; ausMapa(); });
   corpo.insertAdjacentHTML('beforeend',
       '<div class="ausLeg"><span><i class="aus-ferias"></i>férias</span><span><i class="aus-folga"></i>folga</span>'
     + '<span><i class="aus-recesso"></i>recesso</span><span><i class="aus-atestado"></i>atestado</span>'
@@ -3885,7 +3903,8 @@ function ausMapa(){
     + '<span><i class="ausLegVenc"></i>limite para tirar (depois, dobro)</span></div>'
     + '<div class="ausGrade"><table class="ausMapaT"><colgroup><col style="width:170px"><col></colgroup>'
     + '<thead><tr><th class="nome">Pessoa</th><th class="trilho">' + mesesHTML
-    + MESES.map((m, i) => '<span class="ausMesR" style="left:' + pc(ano + '-' + String(i + 1).padStart(2, '0') + '-01') + '">' + m + '</span>').join('')
+    + (z[0] === 'M' ? diasNo.map(d => '<span class="ausDiaR" style="left:' + pc(d) + '">' + Number(d.slice(8)) + '</span>').join('')
+       : mesesNo.map(([m, d]) => '<span class="ausMesR" style="left:' + pc(d) + '">' + m + '</span>').join(''))
     + '</th></tr></thead><tbody>'
     + (linhas.length ? linhas.map(([id, nome]) => {
         const bs = vivos.filter(x => String(x.usuario_id) === id);
@@ -3895,18 +3914,21 @@ function ausMapa(){
           + bs.map(x => {
               const a = x.inicio < ini ? ini : x.inicio, b = x.fim > fim ? fim : x.fim;
               const chq = (x.choques || []).length || ((x.conferencia || {}).choques || []).length;
-              return '<button type="button" class="ausBar aus-' + esc(x.tipo) + (x.status === 'pedida' ? ' ped' : '') + (chq ? ' chq' : '')
+              return '<button type="button" class="ausBar aus-' + esc(x.tipo) + (x.status === 'pedida' ? ' ped' : '') + (chq ? ' chq' : '') + (x.hora_inicio ? ' meio' : '')
                 + '" data-id="' + esc(x.id) + '" style="left:' + pc(a) + ';width:calc(' + ((ausNDias(a, b)) / total * 100).toFixed(3) + '% - 1px)" title="'
                 + esc((AUS_ROT[x.tipo] || '') + (x.status === 'pedida' ? ' (pedido)' : '') + ' · ' + ausPer(x)
+                  + (x.hora_inicio ? ' · parte do dia' : '')
                   + (chq ? ' · ⚠ ' + ((x.choques || [])[0] || ((x.conferencia || {}).choques || [])[0] || {}).texto : '')) + '">'
-                + esc(ausNDias(x.inicio, x.fim) >= 6 ? (AUS_ROT[x.tipo] || '').split('/')[0] : '') + '</button>';
+                + esc(ausNDias(a, b) / total >= 6 / 365 ? (AUS_ROT[x.tipo] || '').split('/')[0] : '') + '</button>';
             }).join('')
-          + (lm ? '<div class="ausVenc" style="left:' + pc(lm.conc_fim) + '" title="Limite para tirar o período '
-              + esc(dataBR(lm.aq_ini) + ' a ' + dataBR(lm.aq_fim)) + ' (sobram ' + lm.restantes + ')"></div>' : '')
+          + (lm ? '<div class="ausVenc' + (lm.conc_fim < ini ? ' passou' : '') + '" style="left:' + pc(lm.conc_fim < ini ? ini : lm.conc_fim) + '" title="'
+              + esc((lm.conc_fim < ini ? 'VENCIDO em ' + dataBR(lm.conc_fim) + ': o limite para tirar o período ' : 'Limite para tirar o período ')
+                + dataBR(lm.aq_ini) + ' a ' + dataBR(lm.aq_fim)) + ' (sobram ' + lm.restantes + ')"></div>' : '')
           + '</td></tr>';
       }).join('') : '<tr><td colspan="2" class="nota" style="padding:12px">Ninguém com essa busca.</td></tr>')
     + '</tbody></table></div>'
-    + '<p class="nota">Toque numa barra para ver o registro, corrigir ou cancelar. A conta de “não sai junto” olha férias e recesso, aprovados e pedidos; folga e atestado ficam fora.</p>');
+    + '<p class="nota">Toque numa barra para ver o registro, corrigir ou cancelar. A barra mais baixa é a folga ou o atestado de parte do dia; '
+    + 'para ver um dia com folga, escolha o mês em “Ver”. A marca vermelha mais grossa no começo é um limite de férias que já venceu. A conta de “não sai junto” olha férias e recesso, aprovados e pedidos; folga e atestado ficam fora.</p>');
   corpo.querySelectorAll('.ausBar').forEach(b => b.addEventListener('click', () => {
     const x = (D.itens || []).find(i => String(i.id) === b.dataset.id);
     if (!x) return;
@@ -3942,7 +3964,7 @@ function ausSaldos(){
           + (p.saldo_inicial.definido_em ? ' em ' + esc(rhDT(p.saldo_inicial.definido_em)) : '') : '') + '</small>'
       + '<button class="btn mini" type="button" data-aj="1">Ajustar</button></div>'
       + ((p.periodos || []).length
-          ? '<div class="ausPerL cab"><span>Período aquisitivo</span><span class="n">Direito</span><span class="n">Tirados</span>'
+          ? '<div class="ausPerL cab"><span>Período aquisitivo</span><span class="n">Direito</span><span class="n" title="Férias aprovadas: as já tiradas e as que ainda vão acontecer">Aprovados</span>'
             + '<span class="n">Pedidos</span><span class="n">Vendidos</span><span class="n">Sobram</span><span></span></div>'
             // S55 · só até o período em formação de AGORA (o do ano que vem não serve para nada ainda)
             + p.periodos.filter(z => z.aq_ini <= hoje).map(z => perLin(p, z)).join('')
@@ -3985,8 +4007,10 @@ function ausAjustar(p){
      { label:'Gravar', pri:true, onClick: async () => {
         const msg = document.getElementById('ajMsg'); msg.textContent = '';
         const per = (document.getElementById('ajP') || {}).value || null;
-        const dias = per ? Number(document.getElementById('ajD').value) : null;
-        if (per && !(dias >= 0 && dias <= 30)){ msg.textContent = 'Dias de 0 a 30.'; return; }
+        const txtD = per ? String(document.getElementById('ajD').value).trim() : '';
+        if (per && txtD === ''){ msg.textContent = 'Escreva quantos dias sobram no período (de 0 a 30). Em branco não grava.'; return; }   // RH20 (165, item 3)
+        const dias = per ? Number(txtD) : null;
+        if (per && !(Number.isInteger(dias) && dias >= 0 && dias <= 30)){ msg.textContent = 'Dias de 0 a 30.'; return; }
         if (DEMO){ msg.textContent = 'Modo demonstração: nada é gravado.'; return; }
         try{
           await rpc('tf_ferias_pessoa_salvar', { p_usuario: p.id, p_vinculo: document.getElementById('ajV').value,
@@ -4165,8 +4189,8 @@ function ausModal(x){
     document.getElementById('auVendaC').hidden = t !== 'ferias';
     document.getElementById('auAnxC').hidden = t !== 'atestado';
     document.getElementById('auDica').textContent = t === 'folga'
-      ? 'Folga só marca o dia (ou as horas): o saldo do banco de horas continua no EZPoint. Não entra em “quem não sai junto”.'
-      : t === 'atestado' ? 'Lance também no EZPoint. Quem não tem esta caixa vê só “afastado”. Atestado nunca é barrado e não barra ninguém.'
+      ? 'Folga do banco de horas: o dia (ou as horas) entra no espelho do ponto e as horas saem do banco. Não entra em “quem não sai junto”.'
+      : t === 'atestado' ? 'Entra no espelho do ponto como dia abonado. Quem não tem esta caixa vê só “afastado”. Atestado nunca é barrado e não barra ninguém.'
       : t === 'recesso' ? 'Recesso é do estagiário: 30 dias por ano de estágio, sem venda e sem partes mínimas.'
       : 'Férias: saldo do período, até 3 partes (uma ≥ 14, nenhuma < 5), começo de segunda a quinta fora de feriado e das vésperas.';
     // o tipo que a pessoa não tem fica de lado (sem esconder: o banco é quem decide)
@@ -4468,29 +4492,51 @@ function diaLancarOutro(){
         const tipos = [...document.querySelectorAll('#mBody [data-t]:checked')].map(x => x.dataset.t);
         const mot = document.getElementById('dlM').value.trim(), os = document.getElementById('dlO').value || null;
         if (!u || !d || !tipos.length){ msg.textContent = 'Escolha a pessoa, o dia e ao menos uma refeição.'; return; }
-        try{
-          let n = 0;
-          for (const t of tipos){
+        let n = 0; const feitas = [];
+        for (const t of tipos){
+          try{
             const r = await rpc('tf_diarias_marcar', { p_data: d, p_tipo: t, p_marcar: true, p_os_id: os, p_usuario: u, p_motivo: mot });
             if (r && r.status === 'ok') n++;
+            feitas.push(t);
+            const cx = document.querySelector('#mBody [data-t="' + t + '"]'); if (cx){ cx.checked = false; cx.disabled = true; }
+          }catch(e){
+            // RH20 (165, item 10): o que já foi gravado fica dito (e desmarcado); o resto não foi
+            msg.textContent = (feitas.length ? 'Gravado: ' + feitas.map(k => DIA_ROT[k]).join(', ') + '. ' : '')
+              + 'Não gravou ' + DIA_ROT[t] + ': ' + e.message
+              + (tipos.length > feitas.length + 1 ? ' (' + tipos.filter(k => k !== t && !feitas.includes(k)).map(k => DIA_ROT[k]).join(', ') + ' também não)' : '');
+            if (feitas.length) pintarDiarias();
+            return;
           }
-          fecharModal(); toast(n ? n + ' refeição(ões) lançada(s).' : 'Já estava lançado.', 'ok'); pintarDiarias();
-        }catch(e){ msg.textContent = e.message; }
+        }
+        fecharModal(); toast(n ? n + ' refeição(ões) lançada(s).' : 'Já estava lançado.', 'ok'); pintarDiarias();
      }}]);
 }
 
 function diaFecharMes(){
   const D = DIA.dados;
   const sem = D.sem_lancamento || [];
+  // RH20 (issue 162): o mês que ainda está correndo avisa em destaque e pede a 2ª confirmação (o banco também confere)
+  const hoje = isoHoje(), corrente = String(D.mes).slice(0, 7) === hoje.slice(0, 7);
+  const faltam = corrente ? Math.round((new Date(S49_MES_SOMA(D.mes, 1) + 'T12:00') - new Date(hoje + 'T12:00')) / 864e5) : 0;
   abrirModal('Fechar ' + S49_MES(D.mes) + '?',
-    '<p style="margin-top:0">Depois de fechado, <b>ninguém</b> lança, desmarca ou corrige nada deste mês — nem o admin — '
+    (corrente ? '<div class="aviso" style="border-color:var(--crit);color:var(--crit)"><b>Este mês ainda não acabou: faltam ' + faltam
+      + ' dia(s), contando hoje.</b> Depois de fechado ninguém lança mais nada até o fim do mês (só o administrador reabre).</div>' : '')
+    + '<p style="margin-top:0">Depois de fechado, <b>ninguém</b> lança, desmarca ou corrige nada deste mês — nem o admin — '
     + 'sem reabrir antes (só o administrador, com motivo).</p>'
     + (sem.length ? '<div class="aviso">' + sem.length + ' pessoa(s) do campo sem nenhum lançamento no mês: ' + sem.map(esc).join(', ')
       + '. É só informação — confira antes se esperava algo delas.</div>' : '')
     + '<p class="nota">Confira o relatório antes: o fechamento guarda os números como estão.</p>',
     [{ label:'Voltar', onClick: fecharModal },
      { label:'Fechar o mês', pri:true, onClick: async () => {
-        try{ await rpc('tf_diarias_fechar_mes', { p_mes: D.mes }); fecharModal(); toast('Mês fechado.', 'ok'); pintarDiarias(); }
+        if (corrente){
+          fecharModal();
+          const r = await confirmar('Fechar antes do fim do mês?', '<p style="margin-top:0">Faltam <b>' + faltam + ' dia(s)</b> para ' + esc(S49_MES(D.mes))
+            + ' acabar. Ninguém lança refeição nesses dias, e no TapField o funcionário só vê “o mês está fechado”.</p>'
+            + '<div class="campo"><label for="dfConf">Para confirmar, digite FECHAR</label><input id="dfConf" type="text" autocomplete="off" name="dfconf_nofill"></div>',
+            'Fechar mesmo assim', true, { campo: 'dfConf', igual: 'FECHAR' });
+          if (!r) return;
+        }
+        try{ await rpc('tf_diarias_fechar_mes', { p_mes: D.mes, p_antes_do_fim: corrente }); fecharModal(); toast('Mês fechado.', 'ok'); pintarDiarias(); }
         catch(e){ toast(e.message, 'err'); }
      }}]);
 }
@@ -4538,11 +4584,15 @@ async function diaValores(){
 }
 
 const DOC = { ponto: { mes:null, dados:null, rasc:null }, recibo: { mes:null, dados:null, rasc:null }, carimbando:false };
+/** RH20 (issue 118): o último mês da Folha de Ponto antiga (PDF do EzPoint). Desde novembro/2026 o espelho é o do ponto
+ *  próprio, assinado em Ponto › Fechamento. O banco devolve o mesmo em `ponto_ate` e recusa subir mês depois dele. */
+const DOC_PONTO_ATE = '2026-10-01';
 
 const DOC_CFG = {
   ponto:  { v:'rhp',  mod:'ponto', titulo:'Folha de Ponto', item:'folha', itens:'folhas',
-            desc:'O espelho de ponto do EZPoint, já conferido com cada funcionário, entregue no TapField para assinatura. '
-              + 'O funcionário assina primeiro; quem assina pela empresa, depois. O TapHub não calcula nem lê horas.' },
+            desc:'Os meses até outubro/2026: o espelho de ponto do EzPoint, já conferido com cada funcionário, entregue no TapField para assinatura '
+              + '(o funcionário assina primeiro; quem assina pela empresa, depois). Desde novembro/2026 o espelho é o do ponto próprio, '
+              + 'assinado em TapRH › Ponto › Fechamento: esta tela guarda os meses anteriores.' },
   recibo: { v:'rhdp', mod:'demonstrativo', titulo:'Demonstrativo de Pagamento', item:'recibo', itens:'recibos',
             desc:'Os recibos de pagamento (mensal, férias e 13º), já conferidos com cada funcionário, entregues no TapField para assinatura. '
               + 'Só o funcionário assina. O TapHub não lê nem confere valores.' }
@@ -4560,6 +4610,7 @@ async function pintarRHDocs(tipo){
   const board = document.getElementById('board');
   if (DEMO) return rhDemo(board, C.titulo);
   if (!S.mes) S.mes = S49_MES_SOMA(isoHoje(), -1);   // o normal é postar o mês que acabou
+  if (tipo === 'ponto' && S.mes > DOC_PONTO_ATE && !S.mesEscolhido) S.mes = DOC_PONTO_ATE;   // RH20 (118): a folha antiga para em outubro/2026
   board.innerHTML = '<div class="tela rhTela"><div class="telaCab"><h2>' + C.titulo + '</h2><p>' + C.desc + '</p></div>'
     + '<div id="docCorpo"><p class="nota">Carregando…</p></div></div>';
   const corpo = document.getElementById('docCorpo');
@@ -4598,14 +4649,20 @@ function docDesenhar(tipo){
   }
   // ── barra do mês ─────────────────────────────────────────────────────────
   const barra = document.createElement('div'); barra.className = 'rhBarra';
-  barra.appendChild(s49SeletorMes(S.mes, m => { S.mes = m; pintarRHDocs(tipo); }));
+  barra.appendChild(s49SeletorMes(S.mes, m => { S.mes = m; S.mesEscolhido = true; pintarRHDocs(tipo); }));
+  const pontoNovo = tipo === 'ponto' && S.mes > (P.ponto_ate || DOC_PONTO_ATE);   // RH20 (118): o espelho é o do ponto próprio
   barra.insertAdjacentHTML('beforeend',
-      '<label class="btn pri" style="cursor:pointer">Subir PDFs de ' + esc(S49_MES(S.mes))
-    + '<input type="file" id="docArq" accept="application/pdf" multiple hidden></label>'
+      (pontoNovo ? '' : '<label class="btn pri" style="cursor:pointer">Subir PDFs de ' + esc(S49_MES(S.mes))
+    + '<input type="file" id="docArq" accept="application/pdf" multiple hidden></label>')
     + '<button class="btn" type="button" id="docZip">Baixar assinados (.zip)</button>'
     + '<button class="btn" type="button" id="docXlsx">Planilha</button>'
     + '<button class="btn" type="button" id="docPdf">PDF</button>');
   corpo.appendChild(barra);
+  if (pontoNovo) corpo.insertAdjacentHTML('beforeend', '<div class="aviso">Desde novembro/2026 o espelho do ponto é assinado em <b>TapRH › Ponto › Fechamento</b>. '
+    + 'Esta tela guarda só os meses até ' + esc(S49_MES(P.ponto_ate || DOC_PONTO_ATE)) + '.'
+    + (PONTO_APR ? ' <button class="btn mini pri" type="button" id="docIrPonto">Abrir o Fechamento</button>' : '') + '</div>');
+  if (P.carimbo_falhas) corpo.insertAdjacentHTML('beforeend', '<div class="aviso">' + P.carimbo_falhas + ' PDF(s) assinado(s) não saíram. '
+    + 'A assinatura continua registrada; use “Tentar de novo” na linha (só falta o PDF com a rubrica desenhada).</div>');
   corpo.insertAdjacentHTML('beforeend', '<p class="nota" id="docProg" style="margin:0 0 6px"></p>');
   // ── conferência (rascunhos) ──────────────────────────────────────────────
   if ((R.rascunhos || []).length) corpo.appendChild(docConferencia(tipo));
@@ -4635,7 +4692,10 @@ function docDesenhar(tipo){
   corpo.querySelectorAll('[data-rec]').forEach(b => b.addEventListener('click', () => docRecolher(tipo, b.dataset.rec)));
   corpo.querySelectorAll('[data-reab]').forEach(b => b.addEventListener('click', () => docReabrir(tipo, b.dataset.reab)));
   const arq = document.getElementById('docArq');
-  arq.addEventListener('change', () => { const fs = [...(arq.files || [])]; arq.value = ''; if (fs.length) docSubir(tipo, fs); });
+  if (arq) arq.addEventListener('change', () => { const fs = [...(arq.files || [])]; arq.value = ''; if (fs.length) docSubir(tipo, fs); });
+  const bip = document.getElementById('docIrPonto'); if (bip) bip.addEventListener('click', () => { PT.aba = 'fechamento'; irPara('rhpt'); });
+  corpo.querySelectorAll('[data-carimbo]').forEach(b => b.addEventListener('click', () => _semDuploEnvio_(b, async () => {
+    await docCarimbar(tipo, [b.dataset.carimbo]); pintarRHDocs(tipo); })));
   const be = document.getElementById('docEmp'); if (be) be.addEventListener('click', () => docAssinarEmpresa());
   document.getElementById('docZip').addEventListener('click', function(){ _semDuploEnvio_(this, () => docZip(tipo)); });
   document.getElementById('docXlsx').addEventListener('click', function(){ _semDuploEnvio_(this, () => relXLSX(docModelo(tipo)).catch(e => toast(e.message,'err'))); });
@@ -4662,25 +4722,29 @@ function docLinha(tipo, d){
     + (d.termo_ok === false && d.situacao === 'liberado' ? ' <span class="chip">sem termo</span>' : '')
     + '<small>' + (d.situacao === 'liberado' ? 'prazo ' + esc(dataBR(d.prazo)) + (d.vencido ? ' — VENCIDO' : '') + ' · ' : '')
     + (datas ? 'assinado: ' + esc(datas) + ' · ' : '') + esc(docVis(d.acessos))
-    + (d.situacao === 'assinado_func' || d.situacao === 'concluido' ? (d.tem_assinado ? '' : ' · gerando o PDF assinado…') : '')
+    + (d.situacao === 'assinado_func' || d.situacao === 'concluido' ? (d.tem_assinado && !d.carimbo_falha ? ''
+        : d.carimbo_falha ? ' · <b style="color:var(--crit)">não consegui gerar o PDF assinado</b> (' + esc(d.carimbo_falha) + '); a assinatura continua registrada'
+        : ' · gerando o PDF assinado…') : '')
     + (d.encerrado_motivo && !vivo ? ' · ' + esc(d.encerrado_motivo) : '') + '</small></span>'
     + '<span class="a">' + (d.tem_pdf ? '<button class="btn mini" type="button" data-ver="' + esc(d.id) + '">Ver</button>' : '')
     + '<button class="btn mini" type="button" data-det="' + esc(d.id) + '">Detalhe</button>'
+    + (d.carimbo_falha && (d.situacao === 'assinado_func' || d.situacao === 'concluido') ? '<button class="btn mini pri" type="button" data-carimbo="' + esc(d.id) + '">Tentar de novo</button>' : '')
     + (d.situacao === 'liberado' ? '<button class="btn mini" type="button" data-rec="' + esc(d.id) + '">Recolher</button>' : '')
     + (adm && (d.situacao === 'assinado_func' || d.situacao === 'concluido') ? '<button class="btn mini perigo" type="button" data-reab="' + esc(d.id) + '">Reabrir</button>' : '')
     + '</span></div>';
 }
 
 async function docAbrir(id, acao, qual){
+  let w = null;
   try{
-    const w = acao === 'ver' ? window.open('', '_blank') : null;
+    w = acao === 'ver' ? window.open('', '_blank') : null;
     const a = await rpc('tf_rhdoc_abrir', { p_id: id, p_acao: acao, p_qual: qual || 'assinado' });
     const blob = await (await fetch(a.conteudo)).blob();
     if (acao === 'ver'){
       if (!w){ toast('O navegador bloqueou a janela nova — libere pop-ups para o TapHub.', 'err'); return; }
       w.location.href = URL.createObjectURL(blob);
     } else rhBaixarBlob(blob, a.nome_arquivo);
-  }catch(e){ toast(e.message, 'err'); }
+  }catch(e){ try{ if (w) w.close(); }catch(x){} toast(e.message, 'err'); }   // RH20 (165, item 6): sem aba em branco no erro
 }
 
 async function docDetalhe(tipo, id){
@@ -4835,6 +4899,7 @@ async function docSubir(tipo, files){
         const pg = await leitor.getPage(i + 1);
         const L = await docLinhasTexto(pg);
         const lido = tipo === 'ponto' ? docLerPonto(L) : docLerRecibo(L);
+        const linhaAss = docAcharPos(tipo, L).achou;   // RH20 (164): a linha de assinatura está nesta página?
         // a miniatura: pequena, só para quem confere reconhecer a folha
         const vp1 = pg.getViewport({ scale: 1 });
         const vp = pg.getViewport({ scale: 360 / vp1.width });
@@ -4851,18 +4916,23 @@ async function docSubir(tipo, files){
           pdfUrl = await bytesParaDataUrl(await novo.save());
         }
         paginas.push(Object.assign({ arquivo_nome: f.name + (leitor.numPages > 1 ? ' (pág. ' + (i + 1) + ')' : ''),
-          pdf: pdfUrl, miniatura: mini }, lido,
+          pdf: pdfUrl, miniatura: mini, linha_assinatura: linhaAss }, lido,
           tipo === 'recibo' ? { subtipo: docTipoLido(lido.competencia_lida) } : {}));
       }
     }
     // em lotes: um PDF de página tem ~100–300 KB
     for (let k = 0; k < paginas.length; k += 6){
       diz('Enviando ' + Math.min(k + 6, paginas.length) + ' de ' + paginas.length + '…');
-      await rpc('tf_rhdoc_preparar', { p_tipo: tipo, p_competencia: S.mes, p_itens: paginas.slice(k, k + 6) });
+      try{ await rpc('tf_rhdoc_preparar', { p_tipo: tipo, p_competencia: S.mes, p_itens: paginas.slice(k, k + 6) }); }
+      catch(e){   // RH20 (165, item 8): diz quantas subiram antes da falha (as que subiram estão na conferência)
+        if (!k) throw e;
+        throw new Error('Subiram ' + k + ' de ' + paginas.length + ' páginas; as outras ' + (paginas.length - k) + ' não ('
+          + e.message + '). As que subiram estão na conferência: suba de novo só os PDFs que faltaram.');
+      }
     }
     diz('');
     toast(paginas.length + ' página(s) subida(s). Confira e libere.', 'ok');
-  }catch(e){ diz(''); toast(e.message, 'err'); }
+  }catch(e){ diz(''); toast(e.message, 'err', { fixo: true }); }
   pintarRHDocs(tipo);
 }
 
@@ -4872,12 +4942,15 @@ function docConferencia(tipo){
   const ok = ras.filter(r => (r.casamento === 'ok' || r.casamento === 'manual') && !r.bloqueio
     && !(r.conflito && ['assinado_func','concluido'].includes(r.conflito.situacao)) && !r.repetido);
   const funcs = R.funcionarios || [];
-  const ativos = funcs.length, semDoc = funcs.filter(f => !f.tem);
+  // RH20 (issue 159): a conta é só de quem deve receber neste mês (sem sócio, estagiário ou quem entrou depois)
+  const devem = funcs.filter(f => f.deve !== false), ativos = devem.length, semDoc = devem.filter(f => !f.tem);
   const donos = {}; ras.forEach(r => { if (r.usuario_id) donos[r.usuario_id] = (donos[r.usuario_id] || 0) + 1; });
   const box = document.createElement('div'); box.className = 's49Conf';
   const alertas = [];
-  if (tipo === 'ponto' && ras.length !== ativos) alertas.push(ras.length + ' página(s) para ' + ativos + ' funcionário(s) ativo(s) com ficha de RH.');
-  if (semDoc.length) alertas.push('Ativo(s) sem ' + (tipo === 'ponto' ? 'folha' : 'recibo mensal') + ' neste mês: ' + semDoc.map(f => f.nome).join(', ') + '.');
+  if (tipo === 'ponto' && ras.length !== ativos) alertas.push(ras.length + ' página(s) para ' + ativos + ' funcionário(s) que recebem a folha neste mês.');
+  if (semDoc.length) alertas.push('Sem ' + (tipo === 'ponto' ? 'folha' : 'recibo mensal') + ' neste mês (deveria receber): ' + semDoc.map(f => f.nome).join(', ') + '.');
+  const semLinha = ras.filter(r => r.linha_assinatura === false).length;
+  if (semLinha) alertas.push(semLinha + ' página(s) sem a linha de assinatura que o sistema procura: confira o modelo antes de liberar.');
   const sem = ras.filter(r => !r.usuario_id).length;
   if (sem) alertas.push(sem + ' página(s) sem dono confirmado.');
   if (ras.some(r => r.repetido)) alertas.push('Há pessoa com duas páginas do mesmo documento — descarte a que sobra.');
@@ -4912,6 +4985,7 @@ function docConferencia(tipo){
       + '</div>'
       + (!pronto && (r.casamento_motivo || r.bloqueio) ? '<div class="mot">' + esc(r.bloqueio || r.casamento_motivo) + '</div>' : '')
       + (r.repetido ? '<div class="mot">Há outra página do mesmo documento desta pessoa neste lote.</div>' : '')
+      + (r.linha_assinatura === false ? '<div class="mot">Não achei a linha de assinatura neste PDF: confira o modelo. A rubrica sairia na posição padrão, que pode cair fora da linha.</div>' : '')
       + (r.conflito ? '<div class="' + (assinadoAntes ? 'mot' : 'nota') + '">' + (assinadoAntes
           ? 'Já ASSINADO por ' + esc(r.nome || '') + ' (v' + r.conflito.versao + '). Para trocar, o administrador reabre antes.'
           : 'Vai SUBSTITUIR a versão ' + r.conflito.versao + ', ainda não assinada (o PDF dela deixa de ser guardado).') + '</div>' : '')
@@ -4945,6 +5019,9 @@ function docConferencia(tipo){
     const mb = el.querySelector('.s49MiniB'); if (mb) mb.addEventListener('click', () => docAbrir(r.id, 'ver', 'original'));
     const l1 = el.querySelector('[data-lib1]'); if (l1) l1.addEventListener('click', () => _semDuploEnvio_(l1, () => docLiberar(tipo, [r.id])));
     const d1 = el.querySelector('[data-desc1]'); d1.addEventListener('click', () => _semDuploEnvio_(d1, async () => {
+      // RH20 (165, item 7): descartar uma página também pergunta antes
+      if (!await confirmar('Descartar esta página?', '<p style="margin-top:0">' + esc(r.lido_nome || r.arquivo_nome || 'Página') + ' · '
+        + esc(r.arquivo_nome || '') + '. Ela não chega a ninguém; para usar, suba o PDF de novo.</p>', 'Descartar', true)) return;
       try{ await rpc('tf_rhdoc_descartar', { p_ids: [r.id] }); pintarRHDocs(tipo); }catch(e){ toast(e.message, 'err'); }
     }));
     L.appendChild(el);
@@ -4959,6 +5036,13 @@ function docConferencia(tipo){
 
 async function docLiberar(tipo, ids){
   if (!ids.length) return;
+  // RH20 (issue 164): página sem a linha de assinatura só sai com a confirmação de quem conferiu
+  const semLinha = ((DOC[tipo].rasc || {}).rascunhos || []).filter(r => ids.includes(r.id) && r.linha_assinatura === false);
+  if (semLinha.length && !await confirmar('Liberar sem a linha de assinatura?',
+      '<p style="margin-top:0">Não achei a linha de assinatura em ' + semLinha.length + ' página(s): '
+      + semLinha.map(r => '<b>' + esc(r.nome || r.lido_nome || r.arquivo_nome || '—') + '</b>').join(', ') + '.</p>'
+      + '<p>O modelo do PDF pode ter mudado (ou veio escaneado). A rubrica sairia na posição padrão, que pode cair em cima de um valor. '
+      + 'Abra a página e confira; se o modelo mudou, avise o administrador antes de liberar.</p>', 'Conferi, liberar assim', true)) return;
   try{
     const r = await rpc('tf_rhdoc_liberar', { p_ids: ids });
     toast(r.n + ' ' + (r.n === 1 ? DOC_CFG[tipo].item + ' liberad' + (tipo === 'ponto' ? 'a' : 'o') : DOC_CFG[tipo].itens + ' liberad' + (tipo === 'ponto' ? 'as' : 'os'))
@@ -5014,7 +5098,12 @@ const docSelo = (em, metodo) => 'Confirmado por ' + (metodo === 'passkey' ? 'dig
 async function docPosicoes(tipo, bytes){
   const pdfjs = await carregarPdfJs();
   const d = await pdfjs.getDocument({ data: bytes.slice() }).promise;
-  const L = await docLinhasTexto(await d.getPage(1));
+  return docAcharPos(tipo, await docLinhasTexto(await d.getPage(1)));
+}
+
+/** RH20 (issue 164): onde vão a rubrica e a data. `achou` = a linha de assinatura está no PDF; sem ela, a posição é a
+ *  fixa do modelo antigo — a conferência avisa antes de liberar ("confira o modelo"). */
+function docAcharPos(tipo, L){
   const linhaDe = re => L.linhas.find(l => re.test(l.txt));
   const sublinhado = (l) => { const it = l && l.itens.find(i => /_{6,}/.test(i.s) && i.x > 300);
     return it ? { x0: it.x + (it.s.indexOf('_') > 0 ? it.w * it.s.indexOf('_') / it.s.length : 0), x1: it.x + it.w } : null; };
@@ -5115,15 +5204,21 @@ async function docCarimbar(tipo, ids){
     const lista = await rpc('tf_rhdoc_para_carimbar', { p_tipo: tipo, p_ids: ids || null });
     if (!lista.length) return;
     const lib = await carregarPdfLib();
-    let n = 0;
+    let n = 0; const falhas = [];
     for (const x of lista){
       if (prog) prog.textContent = 'Gerando o PDF assinado ' + (++n) + ' de ' + lista.length + ' (' + x.nome + ')…';
       try{
         const url = await docCarimbarUm(lib, x);
         await rpc('tf_rhdoc_gravar_carimbado', { p_id: x.id, p_etapa: x.etapa, p_pdf: url, p_hash_original: x.pdf_hash });
-      }catch(e){ console.warn('[carimbo]', x.id, e); toast('Não consegui gerar o PDF assinado de ' + x.nome + ': ' + e.message, 'err'); }
+      }catch(e){
+        // RH20 (issue 164): a falha fica no documento (a linha mostra "Tentar de novo") e não volta a cada abertura
+        console.warn('[carimbo]', x.id, e); falhas.push(x.nome);
+        try{ await rpc('tf_rhdoc_carimbo_falhou', { p_id: x.id, p_motivo: String((e && e.message) || 'erro sem mensagem').slice(0, 300) }); }catch(e2){}
+      }
     }
     if (prog) prog.textContent = '';
+    if (falhas.length) toast('Não consegui gerar o PDF assinado de ' + falhas.join(', ') + '. A assinatura continua registrada; '
+      + 'a linha mostra “Tentar de novo”.', 'err', { fixo: true });
     if (visao === DOC_CFG[tipo].v && !ids) pintarRHDocs(tipo);
   }catch(e){ if (prog) prog.textContent = ''; }
   finally{ DOC.carimbando = false; }
@@ -5135,16 +5230,19 @@ async function docZip(tipo){
   if (!docs.length){ toast('Nenhum documento assinado em ' + S49_MES(DOC[tipo].mes) + '.', 'err'); return; }
   const JSZipLib = await carregarJSZip();
   const zip = new JSZipLib();
-  let n = 0;
+  let n = 0, nFalta = 0;
   for (const d of docs){
     try{
       const a = await rpc('tf_rhdoc_abrir', { p_id: d.id, p_acao: 'baixar', p_qual: 'assinado' });
-      zip.file(rhNomeArq(a.nome_arquivo), dataUrlParaBytes(a.conteudo)); n++;
+      // RH20 (165, item 9): a folha que só o funcionário assinou não sai com o nome das concluídas
+      const nome = d.situacao === 'assinado_func' ? String(a.nome_arquivo).replace(/(\.pdf)?$/i, ' - FALTA A EMPRESA.pdf') : a.nome_arquivo;
+      zip.file(rhNomeArq(nome), dataUrlParaBytes(a.conteudo)); n++; if (d.situacao === 'assinado_func') nFalta++;
     }catch(e){ toast(d.nome + ': ' + e.message, 'err'); }
   }
   const blob = await zip.generateAsync({ type:'blob' });
   rhBaixarBlob(blob, rhNomeArq(DOC_CFG[tipo].titulo + ' - ' + S49_MES(DOC[tipo].mes).replace('/', ' de ') + ' - assinados.zip'));
-  toast(n + ' arquivo(s) no .zip (cada download ficou registrado).', 'ok');
+  toast(n + ' arquivo(s) no .zip' + (nFalta ? ' (' + nFalta + ' ainda sem a assinatura da empresa: o nome do arquivo diz “FALTA A EMPRESA”)' : '')
+    + ' — cada download ficou registrado.', 'ok');
 }
 
 function docModelo(tipo){
@@ -5176,11 +5274,19 @@ async function rhFPonto(c, f){
   let p;
   try{ p = await rpc('tf_rhdoc_func', { p_usuario: f.usuario.id }); }catch(e){ return rhFalha(c, e.message, rhDesenharFicha); }
   c.innerHTML = '<div class="secTit" style="margin-top:4px">Matrícula do ponto</div>'
-    + '<p class="nota" style="margin-top:0">É a mesma do EZPoint e do recibo ("0015" no recibo = 15). É por ela, junto com o nome, que '
+    + '<p class="nota" style="margin-top:0">É a do recibo ("0015" no recibo = 15; era também a do EzPoint). É por ela, junto com o nome, que '
     + 'cada folha e cada recibo vão para a pessoa certa. Na primeira folha de cada um, ela é gravada aqui sozinha, na conferência.</p>'
     + '<div class="dupla"><div class="campo"><label for="ppMat">Matrícula</label><input id="ppMat" type="number" min="1" step="1" value="' + esc(p.matricula ?? '') + '"></div>'
     + '<div class="campo"><label for="ppNome">Nome como sai no ponto/recibo</label><input id="ppNome" type="text" maxlength="120" value="' + esc(p.nome_ponto || '') + '"></div></div>'
     + '<div class="linhaBtns"><button class="btn" type="button" id="ppSalvar">Salvar matrícula</button></div>'
+    // RH20 (issue 159): quem recebe a folha e o recibo — o "não postado" e a conferência só contam quem recebe
+    + '<div class="secTit">Recebe pelo TapField</div>'
+    + '<p class="nota" style="margin-top:0">Por padrão só o CLT recebe a folha de ponto e o recibo mensal; sócio e estagiário, não'
+    + (p.vinculo ? ' (vínculo desta pessoa: <b>' + esc({ clt:'CLT', estagio:'estágio', socio:'sócio' }[p.vinculo] || p.vinculo) + '</b>)' : '')
+    + '. Marque aqui quem é exceção. Quem não recebe não aparece como “não postado”.</p>'
+    + '<label class="chk"><input type="checkbox" id="ppRecF"' + ((p.recebe_folha ?? p.padrao) ? ' checked' : '') + '> Recebe a folha de ponto (meses até outubro/2026)</label>'
+    + '<label class="chk"><input type="checkbox" id="ppRecR"' + ((p.recebe_recibo ?? p.padrao) ? ' checked' : '') + '> Recebe o recibo de pagamento mensal</label>'
+    + '<div class="linhaBtns"><button class="btn" type="button" id="ppRecS">Salvar</button></div>'
     + '<div class="secTit">Termo do ponto e do recibo</div>'
     + '<p class="nota" style="margin-top:0">Um termo só para o espelho de ponto e o recibo de pagamento. A rubrica é a que já está cadastrada '
     + '(termo do EPI) — este termo só autoriza o uso dela. Sem ele anexado, a pessoa não assina folha nem recibo no TapField.</p>'
@@ -5196,6 +5302,13 @@ async function rhFPonto(c, f){
   document.getElementById('ppSalvar').addEventListener('click', function(){ _semDuploEnvio_(this, async () => {
     try{ await rpc('tf_rhdoc_func_salvar', { p_usuario: f.usuario.id, p_matricula: document.getElementById('ppMat').value ? Number(document.getElementById('ppMat').value) : null,
            p_nome_ponto: document.getElementById('ppNome').value }); toast('Matrícula salva.', 'ok'); rhFPonto(c, f); }
+    catch(e){ toast(e.message, 'err'); }
+  }); });
+  document.getElementById('ppRecS').addEventListener('click', function(){ _semDuploEnvio_(this, async () => {
+    // igual ao padrão do vínculo grava "padrão" (vazio): se o vínculo mudar depois, a caixa acompanha
+    const val = id => { const v = document.getElementById(id).checked; return v === !!p.padrao ? null : v; };
+    try{ await rpc('tf_rhdoc_recebe_gravar', { p_usuario: f.usuario.id, p_folha: val('ppRecF'), p_recibo: val('ppRecR') });
+         toast('Gravado.', 'ok'); rhFPonto(c, f); }
     catch(e){ toast(e.message, 'err'); }
   }); });
   const v = document.getElementById('ppVer'); if (v) v.addEventListener('click', () => rhAbrirArquivo(p.termo_arquivo_id));
@@ -5262,14 +5375,44 @@ async function pintarRHFuncionarios(){
   if (DEMO) return rhDemo(board, 'Funcionários');
   board.innerHTML = '<div class="tela rhTela"><div class="telaCab"><h2>Funcionários</h2>'
     + '<p>A ficha de RH de cada pessoa, ligada ao login que ela já tem (não é uma segunda lista de pessoas).</p></div>'
+    + '<div id="rhDeslAcesso"></div>'
     + '<div class="rhSplit"><div class="rhEsq" id="rhFL"><p class="nota">Carregando…</p></div>'
     + '<div class="rhDir" id="rhFD"></div></div></div>';
   try{ RH.lista = await rpc('tf_rh_funcionarios', {}); }
   catch(e){ return rhFalha(document.getElementById('rhFL'), e.message, pintarRHFuncionarios); }
   rhDesenharLista();
+  rhAvisoDesligados();
   if (RH.sel) await rhDesenharFicha();
   else document.getElementById('rhFD').innerHTML = '<p class="nota" style="padding:20px">Escolha uma pessoa na lista.</p>';
   document.querySelector('.rhSplit').classList.toggle('comFicha', !!RH.sel);
+}
+
+/** RH20 (issue 120): quem foi desligado no TapRH e ainda tem o login ativo. O TapRH não desativa sozinho: leva a quem
+ *  desativa (o administrador, em Cadastros › Configurações › Usuários, que também derruba as sessões abertas). */
+const RH_LINK_USUARIOS = '../cadastros/?ir=cfg&aba=usuarios&area=taprh';
+async function rhAvisoDesligados(){
+  const el = document.getElementById('rhDeslAcesso'); if (!el) return;
+  let r; try{ r = await rpc('tf_rh_desligados_com_acesso', {}); }catch(e){ el.innerHTML = ''; return; }   // banco sem a atualização: sem aviso
+  const L = (r && r.pessoas) || [];
+  el.innerHTML = !L.length ? '' : '<div class="aviso" style="margin:0 0 10px"><b>' + L.length + ' pessoa(s) desligada(s) ainda com o acesso ao sistema ativo:</b> '
+    + L.map(x => esc(x.nome) + ' (desde ' + esc(dataBR(x.desligado_em)) + ')').join(', ') + '. Elas ainda entram no TapHub e no TapField. '
+    + (r.admin ? '<a class="btn mini pri" href="' + RH_LINK_USUARIOS + '">Desativar em Usuários</a>'
+               : 'Peça ao administrador para desativar em Cadastros › Configurações › Usuários.') + '</div>';
+}
+
+function rhDesligadoDepois(f, r, depois){
+  // RH20 (issue 120): o fim do desligamento pergunta pelo login e leva ao resumo da rescisão do ponto
+  const adm = !!(sessao && sessao.admin);
+  abrirModal('Desligado',
+    '<p style="margin-top:0"><b>' + esc(f.usuario.nome) + '</b> foi desligado(a) no RH'
+    + (r.receitas_apagadas ? ' (a receita de óculos foi apagada)' : '') + (r.pedidos_cancelados ? ' (o pedido do TapField foi cancelado)' : '') + '.</p>'
+    + '<div class="aviso"><b>Desativar também o acesso ao sistema?</b> O login continua valendo até ser desativado: '
+    + 'sem isso, a pessoa ainda entra no TapHub e no TapField. Desativar derruba na hora as sessões abertas, e tudo que ela fez continua com o nome dela.'
+    + (adm ? '' : '<br>Quem desativa é o administrador, em Cadastros › Configurações › Usuários: peça a ele.') + '</div>'
+    + (PONTO_APR ? '<p class="nota">O resumo da rescisão do ponto (banco de horas, saldo antigo, teto do desconto) fica em TapRH › Ponto › Escalas e regras.</p>' : ''),
+    [ { label:'Agora não', onClick: () => { fecharModal(); depois && depois(); } } ]
+      .concat(PONTO_APR ? [{ label:'Resumo da rescisão do ponto', onClick: () => { fecharModal(); PT.aba = 'escalas'; PT.sel = f.usuario.id; irPara('rhpt'); } }] : [])
+      .concat(adm ? [{ label:'Desativar o acesso…', pri:true, onClick: () => { location.href = RH_LINK_USUARIOS; } }] : []));
 }
 
 function rhDesenharLista(){
@@ -5627,7 +5770,7 @@ async function rhDesligamento(uid, depois){
   const ok = '<span class="rhSt confirmado">feito</span> ', falta = '<span class="rhSt aguardando">falta</span> ';
   let h = '<p style="margin-top:0">Na ordem do documento: o que está com ' + esc(f.usuario.nome.split(' ')[0]) + ' volta (ou fica registrado que não voltou), '
     + 'ele confirma no celular com o PIN, e só então o desligamento — que desativa o PIN e apaga a receita de óculos. '
-    + 'Ficha, termo, entregas e devoluções ficam guardados (guarda legal). O login do sistema não muda: desative em Pessoas e acessos (no início do TapHub), se for o caso.</p>'
+    + 'Ficha, termo, entregas e devoluções ficam guardados (guarda legal). O login do sistema não muda aqui: no fim, o TapRH pergunta e leva a quem desativa.</p>'
     + '<div class="secTit">' + (p1 ? ok : falta) + '1 · Entregas em aberto</div>'
     + (p1 ? '<p class="nota" style="margin:0">Nenhuma entrega separada ou esperando confirmação.</p>'
           : abertas.map(e => '<div class="rhLin"><span class="t">' + esc(e.epi_nome) + '<small>' + esc(RH_STATUS[e.status]) + '</small></span>'
@@ -5658,8 +5801,7 @@ async function rhDesligamento(uid, depois){
           try{ const r = await rpc('tf_rh_desligar', { p_usuario: uid, p_data: document.getElementById('dD').value,
                  p_motivo: document.getElementById('dM').value });
                fecharModal(); contarRH();
-               toast('Desligado.' + (r.receitas_apagadas ? ' Receita apagada.' : '') + (r.pedidos_cancelados ? ' Pedido do TapField cancelado.' : ''), 'ok');
-               depois && depois(); }
+               rhDesligadoDepois(f, r || {}, depois); }
           catch(e){ document.getElementById('rhMsg').textContent = e.message; }
       } } ]);
   rhModalLargo();
@@ -6215,13 +6357,16 @@ const PT_SIT = {
   fora: ['Fora (ausência)', 'fora'], folga: ['Folga', 'fora'], trabalhando_folga: ['Trabalhando fora da escala', 'campo'],
 };
 async function ptHoje(corpo){
-  try{ PT.hoje = await rpc('tf_ponto_hoje', {}); }catch(e){ return rhFalha(corpo, e.message, pintarPonto); }
+  let filas = [];
+  try{ [PT.hoje, filas] = await Promise.all([rpc('tf_ponto_hoje', {}),
+         rpc('tf_ponto_filas_paradas', {}).catch(() => [])]); }   // RH20 (141): sem a atualização do banco, sem a faixa
+  catch(e){ return rhFalha(corpo, e.message, pintarPonto); }
   if (visao !== 'rhpt' || PT.aba !== 'hoje') return;
   const H = PT.hoje, P = H.pessoas || [];
   const n = k => P.filter(p => k.includes(p.situacao)).length;
   const cart = (rot, val, sub, cls) => '<div class="ptCard' + (cls ? ' ' + cls : '') + '"><span>' + rot + '</span><b>' + val + '</b><small>' + sub + '</small></div>';
   const AUS = { ferias: 'férias', folga: 'folga', atestado: 'atestado' };
-  let h = '<div class="ptCards">'
+  let h = ptFaixaFilas(filas) + '<div class="ptCards">'
     + cart('Trabalhando agora', n(['trabalhando', 'trabalhando_folga']), 'batida de entrada sem saída', '')
     + cart('No almoço', n(['almoco']), 'saída para o almoço batida', '')
     + cart('Fora hoje', n(['fora']), 'vem das Ausências', '')
@@ -6250,6 +6395,19 @@ async function ptHoje(corpo){
   corpo.querySelectorAll('[data-fdia]').forEach(b => b.addEventListener('click', () => ptFotosDia(b.dataset.fdia, H.hoje)));
   corpo.querySelectorAll('[data-esp]').forEach(b => b.addEventListener('click', () => {
     PT.sel = b.dataset.esp; PT.mes = String(b.dataset.dia).slice(0, 7) + '-01'; PT.aba = 'espelhos'; pintarPonto(); }));
+}
+
+/** RH20 (issue 141, parte 2): batida do ponto parada há mais de 1 dia no celular pessoal de alguém. O celular conta a
+ *  fila dele ao banco quando abre com internet; "visto" é a última vez que contou. */
+function ptFaixaFilas(L){
+  if (!(L || []).length) return '';
+  const dh = t => { try{ return new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }); }catch(e){ return t; } };
+  return '<div class="aviso" style="margin:0 0 10px"><b>Batida parada no celular há mais de 1 dia (' + L.length + ' pessoa' + (L.length > 1 ? 's' : '') + ')</b>'
+    + L.map(x => '<div class="rhLin" style="margin:4px 0 0"><span class="t"><b>' + esc(x.nome) + '</b> · '
+        + x.pendentes + ' envio(s) do ponto esperando desde ' + esc(dh(x.mais_antiga))
+        + (x.parados ? ' · <b style="color:var(--crit)">' + x.parados + ' recusado(s) pelo servidor</b>' + (x.motivo ? ': “' + esc(x.motivo) + '”' : '') : ' · esperando sinal')
+        + '<small>o celular contou em ' + esc(dh(x.visto_em)) + '. Fale com a pessoa: no TapField, “Tentar de novo” ou “Pedir ajuste com esta hora”.</small></span></div>').join('')
+    + '</div>';
 }
 
 /** Fotos e locais das batidas de um dia (P6, P23): só quem aprova o ponto. */
@@ -6900,7 +7058,7 @@ async function ptEzComparar(){
   let M = []; try{ M = await rpc('tf_ponto_ez_meses', {}); }catch(e){ el.innerHTML = /tf_ponto_ez_meses/.test(e.message) ? '<p class="nota">A comparação com o EzPoint ainda não abre: falta uma atualização do sistema: avise o administrador.</p>' : ''; return; }
   if (!M.length){ el.innerHTML = ''; return; }
   const mesAtual = isoHoje().slice(0, 7) + '-01', pad = M.find(m => m < mesAtual) || M[0];
-  el.innerHTML = '<h3 class="ptH3">Comparar com o EzPoint</h3><p class="nota">Recalcula o mês com as regras do ponto próprio (tolerância de 10 min por dia, '
+  el.innerHTML = '<h3 class="ptH3">Comparar com o EzPoint</h3><p class="nota">Recalcula o mês com as regras do ponto próprio (a tolerância por dia de Parâmetros, '
     + 'domingo e feriado a 100% fora do banco) e compara, dia a dia, com o que o EzPoint lançou no banco. Só compara: o saldo antigo continua o do EzPoint (lote antigo). '
     + 'Os espelhos em PDF assinados continuam no Drive como prova.</p>'
     + '<div class="rhBarra"><label class="ptCampo">Mês <select id="ptEzM">' + M.map(m => '<option value="' + m + '"' + (m === pad ? ' selected' : '') + '>' + esc(ptMesRot(m)) + '</option>').join('') + '</select></label>'

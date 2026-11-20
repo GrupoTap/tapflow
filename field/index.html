@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapField · S65</title>
+<title>TapField · S66</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -685,7 +685,8 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S65';   // S65 (S200): Rodada R8 da auditoria (cartões) — issue 187: o canhoto vai pela fila comum do celular (no celular da empresa, sobe no nome de quem tirou; aparelho cheio avisa e não perde; o recusado fica na lista, com o motivo); a foto renova o acesso antes; "Não tenho este canhoto" no pedido do escritório
+const APP_VERSION = 'S66';   // S66 (S201): Rodada R9 da auditoria (TapRH) — issue 165 (Folga e férias com "Carregando…" e as abas; Diárias: dois toques na seta voltam dois dias, com "Carregando…") e 141 parte 2 (o celular conta ao escritório a batida parada na fila)
+// const APP_VERSION = 'S65';   // S65 (S200): Rodada R8 da auditoria (cartões) — issue 187: o canhoto vai pela fila comum do celular (no celular da empresa, sobe no nome de quem tirou; aparelho cheio avisa e não perde; o recusado fica na lista, com o motivo); a foto renova o acesso antes; "Não tenho este canhoto" no pedido do escritório
 // const APP_VERSION = 'S64';   // S64 (S197): Rodada R6 da auditoria (celular: ponto e diária) — issue 140 (aparelho cheio: a batida não diz "registrado", o rascunho fica e, com sinal, vai direto), 141 (recusada aparece como recusada, com o motivo; o ajuste leva a hora do toque e a foto), 143 (sem códigos internos; o tempo da repetida pelo parâmetro; horas de 30 em 30) e 166 (diária sem sinal pela fila)
 // const APP_VERSION = 'S63';   // S63 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 109 (as confirmações pela janela do TapHub, com o motivo dentro dela), 110 ("sem sinal, na fila" em amarelo; a T06 com o nome) e nomes fixos trocados por "o escritório"; núcleo N13
 // const APP_VERSION = 'S62';   // S62 (S195): Rodada R4 da auditoria — issue 142 (o espelho assinado, o documento do RH e a foto do canhoto abrem com o acesso vencido: renova também no HTTP 400) e 167/189 (o valor do canhoto pelo leitor único do núcleo: "2.5" = 2,50; "1.250" = 1.250,00); núcleo N12
@@ -5399,6 +5400,7 @@ function nAvisosEu(){
 }
 /** A aba Eu: os avisos no topo, depois as seções (só as que se aplicam). */
 function pintarEu(){
+  ptContarFila();   // S66 (issue 141, parte 2)
   tela = 'eu'; atual = null; coleta = null;
   pintarModulo();
   if (EMP_F()) return pintarEuEmpresa();   // S53 · A2: no celular da empresa, só o que é trabalho
@@ -5512,6 +5514,30 @@ const ptAgora = () => new Date(Date.now() + (ptDifConhecida() || 0) * 1000);   /
 const ptMinInt = t => Math.floor((t instanceof Date ? t.getTime() : t) / 6e4);
 const ptNaFila = () => (window.Nucleo && Nucleo.fila) ? Nucleo.fila.listar({ grupo: 'ponto' }) : [];
 const ptParadas = () => ptNaFila().filter(e => e.parado);   // S64 (issue 141): recusadas (ou paradas atrás de uma recusada)
+/** S66 (issue 141, parte 2): o celular pessoal conta ao banco a fila do ponto (quantos envios esperam, quantos o servidor
+ *  recusou e desde quando), para o escritório ver em TapRH › Ponto › Hoje a batida parada há mais de 1 dia. Só conta
+ *  quando há algo na fila (ou para dizer que esvaziou), no máximo a cada 30 min se nada mudou. Nunca no celular da empresa
+ *  (ele não bate ponto e já conta a fila dele). Sem a atualização do banco, não faz nada. */
+const K_PT_AP = 'tff_ponto_aparelho', K_PT_FILA = 'tff_ponto_fila_contou';
+let ptFilaUlt = { t: 0, sig: '' };
+function ptContarFila(){
+  try{
+    if (DEMO || EMP_F() || !sessao.token || navigator.onLine === false) return;
+    const eu = String(sessao.email || '').toLowerCase();
+    const f = ptNaFila().filter(x => !x.por || String(x.por).toLowerCase() === eu), par = f.filter(x => x.parado);
+    if (!f.length && !LS.get(K_PT_FILA, false)) return;   // nada na fila e nada contado antes: não grava linha à toa
+    const maisAntiga = L => L.reduce((a, x) => (x.em && (!a || x.em < a)) ? x.em : a, null);
+    const parAnt = maisAntiga(par), motivo = par.length ? ((par.find(x => x.em === parAnt) || par[0]).motivo || '') : '';
+    const sig = f.length + '|' + par.length + '|' + maisAntiga(f) + '|' + motivo;
+    if (sig === ptFilaUlt.sig && Date.now() - ptFilaUlt.t < 30 * 6e4) return;
+    ptFilaUlt = { t: Date.now(), sig };
+    let ap = LS.get(K_PT_AP, null);
+    if (!ap){ ap = 'cel-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10); LS.set(K_PT_AP, ap); }
+    rpc('tf_ponto_minha_fila', { p_aparelho: ap, p_pendentes: f.length, p_parados: par.length, p_mais_antiga: maisAntiga(f),
+        p_parada_mais_antiga: parAnt, p_motivo: motivo ? String(motivo).slice(0, 300) : null })
+      .then(() => LS.set(K_PT_FILA, f.length > 0)).catch(() => { ptFilaUlt = { t: 0, sig: '' }; });
+  }catch(e){}
+}
 /** S64 (issue 143): o tempo da batida repetida vem do parâmetro do escritório (1 a 15 min), não fixo. */
 const ptDupMinF = () => { const v = Number(((PONTO || {}).limites || {}).duplicada_min); return v >= 1 && v <= 15 ? v : 10; };
 const ptHojeIso = () => { const d = ptAgora(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
@@ -6630,6 +6656,7 @@ async function ptAbrirComprovante(nsr){
 // quando a fila sobe uma batida, o cartão relê o dia
 try{
   if (window.Nucleo && Nucleo.fila) Nucleo.fila.aoMudar(ev => {
+    setTimeout(ptContarFila, 0);   // S66 (issue 141, parte 2): a fila mudou (enviou, parou, descartou): conta ao escritório
     if (ev.tipo !== 'ponto' || ev.situacao !== 'enviado') return;
     ptRecarregar().then(() => { if (tela === 'eu') pintarEu(); });
   });
@@ -7087,9 +7114,19 @@ function desenharDiariasF(){
     }
     desenharDiariasF();
   }));
-  const irDia = d => { DIAR_DIA = d > hoje ? hoje : d; carregarDiarias().then(desenharDiariasF).catch(e => toast(e.message, 'err')); };
-  p.querySelector('#dAnt').addEventListener('click', () => irDia(somaDiaF(dia, -1)));
-  p.querySelector('#dPro').addEventListener('click', () => irDia(somaDiaF(dia, 1)));
+  // S66 (165, item 12): dois toques rápidos na seta voltam dois dias (a conta parte do dia que está carregando) e a tela
+  // mostra "Carregando…"; só a última resposta pinta (a de um toque anterior que chegue depois é ignorada).
+  const irDia = d => {
+    const alvo = DIAR_DIA = d > hoje ? hoje : d;
+    const lb = p.querySelector('.diaNav label span'); if (lb) lb.textContent = 'Carregando ' + dataBR(alvo).slice(0, 5) + '…';
+    const inp = p.querySelector('#dDia'); if (inp) inp.value = alvo;
+    p.querySelectorAll('.diaTog button').forEach(x => { x.disabled = true; x.style.opacity = '.5'; });
+    carregarDiarias(alvo).then(() => { if (DIAR_DIA === alvo) desenharDiariasF(); })
+      .catch(e => { if (DIAR_DIA === alvo){ toast(e.message, 'err'); DIAR_DIA = dia; desenharDiariasF(); } });
+  };
+  const diaBase = () => DIAR_DIA && DIAR_DIA !== dia ? DIAR_DIA : dia;
+  p.querySelector('#dAnt').addEventListener('click', () => irDia(somaDiaF(diaBase(), -1)));
+  p.querySelector('#dPro').addEventListener('click', () => irDia(somaDiaF(diaBase(), 1)));
   p.querySelector('#dDia').addEventListener('change', ev => { if (ev.target.value) irDia(ev.target.value); });
   // o mês
   const q = D.qtd || {};
@@ -7239,7 +7276,10 @@ async function pintarFeriasF(){
   document.getElementById('btnBack').hidden = true;
   document.getElementById('hTit').textContent = rec ? 'Folga e recesso' : 'Folga e férias';
   document.getElementById('hSub').textContent = (sessao.nome || '') + ' · ' + (rec ? 'folgas e recesso do estágio' : 'folgas e férias');
-  const m = document.getElementById('main'); m.innerHTML = '';
+  const m = document.getElementById('main');
+  // S66 (165, item 11): enquanto carrega, a tela diz e as abas do alto continuam (dá para sair)
+  m.innerHTML = '<p style="color:var(--ink-3);font-size:14px">Carregando…</p>';
+  abasTopo(m, 'fer');
   if (!DEMO){
     const [f, eq] = await Promise.all([rpc('tf_ferias_minhas', {}).catch(e => { toast(e.message, 'err'); return FER; }), carregarEquipeAus()]);
     FER = f; EQUIPE_AUS = eq;
