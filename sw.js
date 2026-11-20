@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H18-S203';   // S203: Rodada R10 da auditoria (contratos; issues 206, 111, 176 e 180): TapFlow S203, documentos.js D3
+const VERSAO = 'H18-S204';   // S204: Rodada R11 da auditoria (TapCRM e TapGestão; issues 127, 130–138; banco 312, 526, 702, 153): TapCRM CRM8, TapGestão GE5
+// const VERSAO = 'H18-S203';   // S203: Rodada R10 da auditoria (contratos; issues 206, 111, 176 e 180): TapFlow S203, documentos.js D3
 // const VERSAO = 'H18-S202';   // S202: Rodada R10 da auditoria (TapFlow celular; issues 106, 107, 177, 178 e 207; banco 311): núcleo N14, Field S67, TapFlow S202
 // const VERSAO = 'H18-S201';   // S201: Rodada R9 da auditoria (TapRH; issues 118, 120, 159, 160, 162, 163, 164, 165 e 141 parte 2; banco 618): TapRH RH20, Field S66
 // const VERSAO = 'H18-S200';   // S200: Rodada R8 da auditoria, parte 2 (cartões e canhoto; issues 185, 186 e 187): TapFin F28, Field S65

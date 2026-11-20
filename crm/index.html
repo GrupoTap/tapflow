@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapCRM 7 · Comercial</title>
+<title>TapCRM 8 · Comercial</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1131,6 +1131,7 @@ button.mini{padding:6px 12px;font-weight:600}
 .barraCom input{flex:1 1 240px;max-width:360px;font-family:inherit;font-size:13.5px;
   padding:8px 11px;border:1px solid var(--rule);border-radius:3px;background:var(--surface);color:var(--ink)}
 .resumoCom{font-size:13px;color:var(--ink-3);margin-left:auto;font-variant-numeric:tabular-nums}
+.resumoCom .resumoSub{font-size:11.5px;margin-left:6px;opacity:.85}
 .colCom{flex:0 0 268px;display:flex;flex-direction:column;min-height:0;height:100%}
 .colTit{display:flex;align-items:baseline;gap:8px;padding:0 2px 3px}
 .colTit b{font-size:13px;font-weight:700;letter-spacing:.01em}
@@ -1311,6 +1312,7 @@ button.mini{padding:6px 12px;font-weight:600}
 .mini.dsi.fucsia{background:#B3166F;color:#FFFFFF}
 .mini.ag{background:var(--gestao-soft);color:var(--gestao)}
 .mini.ct{background:var(--accent-soft);color:var(--accent)}
+.mini.resp{background:var(--paper-2,#f1f1f1);color:var(--ink-2,#333);font-weight:700;letter-spacing:.04em}
 
 /* log do card */
 .novaNota{background:var(--surface-2);border-radius:3px;padding:11px;margin-bottom:16px}
@@ -1337,6 +1339,10 @@ button.mini{padding:6px 12px;font-weight:600}
 .tarefaC b{display:block;font-size:14px;font-weight:600}
 .tarefaC small{display:block;font-size:12px;color:var(--ink-3);margin-top:2px;line-height:1.35}
 .tarefaC .ck{font-size:11.5px;color:var(--ink-3);margin-top:4px}
+.tarefaC .ckI{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--ink-2,#333);margin-top:3px}
+.tarefaC .tcBtns{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.tarefaC.cancelada b{text-decoration:line-through}
+.tarefaC .tcCan{color:var(--crit)}
 .mk input{width:18px;height:18px}
 .agItem{padding:10px 11px;border:1px solid var(--rule);border-radius:3px;margin-bottom:6px;background:var(--surface)}
 .agItem b{display:block;font-size:13.5px;font-weight:600}
@@ -2096,6 +2102,7 @@ th.num .tfThFixo{text-align:right}
 .apoioLista{display:grid;gap:2px;max-height:220px;overflow-y:auto}
 .apoioOpc{padding:4px 8px}
 .agItem .agQuem{display:block;color:var(--ink-3)}
+.agItem .agBtns{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 /* S36: grupo de caixas/rádios FORA de .campo — lá dentro o rótulo vira caixa
    alta e a caixinha ganha 100% de largura, e a lista saía desmontada */
 .grupoOpc{border:0;padding:0;margin:0 0 12px;min-width:0}
@@ -2349,6 +2356,7 @@ th.num .tfThFixo{text-align:right}
       <div class="num mono" id="dNum"></div>
       <h2 id="dCli"></h2>
       <div class="sub" id="dSub"></div>
+      <div class="sub dResp" id="dResp"></div>
     </div>
     <button class="x" id="dClose" aria-label="Fechar">×</button>
   </div>
@@ -2395,7 +2403,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'CRM7';   // TapCRM 7 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 126 (o motivo de trocar/desligar o cliente vai para o histórico) e 128 (textos, situação da proposta com o nome que se lê, o exemplo sem empresa de verdade, Sair pela janela); propostas.js PR2; núcleo N13
+const APP_VERSION = 'CRM8';   // TapCRM 8 (S204): Rodada R11 da auditoria — issues 127 (remarcar e cancelar a visita), 130 (a tarefa: responsável da equipe, itens, editar, cancelar), 131 (o total "em jogo"), 132 (o rascunho da proposta em montagem) e 133 (responsável do negócio, contato do lead); banco 702
+// const APP_VERSION = 'CRM7';   // TapCRM 7 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 126 (o motivo de trocar/desligar o cliente vai para o histórico) e 128 (textos, situação da proposta com o nome que se lê, o exemplo sem empresa de verdade, Sair pela janela); propostas.js PR2; núcleo N13
 // const APP_VERSION = 'CRM6';   // TapCRM 6 (S159): issue 11 — com proposta aprovada esperando OS, a aba Ações não abre OS (manda para a aba Proposta); o banco (701) também recusa
 // const APP_VERSION = 'CRM5';   // TapCRM 5 (S139): item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
 // const APP_VERSION = 'CRM4';   // TapCRM 4 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
@@ -2758,10 +2767,23 @@ function desenharCom(){
     && (!fil || fil.has(String(n.id))));
   pintarFiltrosCom();
   LEAD_SC_DESENHADO = chaveLeadSC();   // S50 · item 3
-  const total = vis.reduce((s,n) => s + Number(n.valor_propostas || n.valor_estimado || 0), 0);
-  document.getElementById('cResumo').textContent =
-    vis.length + (busca && vis.length !== negocios.length ? ' de ' + negocios.length : '')
-    + ' negócio(s) · ' + BRL(total) + ' em jogo';
+  // CRM8 (S204, issue 131): uma conta só, a mesma das colunas (valorDoCard). "Em jogo" = só as colunas em
+  // negociação (de Leads até Proposta enviada); aprovado (aprovadas, em entrega, concluídos) e recusado à parte.
+  const ordCol = {}; COLS_COM.forEach(c => { ordCol[c.nome] = Number(c.ordem); });
+  const tot = { jogo:0, aprovado:0, recusado:0 };
+  vis.forEach(n => {
+    const v = valorDoCard(n).v || 0;
+    if (n.coluna === 'Recusadas') tot.recusado += v;
+    else if ((ordCol[n.coluna] != null ? ordCol[n.coluna] : 75) < 60) tot.jogo += v;
+    else tot.aprovado += v;
+  });
+  const cr = document.getElementById('cResumo');
+  cr.innerHTML = esc(vis.length + (busca && vis.length !== negocios.length ? ' de ' + negocios.length : '')
+    + ' negócio(s) · ' + BRL(tot.jogo) + ' em jogo')
+    + ' <small class="resumoSub">aprovado: ' + esc(BRL(tot.aprovado)) + ' · recusado: ' + esc(BRL(tot.recusado)) + '</small>';
+  cr.title = 'Em jogo = a soma das colunas de Leads até Proposta enviada (o valor das propostas; sem proposta, o estimado). '
+    + 'Aprovado = Aprovadas, entrega e Concluídos. Recusado = Recusadas. É a mesma conta do total de cada coluna'
+    + ((BUSCA.com || FILTRO_COM.size) ? ' · só os cards visíveis (há busca ou filtro ligado)' : '') + '.';
   const nc = document.getElementById('nCom');
   if (nc && !aplicarPendencias()) nc.textContent = negocios.length || '';
 
@@ -2825,6 +2847,13 @@ function desenharCom(){
 const _LOGOS = new Map();
 
 let _logosPedindo = false;
+
+// CRM8 (S204): as iniciais de uma pessoa ("Maria da Silva" → "MS")
+function iniciaisPessoa(nome){
+  const p = String(nome || '?').trim().split(/\s+/).filter(x => x.length > 2 || /^[A-ZÀ-Ú]/.test(x));
+  const a = (p[0] || '?')[0], b = p.length > 1 ? p[p.length - 1][0] : '';
+  return (a + b).toUpperCase();
+}
 
 function iniciaisCliente(nome){
   const partes = String(nome||'?').replace(/[^\p{L}\p{N}\s]/gu,' ').trim().split(/\s+/)
@@ -3149,6 +3178,9 @@ function cardNegocio(n, comContador){
   else if (n.tarefas_abertas) chips.push('<span class="mini">' + n.tarefas_abertas + ' tarefa(s)</span>');
   if (n.proxima_agenda) chips.push('<span class="mini ag">' + dataCurta(n.proxima_agenda) + '</span>');
   if (n.e_contrato) chips.push('<span class="mini ct">contrato</span>');
+  // CRM8 (S204, issue 133): de quem é o negócio, nas iniciais (o nome inteiro no title)
+  { const rn = NOMES[n.responsavel_id];
+    if (rn) chips.push('<span class="mini resp" title="Responsável: ' + esc(rn) + '">' + esc(iniciaisPessoa(rn)) + '</span>'); }
 
   if (Number(n.propostas_numeros) > 1)
     chips.push('<span class="mini">' + n.propostas_numeros + ' propostas</span>');
@@ -3191,6 +3223,39 @@ function cardNegocio(n, comContador){
   return d;
 }
 
+// CRM8 (S204, issue 133): de quem é o negócio, e trocar (fica no histórico)
+function pintarResponsavel(n){
+  const el = document.getElementById('dResp');
+  if (!el) return;
+  const nome = NOMES[n.responsavel_id];
+  el.innerHTML = 'Responsável: <b>' + esc(nome || 'ninguém') + '</b>'
+    + (podeEscritorio() && !DEMO ? ' · <button class="lnk" type="button" id="dRespTroca">trocar</button>' : '');
+  const b = document.getElementById('dRespTroca');
+  if (b) b.addEventListener('click', () => modalResponsavelNegocio(n));
+}
+
+function modalResponsavelNegocio(n){
+  const lista = (EQUIPE || []).filter(u => u.executa_em !== 'campo' || String(u.id) === String(n.responsavel_id));
+  abrirModal('Trocar o responsável',
+      '<div class="campo"><label for="mrN">Quem cuida deste negócio</label><select id="mrN">'
+    + lista.map(u => '<option value="' + esc(u.id) + '"' + (String(u.id) === String(n.responsavel_id) ? ' selected' : '') + '>'
+        + esc(u.nome) + '</option>').join('') + '</select></div>'
+    + '<p class="nota">O filtro "Meus negócios" passa a mostrar este negócio para a pessoa escolhida. A troca fica no histórico e não move o card.</p>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Trocar', pri:true, onClick: async () => {
+        const novo = document.getElementById('mrN').value;
+        if (!novo){ Nucleo.janela.erro('Escolha uma pessoa.'); return; }
+        try{
+          const r = await rpc('tf_negocio_responsavel', { p_negocio_id: n.id, p_responsavel_id: novo });
+          fecharModal();
+          toast(r && r.status === 'sem_mudanca' ? 'Nada mudou.' : 'Responsável: ' + ((r && r.nome) || NOMES[novo] || '') + '.', 'ok');
+          await pintarComercial();
+          const at = (negocios || []).find(x => x.id === n.id);
+          if (at) abrirNegocio(at);
+        }catch(e){ Nucleo.janela.erro(e.message || 'Não consegui trocar.'); }
+     }}]);
+}
+
 const dataCurta = s => {
   try{ return new Date(s).toLocaleDateString('pt-BR',{day:'2-digit',month:'short'}); }
   catch(e){ return ''; }
@@ -3203,6 +3268,7 @@ async function abrirNegocio(n){
   document.getElementById('dSub').textContent = n.coluna
     + (n.numero_exibicao && n.numero_exibicao !== n.numero ? ' · ' + n.numero : '')
     + (n.dias_parado && colunaComContador(n.coluna) ? ' · ' + n.dias_parado + ' dia(s) sem interação' : '');
+  pintarResponsavel(n);
   document.getElementById('drawer').classList.add('on');
   document.getElementById('scrim').classList.add('on');
   document.getElementById('dTabs').innerHTML =
@@ -3365,70 +3431,138 @@ async function negTarefas(n, b){
   if (!itens.length) L.innerHTML = '<p class="nota">Nenhuma tarefa. É aqui que entra o '
     + '“ligar na quinta”, com prazo e responsável — em vez de ficar num bilhete.</p>';
 
+  // CRM8 (S204, issue 130): o responsável na linha, cada item da lista se marca, "editar" e "cancelar tarefa"
+  const pode = podeEscritorio() && !DEMO;
   itens.forEach(t => {
+    const cancelada = !!t.cancelada_em;
     const el = document.createElement('div');
-    el.className = 'tarefaC' + (t.concluida_em ? ' feita' : '')
+    el.className = 'tarefaC' + (t.concluida_em ? ' feita' : '') + (cancelada ? ' cancelada' : '')
       + (!t.concluida_em && t.prazo && t.prazo < isoHoje() ? ' atrasada' : '');
-    const ck = (t.checklist||[]);
-    const feitos = ck.filter(x => x.ok).length;
-    el.innerHTML = '<label class="mk"><input type="checkbox"' + (t.concluida_em?' checked':'') + '></label>'
-      + '<div><b></b><small></small>'
-      + (ck.length ? '<div class="ck">' + feitos + ' de ' + ck.length + ' item(ns)</div>' : '')
+    const ck = Array.isArray(t.checklist) ? t.checklist : [];
+    const feitos = ck.filter(x => x && x.ok).length;
+    el.innerHTML = '<label class="mk">' + (cancelada ? '' : '<input type="checkbox" class="tcFeita" aria-label="Concluir a tarefa"'
+        + (t.concluida_em ? ' checked' : '') + (pode ? '' : ' disabled') + '>') + '</label>'
+      + '<div><b></b><small class="tcLin"></small>'
+      + (cancelada ? '<small class="tcCan"></small>' : '')
+      + (ck.length ? '<div class="ck"><span class="ckN">' + feitos + ' de ' + ck.length + ' item(ns)</span>'
+          + ck.map((x, k) => '<label class="ckI"><input type="checkbox" data-k="' + k + '"' + (x && x.ok ? ' checked' : '')
+              + (cancelada || !pode ? ' disabled' : '') + '> <span></span></label>').join('') + '</div>' : '')
+      + (pode && !cancelada ? '<div class="tcBtns"><button class="btn mini tcEd" type="button">editar</button>'
+          + '<button class="btn mini tcCa" type="button">cancelar tarefa</button></div>' : '')
       + '</div>';
     el.querySelector('b').textContent = t.titulo;
-    el.querySelector('small').textContent =
+    el.querySelector('.tcLin').textContent =
       (t.prazo ? 'até ' + new Date(t.prazo+'T12:00').toLocaleDateString('pt-BR') : 'sem prazo')
+      + ' · ' + (NOMES[t.responsavel_id] ? 'responsável: ' + NOMES[t.responsavel_id] : 'sem responsável')
       + (t.descricao ? ' · ' + t.descricao : '');
-    el.querySelector('input').addEventListener('change', async (ev) => {
+    if (cancelada) el.querySelector('.tcCan').textContent = 'Cancelada em '
+      + new Date(t.cancelada_em).toLocaleDateString('pt-BR') + (NOMES[t.cancelada_por] ? ' por ' + NOMES[t.cancelada_por] : '')
+      + (t.cancelada_motivo ? ': ' + t.cancelada_motivo : '');
+    el.querySelectorAll('.ckI span').forEach((sp, k) => { sp.textContent = (ck[k] && ck[k].t) || ''; });
+    const cbF = el.querySelector('.tcFeita');
+    if (cbF) cbF.addEventListener('change', async (ev) => {
       try{
         if (!DEMO) await rpc('tf_concluir_tarefa_comercial', { p_id:t.id, p_concluir: ev.target.checked });
         toast(ev.target.checked ? 'Tarefa concluída.' : 'Tarefa reaberta.','ok');
         pintarNeg();
       }catch(err){ toast(err.message,'err'); ev.target.checked = !ev.target.checked; }
     });
+    el.querySelectorAll('.ckI input').forEach(cb => cb.addEventListener('change', async (ev) => {
+      const k = Number(cb.dataset.k);
+      cb.disabled = true;
+      try{
+        const r = await rpc('tf_tarefa_comercial_item', { p_id:t.id, p_item:k, p_ok: ev.target.checked });
+        if (ck[k]) ck[k].ok = ev.target.checked;
+        const nEl = el.querySelector('.ckN');
+        if (nEl && r) nEl.textContent = r.feitos + ' de ' + r.total + ' item(ns)';
+      }catch(err){ toast(err.message,'err'); ev.target.checked = !ev.target.checked; }
+      cb.disabled = false;
+    }));
+    const bEd = el.querySelector('.tcEd');
+    if (bEd) bEd.addEventListener('click', () => formTarefa(n, t));
+    const bCa = el.querySelector('.tcCa');
+    if (bCa) bCa.addEventListener('click', () => cancelarTarefaCom(n, t));
     L.appendChild(el);
   });
 
   document.getElementById('tcNova').addEventListener('click', () => formTarefa(n));
 }
 
-function formTarefa(n){
+async function cancelarTarefaCom(n, t){
+  const ok = await confirmar('Cancelar a tarefa?',
+      '<p><b>' + esc(t.titulo) + '</b></p><p>Ela sai das tarefas abertas do negócio. O cancelamento fica no histórico.</p>'
+    + '<div class="campo"><label for="ctMot">Motivo</label><input id="ctMot" type="text" maxlength="300" placeholder="Ex.: o cliente já respondeu por e-mail"></div>',
+    'Cancelar a tarefa', true, { campo:'ctMot', obrigatorio:'Escreva o motivo do cancelamento.', minimo:5 });
+  if (!ok) return;
+  try{
+    await rpc('tf_tarefa_comercial_cancelar', { p_id:t.id, p_motivo: ok.texto });
+    toast('Tarefa cancelada.', 'ok');
+    await pintarComercial();
+    const at = negocios.find(x => x.id === n.id);
+    if (at){ negAberto = at; abaNeg = 'tarefas'; pintarNeg(); }
+  }catch(e){ toast(e.message || 'Não consegui cancelar.', 'err'); }
+}
+
+// Nova tarefa (t vazio) ou editar a tarefa t. O responsável vem da equipe (a mesma da visita),
+// começando por quem está criando.
+function formTarefa(n, t){
+  const ed = !!t;
   const b = document.getElementById('dBody');
-  b.innerHTML = '<h4 class="secTit" style="margin-top:0">Nova tarefa</h4>'
+  b.innerHTML = '<h4 class="secTit" style="margin-top:0">' + (ed ? 'Editar a tarefa' : 'Nova tarefa') + '</h4>'
     + '<div class="campo"><label for="tcT">Título</label><input id="tcT" type="text" '
     +   'placeholder="Ex.: cobrar o pedido do fornecedor"></div>'
     + '<div class="campo"><label for="tcD">Descrição</label><input id="tcD" type="text"></div>'
     + '<div class="dupla"><div class="campo"><label for="tcP">Prazo</label>'
     +   '<input id="tcP" type="date"></div>'
     + '<div class="campo"><label for="tcR">Responsável</label><select id="tcR"></select></div></div>'
-    + '<div class="campo"><label for="tcC">Lista de verificação</label>'
-    +   '<input id="tcC" type="text" placeholder="um item por linha, separado por ; "></div>'
-    + '<div class="linhaBtns"><button class="btn pri" id="tcOk">Criar</button>'
+    + (ed ? '' : '<div class="campo"><label for="tcC">Lista de verificação</label>'
+    +   '<input id="tcC" type="text" placeholder="Ex.: ligar; mandar o e-mail; anotar a resposta">'
+    +   '<small class="nota">Separe os itens com ponto e vírgula (;).</small></div>')
+    + '<div class="linhaBtns"><button class="btn pri" id="tcOk">' + (ed ? 'Gravar' : 'Criar') + '</button>'
     +   '<button class="btn" id="tcCa">Cancelar</button></div>';
 
   const sel = document.getElementById('tcR');
-  (window.USUARIOS || [{id:sessao.id,nome:sessao.nome}]).forEach(u => {
-    const o = document.createElement('option'); o.value = u.id; o.textContent = u.nome;
+  const eu = String(meuId() || '');
+  const atual = ed ? String(t.responsavel_id || '') : eu;
+  const lista = (EQUIPE || []).slice()
+    .filter(u => u.executa_em !== 'campo' || String(u.id) === atual)
+    .sort((a, b) => (String(b.id) === eu) - (String(a.id) === eu));
+  if (atual && !lista.some(u => String(u.id) === atual) && NOMES[atual]) lista.unshift({ id: atual, nome: NOMES[atual] });
+  lista.forEach(u => {
+    const o = document.createElement('option'); o.value = u.id;
+    o.textContent = u.nome + (String(u.id) === eu ? ' (você)' : '');
+    if (String(u.id) === atual) o.selected = true;
     sel.appendChild(o);
   });
+  if (ed){
+    document.getElementById('tcT').value = t.titulo || '';
+    document.getElementById('tcD').value = t.descricao || '';
+    document.getElementById('tcP').value = t.prazo || '';
+  }
 
-  document.getElementById('tcCa').addEventListener('click', pintarNeg);
-  document.getElementById('tcOk').addEventListener('click', async (e) => {
-    const t = document.getElementById('tcT').value.trim();
-    if (!t){ toast('A tarefa precisa de um título.','err'); return; }
-    e.target.disabled = true;
-    const ck = document.getElementById('tcC').value.split(';')
-      .map(s => s.trim()).filter(Boolean).map(s => ({t:s, ok:false}));
+  document.getElementById('tcCa').addEventListener('click', () => { abaNeg = 'tarefas'; pintarNeg(); });
+  document.getElementById('tcOk').addEventListener('click', (e) => _semDuploEnvio_(e.currentTarget, async () => {
+    const tit = document.getElementById('tcT').value.trim();
+    if (!tit){ toast('A tarefa precisa de um título.','err'); return; }
+    const resp = sel.value || null;
+    if (!resp){ toast('Escolha o responsável.','err'); return; }
+    const ckEl = document.getElementById('tcC');
+    const ck = ckEl ? ckEl.value.split(';').map(x => x.trim()).filter(Boolean).map(x => ({t:x, ok:false})) : null;
     try{
       if (!DEMO) await rpc('tf_salvar_tarefa_comercial', {
-        p_negocio_id: n.id, p_titulo: t,
+        p_id: ed ? t.id : null,
+        p_negocio_id: ed ? null : n.id, p_titulo: tit,
         p_descricao: document.getElementById('tcD').value.trim() || null,
         p_prazo: document.getElementById('tcP').value || null,
-        p_responsavel_id: sel.value || null,
+        p_responsavel_id: resp,
         p_checklist: ck });
-      toast('Tarefa criada.','ok'); abaNeg = 'tarefas'; pintarNeg();
-    }catch(err){ toast(err.message,'err'); e.target.disabled = false; }
-  });
+      toast(ed ? 'Tarefa gravada.' : 'Tarefa criada.','ok');
+      await pintarComercial();
+      const at = negocios.find(x => x.id === n.id);
+      if (at) negAberto = at;
+      abaNeg = 'tarefas'; pintarNeg();
+    }catch(err){ toast(err.message,'err'); }
+  }));
 }
 
 function campoDuracaoVisita(id, valor){
@@ -3491,8 +3625,11 @@ async function negAgenda(n, b){
   itens.forEach(a => {
     const el = document.createElement('div');
     el.className = 'agItem';
+    // CRM8 (S204, issue 127): remarcar e cancelar a visita (as duas ficam no histórico do negócio)
     el.innerHTML = '<b></b><small></small><small class="agQuem"></small>'
-      + (podeEscritorio() && !DEMO ? '<button class="btn mini" type="button">quem vai</button>' : '');
+      + (podeEscritorio() && !DEMO ? '<div class="agBtns"><button class="btn mini agPes" type="button">quem vai</button>'
+          + '<button class="btn mini agRem" type="button">remarcar</button>'
+          + '<button class="btn mini agCan" type="button">cancelar</button></div>' : '');
     el.querySelector('b').textContent = a.titulo;
     const fimTxt = a.fim ? ' até ' + new Date(a.fim).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
     el.querySelectorAll('small')[0].textContent =
@@ -3501,8 +3638,12 @@ async function negAgenda(n, b){
     const nomes = (a.responsaveis || []).map(id => NOMES[id] || '?');
     el.querySelector('.agQuem').textContent = nomes.length ? 'Vão: ' + nomes.join(', ')
       : 'Ninguém marcado — não aparece na agenda de ninguém';
-    const bt = el.querySelector('button');
+    const bt = el.querySelector('.agPes');
     if (bt) bt.addEventListener('click', () => modalPessoasVisita(a, n));
+    const br = el.querySelector('.agRem');
+    if (br) br.addEventListener('click', () => modalRemarcarVisita(a, n));
+    const bc = el.querySelector('.agCan');
+    if (bc) bc.addEventListener('click', () => cancelarVisita(a, n));
     L.appendChild(el);
   });
 
@@ -3534,6 +3675,63 @@ async function negAgenda(n, b){
       if (at){ negAberto = at; pintarNeg(); }
     }catch(err){ toast(err.message,'err'); e.target.disabled = false; }
   });
+}
+
+// o "datetime-local" quer a hora do aparelho, sem fuso: "2026-11-20T09:30"
+function paraDataHoraLocal(iso){
+  const d = new Date(iso); if (isNaN(d)) return '';
+  const z = x => String(x).padStart(2, '0');
+  return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()) + 'T' + z(d.getHours()) + ':' + z(d.getMinutes());
+}
+
+async function visitaMudou(n){
+  AGENDA.chave = null;   // a Agenda da equipe precisa ler de novo
+  await pintarComercial();
+  const at = negocios.find(x => x.id === n.id);
+  if (at){ negAberto = at; pintarNeg(); }
+}
+
+function modalRemarcarVisita(a, n){
+  const durAtual = a.fim ? Math.round((new Date(a.fim) - new Date(a.inicio)) / 60000) : 60;
+  abrirModal('Remarcar · ' + a.titulo,
+      '<div class="dupla"><div class="campo"><label for="rvD">Nova data e hora</label>'
+    + '<input id="rvD" type="datetime-local" value="' + esc(paraDataHoraLocal(a.inicio)) + '"></div>'
+    + campoDuracaoVisita('rvDur', durAtual) + '</div>'
+    + '<p class="nota">Quem vai continua o mesmo. Se alguém já tiver compromisso no novo horário, o sistema avisa (não impede). A mudança fica no histórico do negócio.</p>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Remarcar', pri:true, onClick: async () => {
+        const q = document.getElementById('rvD').value;
+        if (!q){ Nucleo.janela.erro('Escolha a nova data e a hora.'); return; }
+        const dur = lerDuracaoVisita('rvDur');
+        if (dur === null) return;
+        const ini = new Date(q), fim = new Date(ini.getTime() + dur * 60000);
+        try{
+          const r = await rpc('tf_agendamento_remarcar', { p_id: a.id, p_inicio: ini.toISOString(), p_fim: fim.toISOString() });
+          fecharModal();
+          const c = (r && r.conflitos) || [];
+          const quemChoca = [...new Set(c.map(x => x.quem).filter(Boolean))].join(', ');
+          toast(r && r.status === 'sem_mudanca' ? 'Nada mudou.'
+            : c.length ? 'Remarcada — atenção: ' + (quemChoca || 'alguém') + ' já tem compromisso nesse horário.' : 'Visita remarcada.',
+            c.length ? 'err' : 'ok');
+          await visitaMudou(n);
+        }catch(e){ Nucleo.janela.erro(e.message || 'Não consegui remarcar.'); }
+     }}]);
+  ligarDuracaoVisita('rvDur');
+}
+
+async function cancelarVisita(a, n){
+  const quando = new Date(a.inicio).toLocaleString('pt-BR', { weekday:'short', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+  const ok = await confirmar('Cancelar a visita?',
+      '<p><b>' + esc(a.titulo) + '</b> · ' + esc(quando) + '</p>'
+    + '<p>A visita sai da Agenda de todos e deixa de segurar o card em "Visita agendada". O cancelamento fica no histórico do negócio.</p>'
+    + '<div class="campo"><label for="cvMot">Motivo</label><input id="cvMot" type="text" maxlength="300" placeholder="Ex.: o cliente pediu para mudar a semana"></div>',
+    'Cancelar a visita', true, { campo:'cvMot', obrigatorio:'Escreva o motivo do cancelamento.', minimo:5 });
+  if (!ok) return;
+  try{
+    await rpc('tf_agendamento_cancelar', { p_id: a.id, p_motivo: ok.texto });
+    toast('Visita cancelada.', 'ok');
+    await visitaMudou(n);
+  }catch(e){ toast(e.message || 'Não consegui cancelar.', 'err'); }
 }
 
 function modalPessoasVisita(a, n){
@@ -3569,6 +3767,71 @@ function vistaProp(){ try{ return localStorage.getItem(_kVistaProp()) === 'clien
 function guardarVistaProp(v){ try{ localStorage.setItem(_kVistaProp(), v); }catch(e){} }
 
 let _propLimpa = false;
+
+/* CRM8 (S204, issue 132): a proposta em montagem não se perde ao trocar de aba, fechar a ficha ou recarregar.
+   O rascunho fica neste navegador, por pessoa e por negócio (as linhas, o número e a validade), e some ao
+   registrar (ou ao descartar). Tem preço: não sai do aparelho e vence em 30 dias. */
+let _propNegId = null, _propBase = '[]', _propRascPend = false;
+const _kRascProp = id => 'tf_prop_rascunho:' + (sessao.email || '') + ':' + id;
+function lerRascProp(id){
+  try{
+    const r = JSON.parse(localStorage.getItem(_kRascProp(id)) || 'null');
+    if (!r || !Array.isArray(r.itens)) return null;
+    if (Date.now() - Number(r.em || 0) > 30 * 86400000){ localStorage.removeItem(_kRascProp(id)); return null; }
+    return r;
+  }catch(e){ return null; }
+}
+function apagarRascProp(id){ try{ localStorage.removeItem(_kRascProp(id)); }catch(e){} }
+function _propCampo(id){ const x = document.getElementById(id); return x ? x.value.trim() : ''; }
+// mexeu = as linhas não são as que abriram, ou digitou número/validade
+function propMexida(){
+  if (!_propNegId) return false;
+  return JSON.stringify(_propItens) !== _propBase || !!_propCampo('npNum') || !!_propCampo('npVal');
+}
+function guardarRascProp(){
+  if (!_propNegId || _propRascPend || !podeEditarPropostaNeg()) return;
+  if (!propMexida()){ apagarRascProp(_propNegId); return; }
+  try{ localStorage.setItem(_kRascProp(_propNegId), JSON.stringify({ itens:_propItens, num:_propCampo('npNum'),
+    val:_propCampo('npVal'), em:Date.now() })); }catch(e){ /* sem espaço: segue só na memória */ }
+}
+function oferecerRascProp(n, alvo){
+  const r = lerRascProp(n.id);
+  if (!r || (JSON.stringify(r.itens) === _propBase && !r.num && !r.val)) return;
+  _propRascPend = true;
+  const quando = new Date(Number(r.em)).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+  const av = document.createElement('div');
+  av.className = 'aviso lembra'; av.id = 'npRasc';
+  av.innerHTML = '<b>Você tinha uma proposta em montagem</b> (' + r.itens.length + ' linha(s), guardada em ' + esc(quando)
+    + '), ainda não registrada. Continuar de onde parou ou descartar?'
+    + '<div class="linhaBtns" style="margin-top:8px"><button class="btn pri mini" type="button" id="npRascSim">Continuar</button>'
+    + '<button class="btn mini" type="button" id="npRascNao">Descartar</button></div>';
+  alvo.insertBefore(av, alvo.firstChild);
+  document.getElementById('npRascSim').addEventListener('click', () => {
+    _propRascPend = false; av.remove();
+    _propItens = r.itens;
+    const nn = document.getElementById('npNum'), vv = document.getElementById('npVal');
+    if (nn && r.num) nn.value = r.num;
+    if (vv && r.val) vv.value = r.val;
+    pintarItensProposta();
+    toast('A proposta em montagem voltou. Nada foi registrado ainda.', 'ok');
+  });
+  document.getElementById('npRascNao').addEventListener('click', () => {
+    _propRascPend = false; av.remove(); apagarRascProp(n.id);
+    toast('Rascunho descartado.', 'ok');
+  });
+}
+// fechar a ficha (X, fora ou Esc) com linhas não registradas pergunta antes
+async function fecharDrawerPerguntando(){
+  const aberta = document.getElementById('drawer').classList.contains('on');
+  if (aberta && abaNeg === 'proposta' && negAberto && negAberto.id === _propNegId && !_propRascPend && propMexida()){
+    guardarRascProp();
+    const ok = await confirmar('Fechar com a proposta sem registrar?',
+      '<p>A proposta em montagem <b>ainda não foi registrada</b>. Ela fica guardada neste navegador e volta quando você abrir a aba Proposta deste negócio.</p>',
+      'Fechar a ficha');
+    if (!ok) return;
+  }
+  fecharDrawer();
+}
 
 async function negPropostas(n, b){
   b.innerHTML = '<p class="nota">Carregando…</p>';
@@ -3976,6 +4239,7 @@ async function montarProposta(n, props){
   const alvo = document.getElementById('npMonta');
   if (!alvo) return;
   _propItens = [];
+  _propNegId = null; _propRascPend = false;
 
   if (!n.cliente_id){
     // A instrução antiga aqui mandava fazer o que não existia ("cadastre em
@@ -4026,6 +4290,7 @@ async function montarProposta(n, props){
     }
   }
   _propLimpa = false;
+  _propNegId = n.id; _propBase = JSON.stringify(_propItens);   // CRM8: o que abriu (o rascunho só guarda o que mudou)
 
   // S104: a montagem (equipamentos, acrescentar, número, validade, Registrar)
   // fica em dois blocos, que somem para quem o banco recusa
@@ -4263,7 +4528,8 @@ async function montarProposta(n, props){
                : r.caso === 'versao_nova' ? 'registrada como versão nova — '
                : 'registrada — ')
               + BRL(r.valor_total) + '.','ok');
-        _propItens = [];
+        apagarRascProp(n.id);   // CRM8: registrou, o rascunho some
+        _propItens = []; _propNegId = null;
         negPropostas(n, document.getElementById('dBody'));
       }catch(e){ toast(e.message,'err'); }
     });
@@ -4279,6 +4545,9 @@ async function montarProposta(n, props){
     av.className = 'nota'; av.id = 'npSoLeitura';
     av.textContent = 'Só leitura: quem monta proposta é o comercial, compras, o técnico administrativo ou o admin.';
     alvo.insertBefore(av, alvo.firstChild);
+  } else {
+    oferecerRascProp(n, alvo);
+    ['npNum', 'npVal'].forEach(id => { const x = document.getElementById(id); if (x) x.addEventListener('input', guardarRascProp); });
   }
   pintarItensProposta();
 }
@@ -4362,6 +4631,7 @@ let _descNeg = null;
 function pintarItensProposta(){
   const el = document.getElementById('npLista');
   if (!el) return;
+  guardarRascProp();   // CRM8 (issue 132): toda mudança das linhas passa por aqui
   if (_descNeg) setTimeout(() => _descNeg && _descNeg.atualizar(), 0);
   // S103 · o seletor das vistas
   const vista = vistaProp();
@@ -4620,6 +4890,28 @@ function modalRenomearLead(n){
   if (inp){ inp.addEventListener('input', mostra); mostra(); inp.focus(); inp.select(); }
 }
 
+// CRM8 (S204, issue 133): contato, telefone e e-mail do lead (vai ao histórico; não move o card)
+function modalContatoLead(n){
+  abrirModal('Corrigir o contato do lead',
+      '<div class="campo"><label for="lcC">Contato</label><input id="lcC" type="text" autocomplete="off" name="lcc_nofill" value="' + esc(n.lead_contato || '') + '"></div>'
+    + '<div class="dupla"><div class="campo"><label for="lcT">Telefone</label><input id="lcT" type="text" autocomplete="off" name="lct_nofill" value="' + esc(n.lead_telefone || '') + '"></div>'
+    + '<div class="campo"><label for="lcE">E-mail</label><input id="lcE" type="email" autocomplete="off" name="lce_nofill" value="' + esc(n.lead_email || '') + '"></div></div>'
+    + '<p class="nota">Vale enquanto o negócio é lead. Depois de virar cliente, o contato é o do cadastro. A correção fica no histórico e não move o card.</p>',
+    [{ label:'Cancelar', onClick: fecharModal },
+     { label:'Gravar', pri:true, onClick: async () => {
+        try{
+          const r = await rpc('tf_negocio_corrigir_contato', { p_negocio_id: n.id,
+            p_contato: document.getElementById('lcC').value.trim() || null,
+            p_telefone: document.getElementById('lcT').value.trim() || null,
+            p_email: document.getElementById('lcE').value.trim() || null });
+          fecharModal(); toast(r && r.status === 'sem_mudanca' ? 'Nada mudou.' : 'Contato corrigido.', 'ok');
+          await pintarComercial();
+          const at = (negocios || []).find(x => x.id === n.id);
+          if (at) abrirNegocio(at);
+        }catch(e){ Nucleo.janela.erro(e.message || 'Não consegui gravar.'); }
+     }}]);
+}
+
 async function ligarClienteAoNegocio(n, clienteId){
   try{
     const r = await rpc('tf_negocio_ligar_cliente',
@@ -4718,10 +5010,13 @@ async function negCliente(n, b){
             + '<span>' + esc(n.lead_nome || '—') + '</span>'
             + '<button class="btn mini" type="button" id="lnEdit">corrigir nome</button></div></div>'
           : '')
-      + (n.lead_contato || n.lead_telefone || n.lead_email
+      + (n.lead_contato || n.lead_telefone || n.lead_email || (podeEscritorio() && !DEMO)
           ? '<div class="blocoLocal"><div class="lin"><span class="rot">Contato</span><span>'
-            + esc([n.lead_contato, n.lead_telefone, n.lead_email].filter(Boolean).join(' · '))
-            + '</span></div></div>'
+            + esc([n.lead_contato, n.lead_telefone, n.lead_email].filter(Boolean).join(' · ') || '—')
+            + '</span>'
+            // CRM8 (S204, issue 133): o contato digitado errado na criação se corrige enquanto é lead
+            + (podeEscritorio() && !DEMO ? '<button class="btn mini" type="button" id="lcEdit">corrigir contato</button>' : '')
+            + '</div></div>'
           : '')
       + '<div class="secTit">Virar cliente</div>'
       + '<p class="nota">Cria o cadastro com o que já está aqui. O contato vira o '
@@ -4753,6 +5048,8 @@ async function negCliente(n, b){
     });
     const lnEdit = document.getElementById('lnEdit');
     if (lnEdit) lnEdit.addEventListener('click', () => modalRenomearLead(n));
+    const lcEdit = document.getElementById('lcEdit');
+    if (lcEdit) lcEdit.addEventListener('click', () => modalContatoLead(n));
 
     // busca com o mesmo debounce das outras listas
     let t = null;
@@ -5179,7 +5476,9 @@ async function formNegocio(){
     +   '<input id="nnN" type="text" placeholder="empresa ou pessoa"></div>'
     + '<div class="dupla"><div class="campo"><label for="nnCt">Contato</label>'
     +   '<input id="nnCt" type="text"></div>'
-    + '<div class="campo"><label for="nnTe">Telefone</label><input id="nnTe" type="text"></div></div></div>'
+    + '<div class="campo"><label for="nnTe">Telefone</label><input id="nnTe" type="text"></div></div>'
+    // CRM8 (S204, issue 133): o e-mail do lead também na criação
+    + '<div class="campo"><label for="nnEm">E-mail</label><input id="nnEm" type="email" autocomplete="off" name="nnem_nofill"></div></div>'
     + '<div class="dupla"><div class="campo"><label for="nnO">Origem</label><select id="nnO">'
     +   '<option value="">—</option>'
     +   [['indicacao','Indicação'],['site','Site'],['feira','Feira'],
@@ -5217,6 +5516,7 @@ async function formNegocio(){
         p_lead_nome: document.getElementById('nnN').value.trim() || null,
         p_lead_contato: document.getElementById('nnCt').value.trim() || null,
         p_lead_telefone: document.getElementById('nnTe').value.trim() || null,
+        p_lead_email: document.getElementById('nnEm').value.trim() || null,
         p_origem: document.getElementById('nnO').value || null,
         p_valor_estimado: num === '' ? null : Number(num) }, extra));
       toast('Negócio ' + (r.numero||'') + ' criado.','ok');
@@ -5947,12 +6247,12 @@ document.addEventListener('keydown', e => {
   const a = document.activeElement;
   if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')
       && a.closest('#drawer')){ a.blur(); return; }
-  fecharDrawer();
+  fecharDrawerPerguntando();
 });
 document.getElementById('btnRefresh').addEventListener('click', () => irPara(visao));
 /* A gaveta do negócio (no Manager era a mesma da OS). */
-document.getElementById('dClose').addEventListener('click', fecharDrawer);
-document.getElementById('scrim').addEventListener('click', fecharDrawer);
+document.getElementById('dClose').addEventListener('click', fecharDrawerPerguntando);
+document.getElementById('scrim').addEventListener('click', fecharDrawerPerguntando);
 (function(){
   const b = document.getElementById('btnHub');
   if (!b || DEMO || !NO_SERVIDOR) return;
