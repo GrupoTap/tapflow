@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H18-S202';   // S202: Rodada R10 da auditoria (TapFlow celular; issues 106, 107, 177, 178 e 207; banco 311): núcleo N14, Field S67, TapFlow S202
+const VERSAO = 'H18-S203';   // S203: Rodada R10 da auditoria (contratos; issues 206, 111, 176 e 180): TapFlow S203, documentos.js D3
+// const VERSAO = 'H18-S202';   // S202: Rodada R10 da auditoria (TapFlow celular; issues 106, 107, 177, 178 e 207; banco 311): núcleo N14, Field S67, TapFlow S202
 // const VERSAO = 'H18-S201';   // S201: Rodada R9 da auditoria (TapRH; issues 118, 120, 159, 160, 162, 163, 164, 165 e 141 parte 2; banco 618): TapRH RH20, Field S66
 // const VERSAO = 'H18-S200';   // S200: Rodada R8 da auditoria, parte 2 (cartões e canhoto; issues 185, 186 e 187): TapFin F28, Field S65
 // const VERSAO = 'H18-S199';   // S199: Rodada R8 da auditoria, parte 1 (nota e boleto; issues 98, 181, 182, 183 e 184; banco 525): TapFin F27
@@ -112,7 +113,7 @@ const ESSENCIAIS = [
   // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo" (mesmo ?v= das páginas)
   './nucleo/modulos.js?v=M4',
   // S110 · o gerador de documentos (o Manager o pede com ?v=D1; o jszip e o pdfmake vêm sob demanda)
-  './nucleo/documentos.js?v=D2',
+  './nucleo/documentos.js?v=D3',
   './nucleo/fin-painel.js?v=FP2',   // S188 · os quadros do Painel do TapFin (TapFin e TapGestão)
   './nucleo/fin-painel.css?v=FP2',
   // S74 · TapFin: a página (S76 · TapFin 2: o plano B fin/util.js saiu)
