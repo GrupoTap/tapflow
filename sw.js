@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H18-S201';   // S201: Rodada R9 da auditoria (TapRH; issues 118, 120, 159, 160, 162, 163, 164, 165 e 141 parte 2; banco 618): TapRH RH20, Field S66
+const VERSAO = 'H18-S202';   // S202: Rodada R10 da auditoria (TapFlow celular; issues 106, 107, 177, 178 e 207; banco 311): núcleo N14, Field S67, TapFlow S202
+// const VERSAO = 'H18-S201';   // S201: Rodada R9 da auditoria (TapRH; issues 118, 120, 159, 160, 162, 163, 164, 165 e 141 parte 2; banco 618): TapRH RH20, Field S66
 // const VERSAO = 'H18-S200';   // S200: Rodada R8 da auditoria, parte 2 (cartões e canhoto; issues 185, 186 e 187): TapFin F28, Field S65
 // const VERSAO = 'H18-S199';   // S199: Rodada R8 da auditoria, parte 1 (nota e boleto; issues 98, 181, 182, 183 e 184; banco 525): TapFin F27
 // const VERSAO = 'H18-S198';   // S198: Rodada R7 da auditoria (TapFlow escritório) (issues 112, 170, 171, 172, 173 e 174; banco 310): TapFlow S198, TapRH RH19
@@ -105,9 +106,9 @@ const ESSENCIAIS = [
   // O núcleo comum. O endereço tem que ser IDÊNTICO ao do <script>, com o ?v=
   // (o cache compara a consulta inteira). Trocou o ?v= nas páginas? Troque aqui também.
   // S76: hub, Manager, Field e fin/ pedem todos ?v=N2 — saíram as linhas ?v=N1. S123: todos pedem ?v=N3 (Passkey 1). S124: ?v=N4. S131: ?v=N5 (IndexedDB do iPhone).
-  './nucleo/nucleo.js?v=N13',
-  './nucleo/nucleo.css?v=N13',
-  './nucleo/config.js?v=N13',
+  './nucleo/nucleo.js?v=N14',
+  './nucleo/nucleo.css?v=N14',
+  './nucleo/config.js?v=N14',
   // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo" (mesmo ?v= das páginas)
   './nucleo/modulos.js?v=M4',
   // S110 · o gerador de documentos (o Manager o pede com ?v=D1; o jszip e o pdfmake vêm sob demanda)
