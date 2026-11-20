@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H18-S200';   // S200: Rodada R8 da auditoria, parte 2 (cartões e canhoto; issues 185, 186 e 187): TapFin F28, Field S65
+const VERSAO = 'H18-S201';   // S201: Rodada R9 da auditoria (TapRH; issues 118, 120, 159, 160, 162, 163, 164, 165 e 141 parte 2; banco 618): TapRH RH20, Field S66
+// const VERSAO = 'H18-S200';   // S200: Rodada R8 da auditoria, parte 2 (cartões e canhoto; issues 185, 186 e 187): TapFin F28, Field S65
 // const VERSAO = 'H18-S199';   // S199: Rodada R8 da auditoria, parte 1 (nota e boleto; issues 98, 181, 182, 183 e 184; banco 525): TapFin F27
 // const VERSAO = 'H18-S198';   // S198: Rodada R7 da auditoria (TapFlow escritório) (issues 112, 170, 171, 172, 173 e 174; banco 310): TapFlow S198, TapRH RH19
 // const VERSAO = 'H18-S197';   // S197: Rodada R6 da auditoria (celular: ponto e diária; issues 140, 141, 143 e 166): Field S64 e TapRH 18
