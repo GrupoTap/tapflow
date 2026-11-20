@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S67-T51';   // S202: Field S67 e núcleo N14 (Rodada R10 da auditoria, TapFlow celular: issues 106, 107, 177, 178 e 207)
+const VERSAO = 'S68-T52';   // S205: Field S68 e núcleo N15 (Rodada R12 da auditoria, TapHub: o "Sair" do núcleo; issue 156)
+// const VERSAO = 'S67-T51';   // S202: Field S67 e núcleo N14 (Rodada R10 da auditoria, TapFlow celular: issues 106, 107, 177, 178 e 207)
 // const VERSAO = 'S66-T50';   // S201: Field S66 (Rodada R9 da auditoria, TapRH: issues 165 e 141 parte 2)
 // const VERSAO = 'S65-T49';   // S200: Field S65 (Rodada R8 da auditoria, cartões: o canhoto pela fila comum; issue 187)
 // const VERSAO = 'S64-T48';   // S197: Field S64 (Rodada R6 da auditoria: celular, ponto e diária; issues 140, 141, 143 e 166)
@@ -74,9 +75,9 @@ const ESSENCIAIS = [
   // IDÊNTICO ao do <script> do index.html, com o ?v= (c.match compara a consulta inteira).
   // Sem isto o Field sem sinal abriria sem o núcleo. Trocou o ?v= no index.html? Troque aqui também.
   // S34: N2 (fila de envios e utilitários)
-  '../nucleo/nucleo.js?v=N14',
-  '../nucleo/nucleo.css?v=N14',
-  '../nucleo/config.js?v=N14',
+  '../nucleo/nucleo.js?v=N15',
+  '../nucleo/nucleo.css?v=N15',
+  '../nucleo/config.js?v=N15',
   // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo"
   '../nucleo/modulos.js?v=M4',
   // S35 · TapDoc 1: a coleta da inspeção (página própria, abre sem sinal)

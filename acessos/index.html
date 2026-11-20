@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pessoas e acessos · A11</title>
+<title>Pessoas e acessos · A12</title>
 <meta name="theme-color" content="#0C1420">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22104%22 fill=%22%231B6FA9%22/%3E%3Ctext x=%22256%22 y=%22350%22 font-family=%22Arial,sans-serif%22 font-size=%22300%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EE%3C/text%3E%3C/svg%3E">
 <link rel="manifest" href="../manifest.webmanifest">
@@ -36,9 +36,9 @@
        "Desativar" (perda, roubo, quebra) e os pedidos para entrar. Mexer, só
        quem tem "Autoriza acesso"; ver, o admin.
      ════════════════════════════════════════════════════════════════════════ -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N14">
-<script src="../nucleo/config.js?v=N14"></script>
-<script src="../nucleo/nucleo.js?v=N14"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N15">
+<script src="../nucleo/config.js?v=N15"></script>
+<script src="../nucleo/nucleo.js?v=N15"></script>
 <script src="../nucleo/modulos.js?v=M4"></script>
 <style>
 :root{
@@ -137,7 +137,7 @@ tr.semmod td{background:#1E2232}
 <main>
   <h1>Pessoas e acessos</h1>
   <p class="sub">Quem tem o módulo entra e faz tudo nele; quem não tem nem vê o card. O <b>PLH</b> confere material, aprova o cálculo e decide a troca de material em campo. A coluna <b>Acesso</b> (autoriza acesso) libera a digital em aparelho novo e atende os pedidos de senha e PIN esquecidos. O <b>Admin</b> vem do perfil.</p>
-  <p class="etapa" id="etapa">Este quadro decide os cards do início, o menu "Trocar de módulo", as telas do TapFlow e quem entra no TapFin. <b>Ainda pela regra de hoje:</b> no TapDoc do escritório, as ações de conferência continuam com o admin, até a próxima rodada.</p>
+  <p class="etapa" id="etapa">Este quadro decide os cards do início, o menu "Trocar de módulo", as telas do TapFlow e quem entra no TapFin. No TapDoc, só a numeração dos laudos (Laudos › Configurar) continua do admin.</p>
 
   <div id="erroGeral" hidden></div>
 
@@ -157,12 +157,12 @@ tr.semmod td{background:#1E2232}
       <div class="cx"><table id="tPedidos"></table></div>
       <div id="provisorios"></div>
     </section>
-    <div class="barra">
+    <div class="barra" id="barraPessoas">
       <input type="search" id="filtro" placeholder="Procurar pessoa, e-mail ou perfil" aria-label="Procurar pessoa"><span class="porp" id="contagem"></span>
       <span style="margin-left:auto;display:flex;gap:8px"><button class="btn" type="button" id="btNovoPerfil">Novo perfil</button><button class="btn" type="button" id="btHist" aria-expanded="false">Ver histórico</button></span>
     </div>
-    <div class="cx"><table id="tPessoas"></table></div>
-    <p class="nota">Clique no <b>perfil</b> de uma pessoa para trocar o perfil dela ou editar o perfil (onde trabalha e se é admin). Pessoa nova nasce <b>sem módulos</b>: marque o que ela usa. Quem trabalha só em campo entra no Campo e no TapDoc do celular pela escala da OS, não por este quadro.</p>
+    <div class="cx" id="cxPessoas"><table id="tPessoas"></table></div>
+    <p class="nota" id="notaPessoas">Clique no <b>perfil</b> de uma pessoa para trocar o perfil dela ou editar o perfil (onde trabalha e se é admin). Pessoa nova nasce <b>sem módulos</b>: marque o que ela usa. Quem trabalha só em campo entra no Campo e no TapDoc do celular pela escala da OS, não por este quadro.</p>
 
     <!-- A7 · celulares da empresa (210) -->
     <section id="celulares">
@@ -189,7 +189,8 @@ tr.semmod td{background:#1E2232}
 
 <script>
 'use strict';
-const APP_VERSION = 'A11';   // A11 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 155 (o print do relato que não abre, sem "HTTP"); núcleo N13
+const APP_VERSION = 'A12';   // A12 (S205): Rodada R12 da auditoria (TapHub) — issues 151 (erro em vermelho, cliques rápidos em fila, a senha provisória que só fecha pelo botão, busca sem acento, textos, o código do perfil pelo nome, botões dos celulares sem clique duplo) e 152 (quem tem "Autoriza acesso" ou "Recebe relatos" sem ser admin vê a parte dele); os prints pelo Nucleo.storage.pedir; núcleo N15 (banco 216)
+// const APP_VERSION = 'A11';   // A11 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 155 (o print do relato que não abre, sem "HTTP"); núcleo N13
 // const APP_VERSION = 'A10';   // A10 (S156): issue 1 (passo 2) — o texto do topo diz "as telas do TapFlow" no lugar de "do Manager"
 // const APP_VERSION = 'A9';   // A9 (S144): a "Função no laudo" e o registro (CREA) de cada pessoa, que saem na seção 14 do laudo do TapDoc (item 71 da lista; 211)
 // const APP_VERSION = 'A8';   // A8 (S142): nos Relatos, "Copiar print" na janela da lista e as 3 respostas prontas (itens 36 e 39 da lista)
@@ -219,11 +220,28 @@ function erroGeral(html){
   document.getElementById('conteudo').hidden = true;
 }
 
+/* A12 (S205, issue 152): quem tem "Autoriza acesso" ou "Recebe relatos" sem ser admin vê a parte dele (pedidos de
+   senha e PIN, digital e celulares da empresa; relatos), sem o quadro de módulos e perfis (esse continua só do admin)
+   e sem aviso de erro. Sem nenhuma das caixas: "Esta tela é para quem administra os acessos". */
+let SO_PARTE = false;
+async function carregarParte(){
+  SO_PARTE = true; D = null;
+  ['barraPessoas', 'cxPessoas', 'notaPessoas', 'secHist', 'etapa'].forEach(id => { const x = document.getElementById(id); if (x) x.hidden = true; });
+  await carregarRelatos();
+  let aut = false;
+  try{ PD = await rpc('tf_acesso_pedidos', {}); aut = !!(PD && PD.pode_atender); }catch(e){ PD = null; }
+  if (aut){
+    document.getElementById('conteudo').hidden = false;
+    carregarDigital(); carregarPedidos(); carregarCelulares();
+  }
+  if (!aut && !(REL && REL.pode_ver))
+    erroGeral('<b>Esta tela é para quem administra os acessos.</b> Volte ao <a href="../">início</a>.');
+}
 async function carregar(){
   try{ D = await rpc('tf_acessos_ver', {}); }
   catch(e){
-    if (/Só o admin/i.test(e.message || '')) erroGeral('<b>Esta tela é só do admin.</b> Volte ao <a href="../">início</a>.');
-    else erroGeral('<b>Não consegui abrir os acessos.</b> ' + esc(e.message || '') + ' — recarregue a página.');
+    if (/Só o admin/i.test(e.message || '')){ await carregarParte(); return; }
+    erroGeral('<b>Não consegui abrir os acessos.</b> ' + esc(e.message || '') + ' — recarregue a página.');
     carregarRelatos();                                       // A6: quem recebe relatos sem ser admin vê só os relatos
     return;
   }
@@ -243,9 +261,9 @@ const REL_RAPIDAS = [
 ];
 const REL_SIT = { novo:['Novo','novo'], respondido:['Respondido','ok'], melhoria:['Na lista de melhorias','ok'], descartado:['Descartado','mute'] };
 const relUrl = path => SUPABASE_URL + '/storage/v1/object/relatos/' + String(path).split('/').map(encodeURIComponent).join('/');
+// A12 (S205; sobra do S195): o armazenamento pelo núcleo (renova o acesso antes e no HTTP 400 do acesso vencido)
 async function relFetch(url, opts){
-  const s = Nucleo.sessao();
-  return fetch(url, Object.assign({}, opts, { headers: Object.assign({ apikey: SUPABASE_ANON_KEY }, s.token ? { Authorization: 'Bearer ' + s.token } : {}, (opts && opts.headers) || {}) }));
+  return Nucleo.storage.pedir(url, opts || {});
 }
 async function carregarRelatos(){
   const sec = document.getElementById('relatos');
@@ -315,7 +333,7 @@ document.getElementById('relLista').addEventListener('click', async ev => {
       const r = await rpc('tf_relato_melhoria', { p_id: b.dataset.melhoria, p_num: null });
       let copiou = false; try{ await navigator.clipboard.writeText(r.texto); copiou = true; }catch(e){}
       const prs = rel.prints || [];
-      Nucleo.janela.abrir('Mandar para a lista de melhorias', '<p>' + (copiou ? 'Texto copiado. ' : '') + 'Cole num chat do projeto — ele anota na página de melhorias (sem o nome):</p>'
+      Nucleo.janela.abrir('Mandar para a lista de melhorias', '<p>' + (copiou ? 'Texto copiado. ' : '') + 'Cole num chat do projeto: ele anota na lista de melhorias (sem o nome).</p>'
         + '<textarea readonly rows="7" style="width:100%;box-sizing:border-box;font:inherit;font-size:13px" id="relJanTxt">' + esc(r.texto) + '</textarea>'
         + '<button class="lnkp" type="button" id="relJanCopiar">copiar o texto de novo</button>'
         + (prs.length ? '<p style="margin:12px 0 0">Print' + (prs.length > 1 ? 's' : '') + ' (cole no chat depois do texto, um de cada vez):</p><div class="relPrJan">'
@@ -377,10 +395,13 @@ async function relLimpar(){
 function cabecalhoModulos(){
   return D.modulos.map((k, i) => '<th class="m' + (i === 0 ? ' sep' : '') + '"><span class="bol" style="background:' + mod(k).cor + '"></span>' + esc(nomeMod(k)) + '</th>').join('');
 }
+// A12 (S205, issue 151): a busca sem acento ("jose" acha "José")
+const semAcento = t => String(t == null ? '' : t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 function desenharPessoas(){
-  const f = (document.getElementById('filtro').value || '').trim().toLowerCase();
+  if (!D) return;                                           // A12: quem não é admin não tem o quadro de pessoas
+  const f = semAcento((document.getElementById('filtro').value || '').trim());
   const semMod = p => p.escritorio && !p.modulos.length;
-  const lista = D.pessoas.filter(p => !f || [p.nome, p.email, p.perfil_nome].join(' ').toLowerCase().includes(f))
+  const lista = D.pessoas.filter(p => !f || semAcento([p.nome, p.email, p.perfil_nome].join(' ')).includes(f))
                          .sort((a, b) => (semMod(b) - semMod(a)) || a.nome.localeCompare(b.nome, 'pt-BR'));
   document.getElementById('contagem').textContent = lista.length + ' de ' + D.pessoas.length + ' pessoa(s)';
   let h = '<thead><tr><th>Pessoa</th><th>Perfil</th>' + cabecalhoModulos() + '<th class="m sep">PLH</th><th class="m" title="Autoriza acesso: libera a digital em aparelho novo e atende os pedidos de senha e PIN">Acesso</th><th class="m" title="Recebe relatos: vê e responde os relatos de problema e sugestão da equipe">Relatos</th><th class="m">Admin</th></tr></thead><tbody>';
@@ -412,12 +433,17 @@ function desenharPessoas(){
   document.getElementById('tPessoas').innerHTML = h + '</tbody>';
 }
 
-document.getElementById('tPessoas').addEventListener('change', async ev => {
+// A12 (S205, issue 151): marcar vários seguidos não perde nenhum. Cada caixa entra numa fila e grava uma de cada vez,
+// na ordem (antes, enquanto a 1ª gravava, as outras voltavam sozinhas, sem aviso). A caixa fica cinza até gravar.
+let filaCaixas = Promise.resolve(), naFila = 0;
+document.getElementById('tPessoas').addEventListener('change', ev => {
   const c = ev.target; if (!c.matches('input[type=checkbox]')) return;
   const p = D.pessoas.find(x => x.id === c.dataset.pessoa); if (!p) return;
   const tem = c.checked;
-  if (ocupado){ c.checked = !tem; return; }
-  ocupado = true; c.disabled = true;
+  c.disabled = true; naFila++;
+  filaCaixas = filaCaixas.then(() => gravarCaixa(c, p, tem)).catch(() => {}).then(() => { naFila--; });
+});
+async function gravarCaixa(c, p, tem){
   try{
     if (c.dataset.poder){
       await rpc('tf_acessos_poder', { p_usuario: p.id, p_poder: c.dataset.poder, p_tem: tem });
@@ -432,12 +458,12 @@ document.getElementById('tPessoas').addEventListener('change', async ev => {
       p.modulos = tem ? p.modulos.concat(k) : p.modulos.filter(x => x !== k);
       toast(nomeMod(k) + (tem ? ' dado a ' : ' tirado de ') + p.nome, 'ok');
     }
-    recarregarHistorico();
+    if (naFila <= 1) recarregarHistorico();
   }catch(e){
     c.checked = !tem;
-    toast(e.message || 'Não gravou. Tente de novo.', 'erro');
-  }finally{ c.disabled = false; ocupado = false; }
-});
+    toast(e.message || 'Não gravou. Tente de novo.', 'err');
+  }finally{ c.disabled = false; }
+}
 document.getElementById('filtro').addEventListener('input', desenharPessoas);
 
 const ONDE = { campo:'Campo', adm:'Escritório', ambos:'Campo e escritório' };
@@ -448,8 +474,7 @@ function formPerfil(p){
   p = p || { id:'', nome:'', executa_em:'adm', admin:false, ativo:true, pessoas_total:0 };
   const corpo = '<div class="pform">'
     + '<label for="pfNome">Nome</label><input type="text" id="pfNome" value="' + esc(p.nome) + '" placeholder="Estagiário de campo">'
-    + '<label for="pfId">Código</label><input type="text" id="pfId" value="' + esc(p.id) + '"' + (novo ? ' placeholder="estagiario_campo"' : ' disabled') + '>'
-    + '<p class="dica">' + (novo ? 'Letras minúsculas, números e _. Não muda depois.' : 'O código não muda.') + '</p>'
+    + (novo ? '<p class="dica" id="pfCodigo"></p>' : '')
     + '<label for="pfOnde">Onde trabalha</label><select id="pfOnde">'
     + ['adm','campo','ambos'].map(o => '<option value="' + o + '"' + (p.executa_em === o ? ' selected' : '') + '>' + ONDE[o] + '</option>').join('') + '</select>'
     + '<p class="dica">Campo: entra no Campo e no TapDoc do celular pela escala da OS. Escritório: os módulos marcados na aba Pessoas.</p>'
@@ -460,26 +485,42 @@ function formPerfil(p){
   if (!novo) botoes.push({ label:'Excluir perfil', cls:'perigo', onClick: () => excluirPerfil(p) });
   botoes.push({ label: novo ? 'Criar perfil' : 'Salvar', pri:true, onClick: async () => {
     const nome = document.getElementById('pfNome').value.trim();
-    const id = novo ? document.getElementById('pfId').value.trim().toLowerCase() : p.id;
+    const id = novo ? codigoPerfil(nome) : p.id;                // A12 (issue 151): o sistema cria o código pelo nome
+    if (novo && !id){ Nucleo.janela.erro('Escreva o nome do perfil.'); return; }
     try{
       const r = await rpc('tf_acessos_perfil_salvar', { p_id:id, p_nome:nome, p_executa_em:document.getElementById('pfOnde').value,
         p_is_admin:document.getElementById('pfAdm').checked, p_ativo:document.getElementById('pfAtivo').checked, p_novo:novo });
       Nucleo.janela.fechar();
       toast(novo ? 'Perfil criado. Para usá-lo, clique no perfil de uma pessoa e escolha este.' : (r.status === 'igual' ? 'Nada mudou.' : 'Perfil salvo.'), 'ok');
       await carregar();
-    }catch(e){ toast(e.message || 'Não gravou.', 'erro'); }
+    }catch(e){ toast(e.message || 'Não gravou.', 'err'); }
   }});
   Nucleo.janela.abrir(novo ? 'Novo perfil' : 'Perfil: ' + p.nome, corpo, botoes);
+  if (novo){
+    const nm = document.getElementById('pfNome'), cd = document.getElementById('pfCodigo');
+    const mostra = () => { const k = codigoPerfil(nm.value.trim()); cd.textContent = k ? 'Código interno (o sistema cria; não muda depois): ' + k : ''; };
+    nm.addEventListener('input', mostra); mostra();
+  }
+}
+/* A12 (S205, issue 151, item 7): o código do perfil nasce do nome (sem acento, minúsculas, "_" no lugar dos espaços)
+   e não repete um que já existe ("_2", "_3"…). Antes a pessoa tinha de digitar letras minúsculas e sublinhado. */
+function codigoPerfil(nome){
+  const base = semAcento(nome).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+  if (!base) return '';
+  const usados = new Set(((D && D.perfis) || []).map(x => x.id));
+  let k = base, i = 2;
+  while (usados.has(k)) k = base + '_' + (i++);
+  return k;
 }
 async function excluirPerfil(p){
   if (p.pessoas_total){
-    toast('O perfil tem ' + p.pessoas_total + ' pessoa(s), contando as desativadas. Mude essas pessoas de perfil antes, ou desmarque "Ativo".', 'erro'); return;
+    toast('O perfil tem ' + p.pessoas_total + ' pessoa(s), contando as desativadas. Mude essas pessoas de perfil antes, ou desmarque "Ativo".', 'err'); return;
   }
   Nucleo.janela.fechar();
   const ok = await Nucleo.janela.confirmar('Excluir o perfil ' + p.nome + '?', '<p>Ninguém usa este perfil. Não tem como desfazer.</p>', 'Excluir', true);
   if (!ok) return;
   try{ await rpc('tf_acessos_perfil_excluir', { p_id:p.id }); toast('Perfil excluído.', 'ok'); await carregar(); }
-  catch(e){ toast(e.message || 'Não excluiu.', 'erro'); }
+  catch(e){ toast(e.message || 'Não excluiu.', 'err'); }
 }
 document.getElementById('btNovoPerfil').addEventListener('click', () => formPerfil(null));
 
@@ -500,7 +541,7 @@ document.getElementById('tPessoas').addEventListener('click', ev => {
         const r = await rpc('tf_acessos_laudo_gravar', { p_usuario: pes.id, p_funcao: document.getElementById('plFunc').value, p_registro: document.getElementById('plReg').value });
         LAUDO_P[pes.id] = { id: pes.id, funcao_laudo: r.funcao_laudo, registro: r.registro };
         Nucleo.janela.fechar(); toast('Gravado: ' + pes.nome + (r.funcao_laudo ? ' — ' + r.funcao_laudo : '') + '.', 'ok'); desenharPessoas();
-      }catch(e){ toast(e.message || 'Não gravou.', 'erro'); }
+      }catch(e){ toast(e.message || 'Não gravou.', 'err'); }
     }}]);
 });
 
@@ -523,7 +564,7 @@ document.getElementById('tPessoas').addEventListener('click', ev => {
       try{
         await rpc('tf_acessos_pessoa_perfil', { p_usuario: pes.id, p_perfil: novo });
         Nucleo.janela.fechar(); toast('Perfil de ' + pes.nome + ' trocado.', 'ok'); await carregar();
-      }catch(e){ toast(e.message || 'Não trocou.', 'erro'); }
+      }catch(e){ toast(e.message || 'Não trocou.', 'err'); }
     }}]);
   const info = () => {
     const x = D.perfis.find(y => y.id === document.getElementById('ppPerfil').value) || atual;
@@ -575,7 +616,7 @@ document.getElementById('tDig').addEventListener('click', ev => {
        { label:'Liberar', pri:true, onClick: async () => {
          try{ await rpc('tf_digital_liberar', { p_usuario: p.id, p_motivo: document.getElementById('dgMotivo').value });
               Nucleo.janela.fechar(); toast('Liberado para ' + p.nome + ' por 24 horas.', 'ok'); await carregarDigital(); recarregarHistorico(); }
-         catch(e){ toast(e.message || 'Não liberou.', 'erro'); }
+         catch(e){ toast(e.message || 'Não liberou.', 'err'); }
        }}]);
     return;
   }
@@ -585,7 +626,7 @@ document.getElementById('tDig').addEventListener('click', ev => {
       .then(async ok => {
         if (!ok) return;
         try{ await rpc('tf_digital_remover_de', { p_usuario: p.id, p_aparelho: rem.dataset.ap }); toast('Digital removida.', 'ok'); await carregarDigital(); recarregarHistorico(); }
-        catch(e){ toast(e.message || 'Não removeu.', 'erro'); }
+        catch(e){ toast(e.message || 'Não removeu.', 'err'); }
       });
   }
 });
@@ -597,7 +638,7 @@ async function carregarCelulares(){
   try{ CE = await rpc('tf_aparelhos_empresa_painel', {}); }
   catch(e){
     t.innerHTML = '<tbody><tr><td class="vazio">' + (/tf_aparelhos_empresa_painel|function|404/i.test(e.message || '')
-      ? 'O banco ainda não tem os celulares da empresa (rodar a 210).' : 'Não deu para carregar: ' + esc(e.message || '')) + '</td></tr></tbody>';
+      ? 'Falta uma atualização do sistema: avise o administrador.' : 'Não deu para carregar: ' + esc(e.message || '')) + '</td></tr></tbody>';
     return;
   }
   desenharCelulares();
@@ -653,7 +694,7 @@ function formCelular(c){
           Nucleo.janela.fechar();
           toast(c ? ('Salvo.' + (r && r.sairam ? ' ' + r.sairam + ' pessoa(s) desconectada(s).' : '')) : 'Celular cadastrado. Na 1ª vez, a pessoa entra nele e escolhe "É um celular da empresa".', 'ok');
           await carregarCelulares(); recarregarHistorico();
-        }catch(e){ toast(String(e.message || 'Não salvou.').replace(/^.*?(Dê um|Já existe|Uma das|Só quem)/, '$1'), 'erro'); }
+        }catch(e){ toast(String(e.message || 'Não salvou.').replace(/^.*?(Dê um|Já existe|Uma das|Só quem)/, '$1'), 'err'); }
      }}]);
   setTimeout(() => { try{ document.getElementById('ceNome').focus(); }catch(e){} }, 30);
 }
@@ -672,17 +713,18 @@ document.getElementById('celulares').addEventListener('click', ev => {
         try{ const r = await rpc('tf_aparelho_empresa_ativo', { p_id: c.id, p_ativo: ativar });
              toast(ativar ? 'Reativado.' : 'Desativado. ' + ((r && r.desconectados) || 0) + ' sessão(ões) desconectada(s).', 'ok');
              await carregarCelulares(); recarregarHistorico(); }
-        catch(e){ toast(e.message || 'Não deu.', 'erro'); }
+        catch(e){ toast(e.message || 'Não deu.', 'err'); }
       });
     return;
   }
   if (pd){
     const incluir = pd.dataset.v === '1';
-    (async () => {
+    // A12 (issue 151, item 8): o botão trava enquanto grava (antes o clique duplo mandava duas vezes)
+    Nucleo.util.semDuploEnvio(pd, async () => {
       try{ await rpc('tf_aparelho_empresa_pedido', { p_pedido: pd.dataset.celPedido, p_incluir: incluir });
            toast(incluir ? 'Incluído na lista.' : 'Pedido recusado.', 'ok'); await carregarCelulares(); recarregarHistorico(); }
-      catch(e){ toast(e.message || 'Não deu.', 'erro'); }
-    })();
+      catch(e){ toast(e.message || 'Não deu.', 'err'); }
+    });
   }
 });
 
@@ -707,6 +749,20 @@ async function carregarPedidos(){
        + ' <button class="lnkp" type="button" data-descartar="' + esc(x.id) + '">descartar</button></td></tr>';
   });
   t.innerHTML = h + '</tbody>';
+  // A12 (issue 152): quem atende sem ser admin não tem o quadro de pessoas (com o "senha/PIN" de cada linha):
+  // escolhe a pessoa aqui, para gerar sem pedido
+  let outra = document.getElementById('pdOutra');
+  if (!outra){ outra = document.createElement('div'); outra.id = 'pdOutra'; outra.className = 'barra'; outra.style.margin = '10px 0 0'; t.closest('.cx').after(outra); }
+  if (!D && (PD.pessoas || []).length){
+    outra.innerHTML = '<label for="pdPessoa" class="porp">Sem pedido:</label><select id="pdPessoa" style="background:var(--surface);border:1px solid var(--rule);color:var(--ink);border-radius:4px;padding:6px 8px;font:inherit">'
+      + '<option value="">escolha a pessoa</option>' + PD.pessoas.filter(x => x.id !== PD.eu).map(x => '<option value="' + esc(x.id) + '">' + esc(x.nome) + '</option>').join('')
+      + '</select><button class="btn" type="button" id="pdGerarOutra">Gerar senha ou PIN provisório</button>';
+    document.getElementById('pdGerarOutra').addEventListener('click', () => {
+      const id = document.getElementById('pdPessoa').value;
+      if (!id){ toast('Escolha a pessoa.', 'err'); return; }
+      abrirRedefinir(id);
+    });
+  } else outra.innerHTML = '';
   const pv = document.getElementById('provisorios');
   pv.innerHTML = PD.provisorios.length
     ? '<p class="nota" style="margin:12px 0 4px"><b>Esperando a pessoa trocar:</b></p><ul class="mud">' + PD.provisorios.map(x =>
@@ -718,7 +774,7 @@ async function carregarPedidos(){
   if (location.hash === '#pedidos' && !sec.dataset.rolou){ sec.dataset.rolou = '1'; sec.scrollIntoView({ block:'start' }); }
 }
 function confirmarGerar(id, tipo){
-  const p = (D.pessoas.find(x => x.id === id)) || (PD.pedidos.find(x => x.usuario_id === id) || {});
+  const p = (((D && D.pessoas) || (PD && PD.pessoas) || []).find(x => x.id === id)) || (PD.pedidos.find(x => x.usuario_id === id) || {});
   const nome = p.nome || 'esta pessoa';
   const corpo = tipo === 'senha'
     ? '<p style="margin:0">O sistema sorteia uma <b>senha provisória</b> para ' + esc(nome) + ', que vale <b>24 horas</b>. ' + esc(nome)
@@ -731,7 +787,7 @@ function confirmarGerar(id, tipo){
       const r = await rpc('tf_acesso_redefinir', { p_usuario: id, p_tipo: tipo });
       mostrarProvisorio(r);
       await carregarPedidos(); recarregarHistorico();
-    }catch(e){ toast(e.message || 'Não gerou.', 'erro'); }
+    }catch(e){ toast(e.message || 'Não gerou.', 'err'); }
   });
 }
 function mostrarProvisorio(r){
@@ -742,7 +798,16 @@ function mostrarProvisorio(r){
     + '<p style="margin:0;color:var(--crit)"><b>Anote ou copie agora:</b> depois de fechar esta janela ela não aparece de novo.</p>'
     + '<p class="porp" style="margin:8px 0 0">' + (senha ? 'No TapHub: entrar com o e-mail e esta senha → criar a senha dela.' : 'Na trava do TapHub: digitar este PIN → criar o PIN dela.') + '</p>',
     [{ label:'Copiar', onClick: () => { try{ Nucleo.util.copiar(r.provisorio, 'Copiado.'); }catch(e){} } },
-     { label:'Fechar', pri:true, onClick: () => { Nucleo.janela.fechar(); document.getElementById('mBody').innerHTML = ''; } }]);
+     { label:'Fechar', pri:true, onClick: el => {
+        // A12 (S205, issue 151, item 3): a janela é "fixa" (não fecha no X, no Esc nem clicando fora) e o Fechar
+        // pergunta antes: depois dela, o provisório não aparece de novo (gerar outro tira a pessoa dos aparelhos de novo)
+        if (el.dataset.certeza !== '1'){
+          el.dataset.certeza = '1'; setTimeout(() => { el.textContent = 'Já anotei: fechar'; }, 0);   // depois do semDuploEnvio devolver o rótulo
+          Nucleo.janela.erro('Já anotou ou copiou? Depois de fechar, ' + (senha ? 'a senha' : 'o PIN') + ' não aparece de novo. Toque em "Já anotei: fechar".');
+          return;
+        }
+        Nucleo.janela.fechar(); document.getElementById('mBody').innerHTML = '';
+     } }], { fixa: true });
 }
 document.getElementById('tPedidos').addEventListener('click', ev => {
   const g = ev.target.closest('[data-gerar]'), d = ev.target.closest('[data-descartar]');
@@ -752,18 +817,21 @@ document.getElementById('tPedidos').addEventListener('click', ev => {
       .then(async ok => {
         if (!ok) return;
         try{ await rpc('tf_acesso_descartar', { p_pedido: d.dataset.descartar }); toast('Pedido descartado.', 'ok'); await carregarPedidos(); }
-        catch(e){ toast(e.message || 'Não descartou.', 'erro'); }
+        catch(e){ toast(e.message || 'Não descartou.', 'err'); }
       });
   }
 });
 document.getElementById('tPessoas').addEventListener('click', ev => {
   const b = ev.target.closest('[data-redefinir]'); if (!b) return;
-  const p = D.pessoas.find(x => x.id === b.dataset.redefinir); if (!p) return;
+  abrirRedefinir(b.dataset.redefinir);
+});
+function abrirRedefinir(id){
+  const p = ((D && D.pessoas) || (PD && PD.pessoas) || []).find(x => x.id === id); if (!p) return;
   Nucleo.janela.abrir('Redefinir o acesso de ' + p.nome, '<p style="margin:0">Gere uma senha ou um PIN provisório para <b>' + esc(p.nome) + '</b> (vale 24 horas). No primeiro uso, a pessoa é obrigada a criar a própria.</p>',
     [{ label:'Cancelar', onClick: () => Nucleo.janela.fechar() },
      { label:'PIN provisório', onClick: () => { Nucleo.janela.fechar(); confirmarGerar(p.id, 'pin'); } },
      { label:'Senha provisória', pri:true, onClick: () => { Nucleo.janela.fechar(); confirmarGerar(p.id, 'senha'); } }]);
-});
+}
 
 /* ── Histórico ──────────────────────────────────────────────────────────── */
 function quando(t){ try{ return new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }); }catch(e){ return t; } }
@@ -779,7 +847,8 @@ function desenharHistorico(){
         h += '<tr><td>' + quando(x.em) + '</td><td>' + esc(x.pessoa || '—') + '</td><td><span class="' + (x.acao === 'deu' ? 'ganha' : 'perde') + '">' + esc(x.obs || '') + '</span></td><td>' + esc(x.por || 'sistema') + '</td></tr>';
         return;
       }
-      const nome = x.tipo === 'poder' ? (x.chave === 'digital' ? '"Autoriza acesso"' : x.chave.toUpperCase()) : nomeMod(x.chave);
+      // A12 (issue 151, item 5): "Recebe relatos" pelo nome da caixa (antes saía "ganhou RELATOS")
+      const nome = x.tipo === 'poder' ? ({ digital:'"Autoriza acesso"', relatos:'"Recebe relatos"', plh:'PLH' }[x.chave] || x.chave.toUpperCase()) : nomeMod(x.chave);
       oque = '<span class="' + (x.acao === 'deu' ? 'ganha' : 'perde') + '">' + (x.acao === 'deu' ? 'ganhou ' : 'perdeu ') + esc(nome) + '</span>'
            + (x.alvo === 'perfil' ? ' <span class="porp">(no padrão)</span>' : '');
     }
@@ -811,7 +880,7 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
 (function boot(){
   try{ document.getElementById('selo').textContent = 'ACESSOS · ' + APP_VERSION; }catch(e){}
   if (!window.Nucleo || !Nucleo.api || !Nucleo.api.rpc || !Nucleo.janela){
-    erroGeral('<b>Não consegui carregar o núcleo.</b> Recarregue a página. Se continuar, falta a pasta <code>nucleo/</code> no ar.'); return;
+    erroGeral('<b>Não consegui carregar o núcleo.</b> Recarregue a página. Se continuar, falta uma atualização do sistema: avise o administrador.'); return;
   }
   if (DEMO){ erroGeral('<b>Modo demonstração.</b> Esta tela só funciona aberta pelo TapHub no ar (o login fica no início).'); return; }
   const s = (typeof Nucleo.sessao === 'function' && Nucleo.sessao()) || {};

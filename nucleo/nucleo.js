@@ -1,16 +1,17 @@
 /* ============================================================================
- * TAPHUB · NÚCLEO COMUM — N14 (N7: o celular da empresa; N11: a fila avisa quando o aparelho está sem espaço;
+ * TAPHUB · NÚCLEO COMUM — N15 (N7: o celular da empresa; N11: a fila avisa quando o aparelho está sem espaço;
  *   N12: renovar devolve ok/recusado/sem rede; a fila não trava no erro do servidor; os leitores únicos de valor e de .xlsx;
  *   N13: a janela devolve o campo digitado e não fecha por engano com algo digitado;
- *   N14: a fila envia pelo tratador que a página registra, `fila.tratador`)
+ *   N14: a fila envia pelo tratador que a página registra, `fila.tratador`;
+ *   N15: um "Sair" só, `Nucleo.sairDaConta`, que também encerra o acesso no servidor; a janela "fixa")
  * ----------------------------------------------------------------------------
  * Código que serve a mais de um módulo e por isso NÃO mora dentro de nenhum:
  * sessão, conexão com o banco, PIN e a trava. Regra de negócio nunca entra
  * aqui (fica no módulo e nas funções tf_*). Sem framework, sem build.
  *
  * COMO UM MÓDULO USA (duas linhas no <head> e uma no boot):
- *   <script src="../nucleo/config.js?v=N14"></script>
- *   <script src="../nucleo/nucleo.js?v=N14"></script>
+ *   <script src="../nucleo/config.js?v=N15"></script>
+ *   <script src="../nucleo/nucleo.js?v=N15"></script>
  *   ...
  *   const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
  *   if (g === 'hub') { irParaHub(Nucleo.recado); return; }     // ANTES do iniciar()
@@ -43,7 +44,8 @@
   'use strict';
   if (window.Nucleo && window.Nucleo.versao) return;
 
-  var VERSAO = 'N14';   // N14 (S202): Rodada R10 da auditoria — issues 106, 107 e 177 (a fila envia também os envios antigos do TapField — levantamento, extras, execução e fotos do Drive — pelo tratador que a página registra: recusado fica parado com o motivo, nada some)
+  var VERSAO = 'N15';   // N15 (S205): Rodada R12 da auditoria (TapHub) — issues 156 (um "Sair" só, Nucleo.sairDaConta, que encerra o acesso também no servidor e respeita o celular da empresa) e 151 (a janela "fixa", que só fecha pelo botão dela; o aviso "erro" em vermelho)
+  // var VERSAO = 'N14';   // N14 (S202): Rodada R10 da auditoria — issues 106, 107 e 177 (a fila envia também os envios antigos do TapField — levantamento, extras, execução e fotos do Drive — pelo tratador que a página registra: recusado fica parado com o motivo, nada some)
   // var VERSAO = 'N13';   // N13 (S196): Rodada R5 da auditoria — issues 108, 109, 126, 144, 169 (a janela devolve o campo digitado e confere o obrigatório/CONFIRMO; com algo digitado não fecha clicando fora e o X/Esc pede 2º toque; o Esc fecha a janela em todas as páginas)
   // var VERSAO = 'N12';   // N12 (S195): Rodada R4 da auditoria — issues 142, 146, 153, 154, 167 e 189 (renovar com 3 respostas, fila que não trava, aviso fixo, relato com rascunho, janela no X = Cancelar, destraves só apagados depois de enviados, storage.pedir, util.lerValor, planilha.lerXLSX)
   // var VERSAO = 'N11';   // N11 (S171): issue 35 — a fila avisa em vermelho quando o aparelho está sem espaço (nada some calado); quem tem dado guardado ajuda a liberar espaço (fila.aoFaltarEspaco)
@@ -360,6 +362,59 @@
     try { sessionStorage.setItem('tf_recado', recado || ''); } catch (e) {}
     var para = conf.app && conf.app !== 'hub' ? ('?para=' + conf.app) : '';
     location.href = RAIZ + para;
+  }
+
+  /* ── N15 (S205, issue 156): UM "Sair" só, em todas as páginas ────────────────
+   * Antes eram três (o início, Cadastros e os outros módulos), nenhum avisava o servidor (o acesso do aparelho
+   * continuava valendo lá por até 1 hora) e o de Cadastros, no celular da empresa, não guardava a sessão da pessoa.
+   * Agora: pergunta pela janela do TapHub, encerra o acesso DESTE aparelho no servidor (/auth/v1/logout, só esta
+   * sessão: os outros aparelhos da pessoa continuam), apaga a sessão e vai para o início (a tela de entrada).
+   *  · celular da empresa, "Sair": a pessoa continua no "Quem vai usar?" (é o mesmo que trocar de pessoa); a sessão
+   *    guardada dela precisa continuar valendo, então o servidor não é avisado;
+   *  · celular da empresa, "Sair deste celular" (o.deste): a pessoa some da lista e o aparelho dela é desconectado
+   *    (Nucleo.empresa.sairDeste); com envio na fila, a sessão fica só para enviar (por isso também sem logout);
+   *  · sem sinal: sai do mesmo jeito (o acesso vence sozinho em até 1 hora).
+   * o = { deste, perguntar (padrão true), titulo, texto (html), depois(): chamado antes de ir para o início } */
+  function filaMinha() {
+    var s = sessao(), k = String(s.email || '').toLowerCase();
+    return (jget('tff_fila') || []).filter(function (x) { return x && (!x.por || !k || String(x.por).toLowerCase() === k); }).length;
+  }
+  function logoutServidor(token) {
+    var c = cfgDoBanco();
+    if (!token || !c.url || !NO_SERVIDOR) return Promise.resolve(false);
+    return fetch(c.url + '/auth/v1/logout?scope=local', {
+      method: 'POST', headers: { apikey: c.anon, Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: '{}', signal: comPrazo(5000)
+    }).then(function (r) { return r.ok || r.status === 401 || r.status === 403 || r.status === 404; }, function () { return false; });
+  }
+  function sairDaConta(o) {
+    o = o || {};
+    var emp = empresa(), deste = !!(o.deste && emp), n = filaMinha();
+    var titulo = o.titulo || (deste ? 'Sair deste celular?' : 'Sair da conta?');
+    var texto = o.texto || (deste
+      ? '<p>Você some da lista "Quem vai usar?" deste celular e, para voltar, entra com e-mail e senha.'
+        + (n ? ' Os ' + n + ' envio(s) da fila continuam e sobem quando tiver sinal.' : '') + '</p>'
+      : emp
+        ? '<p>Você continua na lista "Quem vai usar?" deste celular e volta com o seu PIN.'
+          + (n ? ' Os ' + n + ' envio(s) da fila continuam e sobem quando tiver sinal.' : '') + '</p>'
+        : (n ? '<p>Você tem ' + n + ' envio(s) na fila. Eles ficam guardados neste aparelho e saem quando você entrar de novo.</p>'
+             : '<p>Para voltar, entre de novo com e-mail e senha.</p>'));
+    var pergunta = o.perguntar === false ? Promise.resolve(true) : confirmarJanela(titulo, texto, 'Sair');
+    return pergunta.then(function (ok) {
+      if (!ok) return false;
+      var s = sessao();
+      var antes = deste
+        ? sairDeste(s.email).catch(function () {})
+        : (emp ? Promise.resolve() : logoutServidor(s.token));
+      return antes.then(function () {
+        if (!deste) { if (emp && s.email && s.token) lembrarSessaoEmp(s); limparSessao(); }
+        lsDel(K_TRAVADO); lsDel(K_DESTRAV);
+        try { if (typeof o.depois === 'function') o.depois(); } catch (e) {}
+        try { sessionStorage.setItem('tf_recado', ''); } catch (e) {}
+        if (NO_SERVIDOR) location.href = RAIZ; else location.reload();
+        return true;
+      });
+    });
   }
 
   /* ── a tela do PIN ─────────────────────────────────────────────────────── */
@@ -1419,6 +1474,7 @@
     /** Sair de verdade (botão Sair): apaga a sessão, mantém o aparelho lembrado.
      *  N7: no celular da empresa, a pessoa continua no "Quem vai usar?" (é o mesmo que trocar de pessoa). */
     sair: function () { var s = sessao(); if (empresa() && s.email && s.token) lembrarSessaoEmp(s); limparSessao(); lsDel(K_TRAVADO); },
+    sairDaConta: sairDaConta,                          // N15 (S205, issue 156): o "Sair" de todas as páginas
     /** N7 · o celular da empresa (210). atual() = { id, nome } ou null. */
     empresa: {
       atual: empresa, pessoas: pessoasEmp, entrarComo: entrarComo, trocarPessoa: trocarPessoa,
@@ -1624,6 +1680,7 @@
    *  a pessoa tocar em "Entendi" (o de "aparelho sem espaço" sumia em 4 s, sem dar tempo de ler). O resto some sozinho. */
   var TOAST_LONGO = 120, toastFora = function () {};
   function toast(msg, tipo, opt) {
+    if (tipo === 'erro' || tipo === 'error') tipo = 'err';   // N15 (S205, issue 151): "erro" também sai em vermelho
     var el = garantirToast();
     var meu = el.classList.contains('tfn-toast');
     var fixo = !!(opt && opt.fixo) || (tipo === 'err' && String(msg == null ? '' : msg).length > TOAST_LONGO);
@@ -1685,8 +1742,17 @@
   // pede um 2º toque ("Descartar o que foi digitado?"). "Mexida" = a pessoa digitou ou trocou algum campo
   // da janela desde que ela abriu (o que o programa preenche sozinho não conta). Vale em toda página que usa
   // a janela do núcleo, inclusive as que têm o #modal delas (o fechar é delas; a trava é daqui).
-  var janelaMexida = false, descarteArmado = 0;
+  var janelaMexida = false, descarteArmado = 0, janelaFixa = false;
   function cancelarJanela() { var f = aoFecharJanela; aoFecharJanela = null; if (f) { try { f(); } catch (e) {} } }
+  // N15 (S205, issue 151): a janela "fixa" (a senha ou o PIN provisório, que aparece uma vez só) não fecha no X,
+  // no Esc nem clicando fora: só pelo botão dela. abrirJanela(t, html, botoes, { fixa: true }).
+  function avisoFixa() {
+    var b = document.getElementById('mBody'); if (!b) return;
+    var a = document.getElementById('tfnDescartar');
+    if (!a) { a = document.createElement('div'); a.id = 'tfnDescartar'; a.className = 'tfn-descartar'; a.setAttribute('role', 'alert'); b.insertBefore(a, b.firstChild); }
+    a.textContent = 'Esta janela só fecha pelo botão de baixo.';
+    try { a.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+  }
   function avisoDescartar(porFora) {
     var b = document.getElementById('mBody'); if (!b) return;
     var a = document.getElementById('tfnDescartar');
@@ -1700,6 +1766,7 @@
   function podeFecharPorFora(porFora) {
     var m = document.getElementById('modal');
     if (!m || m.hidden) return true;
+    if (janelaFixa) { avisoFixa(); return false; }       // N15 (issue 151): a janela fixa só fecha pelo botão dela
     if (janelaMexida) {
       if (porFora) { avisoDescartar(true); return false; }
       if (Date.now() - descarteArmado > 6000) { descarteArmado = Date.now(); avisoDescartar(false); return false; }
@@ -1749,7 +1816,7 @@
     garantirJanela();
     cancelarJanela();                                   // a janela anterior que ainda esperava resposta: "Cancelar"
     aoFecharJanela = (opcoes && typeof opcoes.aoFechar === 'function') ? opcoes.aoFechar : null;
-    janelaMexida = false; descarteArmado = 0;
+    janelaMexida = false; descarteArmado = 0; janelaFixa = !!(opcoes && opcoes.fixa);
     var mm = document.getElementById('modal');
     if (!mm || mm.hidden) focoAntes = document.activeElement;   // janela trocada por outra: o foco volta para quem abriu a 1ª
     document.getElementById('mTit').textContent = titulo;
@@ -1773,7 +1840,7 @@
   }
   function fecharJanela() {
     aoFecharJanela = null;                              // fechou por um botão: quem perguntou já teve a resposta
-    janelaMexida = false; descarteArmado = 0;
+    janelaMexida = false; descarteArmado = 0; janelaFixa = false;
     var sc = document.getElementById('mScrim'), m = document.getElementById('modal');
     if (sc) sc.hidden = true;
     if (m) { m.hidden = true; m.classList.remove('largo'); }

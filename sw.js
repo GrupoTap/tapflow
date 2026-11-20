@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H18-S204';   // S204: Rodada R11 da auditoria (TapCRM e TapGestão; issues 127, 130–138; banco 312, 526, 702, 153): TapCRM CRM8, TapGestão GE5
+const VERSAO = 'H19-S205';   // S205: Rodada R12 da auditoria (TapHub; issues 149, 150, 151, 152 e 156; banco 216): núcleo N15, hub H19, Pessoas e acessos A12, Cadastros CAD9, o "Sair" do núcleo em todas as páginas (TapFlow S205, TapCRM 9, TapFin 30, TapRH 21, TapSeg 9, TapField S68)
+// const VERSAO = 'H18-S204';   // S204: Rodada R11 da auditoria (TapCRM e TapGestão; issues 127, 130–138; banco 312, 526, 702, 153): TapCRM CRM8, TapGestão GE5
 // const VERSAO = 'H18-S203';   // S203: Rodada R10 da auditoria (contratos; issues 206, 111, 176 e 180): TapFlow S203, documentos.js D3
 // const VERSAO = 'H18-S202';   // S202: Rodada R10 da auditoria (TapFlow celular; issues 106, 107, 177, 178 e 207; banco 311): núcleo N14, Field S67, TapFlow S202
 // const VERSAO = 'H18-S201';   // S201: Rodada R9 da auditoria (TapRH; issues 118, 120, 159, 160, 162, 163, 164, 165 e 141 parte 2; banco 618): TapRH RH20, Field S66
@@ -108,9 +109,9 @@ const ESSENCIAIS = [
   // O núcleo comum. O endereço tem que ser IDÊNTICO ao do <script>, com o ?v=
   // (o cache compara a consulta inteira). Trocou o ?v= nas páginas? Troque aqui também.
   // S76: hub, Manager, Field e fin/ pedem todos ?v=N2 — saíram as linhas ?v=N1. S123: todos pedem ?v=N3 (Passkey 1). S124: ?v=N4. S131: ?v=N5 (IndexedDB do iPhone).
-  './nucleo/nucleo.js?v=N14',
-  './nucleo/nucleo.css?v=N14',
-  './nucleo/config.js?v=N14',
+  './nucleo/nucleo.js?v=N15',
+  './nucleo/nucleo.css?v=N15',
+  './nucleo/config.js?v=N15',
   // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo" (mesmo ?v= das páginas)
   './nucleo/modulos.js?v=M4',
   // S110 · o gerador de documentos (o Manager o pede com ?v=D1; o jszip e o pdfmake vêm sob demanda)
