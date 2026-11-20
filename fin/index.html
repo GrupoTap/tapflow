@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 28 · Financeiro</title>
+<title>TapFin 29 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2220,7 +2220,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'F28';   // TapFin 28 (S200): Rodada R8 da auditoria (cartões) — issues 185 (canhotos: "Lançar assim mesmo", o lote sem os repetidos, a tela que não perde as escolhas, a data da compra, editar cartão sem apagar fornecedor e recorrência) e 186 (estornar só a baixa da fatura paga vai pela fatura; o pedido do canhoto com "Trocar", "Cancelar pedido" e a resposta do funcionário; a leitura do CSV); 525
+const APP_VERSION = 'F29';   // TapFin 29 (S204): Rodada R11 da auditoria — issue 137 (o "abrir no módulo" do TapGestão abre Contas a Receber já em "Vencidas": fin/?ir=finre&sit=vencidas)
+// const APP_VERSION = 'F28';   // TapFin 28 (S200): Rodada R8 da auditoria (cartões) — issues 185 (canhotos: "Lançar assim mesmo", o lote sem os repetidos, a tela que não perde as escolhas, a data da compra, editar cartão sem apagar fornecedor e recorrência) e 186 (estornar só a baixa da fatura paga vai pela fatura; o pedido do canhoto com "Trocar", "Cancelar pedido" e a resposta do funcionário; a leitura do CSV); 525
 // const APP_VERSION = 'F27';   // TapFin 27 (S199): Rodada R8 da auditoria (nota e boleto) — issues 98 (mudar o vencimento da conta com nota), 181 (o local do serviço na nota), 182 (o clique das janelas Boletos, Notas e Trazer do Inter), 183 (avisos do boleto; o vencimento acompanha o boleto) e 184 (9 acertos); 525
 // const APP_VERSION = 'F26';   // TapFin 26 (S196): Rodada R5 da auditoria (padrões de todas as telas) — o "Sair" pela janela do TapHub; núcleo N13
 // const APP_VERSION = 'F25';   // TapFin 25 (S195): Rodada R4 da auditoria — issue 142 (nota, boleto, canhotos e faturas abrem com a página aberta há mais de 1 hora), 189 ("1.250" = R$ 1.250,00 na Conta corrente Proper e nos Cartões; confirmar o valor antes de lançar; "Quem vê" pede confirmação) e 146 (a planilha .xlsx pelo leitor do núcleo); núcleo N12
@@ -4091,6 +4092,7 @@ const finTituloRot = t => finDescOk(finSemMarcador(t.descricao)) ? finSemMarcado
   : (t.fornecedor_nome || t.cliente_nome || 'título');
 
 const FINF = {};
+let FIN_SIT_ENTRADA = null;   // F29: { tela, sit } vindo do endereço (fin/?ir=finre&sit=vencidas)
 
 function finfNovo(cfg){
   // S58 · hist: o histórico do SIGE (origem 'sige') fica escondido até pedir
@@ -4557,6 +4559,11 @@ function finResumoTitulos(L, st){
 async function finAbrirTela(tela, titulo, sub, botoes){
   const cfg = FIN_CFG[tela];
   FINF[tela] = finfNovo(cfg);       // volta ao padrão a cada abertura
+  // F29 (S204, issue 137): o link de outro módulo (`?sit=`) escolhe a situação uma vez, na 1ª abertura da tela
+  if (FIN_SIT_ENTRADA && FIN_SIT_ENTRADA.tela === tela){
+    if ((cfg.situacoes || []).some(x => x[0] === FIN_SIT_ENTRADA.sit)) FINF[tela].sit = FIN_SIT_ENTRADA.sit;
+    FIN_SIT_ENTRADA = null;
+  }
   const board = document.getElementById('board');
   board.innerHTML = '<div class="tela"><div class="telaCab"><h2>' + esc(titulo) + '</h2><p>' + esc(sub) + '</p></div>'
     + '<div class="finTopo">' + botoes + '</div>'
@@ -8324,7 +8331,11 @@ async function iniciar(){
     const prm = new URLSearchParams(location.search);
     const ir = prm.get('ir');
     if (ir){
-      if (NAV.some(g => (g.itens || []).some(i => i.v === ir && !i.link))) visao = ir;
+      if (NAV.some(g => (g.itens || []).some(i => i.v === ir && !i.link))){
+        visao = ir;
+        const sit = prm.get('sit');
+        if (sit && /^[a-z_]{2,20}$/.test(sit)) FIN_SIT_ENTRADA = { tela: ir, sit: sit };
+      }
       history.replaceState(null, '', location.pathname);
     }
     // F11 · o card da T16 abre fin/?os=<id>(&t=T16): Contas a Receber com o painel da OS

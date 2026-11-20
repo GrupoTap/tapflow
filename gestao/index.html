@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapGestão 4 · Indicadores</title>
+<title>TapGestão 5 · Indicadores</title>
 <meta name="theme-color" content="#4338CA">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22104%22 fill=%22%231B6FA9%22/%3E%3Ctext x=%22256%22 y=%22350%22 font-family=%22Arial,sans-serif%22 font-size=%22300%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EE%3C/text%3E%3C/svg%3E">
 <link rel="manifest" href="../manifest.webmanifest">
@@ -112,6 +112,10 @@ main{max-width:1240px;margin:0 auto;padding:20px 18px 60px}
 .ind .como summary::after{content:' ▸'} .ind .como[open] summary::after{content:' ▾'}
 .ind .como p{margin:3px 0 0}
 .ind.parcial{border-left-style:dashed}
+.ind .cmp{font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.ind .cmp .sobe{color:var(--ok)} .ind .cmp .desce{color:var(--crit)}
+.ind .abrir{font-size:11.5px;color:var(--accent-ink,#4338CA);text-decoration:underline}
+.ind .erro details summary{cursor:pointer;font-size:11px;color:var(--ink-3)}
 .ind .de{font-size:11px;color:var(--ink-3);margin-top:auto;padding-top:4px;font-family:var(--mono);letter-spacing:.02em}
 .nota{color:var(--ink-3);font-size:12.5px;margin-top:14px;max-width:900px}
 .hist{margin-top:10px;font-size:12.5px;color:var(--ink-2)} .hist li{margin:2px 0}
@@ -305,7 +309,8 @@ body.apres .reuQ.atual .reuQcab h2{font-size:28px}
 
 <script>
 'use strict';
-const APP_VERSION = 'GE4';   // GE4 (S189): a aba Reunião, bloco Financeiro (os quadros do TapFin pelo nucleo/fin-painel FP2, a meta de recebimento, a ata; 152 e 524)
+const APP_VERSION = 'GE5';   // GE5 (S204): Rodada R11 da auditoria — issues 134 a 138 (lembrete de todos os meses abertos e o mês de início; o "como é calculado" no ano; a base do 13; a meta do 13 só "aumentar"; o erro do módulo em português; "abrir no módulo" e a comparação no card; as OS atrasadas abertas; os sócios sem ficha com data); banco 153, 312 e 526
+// const APP_VERSION = 'GE4';   // GE4 (S189): a aba Reunião, bloco Financeiro (os quadros do TapFin pelo nucleo/fin-painel FP2, a meta de recebimento, a ata; 152 e 524)
 // const APP_VERSION = 'GE3';   // GE3 (S132): o sistema se chama TapHub nas telas (item #10 da lista) e "Relatar problema ou sugerir" no menu (núcleo N6, modulos M2)
 // const APP_VERSION = 'GE2';   // GE2 (03/11/2026): mês em andamento sem cor, "como é calculado", módulo com erro no card, Enter grava a meta · GE1: o módulo
 const _CFG = window.TF_CONFIG || {};
@@ -360,17 +365,46 @@ function textoBase(i){
     case 'fat_pessoa': return !Number(b.pessoas) ? 'nenhuma ficha no TapRH no mês (e nenhum sócio sem ficha em Metas)' : nf0.format(b.pessoas) + ' pessoas: ' + (b.clt||0) + ' CLT, ' + (b.estagio||0) + ' estágio, '
       + (b.socio||0) + ' sócio(s) com ficha' + (b.socios_sem_ficha ? ' + ' + b.socios_sem_ficha + ' sem ficha' : '')
       + (b.sem_vinculo ? ', ' + b.sem_vinculo + ' sem vínculo' : '');
-    case 'vencidas': return plural(b.titulos, 'título vencido', 'títulos vencidos') + (b.em ? ' em ' + Nucleo.util.dataBR(b.em) : '');
+    case 'vencidas': return plural(b.titulos, 'título vencido', 'títulos vencidos') + (b.em ? ' em ' + Nucleo.util.dataBR(b.em) : '')
+      // GE5 (issue 134): as contas "A faturar" com a data estimada vencida não entram no número; aparecem à parte
+      + (Number(b.a_faturar_contas) > 0 ? ' · à parte: ' + Nucleo.util.BRL(b.a_faturar_valor) + ' a faturar com data estimada vencida ('
+          + plural(b.a_faturar_contas, 'conta', 'contas') + ')' : '');
     case 'enviadas': return Nucleo.util.BRL(b.valor_rs) + ' em propostas';
     case 'conversao': return plural(b.aprovadas, 'aprovada', 'aprovadas') + ' · ' + plural(b.recusadas, 'recusada', 'recusadas') + ' · ' + plural(b.vencidas, 'vencida sem resposta', 'vencidas sem resposta');
     case 'ticket': return Nucleo.util.BRL(b.valor_aprovado) + ' aprovados' + (b.parciais_sem_itens ? ' · ' + plural(b.parciais_sem_itens, 'parcial antiga', 'parciais antigas') + ' sem itens' : '');
     case 'tempo': return plural(b.aprovadas, 'proposta aprovada', 'propostas aprovadas');
     case 'equipamentos': return b.os_inspecao != null ? plural(b.os_inspecao, 'OS de inspeção concluída', 'OS de inspeção concluídas') : plural(b.inspecoes_terminadas, 'inspeção terminada', 'inspeções terminadas');
-    case 'prazo': return (b.no_prazo||0) + ' de ' + (b.com_prazo||0) + ' no prazo' + (b.sem_prazo ? ' · ' + plural(b.sem_prazo, 'OS sem prazo', 'OS sem prazo') + ' (fora da conta)' : '');
+    case 'prazo': return (b.no_prazo||0) + ' de ' + (b.com_prazo||0) + ' no prazo' + (b.sem_prazo ? ' · ' + plural(b.sem_prazo, 'OS sem prazo', 'OS sem prazo') + ' (fora da conta)' : '')
+      // GE5 (issue 138): a OS atrasada que continua aberta não entra no percentual, mas aparece
+      + (b.abertas_atrasadas != null ? ' · ' + plural(b.abertas_atrasadas, 'OS atrasada ainda aberta', 'OS atrasadas ainda abertas') + ' no fim do mês' : '');
     case 'dias_laudo': return plural(b.laudos, 'laudo emitido', 'laudos emitidos');
     case 'devolvidos': return (b.devolvidas||0) + ' de ' + plural(b.liberadas, 'liberada', 'liberadas');
+    case 'recebido': return plural(b.titulos, 'conta recebida', 'contas recebidas');   // GE5 (issue 136)
   }
   return '';
+}
+
+/* GE5 (issue 137): "abrir no módulo" — a tela de onde vem o número, em outra aba (o TapGestão continua aqui) */
+const ABRIR_EM = {
+  fat:'../fin/?ir=finre', margem:'../fin/?ir=finpg', vencidas:'../fin/?ir=finre&sit=vencidas', recebido:'../fin/?ir=finb',
+  fat_pessoa:'../rh/', enviadas:'../crm/', conversao:'../crm/', ticket:'../crm/', tempo:'../crm/',
+  equipamentos:'../manager/', prazo:'../manager/', dias_laudo:'../doc/', devolvidos:'../doc/'
+};
+// GE5 (issue 137): "mês anterior: X (▲)" e o mesmo mês do ano passado
+function textoComparar(i, cmp){
+  if (!cmp) return '';
+  const partes = [];
+  const um = (c, rot) => {
+    if (!c || !c.valores || !(i.id in c.valores)) return;
+    const v = fmt(c.valores[i.id], i.unidade, true);
+    if (v === null) { partes.push(esc(rot + ' (' + c.nome + '): sem dado')); return; }
+    const a = num(c.valores[i.id]), x = num(i.valor);
+    let seta = '';
+    if (x !== null && a !== null && x !== a) seta = x > a ? ' <span class="sobe" aria-label="subiu">▲</span>' : ' <span class="desce" aria-label="caiu">▼</span>';
+    partes.push(esc(rot + ' (' + c.nome + '): ' + v) + seta);
+  };
+  um(cmp.anterior, 'mês anterior'); um(cmp.ano_passado, 'ano passado');
+  return partes.length ? '<div class="cmp">' + partes.join(' · ') + '</div>' : '';
 }
 
 /* ── erro geral ──────────────────────────────────────────────────────────── */
@@ -432,6 +466,11 @@ function pintarMes(j){
       ? '<b>O fechamento de ' + esc(j.nome) + ' está atrasado</b> (o prazo era o 5º dia útil, ' + esc(Nucleo.util.dataBR(f.prazo)) + '). Confira os números e feche o mês.'
       : '<b>Feche ' + esc(j.nome) + ' até ' + esc(Nucleo.util.dataBR(f.prazo)) + '</b> (5º dia útil). Ao fechar, os números ficam guardados como estão agora.') + '</div>';
   }
+  // GE5 (issue 135): os outros meses terminados e ainda abertos (lidos ao abrir o TapGestão)
+  const outros = (E.pend || []).filter(x => !(Number(x.ano) === j.ano && Number(x.mes) === j.mes));
+  if (f.fechado) E.pend = (E.pend || []).filter(x => !(Number(x.ano) === j.ano && Number(x.mes) === j.mes));   // fechou: sai da lista
+  if (outros.length) document.getElementById('mesAviso').innerHTML += '<div class="aviso lembra">Também ' + (outros.length === 1 ? 'está aberto' : 'estão abertos')
+    + ' (sem fechar): <b>' + esc(outros.map(x => x.nome).join(', ')) + '</b>. Use as setas para ir até ' + (outros.length === 1 ? 'ele' : 'eles') + '.</div>';
   const lista = j.indicadores || [], parcial = mesParcial(j), futuro = mesFuturo(j);
   const comErro = lista.filter(i => i.erro).map(i => i.modulo).filter((m, k, a) => a.indexOf(m) === k);
   if (comErro.length) document.getElementById('mesAviso').innerHTML += '<div class="aviso erro"><b>' + esc(comErro.join(' e ')) + ' não respondeu.</b> Os outros números estão certos; o deste módulo aparece como "sem dado" até alguém consertar (o erro está no card). Enquanto isso, o mês não fecha.</div>';
@@ -444,10 +483,14 @@ function pintarMes(j){
       + (v === null ? '<div class="valor sem">' + (i.erro ? 'sem dado' : futuro ? '—' : 'sem dado') + '</div>' : '<div class="valor">' + esc(v) + '</div>')
       + '<div class="meta"><span class="cor ' + esc(cor) + '">' + esc(rot) + '</span>'
       + (i.meta ? '<span>Meta: ' + esc(textoMeta(i.meta, i.unidade)) + '</span>' : '') + '</div>'
-      + (i.erro ? '<div class="erro">' + esc(i.modulo) + ' não respondeu: ' + esc(i.erro) + '</div>' : '<div class="base">' + esc(textoBase(i)) + '</div>')
+      // GE5 (issue 136): a mensagem simples no card; o detalhe técnico fica atrás do "ver detalhe"
+      + (i.erro ? '<div class="erro">' + esc(i.modulo) + ' não respondeu: avise o administrador.'
+          + '<details><summary>ver detalhe</summary>' + esc(i.erro) + '</details></div>' : '<div class="base">' + esc(textoBase(i)) + '</div>')
+      + (i.erro || futuro ? '' : textoComparar(i, j.comparar))
       + (i.obs ? '<div class="obs">' + esc(i.obs) + '</div>' : '')
       + (i.como ? '<details class="como"><summary>como é calculado</summary><p>' + esc(i.como) + '</p></details>' : '')
-      + '<div class="de">' + esc(i.modulo || '') + '</div>'
+      + '<div class="de">' + esc(i.modulo || '')
+      + (ABRIR_EM[i.id] ? ' · <a class="abrir" href="' + esc(ABRIR_EM[i.id]) + '" target="_blank" rel="noopener">abrir no módulo</a>' : '') + '</div>'
       + '</article>';
   }).join('') || '<p class="carregando">Nenhum indicador.</p>';
   const re = (f.reaberturas || []);
@@ -513,8 +556,9 @@ async function carregarAno(){
     });
     h += '</tr>';
   });
-  h += '</tbody></table></div><p class="nota">Embaixo de cada número, em cinza, o mesmo mês de ' + esc(E.anoVer - 1) + '. Traço = sem dado. Sublinhado roxo = mês fechado. O mês em andamento fica sem cor até terminar. Passe o mouse no nome para ver como é calculado.</p>';
-  h += '<div class="ano-cards">' + L.map(i => '<div class="acard"><h3>' + esc(String(i.num).padStart(2, '0') + ' · ' + i.nome) + '</h3><div class="g">'
+  h += '</tbody></table></div><p class="nota">Embaixo de cada número, em cinza, o mesmo mês de ' + esc(E.anoVer - 1) + '. Traço = sem dado. Sublinhado roxo = mês fechado. O mês em andamento fica sem cor até terminar. Passe o mouse no nome para ver como é calculado (no celular, toque em "como é calculado").</p>';
+  h += '<div class="ano-cards">' + L.map(i => '<div class="acard"><h3>' + esc(String(i.num).padStart(2, '0') + ' · ' + i.nome) + '</h3>'
+      + (i.como ? '<details class="como"><summary>como é calculado</summary><p>' + esc(i.como) + '</p></details>' : '') + '<div class="g">'
       + i.meses.map((m, k) => { const v = fmt(m.valor, i.unidade, true), a = fmt(i.anterior[k], i.unidade, true);
           return '<div class="m ' + esc(v === null || emAndamento(k) ? '' : m.cor) + '"><small>' + MES3[k] + (m.fechado ? ' ✓' : '') + '</small><b>' + esc(v === null ? '—' : v) + '</b><small>' + esc(a === null ? '—' : a) + '</small></div>'; }).join('')
       + '</div></div>').join('') + '</div>';
@@ -539,7 +583,8 @@ async function carregarMetas(){
     h += '<div class="mt-l" data-id="' + esc(m.id) + '">'
       + '<div class="nm">' + esc(String(m.num).padStart(2, '0') + ' · ' + m.nome) + '<small>' + (m.direcao ? 'gravada' + (m.atualizado_por ? ' por ' + esc(m.atualizado_por) : '') + ' em ' + esc(Nucleo.util.dataBR(m.atualizado_em)) : 'sem meta') + '</small></div>'
       + '<select aria-label="Direção de ' + esc(m.nome) + '" class="mDir">'
-      + ['aumentar','reduzir','faixa'].map(d => '<option value="' + d + '"' + (d === dir ? ' selected' : '') + '>' + ({aumentar:'aumentar (≥)', reduzir:'reduzir (≤)', faixa:'faixa'})[d] + '</option>').join('') + '</select>'
+      // GE5 (issue 136): a meta do 13 (Recebido no mês) é sempre "aumentar": é ela que a Reunião desenha
+      + (m.id === 'recebido' ? ['aumentar'] : ['aumentar','reduzir','faixa']).map(d => '<option value="' + d + '"' + (d === dir || m.id === 'recebido' ? ' selected' : '') + '>' + ({aumentar:'aumentar (≥)', reduzir:'reduzir (≤)', faixa:'faixa'})[d] + '</option>').join('') + '</select>'
       + '<div class="vals">'
       + '<input type="number" step="any" inputmode="decimal" class="mMeta" aria-label="Meta de ' + esc(m.nome) + '" placeholder="meta" value="' + esc(m.meta == null ? '' : m.meta) + '"' + (dir === 'faixa' ? ' hidden' : '') + '>'
       + '<input type="number" step="any" inputmode="decimal" class="mMin" aria-label="Mínimo de ' + esc(m.nome) + '" placeholder="mínimo" value="' + esc(m.min == null ? '' : m.min) + '"' + (dir === 'faixa' ? '' : ' hidden') + '>'
@@ -548,10 +593,21 @@ async function carregarMetas(){
       + '<input type="text" class="mResp" aria-label="Responsável por ' + esc(m.nome) + '" placeholder="responsável" maxlength="80" value="' + esc(m.responsavel || '') + '">'
       + '<button type="button" class="btn mGravar">Gravar</button></div>';
   });
-  h += '</div><p class="nota">Deixe a meta em branco e grave para tirar a meta do indicador (ele fica cinza). Percentual em número: 80 = 80%. A cor do painel: verde atingiu, amarelo até 10% longe, vermelho mais longe.</p>';
+  h += '</div><p class="nota">Deixe a meta em branco e grave para tirar a meta do indicador (ele fica cinza). Percentual em número: 80 = 80%. A cor do painel: verde atingiu, amarelo até 10% longe, vermelho mais longe. Com meta zero não há amarelo (10% de zero é zero): qualquer valor acima de zero, num indicador de reduzir, já fica vermelho. A meta do 13 (Recebido no mês) é sempre de aumentar.</p>';
+  // GE5 (issue 138): os sócios sem ficha valem a partir de um mês (o passado não muda); (issue 135) o mês de início
+  const mesHoje = String(E.hoje || Nucleo.util.isoHoje()).slice(0, 7);
+  const hist = (j.socios_historico || []).filter(x => String(x.desde) > '2020-01-01').slice(0, 6);
   h += '<div class="cfg"><label for="cfgSoc">Sócios sem ficha no RH</label><input type="number" id="cfgSoc" min="0" max="20" step="1" value="' + esc(j.socios_sem_ficha || 0) + '">'
+     + '<label for="cfgSocDe">a partir de</label><input type="month" id="cfgSocDe" value="' + esc(mesHoje) + '" min="2020-01">'
      + '<button type="button" class="btn" id="btCfg">Gravar</button>'
-     + '<small>Entram na conta de pessoas ocupadas (indicador 3). Quem já tem ficha no TapRH com vínculo "sócio" é contado sozinho: não some aqui de novo.</small></div>';
+     + '<small>Entram na conta de pessoas ocupadas (indicador 3). Quem já tem ficha no TapRH com vínculo "sócio" é contado sozinho: não some aqui de novo. '
+     + 'O número vale do mês escolhido em diante; os meses antes dele não mudam, e o mês já fechado guarda o que tinha.'
+     + (hist.length ? ' Mudanças: ' + hist.map(x => esc(MES3[Number(String(x.desde).slice(5, 7)) - 1] + '/' + String(x.desde).slice(2, 4)) + ' = ' + esc(x.qtd)).join(' · ') + '.' : '')
+     + '</small></div>';
+  const mi = j.mes_inicio ? String(j.mes_inicio).slice(0, 7) : '';
+  h += '<div class="cfg"><label for="cfgIni">Mês de início do TapGestão</label><input type="month" id="cfgIni" value="' + esc(mi) + '" min="2020-01" max="' + esc(mesHoje) + '">'
+     + '<button type="button" class="btn" id="btIni">Gravar</button>'
+     + '<small>O lembrete de fechar o mês (no card do início e ao abrir o TapGestão) olha todos os meses terminados e ainda abertos desde este mês.</small></div>';
   alvo.innerHTML = h;
   alvo.querySelectorAll('.mt-l[data-id]').forEach(l => {
     const sel = l.querySelector('.mDir');
@@ -568,7 +624,19 @@ async function carregarMetas(){
   bc.addEventListener('click', () => _semDuploEnvio_(bc, async () => {
     const n = parseInt(document.getElementById('cfgSoc').value, 10);
     if (isNaN(n) || n < 0 || n > 20){ toast('Sócios sem ficha: de 0 a 20.', 'err'); return; }
-    try{ await rpc('tf_gestao_config_gravar', { p_socios_sem_ficha:n }); toast('Gravado.', 'ok'); }
+    const de = document.getElementById('cfgSocDe').value;
+    if (!/^\d{4}-\d{2}$/.test(de)){ toast('Escolha o mês a partir do qual o número vale.', 'err'); return; }
+    try{
+      const r = await rpc('tf_gestao_config_gravar', { p_socios_sem_ficha:n, p_desde: de + '-01' });
+      toast('Gravado' + (r && Number(r.meses_fechados) > 0 ? ': ' + r.meses_fechados + ' mês(es) já fechado(s) depois dessa data continuam com o número que guardaram (reabra para recalcular).' : '.'), 'ok');
+      await carregarMetas();
+    }catch(e){ toast(e.message || 'Não consegui gravar.', 'err'); }
+  }));
+  const bi = document.getElementById('btIni');
+  bi.addEventListener('click', () => _semDuploEnvio_(bi, async () => {
+    const v = document.getElementById('cfgIni').value;
+    if (!/^\d{4}-\d{2}$/.test(v)){ toast('Escolha o mês de início.', 'err'); return; }
+    try{ await rpc('tf_gestao_inicio_gravar', { p_mes: v + '-01' }); toast('Mês de início gravado.', 'ok'); await carregarMetas(); }
     catch(e){ toast(e.message || 'Não consegui gravar.', 'err'); }
   }));
 }
@@ -643,7 +711,9 @@ async function carregarReuniao(){
   FINPM.mes = reuK();
   const M = fpjMeses(); FINPM.pjMes = M[1] || M[0];
   const rec = (ind.indicadores || []).find(i => i.id === 'recebido');
-  FINPM.metaEntrou = rec && rec.meta && rec.meta.direcao === 'aumentar' ? Number(rec.meta.meta) || 0 : 0;
+  // GE5 (issue 136): desde a 153 a meta do 13 só se grava "aumentar"; uma faixa antiga vale pelo mínimo
+  FINPM.metaEntrou = !(rec && rec.meta) ? 0 : rec.meta.direcao === 'aumentar' ? Number(rec.meta.meta) || 0
+    : rec.meta.direcao === 'faixa' ? Number(rec.meta.min) || 0 : 0;
   pintarReuniao();
 }
 
@@ -892,12 +962,12 @@ async function iniciar(){
   let jPronto = null;
   if (pm && Number(pm[2]) >= 1 && Number(pm[2]) <= 12 && Number(pm[1]) >= 2021 && Number(pm[1]) <= 2100){ E.ano = Number(pm[1]); E.mes = Number(pm[2]); }
   else {
-    // o mês passado, se ainda não foi fechado (a resposta é reaproveitada: uma chamada só ao abrir)
-    let pa = a, pmes = m - 1; if (pmes < 1){ pmes = 12; pa--; }
+    // GE5 (issue 135): o mês mais antigo terminado e ainda aberto desde o mês de início; senão, o mês corrente
     try{
-      const j = await rpc('tf_gestao_mes', { p_ano:pa, p_mes:pmes });
-      E.hoje = j.hoje;
-      if (!(j.fechamento && j.fechamento.fechado)){ E.ano = pa; E.mes = pmes; jPronto = j; } else { E.ano = a; E.mes = m; }
+      const l = await rpc('tf_gestao_lembrete', {});
+      E.hoje = l.hoje; E.pend = l.meses || [];
+      const m0 = (l.meses || [])[0];
+      if (m0){ E.ano = Number(m0.ano); E.mes = Number(m0.mes); } else { E.ano = a; E.mes = m; }
     }catch(e){
       if (/não tem acesso ao TapGestão/i.test(e.message || '')){ erroEm(document.getElementById('grade'), e, iniciar); return; }
       E.ano = a; E.mes = m;
