@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H19-S208';   // S208: Rodada R18 da auditoria (TapDoc revisão e celular; issues 218, 219, 220, 221 e 222; banco 449): TapDoc escritório E53, documentos-pdf.js D9, mapa-3d.js M3, celular 32
+const VERSAO = 'H19-S209';   // S209: Rodada R14 da auditoria (TapFin dinheiro; issues 93, 94, 188, 96, 99 e 105; banco 527): TapFin F31, nucleo/fin-painel FP3, TapGestão GE6
+// const VERSAO = 'H19-S208';   // S208: Rodada R18 da auditoria (TapDoc revisão e celular; issues 218, 219, 220, 221 e 222; banco 449): TapDoc escritório E53, documentos-pdf.js D9, mapa-3d.js M3, celular 32
 // const VERSAO = 'H19-S207';   // S207: Rodada R13 da auditoria (TapSeg; issues 121, 190, 191, 192, 193, 195 e 196; banco 627): TapSeg G10, Field S69
 // const VERSAO = 'H19-S206';   // S206: Rodada R12 da auditoria, parte 2 (Cadastros; issues 145, 147, 148, 157 e 158; banco 216 do S205): Cadastros CAD10; saíram config.js, nucleo.js e nucleo.css da raiz
 // const VERSAO = 'H19-S205';   // S205: Rodada R12 da auditoria (TapHub; issues 149, 150, 151, 152 e 156; banco 216): núcleo N15, hub H19, Pessoas e acessos A12, Cadastros CAD9, o "Sair" do núcleo em todas as páginas (TapFlow S205, TapCRM 9, TapFin 30, TapRH 21, TapSeg 9, TapField S68)
@@ -119,8 +120,8 @@ const ESSENCIAIS = [
   './nucleo/modulos.js?v=M4',
   // S110 · o gerador de documentos (o Manager o pede com ?v=D1; o jszip e o pdfmake vêm sob demanda)
   './nucleo/documentos.js?v=D3',
-  './nucleo/fin-painel.js?v=FP2',   // S188 · os quadros do Painel do TapFin (TapFin e TapGestão)
-  './nucleo/fin-painel.css?v=FP2',
+  './nucleo/fin-painel.js?v=FP3',   // S188 · os quadros do Painel do TapFin (TapFin e TapGestão) · FP3 (S209)
+  './nucleo/fin-painel.css?v=FP3',
   // S74 · TapFin: a página (S76 · TapFin 2: o plano B fin/util.js saiu)
   './fin/',
   // S77 · TapDoc do escritório (R02b1) e o motor de cálculo que ele usa
