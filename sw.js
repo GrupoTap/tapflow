@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H19-S206';   // S206: Rodada R12 da auditoria, parte 2 (Cadastros; issues 145, 147, 148, 157 e 158; banco 216 do S205): Cadastros CAD10; saíram config.js, nucleo.js e nucleo.css da raiz
+const VERSAO = 'H19-S207';   // S207: Rodada R13 da auditoria (TapSeg; issues 121, 190, 191, 192, 193, 195 e 196; banco 627): TapSeg G10, Field S69
+// const VERSAO = 'H19-S206';   // S206: Rodada R12 da auditoria, parte 2 (Cadastros; issues 145, 147, 148, 157 e 158; banco 216 do S205): Cadastros CAD10; saíram config.js, nucleo.js e nucleo.css da raiz
 // const VERSAO = 'H19-S205';   // S205: Rodada R12 da auditoria (TapHub; issues 149, 150, 151, 152 e 156; banco 216): núcleo N15, hub H19, Pessoas e acessos A12, Cadastros CAD9, o "Sair" do núcleo em todas as páginas (TapFlow S205, TapCRM 9, TapFin 30, TapRH 21, TapSeg 9, TapField S68)
 // const VERSAO = 'H18-S204';   // S204: Rodada R11 da auditoria (TapCRM e TapGestão; issues 127, 130–138; banco 312, 526, 702, 153): TapCRM CRM8, TapGestão GE5
 // const VERSAO = 'H18-S203';   // S203: Rodada R10 da auditoria (contratos; issues 206, 111, 176 e 180): TapFlow S203, documentos.js D3
