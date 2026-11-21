@@ -86,6 +86,7 @@ h2:first-child{margin-top:4px}
 .chip.inc{background:var(--warn-soft);color:var(--warn);border-color:transparent}
 .chip.pend{background:var(--crit-soft);color:var(--crit);border-color:transparent}
 .chip.prov{background:#EEE7F7;color:#4B2E83;border-color:transparent}
+.chip.mvf{background:var(--warn-soft);color:var(--warn);border-color:transparent}   /* TapDoc 32 · issue 221: faltam medidas do vaso */
 .btn{display:block;width:100%;border:1px solid var(--rule);background:var(--surface);border-radius:5px;padding:12px 14px;font-weight:600;font-size:15px;text-align:center;margin-top:10px}
 .btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn.sec{background:var(--accent-soft);border-color:transparent;color:var(--accent-ink)}
@@ -147,6 +148,7 @@ textarea.t{min-height:72px;resize:vertical}
 .faixa{background:#FBF3DB;border:1px solid #EAD9A6;border-radius:8px;padding:6px 10px;font-size:12.5px;margin-top:6px;color:#3D3416}
 .faixa[hidden]{display:none}
 /* S140 · itens 49, 51, 52, 53, 60 */
+.foto .gir{position:absolute;top:4px;left:4px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:15px;line-height:1;z-index:2}   /* TapDoc 32 · issue 220: girar */
 .foto .galb{position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.6);color:#fff;font-size:9.5px;font-weight:700;padding:1px 4px;border-radius:3px;z-index:2}
 .foto.add.gal{background:var(--surface-2);border-color:var(--ink-3);color:var(--ink-2)}
 .lugar{border-top:1px solid var(--rule-2);padding:10px 0 4px;margin-top:8px}
@@ -192,7 +194,8 @@ input.t.suspeita{border-color:var(--crit);background:var(--crit-soft);color:var(
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 31';   // S175 · issues 48, 49, 50, 51 e 53 (Revisão TapDoc · Rodada 4b): tocar no que já está marcado não apaga a resposta e trocar com texto escrito pergunta (visual, boroscopia, teste); a pressão volta como foi digitada (sem 10,0004) e "1.013" pergunta; mensagens da conta em português simples, avisos na unidade do inspetor, "pelo PLH"; acessórios: "Trazer os da anterior" fica e a pressão não redesenha a tela; ajustes pequenos (laudo sem páginas, janela, código "Outro", GPS, ordem das fotos, CSV); sem SQL
+const VERSAO = 'TapDoc 32';   // S208 · issues 220 e 221 (Rodada R18 da auditoria): "Girar" (↻) em cada foto, de 90 em 90 graus, pela fila (vale no laudo e nos documentos; 449); o Fechamento avisa em amarelo quando falta o comprimento do costado ou a altura de um tampo (com um link para cada campo; o envio continua liberado) e o cartão "Medidas do vaso" mostra "faltam N medidas"
+// const VERSAO = 'TapDoc 31';   // S175 · issues 48, 49, 50, 51 e 53 (Revisão TapDoc · Rodada 4b): tocar no que já está marcado não apaga a resposta e trocar com texto escrito pergunta (visual, boroscopia, teste); a pressão volta como foi digitada (sem 10,0004) e "1.013" pergunta; mensagens da conta em português simples, avisos na unidade do inspetor, "pelo PLH"; acessórios: "Trazer os da anterior" fica e a pressão não redesenha a tela; ajustes pequenos (laudo sem páginas, janela, código "Outro", GPS, ordem das fotos, CSV); sem SQL
 // const VERSAO = 'TapDoc 30';   // S174 · issues 38, 39, 52, 82 e 83 (Revisão TapDoc · Rodada 4a): o CSV do medidor com uma leitura inválida entra com as boas e diz quais ficaram de fora; o PDF do laudo anterior que não coube avisa; a miniatura renova o acesso antes de baixar; depois de a câmera fechar o app, volta para a mesma tela e avisa que a foto não chegou; PDF até 50 MB (441); o GPS do vaso volta no pacote da OS (441)
 // const VERSAO = 'TapDoc 29';   // S173 · issues 43, 44, 45, 46 e 47 (Revisão TapDoc · Rodada 3): a aferição reprovada põe "substituir" só ao sair do campo e a situação volta quando o resultado deixa de ser reprovado (o banco não troca mais: 440); "Cancelar esta aferição" (com o motivo) e trocar o tipo do acessório pede para cancelá-la; sem a PMTA vigente, a válvula é conferida (aviso) contra a menor entre a PMTA da plaqueta e a da prévia; "Gerar os pontos" pergunta antes de apagar leituras; o prazo menor não grava a cada letra, só aparece com a categoria e a escolha pela metade fica guardada
 // const VERSAO = 'TapDoc 28';   // S172 · issues 40, 42 e 55 (Revisão TapDoc · Rodada 2): a leitura do número com ponto de milhar — vírgula é a decimal; "1.250" sem vírgula pergunta "1250 ou 1,25?" e não grava até escolher; volume abaixo de 20 litros e circunferência abaixo de 300 mm avisam; a mesma regra do escritório (E41)
@@ -636,7 +639,7 @@ const CK_ROT = { ck_cam_volume:['Volume', 'operacao', 'volume preenchido com "n�
   ck_cam_externa:['PMTA externa', 'operacao', 'PMTA externa sem "opera com vácuo" marcado', '#oPe_'], ck_leit_ponto_1000:['Ponto da medição', 'ultrassom', 'de 1 a 1000'] };
 const TELA_DO_ENVIO = [[/^cam-/, 'operacao'], [/^comp-/, 'componentes'], [/^(vaso|fab)~/, 'plaqueta'], [/^visual~/, 'visual'], [/^boro~/, 'boroscopia'],
   [/^teste~/, 'teste'], [/^(acess-|acessrm-|afer-|afercanc-|acconf~)/, 'acessorios'], [/^(leit-|us~)/, 'ultrassom'], [/^(amb|gps)~/, 'localizacao'], [/^laudo~/, 'laudo'],
-  [/^((fech|fechrec|recaj|prazo)~|enviar-|naoinsp-)/, 'fechamento']];
+  [/^((fech|fechrec|recaj|prazo)~|enviar-|naoinsp-)/, 'fechamento'], [/^fotogir-/, 'fechamento']];
 const TELA_DA_SECAO = { plaqueta:'plaqueta', geral:'visual', visual:'visual', componentes:'ultrassom', localizacao:'localizacao', laudo_anterior:'laudo', capa:'fechamento',
   acessorios:'acessorios', teste:'teste', boroscopia:'boroscopia' };
 function explicarRecusa(v, e){
@@ -761,6 +764,7 @@ async function baixar(silencioso){
     FORA_T06 = false; ESCALA_T06 = null;
     mesclar(p, t0, !!silencioso);
     await baixarProntos();   // S146 · item 79
+    await baixarGiro();   // TapDoc 32 · issue 220
     if (!silencioso) U.toast('Pacote da OS atualizado.');
     conferirRecusas();
     // S171 · issue 36: o pacote que chega sozinho não redesenha a tela em uso (o teclado fechava e o campo voltava ao valor antigo)
@@ -1224,9 +1228,11 @@ function gradeFotos(v, secao, max, rotulos, item){
   let h = '<div class="fotos">';
   fs.forEach(f => {
     const src = MINI[f.id];
-    h += '<div class="foto" data-f="' + esc(f.id) + '">' + (src ? '<img alt="" src="' + src + '">' : (/\.pdf$/i.test(f.storage_path || '') ? 'PDF' : 'foto enviada')) +
+    const pdf = /\.pdf$/i.test(f.storage_path || ''), g = Number(f.girar) || 0;   // TapDoc 32 · issue 220: a foto girada aparece girada
+    h += '<div class="foto" data-f="' + esc(f.id) + '">' + (src ? '<img alt="" src="' + src + '"' + (g ? ' style="transform:rotate(' + g + 'deg)"' : '') + '>' : (pdf ? 'PDF' : 'foto enviada')) +
       (f.legenda ? '<span class="leg">' + esc(f.legenda) + '</span>' : '') +
       (pend.has(f.id) ? '<span class="pend">a enviar</span>' : f.origem === 'galeria' ? '<span class="galb">galeria</span>' : '') +
+      (pdf ? '' : '<button class="gir" data-gir="' + esc(f.id) + '" aria-label="Girar a foto" title="Girar 90°">↻</button>') +
       '<button class="x" data-rm="' + esc(f.id) + '" aria-label="Tirar a foto">×</button></div>';
   });
   // S140 · item 53: tirar na hora ou escolher da galeria
@@ -1239,6 +1245,7 @@ function ligarFotos(v, secao, legendaFn, item){
   $('tela').querySelectorAll('[data-add]').forEach(b => { if (b.dataset.add === k) b.addEventListener('click', () => tirarFoto(v, secao, legendaFn ? legendaFn() : null, item)); });
   $('tela').querySelectorAll('[data-gal]').forEach(b => { if (b.dataset.gal === k) b.addEventListener('click', () => escolherGaleria(v, secao, legendaFn ? legendaFn() : null, item, Number(b.dataset.resta) || 20)); });
   $('tela').querySelectorAll('[data-rm]').forEach(b => { if (b.dataset.lig) return; b.dataset.lig = '1'; b.addEventListener('click', ev => { ev.stopPropagation(); tirarFotoDaLista(v, b.dataset.rm); }); });
+  $('tela').querySelectorAll('[data-gir]').forEach(b => { if (b.dataset.lig) return; b.dataset.lig = '1'; b.addEventListener('click', ev => { ev.stopPropagation(); girarFoto(v, b.dataset.gir); }); });
   carregarMinis(v);
 }
 // S149 · item 92: a foto sem lugar próprio pergunta "Onde vai no laudo?" (as figuras de sempre dos laudos entregues)
@@ -1422,6 +1429,24 @@ async function registrarArquivo(v, secao, legenda, blob, ext, tipo, mini, item, 
   }
   pintar();
   return !!foi;   // S174 · issue 39: quem chama sabe se entrou
+}
+// TapDoc 32 · issue 220 (449): girar a foto de 90 em 90 graus. Vale no laudo e nos documentos (o escritório gira a imagem pelo
+// que fica no banco). Vai pela fila, depois da própria foto (mesmo grupo): sem sinal, sobe junto. Grava o valor final.
+function girarFoto(v, fid){
+  const f = (v.inspecao.fotos || []).find(x => x.id === fid); if (!f) return;
+  const g = ((Number(f.girar) || 0) + 90) % 360;
+  const foi = enfileirar(v, 'fotogir-' + fid, 'girar foto', { funcao:'tf_insp_foto_girar', payload:{ p_foto:fid, p_graus:g } });
+  if (!foi) return;   // não coube no aparelho (o aviso vermelho já saiu)
+  f.girar = g; salvar();
+  const im = document.querySelector('[data-f="' + fid + '"] img'); if (im) im.style.transform = g ? 'rotate(' + g + 'deg)' : '';
+}
+/** TapDoc 32 · issue 220: o giro das fotos que está no banco (o pacote da OS não o traz); o que ainda está na fila fica como no aparelho. */
+async function baixarGiro(){
+  const vs = (E && E.vasos || []).filter(v => v.inspecao && v.inspecao.id), ids = vs.map(v => v.inspecao.id); if (!ids.length) return;
+  let m; try{ m = await N.api.rpc('tf_insp_fotos_giro', { p_inspecoes: ids }); }catch(e){ return; }   // banco sem a 449: nada gira
+  const naFila = new Set(N.fila.listar({ tipo:'insp' }).filter(e => e.id.indexOf('fotogir-') === 0).map(e => e.id.slice(8).split('~')[0]));
+  vs.forEach(v => (v.inspecao.fotos || []).forEach(f => { if (!naFila.has(f.id)) f.girar = (m || {})[f.storage_path] || 0; }));
+  salvar();
 }
 function tirarFotoDaLista(v, fid){
   N.janela.confirmar('Tirar esta foto?', '<p>Ela sai da inspeção.</p>', 'Tirar', true).then(sim => {
@@ -1769,9 +1794,19 @@ function cartoesComp(v){
 // S152 · issue 7 (decisão 8): "Medidas do vaso" — tudo o que o inspetor mede com a trena, num lugar só. Nada aqui é obrigatório
 // para enviar: sem o comprimento do costado, o laudo sai com o desenho 2D (decisão 5).
 const outrasCompletas = l => (l || []).filter(x => String(x.nome || '').trim() && x.mm > 0).map(x => ({ nome:String(x.nome).trim().slice(0, 80), mm:x.mm }));
+// TapDoc 32 · issue 221: sem o comprimento do costado ou a altura de um tampo o laudo sai com o desenho 2D. Não trava o envio: o
+// Fechamento avisa em amarelo, com um link para cada campo, e o cartão mostra "faltam N medidas". (O tampo plano não tem altura.)
+function medidasFaltando(v){
+  const r = [];
+  if (!(Number(v.costado_comprimento_mm) > 0)) r.push({ rot:'o comprimento do costado (entre as soldas)', sel:'#mvCostado' });
+  compsAtivos(v).filter(c => tampo(c.tipo) && c.tipo !== 'plano' && !(Number(c.altura_medida_mm) > 0))
+    .forEach(c => r.push({ rot:'a altura do ' + String(c.nome || 'tampo').toLowerCase(), sel:'#mvAlt_' + c.id }));
+  return r;
+}
 function medidasVasoHtml(v, pode){
   const tps = compsAtivos(v).filter(c => tampo(c.tipo)), outras = Array.isArray(v.medidas_outras) ? v.medidas_outras : [];
-  let h = '<div class="card" id="mvCard"><b>Medidas do vaso</b><p class="muted" style="margin:2px 0 0">Com a trena, por fora. São elas que fazem o desenho do mapa dos pontos no laudo.</p>';
+  const nf = medidasFaltando(v).length;
+  let h = '<div class="card" id="mvCard"><b>Medidas do vaso</b>' + (nf ? ' <span class="chip mvf" id="mvFaltam">faltam ' + nf + ' medida' + (nf > 1 ? 's' : '') + '</span>' : '') + '<p class="muted" style="margin:2px 0 0">Com a trena, por fora. São elas que fazem o desenho do mapa dos pontos no laudo.</p>';
   h += campoNum('Circunferência do costado (mm)', 'mvCirc', v.circunferencia_mm, 'Dá o diâmetro. É a mesma de "Operação e câmaras".');
   h += campoNum('Comprimento do costado (mm)', 'mvCostado', v.costado_comprimento_mm, 'Entre as soldas dos dois tampos.');
   tps.forEach(c => { h += campoNum('Altura do ' + esc(String(c.nome || 'tampo').toLowerCase()) + ' (mm)', 'mvAlt_' + esc(c.id), c.altura_medida_mm, 'Opcional. Da solda até a ponta do tampo.'); });
@@ -1784,10 +1819,18 @@ function medidasVasoHtml(v, pode){
   if (pode && outras.length < 20) h += '<button class="btn peq sec" id="mvMais" style="margin-top:8px">+ outra medida</button>';
   return h + '</div>';
 }
+/** TapDoc 32 · issue 221: o selo "faltam N medidas" acompanha o que se digita (sem redesenhar a tela). */
+function seloMedidas(v){
+  const cx = $('mvCard'); if (!cx) return;
+  const n = medidasFaltando(v).length, s = $('mvFaltam');
+  if (!n){ if (s) s.remove(); return; }
+  const t = 'faltam ' + n + ' medida' + (n > 1 ? 's' : '');
+  if (s) s.textContent = t; else cx.querySelector('b').insertAdjacentHTML('afterend', ' <span class="chip mvf" id="mvFaltam">' + t + '</span>');
+}
 function ligarMedidasVaso(v){
   ligar('mvCirc', el => { const x = numOuAviso(el, 1, 100000, 'Circunferência'); if (x !== undefined){ avisarCirc(x); mudouVaso(v, 'circunferencia_mm', x); } });
-  ligar('mvCostado', el => { const x = numOuAviso(el, 50, 100000, 'Comprimento do costado', 'abaixo de 50 mm não é o comprimento de um costado; a medida é em mm, entre as soldas (dois metros = 2000)'); if (x !== undefined) mudouVaso(v, 'costado_comprimento_mm', x); });   // S172 · issue 42: a mensagem diz o motivo
-  compsAtivos(v).filter(c => tampo(c.tipo)).forEach(c => ligar('mvAlt_' + c.id, el => { const x = numOuAviso(el, 1, 50000, 'Altura do tampo'); if (x !== undefined) mudouComp(v, c, 'altura_medida_mm', x); }));
+  ligar('mvCostado', el => { const x = numOuAviso(el, 50, 100000, 'Comprimento do costado', 'abaixo de 50 mm não é o comprimento de um costado; a medida é em mm, entre as soldas (dois metros = 2000)'); if (x !== undefined){ mudouVaso(v, 'costado_comprimento_mm', x); seloMedidas(v); } });   // S172 · issue 42: a mensagem diz o motivo
+  compsAtivos(v).filter(c => tampo(c.tipo)).forEach(c => ligar('mvAlt_' + c.id, el => { const x = numOuAviso(el, 1, 50000, 'Altura do tampo'); if (x !== undefined){ mudouComp(v, c, 'altura_medida_mm', x); seloMedidas(v); } }));
   // as outras medidas: a lista inteira fica no aparelho; para o escritório vão as linhas completas (nome + valor)
   const guardar = lista => { v.medidas_outras = lista; v._pv.medidas_outras = outrasCompletas(lista); salvar(); adiar('vaso:' + v.id, 'vaso', v); };
   const lista = () => (Array.isArray(v.medidas_outras) ? v.medidas_outras : []).map(x => Object.assign({}, x));
@@ -2276,9 +2319,11 @@ function aplicarMarca(v){
   if (!MARCA || MARCA.vaso !== v.id || telaAtual.nome !== MARCA.tela) return;
   if (MARCA.assinatura){   // S171 · issue 37: a marca do envio recusado some quando a correção toma o lugar dele
     if (!pendDoVaso(v).some(e => e.assinatura === MARCA.assinatura && e.recusado)){ MARCA = null; return; }
+  } else if (MARCA.aviso){   // TapDoc 32 · issue 221: o aviso da medida do vaso some quando ela é digitada
+    if (!medidasFaltando(v).some(x => x.sel === MARCA.sel)){ MARCA = null; return; }
   } else if (faltasEnvio(v).indexOf(MARCA.texto) < 0){ MARCA = null; return; }   // a parte foi corrigida: a marca some
   const T = $('tela'), el = (MARCA.sel && T.querySelector(MARCA.sel)) || (MARCA.assinatura ? null : T.querySelector('.chip.inc'));
-  T.insertAdjacentHTML('afterbegin', '<div class="alerta crit" id="marcaMsg"><b>' + (MARCA.assinatura ? 'Envio recusado' : 'Falta para enviar') + '</b>' + esc(MARCA.texto) + '</div>');
+  T.insertAdjacentHTML('afterbegin', '<div class="alerta' + (MARCA.aviso ? '' : ' crit') + '" id="marcaMsg"><b>' + (MARCA.assinatura ? 'Envio recusado' : MARCA.aviso ? 'Aviso' : 'Falta para enviar') + '</b>' + esc(MARCA.texto) + '</div>');   // TapDoc 32 · issue 221: o aviso em amarelo
   if (!el) return;
   const alvo = el.matches('input,select') ? (el.closest('label.f, .chk') || el) : el;
   alvo.classList.add('problema');
@@ -3256,6 +3301,10 @@ function telaFechamento(v){
   h += f.length ? '<div class="alerta crit" id="fFaltas"><b>Falta para enviar</b><ul>' + f.map((x, k) => '<li>' + esc(x) + ' <button class="ir" data-falta="' + k + '">ir para ' + esc(ROT_TELA[alvoFalta(v, x).tela] || 'a tela') + ' ›</button></li>').join('') + '</ul></div>'
                : '<div class="alerta" style="background:var(--ok-soft);color:var(--ok)"><b>Pronto para enviar</b>Tudo o que é obrigatório foi preenchido.</div>';
   if (a.length) h += '<div class="alerta"><b>Avisos</b><ul>' + a.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
+  // TapDoc 32 · issue 221: as medidas do vaso que faltam (o envio continua liberado), com um link para cada campo
+  const mf = medidasFaltando(v);
+  if (mf.length) h += '<div class="alerta" id="fMedidas"><b>Medidas do vaso</b>Sem elas, o laudo sai com o desenho 2D dos pontos. Dá para enviar assim.<ul>'
+    + mf.map((x, k) => '<li>Falta ' + esc(x.rot) + ' <button class="ir" data-mvir="' + k + '">ir para Componentes ›</button></li>').join('') + '</ul></div>';
   h += '<div class="card"><label class="f">Observações do vaso<small>O que o escritório precisa saber e não coube nas seções.</small><textarea class="t" id="fObs">' + esc(i.observacao || '') + '</textarea></label></div>';
   h += '<div class="card" id="fCapa"><b>Foto de capa</b><p class="muted" style="margin:2px 0 0">O vaso inteiro, de frente: vai na capa do laudo.</p>' + gradeFotos(v, 'capa', 1) + '</div>';
   h += cartaoPrazo(v);   // S144 · item 70
@@ -3290,6 +3339,11 @@ function telaFechamento(v){
     i.situacao = 'enviada'; i.pode_editar = false; if (motivo) i.nao_inspecionado_motivo = motivo; salvar();
   };
   $('tela').querySelectorAll('[data-falta]').forEach(b => b.addEventListener('click', () => irFalta(v, f[Number(b.dataset.falta)])));   // S162 · issue 15
+  $('tela').querySelectorAll('[data-mvir]').forEach(b => b.addEventListener('click', () => {   // TapDoc 32 · issue 221
+    const x = mf[Number(b.dataset.mvir)]; if (!x) return;
+    MARCA = { vaso:v.id, tela:'componentes', sel:x.sel, texto:'Falta ' + x.rot + ' (Medidas do vaso). Dá para enviar sem ela: o laudo sai com o desenho 2D.', rolar:true, aviso:true };
+    ir({ nome:'componentes', vaso:v.id });
+  }));
   ligarRecusa(v);
   ligar('fEnviar', () => {
     despejar();   // S171 · issue 37: o que está adiado (digitado há menos de um segundo) entra na fila ANTES do "enviar"

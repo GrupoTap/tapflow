@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H19-S207';   // S207: Rodada R13 da auditoria (TapSeg; issues 121, 190, 191, 192, 193, 195 e 196; banco 627): TapSeg G10, Field S69
+const VERSAO = 'H19-S208';   // S208: Rodada R18 da auditoria (TapDoc revisão e celular; issues 218, 219, 220, 221 e 222; banco 449): TapDoc escritório E53, documentos-pdf.js D9, mapa-3d.js M3, celular 32
+// const VERSAO = 'H19-S207';   // S207: Rodada R13 da auditoria (TapSeg; issues 121, 190, 191, 192, 193, 195 e 196; banco 627): TapSeg G10, Field S69
 // const VERSAO = 'H19-S206';   // S206: Rodada R12 da auditoria, parte 2 (Cadastros; issues 145, 147, 148, 157 e 158; banco 216 do S205): Cadastros CAD10; saíram config.js, nucleo.js e nucleo.css da raiz
 // const VERSAO = 'H19-S205';   // S205: Rodada R12 da auditoria (TapHub; issues 149, 150, 151, 152 e 156; banco 216): núcleo N15, hub H19, Pessoas e acessos A12, Cadastros CAD9, o "Sair" do núcleo em todas as páginas (TapFlow S205, TapCRM 9, TapFin 30, TapRH 21, TapSeg 9, TapField S68)
 // const VERSAO = 'H18-S204';   // S204: Rodada R11 da auditoria (TapCRM e TapGestão; issues 127, 130–138; banco 312, 526, 702, 153): TapCRM CRM8, TapGestão GE5
@@ -126,7 +127,7 @@ const ESSENCIAIS = [
   './doc/',
   './doc/motor-calculo-nr13.js?v=R00.6',
   './doc/recomendacoes.js?v=RC1',   // S163: a lista das recomendações e do prazo (a revisão sem sinal precisa dela)
-  './doc/documentos-pdf.js?v=D7',   // S164: os nomes dos arquivos e o Resumo; S165: o Registro de Segurança; S166: os textos do Prontuário na minuta; S173: o prazo reduzido pelas datas
+  './doc/documentos-pdf.js?v=D9',   // S164: os nomes dos arquivos e o Resumo; S165: o Registro de Segurança; S166: os textos do Prontuário na minuta; S173: o prazo reduzido pelas datas
   // S88 · Acessos P1: a tela do admin
   './acessos/',
   // S116 · TapSeg 1: a Segurança do Trabalho

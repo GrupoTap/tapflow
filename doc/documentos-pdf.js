@@ -12,13 +12,14 @@
  * D3 · S166 · issue 30, Parte 3: o Prontuário (Reconstituído) usa as seções do próprio laudo-pdf.js (LaudoPDF.montar com opc.prontuario; DP1, DP11);
  *   aqui ficam o nome do arquivo dele (ROTULO.prontuario) e os textos da proposta para a minuta.
  * D4 · S167 · issue 30, Parte 4 (DP12, DP13): o fichário e as lombadas, gerados na hora (não são guardados nem assinados):
- *   · DocumentosPDF.kit(imprime, jaTemPasta) — 'completo', 'insercao' (nenhuma folha nova) ou 'nao_imprime';
+ *   · DocumentosPDF.kit(imprime, jaTemPasta) — 'completo', 'insercao' (D9: só a capa; antes, nenhuma folha nova) ou 'nao_imprime';
  *   · DocumentosPDF.fichario(d, opc) — a capa, a folha de rosto e as divisórias que existem, num PDF só por vaso;
  *   · DocumentosPDF.lombadas(itens, opc) — 2 lombadas por folha A4, de 40 ou 60 mm (itens de DocumentosPDF.lombadaDe).
  */
 (function (raiz) {
 'use strict';
-const VERSAO = 'D8-S186-2026-11-17';   // D8 (S186 · issue 74): o volume do Resumo e do Registro é o da categoria; o Resumo sem o quadro do acessório ausente ou retirado (sem aferição) e mais compacto com 3 ou mais acessórios; a data do teste é a de quando a aferição terminou
+const VERSAO = 'D9-S208-2026-11-21';   // D9 (S208 · issue 218): a capa da pasta sai em toda inspeção — com a caixa "O cliente já tem o Registro de Segurança (livro)" marcada, o fichário é só a capa (fichario(d, { soCapa: true })); desmarcada, o kit completo
+// const VERSAO = 'D8-S186-2026-11-17';   // D8 (S186 · issue 74): o volume do Resumo e do Registro é o da categoria; o Resumo sem o quadro do acessório ausente ou retirado (sem aferição) e mais compacto com 3 ou mais acessórios; a data do teste é a de quando a aferição terminou
 // const VERSAO = 'D7-S183-2026-11-17';   // D7 (S183 · issue 69): a válvula aprovada em campo que abre acima da PMTA adotada conta como recomendação (rec_regra.valvula_pmta) e sai "não conforme" no Registro (a fotografia já a traz "reprovado")
 // const VERSAO = 'D6-S178-2026-11-16';   // D6 (S178 · issue 60): a condição operacional "não liberado para operar nessa pressão" no Registro (PMTA adotada abaixo da pressão de operação; LaudoPDF.pressaoAbaixo)
 // const VERSAO = 'D5-S173-2026-11-16';   // D5 (S173 · issue 57): o prazo reduzido do Registro pelas datas aprovadas (LaudoPDF.prazoReduzido)
@@ -398,8 +399,8 @@ const MM = 72 / 25.4, A4W = 595.28, A4H = 841.89;
 const xml = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const ehImg = x => typeof x === 'string' && /^data:image\/(png|jpe?g);base64,/i.test(x);
 const n1 = v => (Math.round(v * 100) / 100).toString();
-/** O que sai do fichário para o vaso (DP12): cliente que não imprime a pasta = nada; já tem a pasta = kit de inserção
- *  (nenhuma folha nova); não tem = kit completo (capa, folha de rosto e divisórias). Quem diz "já tem" é a caixa da regra 45. */
+/** O que sai do fichário para o vaso (DP12): cliente que não imprime a pasta = nada; já tem o livro = kit de inserção
+ *  (D9 · issue 218: só a capa, que sai em toda inspeção); não tem = kit completo (capa, folha de rosto e divisórias). Quem diz "já tem" é a caixa da regra 45. */
 function kit(imprime, jaTemPasta) { return imprime === false ? 'nao_imprime' : jaTemPasta ? 'insercao' : 'completo'; }
 /** O logo oficial da Engetap, com o ®, em vetor (os contornos de vendor/placa-letras.js, o mesmo da placa): o texto de um SVG.
  *  Sem os contornos, null (quem chama usa o logo em imagem, que não tem o ®). */
@@ -442,7 +443,7 @@ const fotoCapa = (d, opc) => ehImg(opc.foto) ? opc.foto : (() => { const img = o
  *  · folha de rosto: a função do vaso, a TAG, o Nº TAP e a lista das divisórias;
  *  · divisórias: Prontuário · Relatório de Inspeção · Certificados Válvula e Manômetro · Anexos · Registro de Segurança.
  * A folha de rosto e as divisórias deixam 30 mm na margem esquerda para os furos do fichário.
- * opc: { foto | imagens, prontuario, certificados, letras, logoEngetap }.
+ * opc: { foto | imagens, prontuario, certificados, letras, logoEngetap, soCapa }. soCapa (D9): só a capa (o kit de inserção).
  */
 function fichario(d, opc) {
   opc = opc || {};
@@ -462,7 +463,8 @@ function fichario(d, opc) {
     foto ? { image: foto, fit: [440, 330], alignment: 'center', margin: [0, 26, 0, 22] } : { text: '', margin: [0, 190, 0, 0] },
     { text: V.tag || '', style: 'capaTag' },
     { text: [funcao, V.numero_tap ? 'Número TAP: ' + V.numero_tap : null].filter(Boolean).join(' · '), style: 'capaSub' }] });
-  // 2 · a folha de rosto: a função, a TAG, o Nº TAP e a lista das divisórias (no pé da moldura)
+  // 2 · a folha de rosto: a função, a TAG, o Nº TAP e a lista das divisórias (no pé da moldura). D9: no kit de inserção, só a capa.
+  if (!opc.soCapa) {
   C.push(logo(150, { pageBreak: 'before' }));
   C.push({ stack: [{ text: String(funcao).toUpperCase(), style: 'rostoTit' }, { text: V.tag || '', style: 'rostoTit', margin: [0, 10, 0, 0] },
     V.numero_tap ? { text: 'Número TAP: ' + V.numero_tap, style: 'rostoSub', margin: [0, 14, 0, 0] } : { text: '' }], margin: [0, 170, 0, 0] });
@@ -472,6 +474,7 @@ function fichario(d, opc) {
     C.push(logo(150, { pageBreak: 'before' }));
     C.push({ text: x.linhas.join('\n'), style: 'divTit', margin: [0, Math.max(40, (altura - 60 - x.linhas.length * 48) / 2 - 30), 0, 0] });
   });
+  }
   return {
     pageSize: 'A4', pageMargins: [ML, MT, MR, MT],
     info: { title: 'Fichário · ' + (V.tag || ''), author: 'Engetap', creator: 'TapFlow · TapDoc', producer: 'TapFlow · TapDoc (pdfmake)', subject: 'NR-13 · Fichário · ' + (V.tag || '') },
