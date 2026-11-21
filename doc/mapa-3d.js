@@ -15,7 +15,8 @@
  * ========================================================================== */
 (function (raiz) {
 'use strict';
-const VERSAO = 'M2-S152';   // M2 (S152): o modelo de vaso (as medidas padrão dos silos iguais, decisão 12) · M1 (S151): a primeira versão
+const VERSAO = 'M3-S208';   // M3 (S208 · issue 222): os pontos da parte de trás (CT) aparecem, mais apagados, nas vistas em que ficariam visíveis (de cima, de baixo e dos tampos no horizontal; das laterais e dos tampos no vertical), e a legenda diz
+// const VERSAO = 'M2-S152';   // M2 (S152): o modelo de vaso (as medidas padrão dos silos iguais, decisão 12) · M1 (S151): a primeira versão
 const W = 2200, H = 1720;
 const CORES = { vermelho: '#b3121a', preto: '#1e1e1e', bege: '#cfc9a6', azul: '#1f4f9a', cinza: '#8a8f96', branco: '#e8e8e8' };
 const COR_NOME = { vermelho: 'Vermelho', preto: 'Preto', bege: 'Bege', azul: 'Azul', cinza: 'Cinza', branco: 'Branco' };
@@ -187,7 +188,7 @@ function calcular(dados) {
     cotas.push({ chave: 'tampo_b', valor: B.h_uso, texto: txtAlt(B), vista: 'inferior', sigla: 'TD' });
     if (dois) cotas.push({ chave: 'tampo_a', valor: A.h_uso, texto: txtAlt(A), vista: 'inferior', sigla: 'TE' });
     O.rotulos = [['CS', 'superior'], ['CF', 'frontal'], ['CI', 'inferior'], ['TE (tampo esquerdo)', 'TE'], ['TD (tampo direito)', 'TD']];
-    O.nota = 'CT: costado traseiro, lado de trás (não aparece)';
+    O.nota = 'CT: costado traseiro (pontos da parte de trás, mais apagados, nas vistas de cima, de baixo e dos tampos)';
   } else {
     // em pé: o eixo vira Y (ponta B em cima). Gira 90°: x' = −y, y' = x.
     const stub = conA && A.r_saida > 0 ? 0.1 * D : 0;
@@ -215,15 +216,31 @@ function calcular(dados) {
     cotas.push({ chave: 'tampo_b', valor: B.h_uso, texto: txtAlt(B), vista: 'CLD', sigla: 'TS' });
     if (dois) cotas.push({ chave: 'tampo_a', valor: A.h_uso, texto: txtAlt(A), vista: 'CLD', sigla: 'TI' });
     O.rotulos = [['CLE (lateral esquerdo)', 'CLE'], ['CF (frontal)', 'CF'], ['CLD (lateral direito)', 'CLD'], ['TS (tampo superior)', 'TS'], [conA ? 'TI (cone, visto de baixo)' : 'TI (tampo inferior)', 'TI']];
-    O.nota = 'CT: costado traseiro, lado de trás (não aparece)' + (temJV ? '  ·  JV: janela de visita (5 pontos)' : '');
+    O.nota = 'CT: costado traseiro (pontos da parte de trás, mais apagados, nas vistas laterais e dos tampos)' + (temJV ? '  ·  JV: janela de visita (5 pontos)' : '');
   }
   O.vistas = vistas.map(v => ({ nome: v.nome, c: v.c, dir: v.dir, up: v.up, w: arred(v.w, 1), h: arred(v.h, 1), px_w: Math.ceil(v.w * O.escala) + 20, px_h: Math.ceil(v.h * O.escala) + 20 }));
   O.pontos = pts.filter(p => tem(p.n));
-  // cada ponto aparece na vista para a qual está virado (o CT nunca aparece)
+  // cada ponto aparece na vista para a qual está virado. M3 · issue 222: o da parte de trás (CT) não tem vista própria (uma 4ª
+  // vista ficaria ruim): aparece, mais apagado (tras: true), em toda vista em que ficaria visível — nas que olham o vaso de lado
+  // (de cima e de baixo no horizontal; as laterais no vertical) como uma segunda fileira, girado 45° para o lado da vista (como no
+  // laudo antigo); nas dos tampos (olhando pelo eixo), um ponto só na borda de trás. A vista da frente não o mostra (está atrás).
+  const eixo = vertical ? [0, 1, 0] : [1, 0, 0], ja = {};
   O.vistas.forEach(v => O.pontos.forEach(p => {
-    if (esc3(p.v, v.dir) < (p.cone ? 0.25 : 0.45)) return;
-    const q = naFolha(v, p.p, O.escala);
-    O.marcas.push({ n: p.n, vista: v.nome, x: arred(q[0], 1), y: arred(q[1], 1), sz: p.n === 'JV' ? 8 : 11 });
+    let pos = p.p, tras = false;
+    if (p.n === 'CT') {
+      const dv = esc3(p.v, v.dir), da = Math.abs(esc3(eixo, v.dir));
+      if (dv < -0.5) return;                                      // a vista da frente
+      if (da > 0.9) {                                             // a vista do tampo: a borda de trás, uma marca só
+        const ax = esc3(p.p, eixo); pos = [p.p[0] - eixo[0] * ax, p.p[1] - eixo[1] * ax, p.p[2] - eixo[2] * ax].map(c => c * 0.88);
+        if (ja[v.nome]) return; ja[v.nome] = true;
+      } else {                                                    // de lado: 45° para o lado da vista, na mesma altura do eixo
+        const ax = esc3(p.p, eixo), r = Math.sqrt(Math.max(0, esc3(p.p, p.p) - ax * ax)), k = Math.SQRT1_2;
+        pos = [0, 1, 2].map(i => eixo[i] * ax + r * k * (p.v[i] + v.dir[i]));
+      }
+      tras = true;
+    } else if (esc3(p.v, v.dir) < (p.cone ? 0.25 : 0.45)) return;
+    const q = naFolha(v, pos, O.escala);
+    O.marcas.push(Object.assign({ n: p.n, vista: v.nome, x: arred(q[0], 1), y: arred(q[1], 1), sz: p.n === 'JV' ? 8 : 11 }, tras ? { tras: true } : {}));
   }));
   O.regioes = [...new Set(O.marcas.map(m => m.n))];
   // a "assinatura": muda quando muda qualquer coisa que muda a figura (a revisão compara para saber se a imagem guardada vale)
@@ -299,7 +316,7 @@ function desenhar(O, THREE) {
     g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
     O.vistas.forEach(v => g.drawImage(foto(orto(v.dir, v.up, v.px_w / 2 / s, v.px_h / 2 / s), v.px_w, v.px_h), v.c[0] - v.px_w / 2, v.c[1] - v.px_h / 2));
     const P = O.perspectiva; g.drawImage(foto(iso(P.dir, P.caixa[0], P.caixa[1], P.caixa[2], P.w, P.h), P.w, P.h), P.c[0] - P.w / 2, P.c[1] - P.h / 2);
-    O.marcas.forEach(m => { g.save(); g.lineWidth = 3; g.strokeStyle = O.clara ? '#222' : '#fff';
+    O.marcas.forEach(m => { g.save(); g.lineWidth = 3; g.strokeStyle = O.clara ? '#222' : '#fff'; if (m.tras) { g.globalAlpha = 0.45; g.setLineDash([5, 4]); }   // M3 · issue 222: o ponto de trás, mais apagado
       for (let k = 0; k < 3; k++) { const a = k * Math.PI / 3; g.beginPath(); g.moveTo(m.x - Math.cos(a) * m.sz, m.y - Math.sin(a) * m.sz); g.lineTo(m.x + Math.cos(a) * m.sz, m.y + Math.sin(a) * m.sz); g.stroke(); }
       g.restore(); });
     // as cotas
