@@ -1,4 +1,4 @@
-/* nucleo/fin-painel.js · FP3 (S209, Rodada R14: a reserva = a soma das caixinhas, issue 93; os botões que voltavam ao Painel e o "Precisa de ação" com clique, issue 188) · FP2 (S189: a linha da meta de recebimento no "Entrou × saiu", só quando FINPM.metaEntrou existe) · FP1 (S188) — os quadros do Painel Financeiro e das Projeções do TapFin.
+/* nucleo/fin-painel.js · FP4 (S213, Rodada R16: os avisos sem número de SQL, issue 97) · FP3 (S209, Rodada R14: a reserva = a soma das caixinhas, issue 93; os botões que voltavam ao Painel e o "Precisa de ação" com clique, issue 188) · FP2 (S189: a linha da meta de recebimento no "Entrou × saiu", só quando FINPM.metaEntrou existe) · FP1 (S188) — os quadros do Painel Financeiro e das Projeções do TapFin.
  * Movido do fin/index.html (F21) sem mudar o código, para o TapGestão (aba Reunião) usar os MESMOS gráficos
  * (decisão RE9 do Bruno, 17/11/2026, processos/tapgestao-reuniao-desenho.md). Mudou um gráfico? Muda aqui, e vale
  * nos dois lugares. A página que carrega este arquivo precisa ter: esc, BRL, dataBR, rpc, irPara, visao, finPlural,
@@ -359,11 +359,12 @@ function fcrDesenhar(){
   if (!FINPM.pjMes || !M.includes(FINPM.pjMes)) FINPM.pjMes = M[1] || M[0];
   const nmPj = fpmRot(FINPM.pjMes), pjAtual = FINPM.pjMes === FINPM.pm.mes_atual;
   const falta = [];
-  if (!fpjTemDesp()) falta.push('as despesas recorrentes (SQL 502' + (FINPM.desp && FINPM.desp.erro ? ': ' + FINPM.desp.erro : '') + ')');
-  if (FINPM.proj && FINPM.proj.erro) falta.push('as OS em execução (SQL 500/501)');
-  if (!fpjTemCiclo()) falta.push('o saldo do dia 1º e as provisões (SQL 503)');
+  // FP4 (issue 97): sem número de SQL na tela; o motivo do servidor, se houver, fica entre parênteses
+  if (!fpjTemDesp()) falta.push('as despesas recorrentes' + (FINPM.desp && FINPM.desp.erro ? ' (' + FINPM.desp.erro + ')' : ''));
+  if (FINPM.proj && FINPM.proj.erro) falta.push('as OS em execução');
+  if (!fpjTemCiclo()) falta.push('o saldo do dia 1º e as provisões');
   const chips = '<div class="fpjChips" role="group" aria-label="Escolher o mês do detalhe">Mês em detalhe: ' + M.map(m => '<button type="button" class="btn sm' + (m === FINPM.pjMes ? ' pri' : '') + '" data-pjm="' + m + '" aria-pressed="' + (m === FINPM.pjMes) + '">' + esc(fpmMesCurto(m)) + (m === FINPM.pm.mes_atual ? ' (resto)' : '') + '</button>').join('') + '</div>';
-  el.innerHTML = (falta.length ? '<p class="fpmAviso">Não carregou ' + esc(falta.join(' e ')) + '. O resto da tela funciona sem elas.</p>' : '')
+  el.innerHTML = (falta.length ? '<p class="fpmAviso">Não carregou ' + esc(falta.join(' e ')) + '. O resto da tela funciona sem elas. Se continuar assim, falta uma atualização do sistema: avise o administrador.</p>' : '')
     // 1 · os quatro números
     + fpjTiles()
     // 2 · o saldo em linha + entradas × saídas
@@ -424,7 +425,7 @@ function fpjSaldoTabela(){
 
 function fpjDespCard(m){
   const D = fpjDespesas(m), nm = FPM_NOMES[+m.slice(5, 7) - 1], atual = m === FINPM.pm.mes_atual;
-  if (!fpjTemDesp()) return '<div class="painel fpmCard"><h3>Despesas de ' + esc(nm) + '</h3><p class="nota">Sem o SQL 502 não há como ler as recorrências.</p></div>';
+  if (!fpjTemDesp()) return '<div class="painel fpmCard"><h3>Despesas de ' + esc(nm) + '</h3><p class="nota">As recorrências não carregaram (falta uma atualização do sistema: avise o administrador).</p></div>';
   const grupos = {}; D.rec.forEach(r => (grupos[r.grupo] = grupos[r.grupo] || []).push(r));
   let h = '';
   Object.entries(grupos).sort((a, b) => fpmTot(b[1]) - fpmTot(a[1])).forEach(([g, L]) => {
@@ -503,7 +504,7 @@ function fcrFluxo(k){
       : c.parcial ? 'pagas até hoje ' + esc(fpmK(c.pago)) + ' + falta pagar ' + esc(fpmK(c.resto)) + ' (lançado e estimado)'
                   : c.ab === null ? 'saiu no mês (Painel)' : 'pagas no mês, com as provisões';
   const abExp = c => c.prev ? 'previsto: o saldo de hoje + o que falta entrar − o que falta sair em ' + esc(nome(fpmSoma(c.m, -1)))
-      : c.ab === null ? (c.faltam && c.faltam.length ? 'sem saldo: ' + esc(c.faltam.map(n => n.replace(/^Banco /, '')).join(', ')) + (c.faltam.length > 1 ? ' começam' : ' começa') + ' depois do dia 1º (data de corte)' : 'sem o saldo do dia 1º (SQL 503)')
+      : c.ab === null ? (c.faltam && c.faltam.length ? 'sem saldo: ' + esc(c.faltam.map(n => n.replace(/^Banco /, '')).join(', ')) + (c.faltam.length > 1 ? ' começam' : ' começa') + ' depois do dia 1º (data de corte)' : 'sem o saldo do dia 1º (falta uma atualização do sistema)')
       : 'saldo real no dia 1º · ' + esc(fpjNomesOp());
   const linha = (c, tit) => '<div class="fcrTit">' + tit + '</div><div class="fcrFluxo">'
     + box((c.prev ? 'Vai começar ' : 'Começou ') + esc(nome(c.m)) + ' com', c.ab === null ? '—' : esc(BRL(c.ab)), abExp(c), c.prev ? 'fpjEst' : '')
@@ -817,7 +818,7 @@ function fpjGrafCiclo(){
   const atual = FINPM.pm.mes_atual;
   const passados = fpjTemCiclo() ? FINPM.ciclo.meses.filter(c => c.abertura !== null && c.abertura !== undefined).map(c => c.mes) : [];
   const L = [...new Set([...passados, ...fpjMeses().filter(m => m > atual)])].sort().map(fcCiclo).filter(c => c && c.ab !== null);
-  if (!L.length){ el.innerHTML = '<p class="nota">Sem saldo do dia 1º ainda (precisa da data de corte de todas as contas e do SQL 503).</p>'; return; }
+  if (!L.length){ el.innerHTML = '<p class="nota">Sem saldo do dia 1º ainda (precisa da data de corte de todas as contas, em Contas Bancárias).</p>'; return; }
   const W = Math.max(240, el.clientWidth || 700), H = 220, pl = 58, pr = 10, pt = 22, pb = 30, iw = W - pl - pr, ih = H - pt - pb;
   const E = fpjEscala(L.flatMap(c => [c.ab, c.contas]), pt, ih, 20000);
   const bw = iw / L.length, barW = Math.min(34, bw * 0.3), gap = 4;
