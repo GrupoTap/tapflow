@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapRH 21 · Recursos Humanos</title>
+<title>TapRH 22 · Recursos Humanos</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2365,9 +2365,9 @@ th.num .tfThFixo{text-align:right}
 <!-- S63 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js.
      S76 · ?v=N2, igual ao hub e ao Field (o N2 aceita tudo do N1: o Manager já rodava o N2 com o
      endereço ?v=N1). O sw.js da raiz guarda estes três endereços: trocou aqui, troca lá (é do central). -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N16">
-<script src="../nucleo/config.js?v=N16"></script>
-<script src="../nucleo/nucleo.js?v=N16"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N17">
+<script src="../nucleo/config.js?v=N17"></script>
+<script src="../nucleo/nucleo.js?v=N17"></script>
 <!-- S82 · H10: a tabela única dos módulos (cor, miniatura, menu "Trocar de módulo"). Mudou o ?v=? Troque no sw.js da raiz também (é do central). -->
 <script src="../nucleo/modulos.js?v=M4"></script>
 </head>
@@ -2437,7 +2437,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'RH21';   // TapRH 21 (S205): Rodada R12 da auditoria (TapHub) — issue 156 (o "Sair" do núcleo: encerra o acesso também no servidor; no celular da empresa, guarda a sessão); núcleo N15
+const APP_VERSION = 'RH22';   // TapRH 22 (S212): Rodada R15 da auditoria — issue 161 ("Assinar como empresa" com o PIN provisório pede a troca do PIN ali mesmo e volta para assinar; só diz "assinada(s)" com a resposta de sucesso, sem "undefined"; o aviso de quem não tem PIN pelo caminho de hoje); núcleo N17
+// const APP_VERSION = 'RH21';   // TapRH 21 (S205): Rodada R12 da auditoria (TapHub) — issue 156 (o "Sair" do núcleo: encerra o acesso também no servidor; no celular da empresa, guarda a sessão); núcleo N15
 // const APP_VERSION = 'RH20';   // TapRH 20 (S201): Rodada R9 da auditoria — issues 118 (EzPoint fora dos textos; a Folha de Ponto antiga só até outubro/2026), 159 ("não postado" só de quem recebe; caixa na ficha), 160 (prazo de quem foi liberado tarde), 162 (fechar Diárias antes do fim pede FECHAR), 163 (mapa por mês/trimestre; parte do dia), 164 (linha de assinatura e o carimbo que falha), 165 (13 acertos), 120 (desligado com o login ativo), 141 parte 2 (batida parada no celular, em Ponto › Hoje); banco 618
 // const APP_VERSION = 'RH19';   // TapRH 19 (S198): Rodada R7 da auditoria — issue 174 (a planilha baixada com R$, total por fórmula, data de verdade e largura da coluna; a mesma relXLSX do TapFlow)
 // const APP_VERSION = 'RH18';   // TapRH 18 (S197): Rodada R6 da auditoria — issue 143 (sem os códigos do desenho, como "(P17)" e "parte 2B", nas telas do Ponto; o tempo da batida repetida vem do parâmetro)
@@ -5066,12 +5067,19 @@ function docAssinarEmpresa(){
         const msg = document.getElementById('aeMsg');
         const ids = [...document.querySelectorAll('#aeL input:checked')].map(i => i.value);
         if (!ids.length){ msg.textContent = 'Nada marcado.'; return; }
+        const pin = document.getElementById('aeP').value;
+        if (!/^\d{6}$/.test(pin)){ msg.textContent = 'Digite os 6 números do seu PIN.'; return; }
         try{
-          const r = await rpc('tf_rhdoc_assinar_empresa', { p_ids: ids, p_pin: document.getElementById('aeP').value });
-          if (r.status === 'pin_errado'){ msg.textContent = 'PIN errado. Restam ' + r.restantes + ' tentativa(s).'; return; }
-          if (r.status === 'bloqueado'){ msg.textContent = 'PIN travado até ' + rhDT(r.ate) + '.'; return; }
-          if (r.status === 'sem_pin'){ msg.textContent = 'Você ainda não criou o seu PIN (TapField › Minha Segurança).'; return; }
-          fecharModal(); toast(r.n + ' folha(s) assinada(s) pela empresa. Gerando os PDFs…', 'ok');
+          // S212 (issue 161): o PIN provisório (o de 24 h) pede a troca do PIN na tela da trava e volta para assinar com o novo
+          const r = await Nucleo.pin.assinar(p => rpc('tf_rhdoc_assinar_empresa', { p_ids: ids, p_pin: p }), pin);
+          if (!r || r.status !== 'ok'){
+            document.getElementById('aeP').value = '';
+            msg.textContent = r && r.status === 'sem_pin' ? 'Você ainda não tem PIN: crie o seu na tela do PIN do TapHub (feche e abra o TapHub).'
+              : (Nucleo.pin.msg(r) || (r && r.status === 'cancelado' ? 'Nada foi assinado: o PIN novo não foi criado.' : 'Não deu para assinar. Tente de novo.'));
+            return;
+          }
+          const n = Number(r.n) || 0;
+          fecharModal(); toast(n + (n === 1 ? ' folha assinada' : ' folhas assinadas') + ' pela empresa. Gerando os PDFs…', 'ok');
           await docCarimbar('ponto', ids); pintarRHDocs('ponto'); contarDocs();
         }catch(e){ msg.textContent = e.message; }
      }}]);
