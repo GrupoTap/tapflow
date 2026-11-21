@@ -18,7 +18,8 @@
  */
 (function (raiz) {
 'use strict';
-const VERSAO = 'D9-S208-2026-11-21';   // D9 (S208 · issue 218): a capa da pasta sai em toda inspeção — com a caixa "O cliente já tem o Registro de Segurança (livro)" marcada, o fichário é só a capa (fichario(d, { soCapa: true })); desmarcada, o kit completo
+const VERSAO = 'D10-S210-2026-11-21';   // D10 (S210 · issues 215, 216 e 227, Rodada R19): a boroscopia feita conta como exame interno ("Inspeção … Interna e Externa"); a frase do teste hidrostático desaconselhado sem a "evidência de teste anterior"; a ART sem a OS; "executou-se" sem quebrar no hífen; o nº de série da válvula no Resumo; a lombada com o QR code da imagem do TapWeb
+// const VERSAO = 'D9-S208-2026-11-21';   // D9 (S208 · issue 218): a capa da pasta sai em toda inspeção — com a caixa "O cliente já tem o Registro de Segurança (livro)" marcada, o fichário é só a capa (fichario(d, { soCapa: true })); desmarcada, o kit completo
 // const VERSAO = 'D8-S186-2026-11-17';   // D8 (S186 · issue 74): o volume do Resumo e do Registro é o da categoria; o Resumo sem o quadro do acessório ausente ou retirado (sem aferição) e mais compacto com 3 ou mais acessórios; a data do teste é a de quando a aferição terminou
 // const VERSAO = 'D7-S183-2026-11-17';   // D7 (S183 · issue 69): a válvula aprovada em campo que abre acima da PMTA adotada conta como recomendação (rec_regra.valvula_pmta) e sai "não conforme" no Registro (a fotografia já a traz "reprovado")
 // const VERSAO = 'D6-S178-2026-11-16';   // D6 (S178 · issue 60): a condição operacional "não liberado para operar nessa pressão" no Registro (PMTA adotada abaixo da pressão de operação; LaudoPDF.pressaoAbaixo)
@@ -112,7 +113,7 @@ function resumo(d, opc) {
   const pth = (cams[0] && cams[0].pth_mpa != null) ? cams[0].pth_mpa : V.pth_mpa;
   const volume = (R.volume_m3 != null ? Number(R.volume_m3) : cams.reduce((a, k) => a + (Number(k.volume_m3) || 0), 0) || null);
   const fluido = [...new Set(cams.map(k => k.fluido).filter(Boolean))].join(' / ') || null;
-  const exames = [I.exame_interno ? 'interna' : null, I.exame_externo ? 'externa' : null].filter(Boolean);
+  const exames = examesDe(d);   // D10 · issue 227: a boroscopia feita conta como exame interno
   const tipo = [TIPO_INSP[I.tipo] || I.tipo, exames.length ? exames.join(' e ') : null].filter(Boolean).join(', ');
   const dataInsp = dataBR(I.termino || I.inicio);
   const { cidade, estado } = cidadeUf(emp);
@@ -167,9 +168,10 @@ function resumo(d, opc) {
       const ab = (L.aberturas || []).filter(x => x != null && x !== '').map(x => emBar(x, un));
       const as = (L.assentamentos || []).filter(x => x != null && x !== '').map(x => emBar(x, un));
       const ajuste = a.pressao_ajuste_mpa != null ? Number(a.pressao_ajuste_mpa) * 10 : null;
-      grade([['FABRICANTE', fab], ['CONEXÃO', a.conexao], ['PRESSÃO DE ABERTURA', ab.length ? fmt(Math.max(...ab), 2) + ' bar' : (ajuste != null ? fmt(ajuste, 2) + ' bar' : null)],
+      const serie = vazio(a.numero_serie) ? null : a.numero_serie;   // D10 · issue 216
+      grade([['FABRICANTE', fab]].concat(serie ? [['Nº DE SÉRIE', serie]] : []).concat([['CONEXÃO', a.conexao], ['PRESSÃO DE ABERTURA', ab.length ? fmt(Math.max(...ab), 2) + ' bar' : (ajuste != null ? fmt(ajuste, 2) + ' bar' : null)],
         ['ASSENTAMENTO', as.length ? fmt(Math.min(...as), 2) + ' bar' : null], ['DATA DO TESTE', f ? dataBR(raiz.LaudoPDF && raiz.LaudoPDF.dataAfericao ? raiz.LaudoPDF.dataAfericao(f, I) : f.updated_at || f.realizada_em || I.termino || I.inicio) : null], ['CERTIFICADO', f ? f.codigo : null],
-        ['LACRE', lacre], resultado.slice(0, 2).concat([2, resultado[3]])]);
+        ['LACRE', lacre], resultado.slice(0, 2).concat([serie ? 1 : 2, resultado[3]])]));
     } else {
       const ini = f ? emBar(f.faixa_ini || 0, un) : null, fimE = f ? emBar(f.faixa_fim, un) : null;
       const esc = fimE != null ? fmt(ini, 0) + ' – ' + fmt(fimE, fimE % 1 ? 1 : 0) + ' bar' : (a.escala || null);
@@ -222,6 +224,16 @@ const TIPO_MIN = { inicial: 'inicial', periodica: 'periódica', extraordinaria: 
 const TESTE_TIPO = { hidrostatico: 'hidrostático', pneumatico: 'pneumático', hidropneumatico: 'hidropneumático' };
 const maiusPal = s => String(s || '').replace(/(^|\s)(\p{L})/gu, (m, a, b) => a + b.toUpperCase()).replace(/ (E|De|Da|Do|Das|Dos) /g, m => m.toLowerCase());
 
+/** D10 · issue 227 (Bruno, 19/11): os exames da inspeção — a boroscopia feita (a microcâmera dentro do vaso) conta como exame
+ *  interno, mesmo com a caixa "exame interno" desmarcada; o externo, como a inspeção marcou. */
+function examesDe(d) {
+  const I = (d && d.inspecao) || {}, B = (d && d.boroscopia) || {};
+  const interno = I.exame_interno === true || B.realizada === true, externo = I.exame_externo === true;
+  return [interno ? 'interna' : null, externo ? 'externa' : null].filter(Boolean);
+}
+/** D10 · issue 227: o hífen e a barra presos à palavra (como no laudo): o justificado não parte "executou-se" em "executou- se". */
+const presos = t => typeof t !== 'string' ? t : t.replace(/(\p{L})-(?=\p{L})/gu, '$1\u2011').replace(/(\p{L})\/(?=\p{L})/gu, '$1/\uFEFF');
+
 /**
  * Os fatos da inspeção que escolhem as frases da anotação (DP9), todos da fotografia do laudo:
  * o tipo e os exames, as aferições terminadas (com os números M/V), o teste (feito, desaconselhado ou não feito),
@@ -237,7 +249,8 @@ function fatosRegistro(d) {
   const afs = (d.acessorios || []).filter(a => a.afericao && (a.afericao.resultado === 'aprovado' || a.afericao.resultado === 'reprovado'));
   let teste;
   if (TE.realizado) teste = { caso: 'feito', tipo: TESTE_TIPO[TE.tipo] || TE.tipo || 'de pressão', pressao: barMPa(TE.pressao_mpa), reprovado: TE.resultado === 'reprovado' };
-  else if (M.teste_nao_cond && visOk && !abaixo) teste = { caso: TE.th_fabricacao_comprovado ? 'desaconselhado_th' : 'desaconselhado' };
+  // D10 · issue 227 (Bruno, 19/11): a frase sem "Pela evidência de teste hidrostático anterior" (saía em vaso sem documento nenhum)
+  else if (M.teste_nao_cond && visOk && !abaixo) teste = { caso: 'desaconselhado' };
   else teste = { caso: 'nao', motivo: TE.motivo_nao || 'motivo não informado' };
   // S173 · issue 57: a frase do prazo reduzido sai das DATAS aprovadas (a mesma conta do laudo: LaudoPDF.prazoReduzido); sem o
   // gerador do laudo carregado, não se afirma redução nenhuma (antes: os anos digitados, que podiam não bater com a data)
@@ -286,7 +299,7 @@ function registro(d, opc) {
   const rodTxt = [V.tag, V.numero_tap ? 'Nº TAP ' + V.numero_tap : null, 'Registro de Segurança'].filter(Boolean).join(' · ');
   const C = [];
   const quebra = () => { if (C.length) C[C.length - 1].pageBreak = 'after'; };
-  const par = (t, extra) => { if (!vazio(t)) C.push(Object.assign({ text: t, style: 'par' }, extra || {})); };
+  const par = (t, extra) => { if (!vazio(t)) C.push(Object.assign({ text: presos(t), style: 'par' }, extra || {})); };   // D10 · issue 227
 
   if (livro) {
     // folha 1 · o termo de abertura
@@ -322,7 +335,7 @@ function registro(d, opc) {
     quebra();
   }
   // a anotação (DP9: cada frase de um texto pronto, escolhido pelos dados)
-  const exames = [I.exame_interno ? 'interna' : null, I.exame_externo ? 'externa' : null].filter(Boolean).join(' e ');
+  const exames = examesDe(d).join(' e ');   // D10 · issue 227: a boroscopia feita conta como exame interno
   const tipoMin = TIPO_INSP[I.tipo] ? TIPO_MIN[I.tipo] : (I.tipo || '');
   C.push({ text: maiusPal(txt(X.titulo, { tipo: tipoMin, exames })).replace(/\s+/g, ' ').trim(), style: 'tituloReg', margin: [0, 0, 0, 14] });
   const frag = F.afs.map(a => {
@@ -352,8 +365,9 @@ function registro(d, opc) {
   if (R.proxima_externa || R.proxima_interna) C.push({ text: [{ text: 'Próximas inspeções: ', bold: true },
     { text: txt(X.proximas, { externa: dataBR(R.proxima_externa) || '—', interna: R.proxima_interna ? ' · interna até ' + dataBR(R.proxima_interna) : '' }) }], style: 'par' });
   par(X.pagina);
-  const art = d.art || {}, os = (d.os || {}).numero;
-  C.push({ text: [{ text: 'ART: ', bold: true }, { text: (art.numero || '—') + (os ? ' (' + osRot(os) + ')' : '') }], style: 'par' });
+  // D10 · issue 227: a linha da ART só com o número (a OS é só da Engetap)
+  const art = d.art || {};
+  C.push({ text: [{ text: 'ART: ', bold: true }, { text: art.numero || '—' }], style: 'par' });
   // a assinatura à mão na via impressa (o oficial é o PDF assinado com o token)
   C.push({ stack: [{ text: ' ', margin: [0, 44, 0, 0] },
     { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 230, y2: 0, lineWidth: 0.6, lineColor: '#1F2A33' }], alignment: 'center' },
@@ -499,15 +513,23 @@ function lombadaDe(d, extra) {
   const emp = (d && d.empresa) || {}, V = (d && d.vaso) || {}, cams = V.camaras || [];
   return { tag: V.tag || '', tipo: TIPO_EQUIP[V.nr13_tipo] || TIPO_EQUIP.vaso, fluido: [...new Set(cams.map(k => k.fluido).filter(Boolean))].join(' / ') || V.fluido || null,
     local: vazio(V.localizacao) ? null : String(V.localizacao).trim(), link: vazio(extra.link) ? null : String(extra.link).trim(),
+    qr: qrDeTexto(extra.qr),   // D10 · issue 215: os módulos lidos da imagem baixada do TapWeb (equipamentos.tapweb_qr)
     foto: fotoCapa(d, extra), logoCliente: ehImg(emp.logo) ? emp.logo : null, largura: LARGURAS.indexOf(Number(extra.largura)) >= 0 ? Number(extra.largura) : 40 };
 }
 /** O que a lombada não tem e sai sem (a tela avisa): o QR code sem o link do TapWeb, a foto, a logomarca do cliente. */
 function avisosLombada(x) {
   const a = [];
-  if (!x.link) a.push('sem o link do TapWeb: sai sem o QR code');
+  if (!x.link && !x.qr) a.push('sem o QR code do TapWeb (a imagem ou o link): sai sem o QR code');
   if (!x.foto) a.push('sem a foto do vaso');
   if (!x.logoCliente) a.push('sem a logomarca do cliente');
   return a;
+}
+/** D10 · issue 215: os módulos guardados ("0" e "1", linha a linha: n × n) → { n, linhas }; formato errado, null. */
+function qrDeTexto(t) {
+  t = typeof t === 'string' ? t.trim() : ''; const n = Math.round(Math.sqrt(t.length));
+  if (!t || n * n !== t.length || n < 21 || (n - 21) % 4 || /[^01]/.test(t)) return null;
+  const linhas = []; for (let r = 0; r < n; r++) linhas.push(t.slice(r * n, r * n + n).split('').map(c => c === '1'));
+  return { n, linhas };
 }
 function qrModulos(qrcode, texto) {
   const q = qrcode(0, 'M'); q.addData(String(texto)); q.make();
@@ -547,8 +569,8 @@ function lombadas(itens, opc) {
       else if (logoPng) imgs.push(imagem(logoPng, x + PAD, yb, util, hEng));
       else svg += '<text x="' + n1(cx) + '" y="' + n1(yb + hEng * 0.7) + '" text-anchor="middle" font-family="Roboto" font-weight="bold" font-size="' + n1(util / 6) + '" fill="' + AZUL + '">ENGETAP®</text>';
       if (it.foto) { const hF = 0.6 * W; yb -= ESP + hF; imgs.push(imagem(it.foto, x + PAD, yb, util, hF)); }
-      if (it.link && typeof Q === 'function') {
-        const lado = 0.6 * W, qr = qrModulos(Q, it.link), mod = lado / (qr.n + 4), qx = cx - lado / 2; yb -= ESP + lado;
+      if (it.qr || (it.link && typeof Q === 'function')) {
+        const lado = 0.6 * W, qr = it.qr || qrModulos(Q, it.link), mod = lado / (qr.n + 4), qx = cx - lado / 2; yb -= ESP + lado;
         svg += '<rect x="' + n1(qx) + '" y="' + n1(yb) + '" width="' + n1(lado) + '" height="' + n1(lado) + '" fill="#FFFFFF"/>';
         let dd = '';
         qr.linhas.forEach((l, r) => { let c = 0; while (c < qr.n) { if (!l[c]) { c++; continue; } let f = c; while (f < qr.n && l[f]) f++;
@@ -578,6 +600,6 @@ function lombadas(itens, opc) {
 }
 
 const DocumentosPDF = { resumo, registro, fatosRegistro, textosDaProposta, dataExtenso, nome, limpo, tagNome, osRot, ROTULO,
-  kit, divisorias, fichario, lombadaDe, lombadas, avisosLombada, logoSvg, DIVISORIAS, LARGURAS, versao: VERSAO };
+  kit, divisorias, fichario, lombadaDe, lombadas, avisosLombada, logoSvg, DIVISORIAS, LARGURAS, examesDe, qrDeTexto, versao: VERSAO };
 if (typeof module !== 'undefined' && module.exports) module.exports = DocumentosPDF; else raiz.DocumentosPDF = DocumentosPDF;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -200,7 +200,8 @@ tr[data-espver]{cursor:pointer} tr[data-espver]:hover{background:var(--surface-2
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E53';   // E53 (S208 · issues 218, 219, 220, 221 e 222, Rodada R18 da auditoria): na revisão, todo quadro se recolhe pelo título e tem "conferido" (a etapa só conclui com todos marcados); a caixa "O cliente já tem o Registro de Segurança (livro)" (a capa e a lombada saem sempre: documentos-pdf.js D9); clicar no componente das Espessuras do medidor mostra todas as leituras; o visor abre com a foto da capa; a boroscopia em miniatura, com a legenda pronta; "Girar" a foto (vale no laudo e nos documentos); as medidas do mapa gravam ao sair do campo; os pontos de trás nas outras vistas do mapa (mapa-3d.js M3); a revisão não pula mais depois de abrir (o mapa e o visor guardam o lugar); 449
+const VERSAO = 'TapDoc E54';   // E54 (S210 · issues 215, 216, 217, 223, 224, 225, 226, 227 e 228, Rodada R19 da auditoria): o laudo (laudo-pdf.js S178: Quadro 1, 7.3 com a conclusão, 9.1 do laudo antigo, as fórmulas em fração e os tampos iguais numa conta, os anexos só do medidor e da ART, o relatório de aferição com carga e descarga e a bancada, a portaria da NR-13 pelo texto) e o certificado do medidor juntado ao PDF; os documentos (documentos-pdf.js D10: a boroscopia conta como exame interno no Registro, a frase do teste, a ART sem a OS); na revisão, o Número TAP sem motivo, o E e a geometria para quem revisa, o nº de série da válvula e o ajuste da conclusão do 7.3; o QR code da placa e da lombada pela imagem do TapWeb (placa-pdf.js P2); 450
+// const VERSAO = 'TapDoc E53';   // E53 (S208 · issues 218, 219, 220, 221 e 222, Rodada R18 da auditoria): na revisão, todo quadro se recolhe pelo título e tem "conferido" (a etapa só conclui com todos marcados); a caixa "O cliente já tem o Registro de Segurança (livro)" (a capa e a lombada saem sempre: documentos-pdf.js D9); clicar no componente das Espessuras do medidor mostra todas as leituras; o visor abre com a foto da capa; a boroscopia em miniatura, com a legenda pronta; "Girar" a foto (vale no laudo e nos documentos); as medidas do mapa gravam ao sair do campo; os pontos de trás nas outras vistas do mapa (mapa-3d.js M3); a revisão não pula mais depois de abrir (o mapa e o visor guardam o lugar); 449
 // const VERSAO = 'TapDoc E52';   // E52 (S186 · issues 74 e 75, Revisão TapDoc · Rodada 11): ajustes do que o laudo e os documentos escrevem (o volume da categoria, a data de quando a aferição terminou, "+N" no 7.3, o Resumo sem o quadro do acessório ausente — laudo-pdf.js S177, documentos-pdf.js D8) e das telas (os avisos do cálculo na tela do laudo e na revisão; campo entre chaves desconhecido na proposta de texto; ART protegida; recomendação sem "Que…"; o link do QR atualiza os documentos; os avisos da placa ao baixar; a foto da capa tentada de novo; o envio lento sem "travou" e o "Tentar de novo" esperando o anterior; busca e "ver mais" na aba Laudos; "faltam N documentos por assinar"; a placa a conferir depois de reabrir; a memória dos rascunhos liberada)
 // const VERSAO = 'TapDoc E51';   // E51 (S185 · issues 70 e 73, Revisão TapDoc · Rodada 10b): o laudo emitido antes da última reabertura da inspeção não entra mais em "Para assinar com o token" (aparece "Falta emitir a revisão"); na devolução do PDF assinado, o certificado vencido na data da assinatura é recusado, o tipo da assinatura é gravado pelo emissor (ICP-Brasil = qualificada; gov.br = avançada; os outros = não identificada) e a tela mostra de quem é o certificado, quem emitiu e até quando vale; o nome do certificado fica sem o CPF (assinatura-pdf.js S174; 447)
 // const VERSAO = 'TapDoc E50';   // E50 (S183 · issues 69 e 84, Revisão TapDoc · Rodada 10a): na revisão, a válvula aprovada em campo que abre acima da PMTA adotada é pendência (vermelha sem a recomendação; com ela, amarela: o laudo sai com a válvula NÃO CONFORME e a recomendação de reajustar ou substituir); em 3 · PMTA, de onde veio a PMTA anterior (qual laudo, qual data) e o aviso quando ela espera a conferência do laudo anterior; laudo-pdf.js S176, documentos-pdf.js D7 (446)
@@ -1167,7 +1168,7 @@ function libsPlaca(){
   if (!LIBS_PLACA) LIBS_PLACA = (async () => {
     if (!window.PlacaLetras) await carregarScript('vendor/placa-letras.js?v=1');
     if (!window.qrcode) await carregarScript('vendor/qrcode.js?v=2.0.4');
-    if (!window.PlacaPDF) await carregarScript('placa-pdf.js?v=P1');
+    if (!window.PlacaPDF) await carregarScript('placa-pdf.js?v=P2');
     return true;
   })().catch(e => { LIBS_PLACA = null; throw e; });
   return LIBS_PLACA;
@@ -1176,10 +1177,17 @@ function baixarBytes(nome, blob){
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
+/** E54 · issue 215: o QR code lido da imagem baixada do TapWeb (equipamentos.tapweb_qr, pela tf_placa_qr_ver), em v.tapweb_qr de
+ *  cada vaso; sem a função no banco (atualização faltando), segue sem: a placa e a lombada usam o link, como antes. */
+async function juntarQR(vasos){
+  const ids = [...new Set((vasos || []).map(v => v.equipamento_id).filter(Boolean))]; if (!ids.length) return;
+  let Q = {}; try{ Q = (await rpc('tf_placa_qr_ver', { p_equips: ids })) || {}; }catch(e){ Q = {}; }
+  (vasos || []).forEach(v => { v.tapweb_qr = Q[v.equipamento_id] || null; });
+}
 async function quadroPlacas(os){
   const cx = $('cxPlacas'); if (!cx) return;
   let D;
-  try{ D = await rpc('tf_placa_dados', { p_os: os }); await libsPlaca(); }
+  try{ D = await rpc('tf_placa_dados', { p_os: os }); await libsPlaca(); await juntarQR(D.vasos); }
   catch(e){ cx.innerHTML = '<p class="muted" style="color:var(--crit)">Não deu para carregar as placas: ' + esc(e && e.message ? e.message : String(e)) + '</p>'; return; }
   if (!$('cxPlacas')) return;                              // a tela mudou enquanto carregava
   const ctx = { emissora: D.emissora || {}, cliente: D.cliente || '' };
@@ -1200,7 +1208,8 @@ async function quadroPlacas(os){
         + (l.falt.length ? '<div class="muted" style="color:var(--crit)">' + l.falt.map(esc).join('<br>') + '</div>' : '')
         + (l.avisos.length ? '<div class="muted" style="color:var(--warn)">' + l.avisos.map(esc).join('<br>') + '</div>' : '') + '</td>'
       + '<td class="h-ins"><div class="linha" style="flex-wrap:nowrap"><input class="t" data-pllink="' + esc(v.equipamento_id) + '" style="margin:0;min-width:180px" placeholder="https://…" value="' + esc(v.tapweb_link || '') + '">'
-        + '<button class="btn mini sec" data-plgrava="' + esc(v.equipamento_id) + '">Gravar</button></div></td>'
+        + '<button class="btn mini sec" data-plgrava="' + esc(v.equipamento_id) + '">Gravar</button></div>'
+        + (v.tapweb_qr ? '<div class="muted">Com a imagem do QR code do TapWeb (é ela que sai)</div>' : '') + '</td>'   // E54 · issue 215
       + '<td class="acoes" style="text-align:right;white-space:nowrap">' + (l.pronta ? '<button class="btn mini" data-plbaixa="' + esc(v.inspecao_id) + '">Baixar a placa</button>' : '') + '</td></tr>';
   }).join('') + '</table>';
   cx.innerHTML = h;
@@ -1383,8 +1392,9 @@ const seletorLombada = v => '<select class="t" data-lomb="' + esc(v.inspecao_id)
 async function gerarLombadas(D, vasos, larguras){
   await libsFichario();
   const itens = [];
+  await juntarQR(vasos);   // E54 · issue 215
   for (const v of vasos){ const d = await fotografiaDoLaudo(v.laudo);
-    itens.push(DocumentosPDF.lombadaDe(d, { foto: await fotoCapaDe(d), link: v.tapweb_link, largura: (larguras || {})[v.inspecao_id] || 40 })); }
+    itens.push(DocumentosPDF.lombadaDe(d, { foto: await fotoCapaDe(d), link: v.tapweb_link, qr: v.tapweb_qr, largura: (larguras || {})[v.inspecao_id] || 40 })); }
   const def = DocumentosPDF.lombadas(itens, { os:(D.os || {}).numero, cliente:D.cliente });
   if (!def) throw new Error('Nenhum vaso com laudo emitido para a lombada.');
   const avisos = itens.map(x => { const a = DocumentosPDF.avisosLombada(x); return a.length ? x.tag + ' ' + a.join(', ') : null; }).filter(Boolean);
@@ -1546,24 +1556,68 @@ function ligarPasta(insp, onde, depois){
 async function pastaVer(insp){ try{ return await rpc('tf_insp_pasta_ver', { p_insp: insp }); }catch(e){ return null; } }
 // ── E39 (S168 · issue 34): o link do TapWeb na revisão ─────────────────────────
 // O QR code da placa de identificação e da lombada do fichário é o link da ficha do vaso no TapWeb (equipamentos.tapweb_link, 431).
+// E54 · issue 215: ou, de preferência, a imagem do QR code baixada do TapWeb (equipamentos.tapweb_qr, 450: os módulos lidos dela).
 // Antes só se digitava no quadro "Placas" da OS; agora a revisão avisa o que falta e deixa colar o link ali (o mesmo campo: vale para os dois).
 async function qrVer(insp){
   try{ const D = await rpc('tf_insp_documentos', { p_os: null, p_insp: insp }), v = (D.vasos || [])[0];
-    return v ? { equip: v.equipamento_id, tag: v.tag, link: v.tapweb_link || '', imprime: D.imprime_pasta !== false } : null; }catch(e){ return null; }
+    if (v) await juntarQR([v]);   // E54 · issue 215
+    return v ? { equip: v.equipamento_id, tag: v.tag, link: v.tapweb_link || '', qr: v.tapweb_qr || null, imprime: D.imprime_pasta !== false } : null; }catch(e){ return null; }
+}
+/** E54 · issue 215: o QR code guardado ("0" e "1", n × n) desenhado num canvas pequeno, para conferir. */
+function qrPrevia(t, px){
+  const n = Math.round(Math.sqrt((t || '').length)); if (!n) return '';
+  const c = document.createElement('canvas'), m = Math.max(1, Math.floor((px || 120) / (n + 4))); c.width = c.height = (n + 4) * m;
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.fillStyle = '#000';
+  for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (t[r * n + k] === '1') x.fillRect((k + 2) * m, (r + 2) * m, m, m);
+  return c.toDataURL('image/png');
+}
+/** E54 · issue 215: a imagem baixada do TapWeb → os módulos do QR code (PlacaPDF.lerQR); recusa a que não é QR. */
+async function lerImagemQR(arq){
+  await libsPlaca();
+  const url = URL.createObjectURL(arq);
+  try{
+    const im = await new Promise((ok, falha) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => falha(new Error('Não consegui abrir a imagem (use PNG ou JPG).')); i.src = url; });
+    const k = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight)), c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(im.naturalWidth * k)); c.height = Math.max(1, Math.round(im.naturalHeight * k));
+    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.imageSmoothingEnabled = false; x.drawImage(im, 0, 0, c.width, c.height);
+    return PlacaPDF.lerQR(x.getImageData(0, 0, c.width, c.height));
+  } finally { URL.revokeObjectURL(url); }
 }
 function cartaoQR(Q){
   if (!Q) return '';
   const onde = 'a placa de identificação' + (Q.imprime ? ' e a lombada do fichário' : '');
   return revCard('qr', 'qrRevCard') + revCab('qr', 'QR code da placa' + (Q.imprime ? ' e da lombada' : '') + ' (link da ficha no TapWeb)')
-    + (Q.link ? '<p class="muted" style="margin:6px 0">Gravado: o QR de ' + onde + ' abre este link. Confira se é a ficha deste vaso (' + esc(Q.tag || '') + ').</p>'
-      : '<p class="alerta falta" style="margin:8px 0">Falta o link da ficha deste vaso no TapWeb. Sem ele, <b>a placa de identificação não sai</b>' + (Q.imprime ? ' e <b>a lombada sai sem o QR code</b>' : '')
-        + '. Abra a ficha do vaso no TapWeb, copie o endereço da página e cole aqui.</p>')
+    // E54 · issue 215 (Bruno, 19/11, opção A): o QR code pela imagem que o TapWeb entrega (aba "QR Code" › Download); a placa e a lombada
+    // usam essa imagem (os módulos dela, em vetor). Sem a imagem, o QR é montado pelo link, como antes.
+    + '<div class="linha" style="align-items:flex-start;gap:12px;margin:8px 0">'
+    + (Q.qr ? '<img id="qrPrev" alt="QR code gravado" style="width:96px;height:96px;image-rendering:pixelated;border:1px solid var(--rule-2)" src="' + qrPrevia(Q.qr, 96) + '">' : '')
+    + '<div style="flex:1">' + (Q.qr ? '<p class="muted" style="margin:0 0 6px"><b>Imagem do QR code do TapWeb gravada</b>: é ela que sai na ' + onde + '. Confira lendo com o celular.</p>'
+        : '<p class="muted" style="margin:0 0 6px">Anexe a imagem do QR code baixada do TapWeb (aba "QR Code" › Download): a ' + onde + ' usam essa imagem.</p>')
+    + '<button class="btn mini sec" id="qrImg">' + (Q.qr ? 'Trocar a imagem do QR code' : 'Anexar a imagem do QR code') + '</button>'
+    + (Q.qr ? ' <button class="btn mini" id="qrImgTirar">Tirar a imagem</button>' : '') + '<input type="file" id="qrArq" accept="image/png,image/jpeg" hidden></div></div>'
+    + (Q.link || Q.qr ? (Q.link ? '<p class="muted" style="margin:6px 0">' + (Q.qr ? 'Link gravado (vale quando não há a imagem)' : 'Gravado: o QR de ' + onde + ' abre este link') + '. Confira se é a ficha deste vaso (' + esc(Q.tag || '') + ').</p>' : '')
+      : '<p class="alerta falta" style="margin:8px 0">Falta o QR code deste vaso no TapWeb. Sem ele, <b>a placa de identificação não sai</b>' + (Q.imprime ? ' e <b>a lombada sai sem o QR code</b>' : '')
+        + '. Anexe a imagem do QR code baixada do TapWeb ou cole o link da ficha.</p>')
     + '<div class="linha" style="flex-wrap:nowrap"><input class="t" id="qrLink" style="margin:0;min-width:220px" placeholder="https://…" value="' + esc(Q.link) + '">'
     + '<button class="btn mini sec" id="qrGravar">Gravar</button></div>'
     + '<div class="muted" style="margin-top:4px">É o mesmo link do quadro "Placas de identificação" da OS: gravar aqui ou lá vale para os dois.</div></div>';
 }
 function ligarQR(depois){
   const b = $('qrGravar'); if (!b || !REV || !REV.qr) return;
+  // E54 · issue 215: a imagem do QR code do TapWeb
+  const bi = $('qrImg'), arq = $('qrArq'), bt = $('qrImgTirar');
+  if (bi && arq){
+    bi.addEventListener('click', () => { arq.value = ''; arq.click(); });
+    arq.addEventListener('change', () => { const f = arq.files && arq.files[0]; if (!f) return;
+      U.semDuploEnvio(bi, async () => {
+        let mod; try{ mod = await lerImagemQR(f); }catch(e){ U.toast(e.message || 'A imagem não foi lida como um QR code.', 'err'); return; }
+        try{ const r = await rpc('tf_placa_qr_gravar', { p_equip: REV.qr.equip, p_qr: mod });
+          U.toast('Imagem do QR code gravada (' + r.lado + ' × ' + r.lado + ' módulos): vale para a placa e a lombada.', 'ok'); await depois(); }catch(e){ erro(e); }
+      }); });
+  }
+  if (bt) bt.addEventListener('click', () => U.semDuploEnvio(bt, async () => {
+    try{ await rpc('tf_placa_qr_gravar', { p_equip: REV.qr.equip, p_qr: null }); U.toast('Imagem do QR code tirada: vale o link.', 'ok'); await depois(); }catch(e){ erro(e); }
+  }));
   b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
     const link = ($('qrLink').value || '').trim();
     if (link && !/^https:\/\/\S+$/i.test(link)){ U.toast('O link precisa começar com https:// e não pode ter espaço.', 'err'); return; }
@@ -2142,6 +2196,13 @@ const REV_ITENS = [['dados','Dados contra as fotos'], ['recomendacoes','Anomalia
 const REV_ETAPA = { 1:'Revisão 1 · equipe', 2:'Revisão 2 · outra equipe', 3:'Aprovação do PLH' };
 const REV_CAMPOS_VASO = [['numero_tap','Número TAP'], ['funcao','Função do vaso'], ['placa_situacao','Placa de identificação'], ['numero_serie','Nº de série'], ['modelo','Modelo'], ['ano_fabricacao','Ano de fabricação'], ['codigo_construcao','Código de construção'],
                          ['codigo_edicao','Edição do código'], ['circunferencia_mm','Circunferência']];   // E46 · issue 61: a circunferência (dela sai o raio da conta)   // S144 · itens 63 e 78: Número TAP (nº do cliente + TAG sem prefixo), função e "sem placa"   // S141 · item 31: a PMTA e a PTH de plaqueta são da câmara (quadro abaixo)
+const VALV_SERIE = ['valvula_seguranca', 'valvula_alivio', 'quebra_vacuo'];   // E54 · issue 216: o nº de série é só da válvula
+/** E54 · issue 217: a linha do Número TAP em "1 · Dados contra as fotos": campo simples (sem motivo, sem histórico de correção). */
+function revTapHtml(R, eu){
+  const t = (R.vaso || {}).numero_tap || '';
+  return '<tr><td class="muted">Número TAP</td><td>' + (eu.pode ? '<input class="t" id="revTap" style="margin:0;max-width:140px" maxlength="30" placeholder="ex.: 33-23" value="' + esc(t) + '">' : '<b>' + esc(t || '—') + '</b>')
+    + '</td><td>' + (eu.pode ? '<button class="btn mini sec" id="revTapGr">Gravar</button>' : '') + '</td></tr>';
+}
 const REV_CAMPOS_AC = [['tag','TAG'], ['marca','Marca'], ['conexao','Conexão'], ['escala','Escala'], ['lacre_num','Lacre'], ['pressao_ajuste_mpa','Ajuste'], ['situacao','Situação']];   // E46 · issues 56 e 61: o ajuste na unidade da inspeção; a situação   // S144 · itens 72 e 75: sem "modelo"; a conexão
 // S144 · item 78: o que a revisão sugere (o revisor escolhe; nada é marcado sozinho)
 const FUNCOES_VASO = ['Reservatório de ar comprimido', 'Pulmão de ar comprimido', 'Secador de ar comprimido', 'Filtro', 'Separador de condensado', 'Acumulador hidráulico',
@@ -2430,14 +2491,14 @@ function revAjustesAltos(v, acess, pr){
 /** Issue 61: o E e a geometria que a conta usa em cada componente. "padrão" = o campo não informou e vale o padrão da conta. */
 function revGeoHtml(v, eu){
   const cs = (v.componentes || []).filter(c => c.ativo !== false); if (!cs.length) return '';
-  const pode = eu.pode && eu.plh, n3 = x => fmt(x, 3);
+  const pode = eu.pode, n3 = x => fmt(x, 3);   // E54 · issue 217: a Revisão 1, a Revisão 2 e o PLH (antes, só o PLH)
   const val = (c, g, k) => g[k] == null ? '<span style="color:var(--crit)">falta</span>' : esc(n3(g[k])) + (g.padrao.indexOf(k) >= 0 ? ' <span class="muted">(padrão)</span>' : '');
   return '<h3 style="margin-top:14px">E e geometria dos componentes</h3><table data-geo="1"><tr><th>Componente</th><th>E (solda)</th><th>Geometria da conta</th><th></th></tr>'
     + cs.map(c => { const g = CALC.geoDe(v, c);
         return '<tr data-georow="' + esc(c.id) + '"><td><b>' + esc(c.nome) + '</b><div class="muted">' + esc(TIPOS_COMP[c.tipo] || c.tipo) + (c.nao_medir ? ' · fora da conta (não medido)' : '') + '</div></td><td>' + val(c, g, 'E') + '</td><td>'
           + (CALC.GEO_CAMPOS[c.tipo] || []).map(k => esc(CALC.GEO_ROT[k]) + ': ' + val(c, g, k)).join(' · ') + '</td><td>'
           + (pode ? '<button class="btn mini" data-corg="' + esc(c.id) + '">Corrigir</button>' : '') + '</td></tr>'; }).join('') + '</table>'
-    + '<p class="muted" style="margin:6px 0 0">' + (pode ? 'Corrigir registra o antes, o depois e o motivo. Em branco vale o padrão da conta.' : 'Só o PLH corrige o E e a geometria (na aprovação).')
+    + '<p class="muted" style="margin:6px 0 0">' + (pode ? 'Corrigir registra o antes, o depois e o motivo. Em branco vale o padrão da conta.' : 'Quem está na vez da revisão corrige o E e a geometria.')
     + ' Padrão: E = 0,7 no costado e no cone e 1,0 nos tampos; o raio vem da circunferência.</p>';
 }
 /** O aviso depois de corrigir: o banco devolve em "desmarcou" as marcas "conferido" que caíram (444 · issue 81). */
@@ -2564,7 +2625,8 @@ function pintarRevisao(){
       + (f.origem === 'galeria' ? ' · galeria' + (f.tirada_em ? ', tirada em ' + dataBR(dataSP(f.tirada_em)).slice(0, 5) : '') : ''); };
   h += cardConf('dados') + cab('dados', '1 · Dados contra as fotos')
     + '<div class="g2rev"><div><table><tr><th>Plaqueta</th><th></th><th></th></tr>'
-    + [['fabricante','Fabricante']].concat(REV_CAMPOS_VASO).map(([k, r]) => '<tr><td class="muted">' + r + '</td><td><b>' + esc(k === 'placa_situacao' ? PLACA_ROT[placaDe(R.vaso)] : k === 'circunferencia_mm' ? revCircTxt(v) : R.vaso[k] == null ? '—' : String(R.vaso[k])) + '</b></td><td>'
+    + [['fabricante','Fabricante']].concat(REV_CAMPOS_VASO).map(([k, r]) => k === 'numero_tap' ? revTapHtml(R, eu)
+        : '<tr><td class="muted">' + r + '</td><td><b>' + esc(k === 'placa_situacao' ? PLACA_ROT[placaDe(R.vaso)] : k === 'circunferencia_mm' ? revCircTxt(v) : R.vaso[k] == null ? '—' : String(R.vaso[k])) + '</b></td><td>'
         + (eu.pode && k !== 'fabricante' ? '<button class="btn mini" data-corv="' + k + '">Corrigir</button>' : '') + '</td></tr>').join('') + '</table>'
     // S141 · itens 31, 45 e 47: a PMTA e a PTH de plaqueta, a pressão de operação e o volume são da câmara (como vieram do campo)
     + CALC.ativas(v).map(k => '<table style="margin-top:8px"><tr><th>' + (CALC.ativas(v).length > 1 ? esc(k.nome) : 'Câmara') + '</th><th></th><th></th></tr>'
@@ -2583,6 +2645,8 @@ function pintarRevisao(){
       + R.acessorios.map(a => { const ct = contradicaoAc(a, NAC[a.id]), pe = pontosEspalhados().some(x => x.af.acessorio_id === a.id);   // E33 · issues 19 e 23
         return '<tr data-acrev="' + esc(a.id) + '"><td><b>' + esc(a.tag || NAC[a.id] || a.tipo) + '</b><div class="muted">' + esc(a.tag ? (NAC[a.id] || a.tipo) : '') + (a.situacao ? (a.tag ? ' · ' : '') + '<span' + (ct ? ' class="problema"' : '') + '>' + esc(ROT_SIT_AC[a.situacao] || a.situacao) + '</span>' : '') + '</div></td><td>'
         + esc([semNaoHa(a.marca), a.conexao].filter(Boolean).join(' · ') || '—')
+        + (VALV_SERIE.indexOf(a.tipo) >= 0 ? '<div class="muted" data-acnserie="' + esc(a.id) + '">' + (a.numero_serie ? 'nº de série ' + esc(a.numero_serie) : 'sem nº de série') + '</div>'
+            + (eu.pode ? '<button class="btn mini" data-acserie="' + esc(a.id) + '" style="margin-top:2px">' + (a.numero_serie ? 'Mudar o nº de série' : 'Pôr o nº de série') + '</button>' : '') : '')   // E54 · issue 216
         + '</td><td>' + esc((a.afericao && a.afericao.lacre) || a.lacre_num || '—') + (a.afericao && a.afericao.lacre ? '<div class="muted">na aferição</div>' : '') + '</td><td>' + (a.pressao_ajuste_mpa != null ? pr(a.pressao_ajuste_mpa) : '—') + '</td><td>'
         + (a.afericao ? '<span' + (ct || pe ? ' class="problema"' : '') + '>' + esc(a.afericao.codigo || 'sem número') + ' · ' + (a.afericao.resultado === 'aprovado' ? 'aprovado' : '<b style="color:var(--crit)">' + esc(a.afericao.resultado || '') + '</b>') + '</span>' + (a.afericao.grave ? ' <span class="chip s-grave">grave</span>' : '') : '<span class="muted">—</span>')
         + (pe ? '<div class="muted" style="color:var(--crit)">leituras espalhadas: confira</div>' : '')
@@ -2643,7 +2707,7 @@ function pintarRevisao(){
     + prev.camaras.map(ck => revPopHtml(ck, plhAprova, eu.pode, pr)).join('')
     + revForaHtml(v)   // E47 · issue 59: os componentes fora do cálculo, com o motivo
     // E45 · issue 60: a PMTA adotada abaixo da pressão de operação
-    + revGeoHtml(v, eu)   // E46 · issue 61: o E e a geometria de cada componente (só o PLH corrige)
+    + revGeoHtml(v, eu)   // E46 · issue 61: o E e a geometria de cada componente (E54 · issue 217: quem está na vez da revisão corrige)
     + (prev.vaso && !prev.vaso.erro ? '<p class="muted" style="margin:8px 0 0">V = ' + fmt(prev.vaso.V, 3) + ' m³ (' + Math.round(prev.vaso.V * 1000).toLocaleString('pt-BR') + ' litros) · P·V = ' + fmt(prev.vaso.pv, 3) + ' · grupo ' + prev.vaso.grupo + ' · <b>categoria ' + prev.vaso.categoria + '</b> · próximas: externa em ' + prev.vaso.prazos.externo
         + ' ano(s), interna ' + (prev.vaso.prazos.interno == null ? 'a critério do PLH' : 'em ' + prev.vaso.prazos.interno + ' anos') + '</p>' : '')
     + (plhAprova && prev.vaso && !prev.vaso.erro ? revDatasHtml(prev.vaso.prazos) : '')   // E9 (410): as datas do PLH
@@ -3133,11 +3197,12 @@ async function ligarMapa(){
 
 function revAnexosHtml(){
   const A = REV.R.anexos || {}, L = [];
-  L.push({ k:'medidor', rot:'Anexo 1 · Certificado de calibração do medidor de espessura' + (A.medidor && A.medidor.descricao ? ' (' + A.medidor.descricao + ')' : ''), path:A.medidor && A.medidor.path });
-  // S148 · item 90: o certificado de cada manômetro padrão usado nas aferições e testes (uma vez cada), antes da ART
-  (A.padroes || []).forEach(p => L.push({ k:'padrao', rot:'Anexo ' + (L.length + 1) + ' · Certificado de calibração do manômetro padrão' + (p.descricao ? ' (' + p.descricao + (p.numero_serie ? ' · nº ' + p.numero_serie : '') + ')' : ''), path:p.path,
+  // E54 · issue 225 (igual ao laudo antigo): o relatório anexa só o certificado do medidor de espessura e a ART
+  L.push({ k:'medidor', rot:'Anexo 1 · Certificado de Calibração do Medidor de Espessura' + (A.medidor && A.medidor.descricao ? ' (' + A.medidor.descricao + ')' : ''), path:A.medidor && A.medidor.path });
+  L.push({ k:'art', rot:'Anexo 2 · ART' + (A.art && A.art.numero ? ' nº ' + A.art.numero : ''), path:A.art && A.art.path });
+  // S148 · item 90 → E54: o certificado de cada manômetro padrão usado vai com o relatório de aferição (o banco continua pedindo o PDF)
+  (A.padroes || []).forEach(p => L.push({ k:'padrao', rot:'Com o relatório de aferição · Certificado de calibração do manômetro padrão' + (p.certificado_num ? ' nº ' + p.certificado_num : '') + (p.descricao ? ' (' + p.descricao + ')' : ''), path:p.path,
     falta:'Sem o PDF do certificado: cadastre em TapDoc › Instrumentos. Sem ele o laudo não é emitido.' }));
-  L.push({ k:'art', rot:'Anexo ' + (L.length + 1) + ' · ART' + (A.art && A.art.numero ? ' nº ' + A.art.numero : ''), path:A.art && A.art.path });
   // S150 · item 81: os documentos de aferição vão no pacote, logo depois do laudo
   const AFS = ((REV.v && REV.v.inspecao && REV.v.inspecao.afericoes) || []).filter(x => !x.cancelada_em && (x.resultado === 'aprovado' || x.resultado === 'reprovado'));
   const docsAf = AFS.length ? '<div style="margin-bottom:10px"><b>Documentos de aferição (no pacote, depois do laudo)</b><ul style="margin:4px 0 0">' + AFS.map(x => '<li>'
@@ -3551,7 +3616,21 @@ function ligarRevisao(){
     };
     sel.addEventListener('change', pinta); pinta();
   };
-  T.querySelectorAll('[data-corv]').forEach(b => b.addEventListener('click', () => { corrigir('vaso', null, REV_CAMPOS_VASO, k => k === 'circunferencia_mm' ? REV.v.circunferencia_mm : R.vaso[k]); $('rcCampo').value = b.dataset.corv; $('rcCampo').dispatchEvent(new Event('change')); }));
+  // E54 · issue 217 (Bruno, 19/11): o Número TAP é posto na própria revisão — campo simples, sem motivo e sem guardar o de antes
+  const bTap = $('revTapGr');
+  if (bTap) bTap.addEventListener('click', () => U.semDuploEnvio(bTap, async () => {
+    const val = ($('revTap').value || '').trim();
+    try{ await rpc('tf_insp_numero_tap_gravar', { p_id:id, p_numero:val || null }); U.toast(val ? 'Número TAP gravado.' : 'Número TAP apagado.', 'ok'); recarregar(); }catch(e){ erro(e); }
+  }));
+  // E54 · issue 216: o nº de série da válvula (opcional): quem preencher primeiro (celular ou revisão) vale para todos
+  T.querySelectorAll('[data-acserie]').forEach(b => b.addEventListener('click', () => {
+    const a = R.acessorios.find(x => x.id === b.dataset.acserie); if (!a) return;
+    janela('Nº de série · ' + (a.tag || nomesAcess(R.acessorios)[a.id] || 'válvula'), '<label class="f">Número de série (opcional)<input class="t" id="acSerie" maxlength="60" value="' + esc(a.numero_serie || '') + '"></label>'
+      + '<p class="muted">Como está na plaqueta da válvula (algumas marcas, como a Fluid, têm). Sai no laudo e no certificado da válvula; o celular também mostra.</p>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => rpc('tf_insp_acessorio_serie', { p_acessorio:a.id, p_numero:($('acSerie').value || '').trim() || null })
+        .then(() => { U.toast('Nº de série gravado.', 'ok'); N.janela.fechar(); recarregar(); return false; }, e => { erro(e); return false; }) }]);
+  }));
+  T.querySelectorAll('[data-corv]').forEach(b => b.addEventListener('click', () => { corrigir('vaso', null, REV_CAMPOS_VASO.filter(x => x[0] !== 'numero_tap'), k => k === 'circunferencia_mm' ? REV.v.circunferencia_mm : R.vaso[k]); $('rcCampo').value = b.dataset.corv; $('rcCampo').dispatchEvent(new Event('change')); }));
   T.querySelectorAll('[data-cora]').forEach(b => b.addEventListener('click', () => { const a = R.acessorios.find(x => x.id === b.dataset.cora); corrigir('acessorio', a.id, REV_CAMPOS_AC, k => a[k]); }));
   // S141 · itens 31, 45 e 47 (417): corrigir o dado da câmara; pressão na unidade da revisão, volume em m³ ou litros; o cálculo se refaz
   T.querySelectorAll('[data-corc]').forEach(b => b.addEventListener('click', () => {
@@ -3574,7 +3653,7 @@ function ligarRevisao(){
         return rpc('tf_insp_revisao_corrigir', { p_id:id, p_alvo:'camara', p_ref:kid, p_campo:campo, p_valor:String(val), p_motivo:$('rkMot').value })   // E48 · issue 65, item 5
           .then(r => { revCorrigido(r); N.janela.fechar(); recarregar(); return false; }, e => { erro(e); return false; }); } }]);
   }));
-  // E46 · issue 61 (444): o PLH corrige o E e a geometria do componente; cada campo mudado vira uma correção no histórico
+  // E46 · issue 61 (444): o E e a geometria do componente (E54 · issue 217, 450: quem está na vez da revisão); cada campo mudado vira uma correção no histórico
   T.querySelectorAll('[data-corg]').forEach(b => b.addEventListener('click', () => {
     const c = (REV.v.componentes || []).find(x => x.id === b.dataset.corg); if (!c) return;
     const g = CALC.geoDe(REV.v, c), ks = ['E'].concat(CALC.GEO_CAMPOS[c.tipo] || []);
@@ -3887,7 +3966,20 @@ function espHtml(){
   h += falta.length ? '<p class="alerta crit" id="espFalta" style="margin:10px 0 0">Faltam as espessuras de: <b>' + esc(falta.map(c => c.nome).join(', ')) + '</b>. Sem elas a revisão não conclui e o PLH não aprova.</p>'
                     : '<p class="muted" style="margin:8px 0 0">Vale a menor leitura de cada componente. Em vermelho: abaixo da espessura requerida.</p>';
   if (!pode) h += '<p class="muted" style="margin:6px 0 0">' + (REV.R.inspecao.etapa === 3 ? 'Na aprovação, só o PLH mexe nas espessuras.' : 'Só dá para anexar com a inspeção enviada ou em revisão.') + '</p>';
-  return h + '</div>';
+  return h + espConclusaoHtml(cs) + '</div>';
+}
+/** E54 · issue 223 (Bruno, 19/11): a conclusão do 7.3 no laudo — o sistema escolhe o texto conforme ou não conforme dos Textos do
+ *  laudo pela medição; quem está na vez da revisão pode trocar a frase nesta inspeção (em branco volta ao texto padrão). */
+function espConclusaoHtml(cs){
+  const v = REV.v, I = REV.R.inspecao || {}, eu = REV.R.eu || {}, aj = ((I.textos_ajustes || {}).ultrassom_conclusao) || '';
+  const baixos = cs.filter(c => { const mn = CALC.minimaDe(v, c.id), req = CALC.eMinDe(v, c); return mn != null && req.valor != null && mn < req.valor; }).map(c => c.nome);
+  return '<div id="espConcl" style="margin-top:12px;padding-top:8px;border-top:1px solid var(--rule-2)"><b>Conclusão da medição no laudo (7.3)</b>'
+    + '<p class="muted" style="margin:4px 0 6px">' + (baixos.length ? 'Sai o texto <b>não conforme</b> (espessura abaixo da requerida em ' + esc(baixos.join(', ')) + ')'
+        : 'Sai o texto <b>conforme</b> (nenhuma espessura abaixo da requerida)') + ', dos Textos do laudo, a não ser que você escreva outra frase aqui.'
+    + (aj ? ' <span class="chip s-pronto">ajustado nesta inspeção</span>' : '') + '</p>'
+    + (eu.pode ? '<textarea class="t" id="espConclTx" rows="3" placeholder="Em branco: o texto dos Textos do laudo">' + esc(aj) + '</textarea>'
+        + '<div class="linha" style="margin-top:4px"><button class="btn mini sec" id="espConclGr">Gravar a conclusão</button>' + (aj ? '<button class="btn mini" id="espConclPad">Voltar ao texto padrão</button>' : '') + '</div>'
+      : (aj ? '<p style="margin:0;white-space:pre-wrap">' + esc(aj) + '</p>' : '')) + '</div>';
 }
 /** E53 · issue 219: todas as leituras do componente, por ponto, com a menor em destaque (é a que vale). */
 function espLeiturasHtml(c, l, mn){
@@ -3985,6 +4077,15 @@ function espConferir(d, nome, plano, recarregar){
   } }]);
 }
 function ligarEsp(recarregar){
+  // E54 · issue 223: gravar (ou voltar ao padrão) a conclusão do 7.3 desta inspeção
+  const gConc = (bt, texto) => U.semDuploEnvio(bt, async () => {
+    if (texto && texto.length < 10){ U.toast('Escreva a frase inteira (pelo menos 10 letras) ou deixe em branco para o texto padrão.', 'err'); return; }
+    try{ await rpc('tf_insp_texto_ajustar', { p_id:REV.id, p_chave:'ultrassom_conclusao', p_texto:texto || null });
+      U.toast(texto ? 'Conclusão do 7.3 gravada para esta inspeção.' : 'A conclusão do 7.3 volta ao texto dos Textos do laudo.', 'ok'); recarregar(); }catch(e){ erro(e); }
+  });
+  const bcg = $('espConclGr'), bcp = $('espConclPad');
+  if (bcg) bcg.addEventListener('click', () => gConc(bcg, ($('espConclTx').value || '').trim()));
+  if (bcp) bcp.addEventListener('click', () => gConc(bcp, ''));
   const b = $('espCsv');
   if (b) b.addEventListener('click', () => {
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.csv,text/csv,text/plain';
@@ -4035,8 +4136,8 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S177');
-    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D9');   // E35 · issue 30: o Resumo e os nomes dos arquivos
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S178');
+    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D10');   // E35 · issue 30: o Resumo e os nomes dos arquivos
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S174');
     return true;
   })().catch(e => { LIBS = null; throw e; });
@@ -4128,20 +4229,25 @@ async function gerarLaudo(d, opc, aviso){
   aviso('', 'montar', 0);
   const def = LaudoPDF.montar(d, Object.assign({ imagens }, opc, { prontuario: null }));   // E40 · issue 68: o relatório nunca recebe o pedido do Prontuário (só o gerarDocumentos o monta)
   const base = await pdfBytes(def);
-  aviso('juntando a ART', 'anexos', 0);
+  aviso('juntando os anexos', 'anexos', 0);
   const out = await PDFLib.PDFDocument.load(base), nBase = out.getPageCount(), semAnexo = [];
-  const path = d.art && d.art.path;
-  if (!path) semAnexo.push('a ART');
-  else {
-    let b = null; try{ b = await baixar(path); }catch(e){ if (opc.exigirAnexos) throw new Error('Não abriu a ART: ' + e.message); semAnexo.push('a ART'); }
+  // E54 · issue 225 (Bruno, 19/11: igual ao laudo antigo): o relatório termina com o Anexo 1, o certificado de calibração do medidor de
+  // espessura (o do dia da inspeção, tf__insp_instr_cert), e o Anexo 2, a ART. Antes o medidor ia só no "Baixar tudo", como arquivo à parte.
+  // O certificado de cada manômetro padrão vai com o relatório de aferição (o documento da aferição cita o número dele).
+  // (o medidor sem o PDF no cadastro o banco já não deixa emitir, tf__laudo_faltas: aqui só avisa; a ART sem o arquivo para a emissão, como antes)
+  const juntar = async (path, nome) => {
+    if (!path){ semAnexo.push(nome); return; }
+    let b = null; try{ b = await baixar(path); }catch(e){ if (opc.exigirAnexos) throw new Error('Não abriu ' + nome + ': ' + e.message); semAnexo.push(nome); }
     if (b && ehPdf(b)){ const src = await PDFLib.PDFDocument.load(b, { ignoreEncryption:true }); (await out.copyPages(src, src.getPageIndices())).forEach(pg => out.addPage(pg)); }
     else if (b){
       const im = b[0] === 0x89 ? await out.embedPng(b) : await out.embedJpg(b), pg = out.addPage([595.28, 841.89]);
       const k = Math.min(515 / im.width, 760 / im.height, 1);
       pg.drawImage(im, { x:(595.28 - im.width * k) / 2, y:(841.89 - im.height * k) / 2, width:im.width * k, height:im.height * k });
     }
-  }
-  if (opc.exigirAnexos && semAnexo.length) throw new Error('Falta ' + semAnexo.join(' e ') + ' para emitir.');
+  };
+  if (d.medidor) await juntar(d.medidor.certificado_path, 'o certificado do medidor de espessura');
+  await juntar(d.art && d.art.path, 'a ART');
+  if (opc.exigirAnexos && semAnexo.indexOf('a ART') >= 0) throw new Error('Falta a ART para emitir.');
   if (opc.numero) await carimbarPaginas(out, nBase, opc.carimbo);   // o carimbo também nas páginas da ART
   out.setTitle(def.info.title); out.setAuthor(def.info.author); out.setCreator(def.info.creator); out.setProducer(def.info.producer); out.setSubject(def.info.subject);
   const bytes = await out.save();
@@ -4391,7 +4497,7 @@ function ligarDesenho(){
 }
 // A4/A5: o pacote para o token (Assinador SERPRO, em lote) e a devolução dos assinados
 // E35 · issue 30 (DP4): o pacote leva todos os documentos técnicos (o relatório, o Resumo e os certificados), cada um num PDF
-function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D9').then(() => true, () => false); }
+function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D10').then(() => true, () => false); }
 /** O que falta assinar: os relatórios (tf_laudo_para_assinar) e os outros documentos (tf_insp_docs_para_assinar). insps: só dessas inspeções. */
 async function pacoteParaAssinar(insps){
   // E51 · issue 70: R = os laudos de inspeção reaberta e aprovada de novo, que esperam a revisão (não se assinam)
