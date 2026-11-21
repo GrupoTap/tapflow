@@ -1,4 +1,4 @@
-/* nucleo/fin-painel.js · FP2 (S189: a linha da meta de recebimento no "Entrou × saiu", só quando FINPM.metaEntrou existe) · FP1 (S188) — os quadros do Painel Financeiro e das Projeções do TapFin.
+/* nucleo/fin-painel.js · FP3 (S209, Rodada R14: a reserva = a soma das caixinhas, issue 93; os botões que voltavam ao Painel e o "Precisa de ação" com clique, issue 188) · FP2 (S189: a linha da meta de recebimento no "Entrou × saiu", só quando FINPM.metaEntrou existe) · FP1 (S188) — os quadros do Painel Financeiro e das Projeções do TapFin.
  * Movido do fin/index.html (F21) sem mudar o código, para o TapGestão (aba Reunião) usar os MESMOS gráficos
  * (decisão RE9 do Bruno, 17/11/2026, processos/tapgestao-reuniao-desenho.md). Mudou um gráfico? Muda aqui, e vale
  * nos dois lugares. A página que carrega este arquivo precisa ter: esc, BRL, dataBR, rpc, irPara, visao, finPlural,
@@ -122,7 +122,13 @@ function fpmLigar(el, i){
     l.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); alterna(); } });
   });
   el.querySelectorAll('[data-tip]').forEach(s => { s.addEventListener('mousemove', e => fpmTip(e, esc(s.dataset.tip))); s.addEventListener('mouseleave', fpmTipSai); });
-  el.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => irPara(b.dataset.ir)));   // S66
+  el.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => fpmIr(b.dataset.ir)));   // S66 · FP3: "tela:situação" e "os"
+  // FP3 (issue 188): a linha do "Precisa de ação" abre a conta
+  el.querySelectorAll('[data-fptit]').forEach(l => {
+    const abre = () => fpmAbrirTitulo(l.dataset.fptipo, l.dataset.fptit);
+    l.addEventListener('click', abre);
+    l.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); abre(); } });
+  });
   osmedLigarPainel(el);   // F14
   const vp = document.getElementById('fpmVerProj');                                                       // S66
   if (vp) vp.addEventListener('click', () => { FINPM.verProj = !FINPM.verProj; fpmRedesenhar(); });
@@ -141,6 +147,34 @@ function fpmLigar(el, i){
   }
 }
 
+/* FP3 (S209, issue 188): os botões apontavam para telas que não existem no TapFin ("finr", "os") e caíam no Painel.
+   "finre:vencidas" = Contas a Receber já em "Vencidas"; "os" = a tabela das OS nas Projeções. A página dá o irPara(tela, situação):
+   o TapFin abre a tela; a Reunião do TapGestão abre o TapFin em outra aba. */
+function fpmIr(alvo){
+  const [v, sit] = String(alvo || '').split(':');
+  if (v === 'os') return fpmIrOs();
+  irPara(v, sit || undefined);
+}
+
+function fpmIrOs(){
+  const achar = () => {
+    const t = document.querySelector('.fpmProjTab:not(.curta)'); if (!t) return false;
+    const d = t.closest('details'); if (d) d.open = true;
+    try{ t.scrollIntoView({ block: 'start', behavior: 'smooth' }); }catch(e){ t.scrollIntoView(); }
+    return true;
+  };
+  if (visao === 'fincr' && achar()) return;
+  irPara('fincr');
+  if (visao !== 'fincr') return;   // a Reunião abre as Projeções em outra aba
+  let n = 0; const iv = setInterval(() => { if (achar() || ++n > 50) clearInterval(iv); }, 100);
+}
+
+// a página pode ter o finAbrirTitulo (o TapFin abre a lista na conta; a Reunião, o TapFin em outra aba); sem ele, a lista
+function fpmAbrirTitulo(tipo, id){
+  if (typeof finAbrirTitulo === 'function') return finAbrirTitulo(tipo, id);
+  irPara(tipo === 'p' ? 'finpg' : 'finre');
+}
+
 function fpmPendencias(d){
   const pend = d.pendencias || [];
   const vencidos = pend.filter(p => p.vencido).length, vencendo = pend.length - vencidos;
@@ -151,7 +185,8 @@ function fpmPendencias(d){
     + '</h3>'
     + medAvisosPainel()   // F13
     + (!pend.length ? '<p class="nota" style="margin:0">Nada vencido ou vencendo nos próximos 7 dias.</p>'
-        : pend.map(p => '<div class="ccLin" style="border-left:3px solid ' + (p.vencido ? 'var(--crit)' : 'var(--warn)') + ';padding-left:8px">'
+        : pend.map(p => '<div class="ccLin fpmPend" role="button" tabindex="0" data-fptit="' + esc(p.id) + '" data-fptipo="' + esc(p.tipo) + '"'
+            + ' title="Abrir esta conta em ' + (p.tipo === 'p' ? 'Contas a Pagar' : 'Contas a Receber') + '" style="border-left:3px solid ' + (p.vencido ? 'var(--crit)' : 'var(--warn)') + ';padding-left:8px">'
             + '<span class="ccData">' + esc(dataBR(p.vencimento)) + (p.vencido ? ' <small style="color:var(--crit)">vencido</small>' : '') + '</span>'
             + '<span class="ccNome">' + esc(p.quem || '—') + '</span>'
             + '<span class="ccDesc">' + esc(p.descricao) + ' <small style="color:var(--ink-3)">· ' + (p.tipo === 'p' ? 'a pagar' : 'a receber') + '</small></span>'
@@ -178,7 +213,17 @@ const fpmProjComData = () => fpmProjLista().filter(o => o.m);
 
 const fpmProjSemData = () => fpmProjLista().filter(o => !o.m);
 
-const fpmReservas = () => (FINPM.pm.contas || []).filter(c => c.papel !== 'operacional');
+// FP3 (S209, issue 93): a reserva é a SOMA DAS CAIXINHAS (pm.reserva, da 527): a conta de reserva nunca recebe a "Reserva
+// mensal" e mostrava R$ 0. Sem a 527 (ou na ata de um mês fechado antes dela), como antes: as contas que não são operacionais.
+const fpmReservas = () => {
+  const R = FINPM.pm && FINPM.pm.reserva;
+  if (R && Array.isArray(R.caixinhas)) return [{ nome: 'caixinhas', papel: 'reserva', saldo: Number(R.total) || 0, saldo_inicial: 1, caixinhas: R.caixinhas }];
+  return (FINPM.pm.contas || []).filter(c => c.papel !== 'operacional');
+};
+// o nome de cada caixinha com o saldo (ao passar o mouse)
+const fpmResTip = c => c.caixinhas ? c.caixinhas.map(x => x.nome + ': ' + BRL(Number(x.saldo) || 0)).join(' · ') || 'nenhuma caixinha' : c.nome + ': ' + BRL(Number(c.saldo) || 0);
+const fpmResNome = c => c.caixinhas ? 'nas caixinhas' : c.nome.replace(/^Banco /, '');
+const fpmResSemIni = c => c.caixinhas || Number(c.saldo_inicial) ? '' : ' (sem saldo inicial)';
 
 const fpmTot = L => L.reduce((s, o) => s + (Array.isArray(o) ? o[1] : o.v), 0);
 
@@ -365,7 +410,7 @@ function fpjSaldoTabela(){
   const S = fpjSerie(), res = fpmReservas();
   const v = (x, cls) => '<td class="' + (cls || '') + (x < 0 ? ' fpmNeg' : '') + '">' + esc(fpmBRL(x)) + '</td>';
   const lin = (rot, f, est, sinal) => '<tr' + (est ? ' class="fpjEst"' : '') + '><th scope="row">' + rot + '</th>' + S.map(x => { const n = f(x); return '<td>' + (n ? (sinal || '') + esc(BRL(n)) : '—') + '</td>'; }).join('') + '</tr>';
-  return '<p class="fpmPq" style="margin:8px 0 4px">Começa com o saldo de hoje nas contas (' + esc(fpjNomesOp()) + (res.length ? '; a reserva ' + res.map(c => esc(c.nome.replace(/^Banco /, '')) + ' ' + ((Number(c.saldo) || 0) ? esc(fpmK(Number(c.saldo))) : '(sem saldo lançado)')).join(', ') + ' não entra' : '') + '). Linhas <span class="fpjEstTxt">em itálico</span> são estimativa. Faturamento que ainda não existe não entra: por isso os meses mais longe sempre parecem piores.</p>'
+  return '<p class="fpmPq" style="margin:8px 0 4px">Começa com o saldo de hoje nas contas (' + esc(fpjNomesOp()) + (res.length ? '; a reserva ' + res.map(c => '<span data-tip="' + esc(fpmResTip(c)) + '">' + esc(fpmResNome(c)) + ' ' + ((Number(c.saldo) || 0) ? esc(fpmK(Number(c.saldo))) : '(sem saldo lançado)') + '</span>').join(', ') + ' não entra' : '') + '). Linhas <span class="fpjEstTxt">em itálico</span> são estimativa. Faturamento que ainda não existe não entra: por isso os meses mais longe sempre parecem piores.</p>'
     + '<div class="fpmRolar"><table class="fpmTabela fpjTab"><tr><th></th>' + S.map(x => '<th>' + esc(fpmMesCurto(x.m)) + (x.m === FINPM.pm.mes_atual ? '<small>até o fim</small>' : '') + '</th>').join('') + '</tr>'
     + '<tr><th scope="row">Começa com</th>' + S.map(x => v(x.inicio)).join('') + '</tr>'
     + lin('+ A receber lançado', x => x.rL, false, '+')
@@ -732,11 +777,11 @@ function fpjSinais(){
   if (venc.length) sinal('warn', finPlural(venc.length, 'recorrência já venceu', 'recorrências já venceram') + ' em ' + esc(nm(FINPM.pm.mes_atual)) + ' e não ' + (venc.length === 1 ? 'tem' : 'têm') + ' título (' + esc(fpmK(fpmTot(venc))) + '): ' + esc(venc.slice(0, 3).map(r => r.fornecedor.split(' ').slice(0, 2).join(' ')).join(', ')) + (venc.length > 3 ? '…' : '') + '. Foram pagas sem lançar, ou a recorrência acabou? Lance ou pause.', 'finrec', 'Recorrentes');
   // a receber vencido
   const ab = FINPM.pm.abertos || [], vencR = ab.filter(a => a.t === 'r' && a.d < hoje && a.etapa !== 'a_faturar');
-  if (vencR.length) sinal('warn', finPlural(vencR.length, 'título a receber vencido', 'títulos a receber vencidos') + ' (' + esc(fpmK(vencR.reduce((s, a) => s + (Number(a.v) || 0), 0))) + '): ' + esc(vencR.slice(0, 3).map(a => a.q.split(' ').slice(0, 2).join(' ')).join(', ')) + '. Cobrar: a projeção conta com esse dinheiro.', 'finr', 'Contas a Receber');
+  if (vencR.length) sinal('warn', finPlural(vencR.length, 'título a receber vencido', 'títulos a receber vencidos') + ' (' + esc(fpmK(vencR.reduce((s, a) => s + (Number(a.v) || 0), 0))) + '): ' + esc(vencR.slice(0, 3).map(a => a.q.split(' ').slice(0, 2).join(' ')).join(', ')) + '. Cobrar: a projeção conta com esse dinheiro.', 'finre:vencidas', 'Contas a Receber');
   // concentração de clientes nos próximos 2 meses
   const C = {}; S.slice(0, 2).forEach(x => { ab.filter(a => a.t === 'r' && (x.m === FINPM.pm.mes_atual ? a.d <= fpmFimMes(x.m) : a.d.slice(0, 7) === x.m)).forEach(a => C[a.q] = (C[a.q] || 0) + (Number(a.v) || 0)); fpmProjMes(x.m).forEach(o => C[o.cliente || '—'] = (C[o.cliente || '—'] || 0) + o.v); });
   const CL = Object.entries(C).sort((a, b) => b[1] - a[1]), totC = CL.reduce((s, c) => s + c[1], 0);
-  if (CL.length && totC > 0 && CL[0][1] / totC >= 0.3) sinal('info', '<b>' + esc(CL[0][0]) + '</b> responde por ' + esc(fpmPct(CL[0][1] / totC)) + ' do que deve entrar até ' + esc(nm(S[1] ? S[1].m : S[0].m)) + ' (' + esc(fpmK(CL[0][1])) + '). Um atraso desse cliente muda tudo.', 'finr', null);
+  if (CL.length && totC > 0 && CL[0][1] / totC >= 0.3) sinal('info', '<b>' + esc(CL[0][0]) + '</b> responde por ' + esc(fpmPct(CL[0][1] / totC)) + ' do que deve entrar até ' + esc(nm(S[1] ? S[1].m : S[0].m)) + ' (' + esc(fpmK(CL[0][1])) + '). Um atraso desse cliente muda tudo.', 'finre', 'Contas a Receber');
   // recorrências a confirmar
   const aconf = fpjMeses().slice(0, 2).flatMap(m => fpjDespesas(m).rec.filter(r => r.variavel));
   const nomesAC = [...new Set(aconf.map(r => r.fornecedor.split(' ').slice(0, 2).join(' ')))];
@@ -895,7 +940,7 @@ function fpmTiles(k){
     + t('', 'Saldo nas contas', atual ? esc(BRL(saldo)) : '—', '',
         atual ? barraContas + '<span class="fpmCmp">' + contas.map((c, j) => '<i class="fpmDot" style="background:' + (segs.find(g => g.nome === c.nome.replace(/^Banco /, '')) || { cor: '#C7DCEB' }).cor + ';width:7px;height:7px"></i> ' + esc(c.nome.replace(/^Banco /, '')) + ' ' + esc(fpmK(Number(c.saldo) || 0))
                   + (Number(c.saldo_inicial) ? '' : ' <small>(sem saldo inicial)</small>')).join(' · ')
-                  + fpmReservas().map(c => '<br>reserva ' + esc(c.nome.replace(/^Banco /, '')) + ' ' + esc(fpmK(Number(c.saldo) || 0)) + (Number(c.saldo_inicial) ? '' : ' (sem saldo inicial)')).join('') + '</span>'
+                  + fpmReservas().map(c => '<br><span data-tip="' + esc(fpmResTip(c)) + '" title="' + esc(fpmResTip(c)) + '">reserva ' + esc(fpmResNome(c)) + ' ' + esc(fpmK(Number(c.saldo) || 0)) + fpmResSemIni(c) + '</span>').join('') + '</span>'
               : '<span class="fpmCmp">o saldo só existe a partir da data de corte</span>');
 }
 
@@ -921,8 +966,8 @@ function fpmLeitura(k){
   });
   // vencidos
   const ab = FINPM.pm.abertos || [], vencR = ab.filter(a => a.t === 'r' && fpmDias(a.d) < 0 && a.etapa !== 'a_faturar'), vencP = ab.filter(a => a.t === 'p' && !a.provisao && fpmDias(a.d) < 0);
-  if (vencR.length) sinal('warn', finPlural(vencR.length, 'título a receber vencido', 'títulos a receber vencidos') + ' (' + esc(fpmK(vencR.reduce((s, a) => s + (Number(a.v) || 0), 0))) + '): ' + esc(vencR.slice(0, 3).map(a => a.q.split(' ').slice(0, 2).join(' ')).join(', ')) + '. Cobrar.', 'finr', 'Contas a Receber');
-  if (vencP.length) sinal('crit', finPlural(vencP.length, 'conta a pagar vencida', 'contas a pagar vencidas') + ' (' + esc(fpmK(vencP.reduce((s, a) => s + (Number(a.v) || 0), 0))) + '): ' + esc(vencP.slice(0, 3).map(a => a.q.split(' ').slice(0, 2).join(' ')).join(', ')) + '.', 'finpg', 'Contas a Pagar');
+  if (vencR.length) sinal('warn', finPlural(vencR.length, 'título a receber vencido', 'títulos a receber vencidos') + ' (' + esc(fpmK(vencR.reduce((s, a) => s + (Number(a.v) || 0), 0))) + '): ' + esc(vencR.slice(0, 3).map(a => a.q.split(' ').slice(0, 2).join(' ')).join(', ')) + '. Cobrar.', 'finre:vencidas', 'Contas a Receber');
+  if (vencP.length) sinal('crit', finPlural(vencP.length, 'conta a pagar vencida', 'contas a pagar vencidas') + ' (' + esc(fpmK(vencP.reduce((s, a) => s + (Number(a.v) || 0), 0))) + '): ' + esc(vencP.slice(0, 3).map(a => a.q.split(' ').slice(0, 2).join(' ')).join(', ')) + '.', 'finpg:vencidas', 'Contas a Pagar');
   // concentração do mês
   const cl = (x.clientes || []).map(c => [c[0], Number(c[1]) || 0]);
   if (x.entrou > 0 && cl.length && cl[0][1] / x.entrou >= 0.4) sinal('info', '<b>' + esc(cl[0][0]) + '</b> foi ' + esc(fpmPct(cl[0][1] / x.entrou)) + ' do que entrou em ' + esc(nm) + '.');
@@ -1157,7 +1202,7 @@ function fpmReceber(){
   return '<div class="painel fpmCard"><h3>A receber <small class="fpmHoje">· posição de hoje</small></h3>'
     + '<p class="fpmPq">Em aberto: <b>' + esc(BRL(total)) + '</b> em ' + finPlural(R.length, 'título', 'títulos') + ' (os "a faturar" estão com vencimento estimado). A régua divide pelo prazo; abaixo, quem deve.</p>'
     + (R.length ? regua + lista : '<p class="nota">Nada em aberto.</p>')
-    + (grupos[0].length ? '<p class="fpmPq" style="margin:8px 0 0"><b>Vencidos:</b> ' + grupos[0].map(a => esc(a.q) + ' ' + esc(BRL(a.v)) + ' (desde ' + esc(dataBR(a.d).slice(0, 5)) + ')').join(' · ') + '. <button class="fpmLk" type="button" data-ir="finr">Contas a Receber</button></p>' : '')
+    + (grupos[0].length ? '<p class="fpmPq" style="margin:8px 0 0"><b>Vencidos:</b> ' + grupos[0].map(a => esc(a.q) + ' ' + esc(BRL(a.v)) + ' (desde ' + esc(dataBR(a.d).slice(0, 5)) + ')').join(' · ') + '. <button class="fpmLk" type="button" data-ir="finre:vencidas">Contas a Receber</button></p>' : '')
     + '</div>';
 }
 
@@ -1176,7 +1221,7 @@ function fpmPagar(){
     + (R30.n ? '<div class="fpmChamada" style="margin-top:8px"><div>⚠ Ainda <b>não lançadas</b> e vencendo nestes 30 dias: ' + finPlural(R30.n, 'recorrência', 'recorrências') + ' (' + esc(BRL(R30.v)) + ') — '
         + esc(R30.nomes) + '. Não estão somadas aqui.</div><button type="button" class="btn" data-ir="fincr">Ver em Projeções →</button></div>' : '')
     + (D.P.length ? '<p class="fpmPq" style="margin:6px 0 0">Maiores a pagar: ' + D.P.slice().sort((a, b) => b.v - a.v).slice(0, 4).map(a => esc(a.q) + ' ' + esc(fpmK(a.v))).join(' · ') + '. A provisão mensal (reserva) não entra.</p>' : '')
-    + (fpmReservas().length ? '<p class="fpmPq" style="margin:4px 0 0">Fora daqui: ' + fpmReservas().map(c => esc(c.nome) + ' ' + esc(fpmK(Number(c.saldo) || 0)) + (Number(c.saldo_inicial) ? '' : ' (sem saldo inicial)')).join(' · ') + '.</p>' : '')
+    + (fpmReservas().length ? '<p class="fpmPq" style="margin:4px 0 0">Fora daqui: ' + fpmReservas().map(c => '<span data-tip="' + esc(fpmResTip(c)) + '">' + (c.caixinhas ? 'a reserva nas caixinhas' : esc(c.nome)) + ' ' + esc(fpmK(Number(c.saldo) || 0)) + fpmResSemIni(c) + '</span>').join(' · ') + '.</p>' : '')
     + '</div>';
 }
 
@@ -1204,7 +1249,7 @@ function fpmIndicadores(k){
   const per = fpmCurto(base[0]) + (base.length > 1 ? ' a ' + fpmCurto(base[base.length - 1]) : '');
   const ent = soma(m => m.entrou), entMed = ent / base.length, folha = ent ? soma(m => m.folha) / ent : 0;
   const eq = soma(m => m.fixas) / base.length, saiMed = soma(m => m.saiu) / base.length;
-  const saldo = fpmSaldoOp() + fpmReservas().reduce((s, c) => s + (Number(c.saldo) || 0), 0), semInicial = (FINPM.pm.contas || []).some(c => !Number(c.saldo_inicial));
+  const saldo = fpmSaldoOp() + fpmReservas().reduce((s, c) => s + (Number(c.saldo) || 0), 0), semInicial = (FINPM.pm.contas || []).some(c => !Number(c.saldo_inicial) && (c.papel === 'operacional' || !FINPM.pm.reserva));   // FP3: a reserva das caixinhas não tem "saldo inicial" de conta
   const cl = {}; base.forEach(m => (fpmMes(m).clientes || []).forEach(([n, v]) => cl[n] = (cl[n] || 0) + (Number(v) || 0)));
   const top = Object.entries(cl).sort((a, b) => b[1] - a[1]);
   const conc = ent ? ((top[0] ? top[0][1] : 0) + (top[1] ? top[1][1] : 0)) / ent : 0;
