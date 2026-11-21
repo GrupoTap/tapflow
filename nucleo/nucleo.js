@@ -3,15 +3,16 @@
  *   N12: renovar devolve ok/recusado/sem rede; a fila não trava no erro do servidor; os leitores únicos de valor e de .xlsx;
  *   N13: a janela devolve o campo digitado e não fecha por engano com algo digitado;
  *   N14: a fila envia pelo tratador que a página registra, `fila.tratador`;
- *   N15: um "Sair" só, `Nucleo.sairDaConta`, que também encerra o acesso no servidor; a janela "fixa")
+ *   N15: um "Sair" só, `Nucleo.sairDaConta`, que também encerra o acesso no servidor; a janela "fixa";
+ *   N16: a busca digitando, `Nucleo.busca.cliente` (e `Nucleo.busca.digitando` para outras listas, como o fornecedor))
  * ----------------------------------------------------------------------------
  * Código que serve a mais de um módulo e por isso NÃO mora dentro de nenhum:
  * sessão, conexão com o banco, PIN e a trava. Regra de negócio nunca entra
  * aqui (fica no módulo e nas funções tf_*). Sem framework, sem build.
  *
  * COMO UM MÓDULO USA (duas linhas no <head> e uma no boot):
- *   <script src="../nucleo/config.js?v=N15"></script>
- *   <script src="../nucleo/nucleo.js?v=N15"></script>
+ *   <script src="../nucleo/config.js?v=N16"></script>
+ *   <script src="../nucleo/nucleo.js?v=N16"></script>
  *   ...
  *   const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
  *   if (g === 'hub') { irParaHub(Nucleo.recado); return; }     // ANTES do iniciar()
@@ -44,7 +45,8 @@
   'use strict';
   if (window.Nucleo && window.Nucleo.versao) return;
 
-  var VERSAO = 'N15';   // N15 (S205): Rodada R12 da auditoria (TapHub) — issues 156 (um "Sair" só, Nucleo.sairDaConta, que encerra o acesso também no servidor e respeita o celular da empresa) e 151 (a janela "fixa", que só fecha pelo botão dela; o aviso "erro" em vermelho)
+  var VERSAO = 'N16';   // N16 (S211): Rodada R17 da auditoria (TapFlow agenda e listas) — issues 114 e 129 (achar o cliente digitando, um componente só: Nucleo.busca.cliente, na Nova OS do TapFlow e no Novo negócio do TapCRM; Nucleo.busca.digitando serve a outras listas, como o fornecedor da R16)
+  // var VERSAO = 'N15';   // N15 (S205): Rodada R12 da auditoria (TapHub) — issues 156 (um "Sair" só, Nucleo.sairDaConta, que encerra o acesso também no servidor e respeita o celular da empresa) e 151 (a janela "fixa", que só fecha pelo botão dela; o aviso "erro" em vermelho)
   // var VERSAO = 'N14';   // N14 (S202): Rodada R10 da auditoria — issues 106, 107 e 177 (a fila envia também os envios antigos do TapField — levantamento, extras, execução e fotos do Drive — pelo tratador que a página registra: recusado fica parado com o motivo, nada some)
   // var VERSAO = 'N13';   // N13 (S196): Rodada R5 da auditoria — issues 108, 109, 126, 144, 169 (a janela devolve o campo digitado e confere o obrigatório/CONFIRMO; com algo digitado não fecha clicando fora e o X/Esc pede 2º toque; o Esc fecha a janela em todas as páginas)
   // var VERSAO = 'N12';   // N12 (S195): Rodada R4 da auditoria — issues 142, 146, 153, 154, 167 e 189 (renovar com 3 respostas, fila que não trava, aviso fixo, relato com rascunho, janela no X = Cancelar, destraves só apagados depois de enviados, storage.pedir, util.lerValor, planilha.lerXLSX)
@@ -2606,7 +2608,120 @@
     el.querySelector('#tfRelTxt').focus();
   }
 
+
+  /* ── N16 (S211, issues 114 e 129): A BUSCA DIGITANDO ─────────────────────────
+     Um componente só para "achar na lista digitando", no lugar da caixa com centenas de nomes em ordem alfabética
+     (filial com o mesmo nome se confundia). Quem usa:
+       var b = Nucleo.busca.cliente(alvo, { id, rotulo, placeholder, aoEscolher, inicial, limite, buscar });
+       b.valor()   → o id escolhido (ou null)      b.item() → a linha escolhida (ou null)
+       b.escolher(linha) / b.limpar() / b.focar()  b.entrada → o <input>
+     `alvo` é o elemento (ou o id) onde o campo nasce. `id` é o id do <input> (o <label for> da página aponta para
+     ele). O cliente vem da tf_buscar_cliente (nome, nome fantasia ou CNPJ, sem acento) e cada resultado mostra o
+     CNPJ e a cidade. `buscar(termo)` troca a fonte (o modo demonstração das páginas; outra lista, pelo
+     Nucleo.busca.digitando com `rotulo(x)`/`detalhe(x)`). A resposta que chega depois de outra mais nova é
+     descartada (digitar rápido não mostra a lista de uma letra antiga). Setas, Enter e Esc funcionam. */
+  function buscaDigitando(alvo, o) {
+    o = o || {};
+    var el = typeof alvo === 'string' ? document.getElementById(alvo) : alvo;
+    if (!el) return null;
+    var minimo = o.minimo || 2, espera = o.espera == null ? 250 : o.espera;
+    var rotulo = o.rotulo || function (x) { return String((x && (x.nome || x.razao_social)) || ''); };
+    var detalhe = o.detalhe || function () { return ''; };
+    var extra = o.extra || function () { return ''; };
+    var escolhido = null, lista = [], marcado = -1, seq = 0, timer = null;
+    el.classList.add('tf-busca');
+    el.innerHTML = '<input type="search" autocomplete="off" class="tf-busca-in" role="combobox" aria-autocomplete="list" aria-expanded="false">'
+      + '<div class="tf-busca-sel" hidden><span class="tf-busca-sel-t"></span><button type="button" class="tf-busca-troca">trocar</button></div>'
+      + '<div class="tf-busca-lista" role="listbox" hidden></div>';
+    var inp = el.querySelector('.tf-busca-in'), cx = el.querySelector('.tf-busca-lista'), sel = el.querySelector('.tf-busca-sel');
+    if (o.id) inp.id = o.id;
+    inp.name = (o.id || 'tfbusca') + '_nofill';
+    inp.placeholder = o.placeholder || 'digite parte do nome ou do CNPJ';
+    if (o.rotuloAria) inp.setAttribute('aria-label', o.rotuloAria);
+    function linhaTxt(x) { var d = detalhe(x); return rotulo(x) + (d ? ' — ' + d : ''); }
+    function fechar() { cx.hidden = true; inp.setAttribute('aria-expanded', 'false'); marcado = -1; }
+    function pintar(msg) {
+      if (msg) { cx.innerHTML = '<div class="tf-busca-msg"></div>'; cx.firstChild.textContent = msg; cx.hidden = false; return; }
+      cx.innerHTML = lista.map(function (x, i) {
+        var e = extra(x);
+        return '<button type="button" class="tf-busca-op' + (i === marcado ? ' on' : '') + '" role="option" data-i="' + i + '">'
+          + '<span class="tf-busca-n">' + esc(rotulo(x)) + '</span>'
+          + '<span class="tf-busca-d">' + esc(detalhe(x)) + (e ? ' · ' + esc(e) : '') + '</span></button>';
+      }).join('');
+      cx.hidden = false; inp.setAttribute('aria-expanded', 'true');
+    }
+    function escolher(x, calado) {
+      escolhido = x || null;
+      if (escolhido) {
+        sel.querySelector('.tf-busca-sel-t').textContent = '✓ ' + linhaTxt(escolhido);
+        sel.hidden = false; inp.hidden = true; fechar();
+      } else { sel.hidden = true; inp.hidden = false; }
+      if (!calado && typeof o.aoEscolher === 'function') { try { o.aoEscolher(escolhido); } catch (e) {} }
+    }
+    function buscar() {
+      var t = inp.value.trim(), meu = ++seq;
+      if (t.length < minimo) { lista = []; fechar(); return; }
+      pintar('Procurando…');
+      var p = typeof o.buscar === 'function' ? Promise.resolve().then(function () { return o.buscar(t); })
+                                             : Promise.reject(new Error('sem fonte'));
+      p.then(function (r) {
+        if (meu !== seq) return;                             // chegou depois de uma busca mais nova: descarta
+        lista = Array.isArray(r) ? r : []; marcado = lista.length ? 0 : -1;
+        if (!lista.length) pintar(o.vazio || 'Nada com esse nome ou CNPJ.'); else pintar();
+      }, function (e) {
+        if (meu !== seq) return;
+        lista = []; pintar('Não deu para procurar: ' + String((e && e.message) || 'sem resposta').replace(/\.$/, '') + '. Tente de novo.');
+      });
+    }
+    inp.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(buscar, espera); });
+    inp.addEventListener('keydown', function (ev) {
+      if (cx.hidden || !lista.length) { if (ev.key === 'Escape' && !cx.hidden) { ev.stopPropagation(); fechar(); } return; }
+      if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+        ev.preventDefault(); marcado = (marcado + (ev.key === 'ArrowDown' ? 1 : lista.length - 1)) % lista.length; pintar();
+      } else if (ev.key === 'Enter') {
+        ev.preventDefault(); if (marcado >= 0) escolher(lista[marcado]);
+      } else if (ev.key === 'Escape') { ev.stopPropagation(); fechar(); }
+    });
+    cx.addEventListener('mousedown', function (ev) { ev.preventDefault(); });   // não tira o foco antes do clique
+    cx.addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-i]'); if (!b) return;
+      escolher(lista[+b.getAttribute('data-i')]);
+    });
+    inp.addEventListener('blur', function () { setTimeout(fechar, 150); });
+    sel.querySelector('.tf-busca-troca').addEventListener('click', function () {
+      escolher(null); inp.focus(); if (inp.value.trim().length >= minimo) buscar();
+    });
+    if (o.inicial) escolher(o.inicial, true);
+    return {
+      entrada: inp,
+      valor: function () { return escolhido ? (escolhido.id != null ? escolhido.id : null) : null; },
+      item: function () { return escolhido; },
+      escolher: function (x) { escolher(x); },
+      limpar: function () { inp.value = ''; lista = []; escolher(null); fechar(); },
+      focar: function () { (inp.hidden ? sel.querySelector('button') : inp).focus(); }
+    };
+  }
+  function buscaCliente(alvo, o) {
+    o = Object.assign({}, o || {});
+    var lim = o.limite || 8;
+    if (typeof o.buscar !== 'function') o.buscar = function (t) { return rpcM('tf_buscar_cliente', { p_termo: t, p_limite: lim }); };
+    if (!o.rotulo) o.rotulo = function (c) {
+      var f = c && c.nome_fantasia && c.nome_fantasia !== c.razao_social ? ' (' + c.nome_fantasia + ')' : '';
+      return String((c && c.razao_social) || (c && c.nome) || '') + f;
+    };
+    if (!o.detalhe) o.detalhe = function (c) {
+      return [c && c.cnpj ? 'CNPJ ' + c.cnpj : 'sem CNPJ', c && c.cidade ? c.cidade + (c.uf ? '/' + c.uf : '') : ''].filter(Boolean).join(' · ');
+    };
+    if (!o.extra) o.extra = function (c) {
+      return c && c.oss != null ? c.oss + ' OS' + (c.equipamentos ? ' · ' + c.equipamentos + ' equip.' : '') : '';
+    };
+    if (!o.vazio) o.vazio = 'Nenhum cliente com esse nome ou CNPJ.';
+    if (!o.placeholder) o.placeholder = 'digite parte do nome, do nome fantasia ou do CNPJ';
+    return buscaDigitando(alvo, o);
+  }
+
   api_.versao = VERSAO;
+  api_.busca = { digitando: buscaDigitando, cliente: buscaCliente };   // N16 (S211, issues 114 e 129)
   api_.util = { esc: esc, toast: toast, BRL: BRL, dataBR: dataBR, isoHoje: isoHoje, copiar: copiar,
                 arquivoParaBase64: arquivoParaBase64, semDuploEnvio: semDuploEnvio,
                 lerValor: lerValor, lerValorDetalhe: lerValorDetalhe, valorEntendido: valorEntendido, mostrarValor: mostrarValor };   // N12 (167, 189)

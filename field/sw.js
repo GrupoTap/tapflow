@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S69-T55';   // S210: TapDoc celular 33 (Rodada R19 da auditoria, TapDoc: o número de série da válvula; issue 216; banco 450)
+const VERSAO = 'S69-T56';   // S211: só o núcleo N16 (Rodada R17 da auditoria, TapFlow agenda e listas; a busca digitando do núcleo; o TapField não muda)
+// const VERSAO = 'S69-T55';   // S210: TapDoc celular 33 (Rodada R19 da auditoria, TapDoc: o número de série da válvula; issue 216; banco 450)
 // const VERSAO = 'S69-T54';   // S208: TapDoc celular 32 (Rodada R18 da auditoria, TapDoc: girar a foto e o aviso das medidas do vaso; issues 220 e 221; banco 449)
 // const VERSAO = 'S69-T53';   // S207: Field S69 (Rodada R13 da auditoria, TapSeg: a devolução em partes na Ficha de EPI do celular; issue 195; banco 627)
 // const VERSAO = 'S68-T52';   // S205: Field S68 e núcleo N15 (Rodada R12 da auditoria, TapHub: o "Sair" do núcleo; issue 156)
@@ -78,9 +79,9 @@ const ESSENCIAIS = [
   // IDÊNTICO ao do <script> do index.html, com o ?v= (c.match compara a consulta inteira).
   // Sem isto o Field sem sinal abriria sem o núcleo. Trocou o ?v= no index.html? Troque aqui também.
   // S34: N2 (fila de envios e utilitários)
-  '../nucleo/nucleo.js?v=N15',
-  '../nucleo/nucleo.css?v=N15',
-  '../nucleo/config.js?v=N15',
+  '../nucleo/nucleo.js?v=N16',
+  '../nucleo/nucleo.css?v=N16',
+  '../nucleo/config.js?v=N16',
   // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo"
   '../nucleo/modulos.js?v=M4',
   // S35 · TapDoc 1: a coleta da inspeção (página própria, abre sem sinal)
