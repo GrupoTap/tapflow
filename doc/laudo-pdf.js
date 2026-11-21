@@ -11,6 +11,12 @@
  * A conta da espessura mínima e da PMTA é a do motor (motor-calculo-nr13.js);
  * aqui ela só é ESCRITA com os números (a memória de cálculo do laudo).
  *
+ * S178 · S210 · Rodada R19 da auditoria (teste de 19/11; issues 216, 223, 224, 225, 226 e 228, 21/11/2026): o Quadro 1 com a 1ª
+ *   letra maiúscula e os tampos só pelo tipo; sem documento anterior, a frase sem "nos documentos anteriores"; o 7.3 sem o parágrafo
+ *   das siglas e com a conclusão (conforme ou não, ou o ajuste da inspeção); o 9.1 do laudo antigo (com o prontuário ou estimado);
+ *   as fórmulas em fração, numeradas, com o resultado em amarelo, e os tampos iguais numa conta só no 9.3; os anexos só do medidor
+ *   e da ART; o relatório de aferição com carga e descarga, a bancada pela marca e o padrão pelo número do certificado; o nº de
+ *   série da válvula; a portaria da NR-13 pelo texto "nr13_portaria". Os textos novos vêm da proposta s210 (o PLH aprova).
  * S177 · S186 · issue 74 (Revisão TapDoc · Rodada 11, 17/11/2026): o volume do quadro 6.1 é o da categoria (o total informado pelo PLH
  *   quando falta o volume de uma câmara); o 7.3 diz "+N" quando o ponto tem mais de 4 leituras; a data do certificado de aferição
  *   é a de quando ela terminou (dataAfericao).
@@ -42,7 +48,7 @@
 (function (raiz) {
 'use strict';
 const LOGO_ENGETAP = 'data:image/png;base64,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';
-const COR = '#1B6FA9', CINZA = '#515252', CLARO = '#78838A', PRETO = '#000000', FAIXA = '#F1F4F7';
+const COR = '#1B6FA9', CINZA = '#515252', CLARO = '#78838A', PRETO = '#000000', FAIXA = '#F1F4F7', AMARELO = '#FFF2A8';   // S178 · issue 224: o resultado da conta
 
 // ── formatação (pt-BR: vírgula decimal, decisão do desenho, pergunta 7) ─────
 function fmt(v, c) {
@@ -74,6 +80,11 @@ function dataBR(x) {
 }
 const dataSP = x => x ? new Date(x).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }) : null;
 function txt(t, v) { return String(t == null ? '' : t).replace(/\{\{(\w+)\}\}/g, (m, k) => v && v[k] != null ? String(v[k]) : ''); }
+// S178 · issue 228: a redação da NR-13 em vigor, só quando o modelo ainda não tem o texto "nr13_portaria" (o PLH aprova a proposta s210)
+const NR13_PORTARIA = 'Portaria MTP nº 1.846, de 1º de julho de 2022, alterada pela Portaria MTP nº 4.219, de 20 de dezembro de 2022';
+const maiuscula = x => x == null || x === '' ? x : String(x).replace(/^\s*\S/, c => c.toUpperCase());   // S178 · issue 223: "Reservatório…", "Cilíndrico"
+// S178 · issue 223: sem laudo anterior conferido e com o prontuário a reconstituir, o vaso não tem documento anterior nenhum
+const semDocAnterior = d => !d.laudo_anterior && ((d.inspecao || {}).reconstituir_prontuario === true);
 // ── S174 · S178 · issue 60: a PMTA adotada abaixo da pressão máxima de operação ──
 // Decisão do Bruno (opção B): o PLH aprova com justificativa escrita (443: resultado_camaras[].justificativa_operacao) e o
 // relatório e o Registro de Segurança saem "não liberado para operar nessa pressão". A mesma conta do banco (tf_insp_avancar):
@@ -203,6 +214,29 @@ function geoDe(vaso, c) {
 }
 // a memória de cálculo escrita: fórmula, substituição e resultado (as contas do motor R00)
 function memoria(g, P, S, t) {
+  const m = memoriaTxt(g, P, S, t);
+  // S178 · issue 224 (Bruno, 19/11: o formato dos laudos anteriores): cada conta também em fração — o que fica à esquerda, o
+  // numerador e o denominador —, primeiro com as letras e depois com os números; o texto de uma linha (fe, se, fp, sp) continua
+  const fr = (x, temNum) => { if (!x) return null;
+    const k = x.indexOf(' = '), esq = x.slice(0, k + 2), dir = x.slice(k + 3);
+    // a janela: "d · √(C·P / (S·E))" — o radical fica à esquerda, com a fração dentro
+    const rz = /^(.*?)\s*√\((.*)\)$/.exec(dir);
+    if (rz) { const [n, dd] = partir(rz[2]); return { esq: esq + ' ' + rz[1].replace(/\s*·$/, ' ·') + ' √', num: n, den: dd, raiz: true }; }
+    const [n, dd] = partir(dir); return { esq, num: n, den: dd };
+  };
+  return Object.assign(m, { Fe: fr(m.fe), Se: fr(m.se), Fp: fr(m.fp), Sp: fr(m.sp) });
+}
+/** S178 · issue 224: "A / (B)" → [A, B] (a barra de fora; os parênteses de fora do denominador saem). */
+function partir(x) {
+  let d = 0, k = -1;
+  for (let i = 0; i < x.length; i++) { const c = x[i]; if (c === '(') d++; else if (c === ')') d--; else if (c === '/' && d === 0) { k = i; break; } }
+  if (k < 0) return [x.trim(), ''];
+  let num = x.slice(0, k).trim(), den = x.slice(k + 1).trim();
+  const fora = y => { if (y[0] !== '(' || y[y.length - 1] !== ')') return y; let dd = 0;
+    for (let i = 0; i < y.length; i++) { if (y[i] === '(') dd++; else if (y[i] === ')') { dd--; if (dd === 0 && i < y.length - 1) return y; } } return y.slice(1, -1).trim(); };
+  return [fora(num), fora(den)];
+}
+function memoriaTxt(g, P, S, t) {
   const E = g.E, f = (x, c) => fmt(x, c == null ? 3 : c), cos = g.alfaGraus != null ? Math.cos(g.alfaGraus * Math.PI / 180) : null;
   switch (g.tipo) {
     case 'costado': return { fe: 'e = P·R / (S·E − 0,6·P)', se: `e = ${f(P)} · ${f(g.R, 2)} / (${f(S, 1)} · ${f(E, 2)} − 0,6 · ${f(P)})`, e: P * g.R / (S * E - 0.6 * P),
@@ -258,14 +292,12 @@ function ordemMedicao(V) {
   const camOrd = c => { const k = (V.camaras || []).find(x => x.id === c.camara_id); return k ? (k.ordem || 0) : 0; };
   return (a, b) => camOrd(a) - camOrd(b) || rankMedicao(a) - rankMedicao(b) || (a.ordem || 0) - (b.ordem || 0);
 }
-/** S148 · item 90: os anexos, na ordem em que o PDF os junta: medidor, cada manômetro padrão usado, ART.
- *  Laudo de antes (a fotografia sem "padroes"): null, e vale a lista do modelo. */
+/** S148 · item 90 → S178 · issue 225 (Bruno, 19/11: igual ao laudo antigo): os anexos do relatório, na ordem em que o PDF os junta:
+ *  o certificado do medidor de espessura e a ART. O certificado de cada manômetro padrão vai com o relatório de aferição (o
+ *  documento da aferição cita o número dele), não com o laudo. Laudo de antes (a fotografia sem "padroes"): null, e vale a lista do modelo. */
 function anexosDoLaudo(d) {
   if (!Array.isArray(d.padroes)) return null;
-  const xs = ['Certificado de calibração do medidor de espessura']
-    .concat(d.padroes.map(p => 'Certificado de calibração do manômetro padrão' + (p.descricao ? ' ' + p.descricao : '') + (p.numero_serie ? ' (nº ' + p.numero_serie + ')' : '')))
-    .concat(['ART – Anotação de Responsabilidade Técnica']);
-  return xs.map((x, k) => 'Anexo ' + (k + 1) + ' – ' + x + (k === xs.length - 1 ? '.' : ';'));
+  return ['Anexo 1 – Certificado de Calibração do Medidor de Espessura;', 'Anexo 2 – ART.'];
 }
 const MESMA_FOTO = /^Mesma foto da placa de TAG/;   // S149 · item 82
 
@@ -296,13 +328,19 @@ function documentosAfericao(d, opc) {
     C.push({ text: titulo, style: 'titulo' }, { text: 'Nº ' + (f.codigo || 'a numerar') + (ok ? '' : ' · NÃO CONFORME'), style: 'numero', color: ok ? CZ : VERM });
     C.push({ table: { widths: [150, '*'], body: [
       linha('Cliente', emp.razao_social || emp.nome_fantasia), linha('Vaso de pressão', [V.tag, V.numero_tap ? 'Número TAP ' + V.numero_tap : null].filter(Boolean).join(' · ')),
-      linha(vv ? 'Válvula' : 'Manômetro', [TIPOS_ACESS[a.tipo] || a.tipo, a.tag, !vazio(a.marca) ? 'marca ' + a.marca : null, a.conexao ? 'conexão ' + a.conexao : null].filter(Boolean).join(' · ')),
+      linha(vv ? 'Válvula' : 'Manômetro', [TIPOS_ACESS[a.tipo] || a.tipo, a.tag, !vazio(a.marca) ? 'marca ' + a.marca : null,
+        vv && !vazio(a.numero_serie) ? 'nº de série ' + a.numero_serie : null, a.conexao ? 'conexão ' + a.conexao : null].filter(Boolean).join(' · ')),   // S178 · issue 216
       linha(vv ? 'Unidade' : 'Escala de indicação', vv ? un : (f.faixa_fim != null ? fmt(f.faixa_ini || 0, 1) + ' a ' + fmt(f.faixa_fim, 1) + ' ' + un + (f.resolucao ? ' · resolução ' + fmt(f.resolucao, 2) : '') : '—')),
       linha('Data', dataBR(dataAfericao(f, I))),   // S177 · issue 74, item 5: a de quando terminou
       linha('Procedimento', 'PR-ENG-001 (Engetap), aprovado pelo PLH: ' + (vv ? 'desmontada até onde a construção permite, inspecionada, limpa e testada (NR-13, item 13.5.4.9)'
         : 'etapa 1, inspeção visual e funcional; etapa 2, comparação com o padrão em 3 cargas e 3 descargas por ponto')),
-    ].concat(e1 ? [] : [linha('Padrão', [pz.descricao, pz.numero_serie ? 'nº ' + pz.numero_serie : null, pz.certificado_num ? 'certificado ' + pz.certificado_num : null,
+    ]
+      // S178 · issue 225, item 3: o padrão pelo número do CERTIFICADO (o nº de série vem depois, com o nome); issue 226: a bancada pela marca
+      .concat(e1 ? [] : [linha('Padrão', [pz.certificado_num ? 'certificado nº ' + pz.certificado_num : null, pz.descricao, pz.numero_serie ? 'nº de série ' + pz.numero_serie : null,
         pz.laboratorio ? pz.laboratorio : null, pz.validade ? 'válido até ' + dataBR(pz.validade) : null].filter(Boolean).join(' · '))])
+      .concat(e1 || !f.bancada || ![f.bancada.marca, f.bancada.modelo, f.bancada.descricao].some(x => !vazio(x)) ? []
+        : [linha('Bancada de aferição', [!vazio(f.bancada.marca) ? 'marca ' + f.bancada.marca : null, !vazio(f.bancada.modelo) ? 'modelo ' + f.bancada.modelo : null,
+            vazio(f.bancada.marca) && vazio(f.bancada.modelo) ? f.bancada.descricao : null].filter(Boolean).join(' · '))])
       .concat(!vv && !e1 ? [linha('Critério', 'ASME B40.100, Grau D (±5% do fundo de escala, em qualquer ponto)')] : []) }, layout: 'lightHorizontalLines', margin: [0, 6, 0, 10] });
     // etapa 1
     C.push({ text: 'Etapa 1 · inspeção visual e funcional', style: 'h2' });
@@ -313,10 +351,12 @@ function documentosAfericao(d, opc) {
     // etapa 2
     if (!e1 && !vv) {
       C.push({ text: 'Etapa 2 · comparação com o padrão', style: 'h2' });
-      const corpo = [['Ponto', 'Indicado (média)', 'Erro médio', 'Tolerância', 'Incerteza (U, k = 2)', 'Dentro da tolerância?'].map(t => ({ text: t, style: 'th' }))]
-        .concat((cal.pontos || []).map(p => [fmt(p.nominal, 2), fmt(indicadoMedio(p), 2), (p.erro_medio > 0 ? '+' : '') + fmt(p.erro_medio, 2), '±' + fmt(p.tol, 2), fmt(p.U, 2),
+      // S178 · issue 226 (opção A do Bruno): as leituras do manômetro em carga e em descarga (a média das 3 de cada sentido) antes da média
+      const corpo = [['Ponto', 'Indicado · carga', 'Indicado · descarga', 'Indicado (média)', 'Erro médio', 'Tolerância', 'Incerteza (U, k = 2)', 'Dentro da tolerância?'].map(t => ({ text: t, style: 'th' }))]
+        .concat((cal.pontos || []).map(p => [fmt(p.nominal, 2), fmt(indicadoSentido(L, p, 'carga'), 2), fmt(indicadoSentido(L, p, 'descarga'), 2), fmt(indicadoMedio(p), 2),
+          (p.erro_medio > 0 ? '+' : '') + fmt(p.erro_medio, 2), '±' + fmt(p.tol, 2), fmt(p.U, 2),
           { text: p.ok ? 'Sim' : 'NÃO', bold: !p.ok, color: p.ok ? VERDE : VERM }].map(x => typeof x === 'object' ? Object.assign({ style: 'td', alignment: 'center' }, x) : { text: x, style: 'td', alignment: 'center' })));
-      C.push({ table: { headerRows: 1, widths: ['*', '*', '*', '*', '*', '*'], body: corpo }, layout: 'lightHorizontalLines', margin: [0, 2, 0, 4] },
+      C.push({ table: { headerRows: 1, widths: [34, '*', '*', '*', '*', '*', '*', 52], body: corpo }, layout: 'lightHorizontalLines', margin: [0, 2, 0, 4] },
              { text: 'Valores em ' + un + '. Incerteza pela EA-4/02: raiz da soma dos quadrados da repetição, da resolução e do padrão, vezes k = 2.', style: 'nota' });
     }
     if (!e1 && vv) {
@@ -353,6 +393,13 @@ function documentosAfericao(d, opc) {
         nota: { fontSize: 7.5, italics: true, color: '#7A8796' }, destaque: { fontSize: 10, bold: true, margin: [0, 6, 0, 6] } } } });
   });
   return out;
+}
+/** S178 · issue 226: a média do que o manômetro marcou num sentido (carga ou descarga), das leituras guardadas na aferição
+ *  (leituras.pontos[].leituras[] = { sentido, padrao, indicado }, o formato do motor); sem as leituras, null (sai "—"). */
+function indicadoSentido(L, p, sentido) {
+  const pt = ((L && L.pontos) || []).find(x => x && x.nominal != null && p.nominal != null && Math.abs(Number(String(x.nominal).replace(',', '.')) - Number(p.nominal)) < 1e-9);
+  const vs = ((pt && pt.leituras) || []).filter(l => l && l.sentido === sentido).map(l => Number(String(l.indicado).replace(',', '.'))).filter(x => isFinite(x));
+  return vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : null;
 }
 /** S161 · issue 24: o que o manômetro do vaso marcou, em média (o banco guarda a média do padrão e o erro médio = indicado − padrão). */
 function indicadoMedio(p) {
@@ -607,8 +654,10 @@ function montar(d, opc) {
 
   // ── 1 a 3 ───────────────────────────────────────────────────────────────
   sec('1', T.objetivo || 'OBJETIVO');
-  par(PRT ? txt(XP.objetivo, { tag: V.tag || '—', tap: numeroTap ? ', Número TAP ' + numeroTap : '', empresa: emp.razao_social || emp.nome_fantasia || '—', relatorio: relatorioP }) : M.objetivo);
-  sec('2', T.referencias || 'REFERÊNCIAS'); lista(M.referencias);
+  // S178 · issue 228: a portaria da NR-13 num texto só ("nr13_portaria", nos Textos do laudo); o objetivo e a referência a citam por {{nr13}}
+  const NR13 = { nr13: M.nr13_portaria || NR13_PORTARIA };
+  par(PRT ? txt(XP.objetivo, Object.assign({ tag: V.tag || '—', tap: numeroTap ? ', Número TAP ' + numeroTap : '', empresa: emp.razao_social || emp.nome_fantasia || '—', relatorio: relatorioP }, NR13)) : txt(M.objetivo, NR13));
+  sec('2', T.referencias || 'REFERÊNCIAS'); lista((M.referencias || []).map(r => txt(r, NR13)));
   sec('3', T.abreviacoes || 'LISTA DE ABREVIAÇÕES'); lista(M.abreviacoes);
   // ── 4 · a empresa (S143 · item 78: ramo, CNAE e grau de risco do cadastro; linha vazia não sai) ──
   sec('4', T.empresa || 'IDENTIFICAÇÃO DA EMPRESA');
@@ -648,32 +697,36 @@ function montar(d, opc) {
   const volume = (R.volume_m3 != null ? Number(R.volume_m3) : cams.reduce((a, k) => a + (Number(k.volume_m3) || 0), 0) || null);
   // S143 · item 78: "Tampos: 2, elípticos 2:1" e "Costado: cilíndrico" no lugar das siglas soltas
   const ativos = (V.componentes || []).filter(c => c.ativo !== false).sort(ordemMedicao(V));   // S148 · item 85
-  const TAMPO_PL = { eliptico: ['elíptico 2:1', 'elípticos 2:1'], torisferico: ['torisférico', 'torisféricos'], hemisferico: ['hemisférico', 'hemisféricos'], plano: ['plano', 'planos'] };
-  const tampos = ativos.filter(c => TAMPO_PL[c.tipo]);
-  const porTipo = {}; tampos.forEach(c => { porTipo[c.tipo] = (porTipo[c.tipo] || 0) + 1; });
-  const tamposTxt = tampos.length ? tampos.length + ', ' + Object.keys(porTipo).map(t => (Object.keys(porTipo).length > 1 ? porTipo[t] + ' ' : '') + TAMPO_PL[t][porTipo[t] > 1 ? 1 : 0]).join(' e ') : null;
-  const costadoTxt = [ativos.some(c => c.tipo === 'costado') ? 'cilíndrico' : null, ativos.some(c => c.tipo === 'conico') ? 'cônico' : null].filter(Boolean).join(' e ') || null;
+  // S178 · issue 223 (Bruno, 19/11): os tampos só pelo tipo ("Elíptico 2:1"; tipos diferentes: "Elíptico 2:1 / Torisférico"), sem a quantidade
+  const TAMPO_TIPO = { eliptico: 'Elíptico 2:1', torisferico: 'Torisférico', hemisferico: 'Hemisférico', plano: 'Plano' };
+  const tampos = ativos.filter(c => TAMPO_TIPO[c.tipo]);
+  const tamposTxt = tampos.length ? [...new Set(tampos.map(c => c.tipo))].map(t => TAMPO_TIPO[t]).join(' / ') : null;
+  const costadoTxt = [ativos.some(c => c.tipo === 'costado') ? 'Cilíndrico' : null, ativos.some(c => c.tipo === 'conico') ? 'cônico' : null].filter(Boolean).join(' e ');
+  const costadoTxtM = maiuscula(costadoTxt) || null;
   const janelas = ativos.filter(c => c.tipo === 'janela').length;
   const codigo = V.sem_codigo_construcao ? 'Sem código de construção' : V.codigo_construcao ? V.codigo_construcao + (V.codigo_edicao ? ' / ' + V.codigo_edicao : '') : 'ASME VIII Div. 1 – adotado';
-  const linhas1 = [['Fabricante', V.fabricante], ['TAG', V.tag], ['Número TAP', numeroTap], ['Função', V.funcao], ['Nº de série', V.numero_serie], ['Modelo', V.modelo], ['Ano de fabricação', V.ano_fabricacao],
-    ['Código de construção', codigo], ['Posição', POSICAO[V.posicao] || V.posicao], ['Tampos', tamposTxt], ['Costado', costadoTxt], ['Janelas de visita', janelas || null],
+  const linhas1 = [['Fabricante', V.fabricante], ['TAG', V.tag], ['Número TAP', numeroTap], ['Função', maiuscula(V.funcao)], ['Nº de série', V.numero_serie], ['Modelo', V.modelo], ['Ano de fabricação', V.ano_fabricacao],
+    ['Código de construção', codigo], ['Posição', maiuscula(POSICAO[V.posicao] || V.posicao)], ['Tampos', tamposTxt], ['Costado', costadoTxtM], ['Janelas de visita', janelas || null],
     ['Volume', litros(volume)]];
   if (cams.length <= 1) {
     const k = cams[0] || {};
-    linhas1.push(['Fluido', k.fluido], ['Classe do fluido', k.classe_fluido], ['Pressão máxima de operação', k.p_operacao_max_mpa != null ? bar(k.p_operacao_max_mpa) : null],
+    linhas1.push(['Fluido', maiuscula(k.fluido)], ['Classe do fluido', k.classe_fluido], ['Pressão máxima de operação', k.p_operacao_max_mpa != null ? bar(k.p_operacao_max_mpa) : null],
       ['PMTA de plaqueta', (k.pmta_plaqueta_mpa != null ? k.pmta_plaqueta_mpa : V.pmta_plaqueta_mpa) != null ? bar(k.pmta_plaqueta_mpa != null ? k.pmta_plaqueta_mpa : V.pmta_plaqueta_mpa) : null],
       ['PTH de plaqueta', (k.pth_mpa != null ? k.pth_mpa : V.pth_mpa) != null ? bar(k.pth_mpa != null ? k.pth_mpa : V.pth_mpa) : null]);
   }
   linhas1.push(['PMTA adotada nesta inspeção', pmtaVaso != null ? bar(pmtaVaso) : null], ['Grupo de potencial de risco', R.grupo != null ? String(R.grupo) : null], ['Categoria (NR-13)', R.categoria]);
   tabelaRV(linhas1, [170, '*'], 'Descrição do equipamento');
   if (cams.length > 1) tabela(['Câmara', 'Fluido', 'Classe', 'Operação', 'Volume', 'PMTA de plaqueta', 'PTH'],
-    cams.map(k => [k.nome, k.fluido, k.classe_fluido, bar(k.p_operacao_max_mpa), litros(k.volume_m3) || '—', bar(k.pmta_plaqueta_mpa), bar(k.pth_mpa)]), null, 'Câmaras do vaso');
+    cams.map(k => [k.nome, maiuscula(k.fluido), k.classe_fluido, bar(k.p_operacao_max_mpa), litros(k.volume_m3) || '—', bar(k.pmta_plaqueta_mpa), bar(k.pth_mpa)]), null, 'Câmaras do vaso');
   // S143 · item 65: as placas numa figura só ("Detalhamento das plaquetas de identificação"), e o texto cita o número dela
   const placas = LUG.filter(l => l.secao === 'plaqueta').map(fotoDoLugar).filter(Boolean)
     .concat((d.fotos || []).filter(f => f.secao === 'plaqueta' && !deLugar(f) && img[f.path])).map(f => img[f.path]);
   const blocoPlacas = [];
   const nPlaca = placas.length ? figura(placas, T.fig_placas || 'Detalhamento das plaquetas de identificação', blocoPlacas) : null;
-  par(txt(M.vaso_fonte, { figura: nPlaca ? ' (Figura ' + nPlaca + ')' : '', quadro: qVaso }));
+  // S178 · issue 223: o vaso sem laudo anterior conferido e com o prontuário a reconstituir não tem "documentos anteriores": o texto
+  // "vaso_fonte_sem_doc" (proposta s210); antes de o PLH aprovar, a frase de hoje sem esse trecho (que não seria verdade)
+  const fonteTxt = !semDocAnterior(d) ? M.vaso_fonte : M.vaso_fonte_sem_doc || String(M.vaso_fonte || '').replace(/,\s*nos documentos anteriores\s*(e|,)/, ' $1').replace(/\s+e\s+e\s+/, ' e ');
+  par(txt(fonteTxt, { figura: nPlaca ? ' (Figura ' + nPlaca + ')' : '', quadro: qVaso }));
   C.push(...blocoPlacas);
   LUG.filter(l => l.secao === 'plaqueta' && !fotoDoLugar(l) && String(SEMAC[l.lugar] || '').trim() && !MESMA_FOTO.test(SEMAC[l.lugar]))   // S149 · item 82: a mesma foto serve para as duas
     .forEach(l => par(presos(l.rotulo) + ': sem foto (' + String(SEMAC[l.lugar]).trim().replace(/[.\s]+$/, '') + ').', { style: 'legenda' }));
@@ -690,7 +743,7 @@ function montar(d, opc) {
       const f = a.afericao || {}, ehMed = a.tipo === 'manometro' || a.tipo === 'manovacuometro';
       const escala = ehMed ? (f.faixa_fim != null ? 'escala de ' + fmt(f.faixa_ini || 0, 0) + ' a ' + fmt(f.faixa_fim, 0) + ' ' + String(f.unidade || 'bar').replace('kgf/cm2', 'kgf/cm²')
         : (nh(a.escala) ? 'escala ' + String(a.escala).replace(/^escala\s*/i, '') : null)) : null;
-      const det = [nh(a.marca) ? 'marca ' + a.marca : null, escala,
+      const det = [nh(a.marca) ? 'marca ' + a.marca : null, nh(a.numero_serie) ? 'nº de série ' + a.numero_serie : null, escala,   // S178 · issue 216
         a.pressao_ajuste_mpa != null ? (a.tipo === 'disco_ruptura' ? 'ruptura ' : 'ajuste ') + bar(a.pressao_ajuste_mpa) : null, a.conexao ? 'conexão ' + a.conexao : null, lacre ? 'lacre nº ' + lacre : null].filter(Boolean).join(', ');
       const sit = { ok: '', substituir: ' — a substituir', ausente: ' — ausente', inoperante: ' — inoperante', retirado: ' — retirado nesta inspeção' }[a.situacao] || '';
       return p + (det ? ': ' + det : '') + sit + ';';
@@ -752,7 +805,7 @@ function montar(d, opc) {
   const qUS = quadro + 1, fMapa = siglasMapa.length || imgMapa ? fig + 1 : null;
   par(txt(M.ultrassom_intro, { medidor: [med.marca, med.modelo].filter(Boolean).join(' ') || med.descricao || '—', serie: med.numero_serie || '—',
     certificado: med.certificado_num || '—', laboratorio: med.laboratorio ? ', ' + med.laboratorio : '', validade: dataBR(med.validade), quadro: qUS }));
-  if (fMapa && M.ultrassom_mapa) par(txt(M.ultrassom_mapa, { figura: fMapa }));
+  // S178 · issue 223 (Bruno, 19/11): o parágrafo das siglas da figura do mapa não sai mais (a figura e o quadro já trazem os nomes)
   const linhasUS = [];
   let maisDe4 = false;   // S177 · issue 74, item 4: ponto com 5 leituras ou mais
   comLeitura.forEach(c => {
@@ -789,7 +842,12 @@ function montar(d, opc) {
     else if (signif.length) par(txt(M.ultrassom_perda, { fonte, taxa: fmt(signif[0].taxa, 3), componente: signif[0].nome }));
     else par(txt(M.ultrassom_sem_perda, { fonte }));
     const abaixo = ES.filter(x => x.abaixo).map(x => x.nome);
-    if (abaixo.length) par(txt(M.ultrassom_abaixo, { componentes: eLista(abaixo) }), { bold: true });
+    // S178 · issue 223: a conclusão da medição — o texto conforme ou não conforme dos Textos do laudo (proposta s210), ou o que quem
+    // revisou ajustou nesta inspeção (inspecoes.textos_ajustes); sem o texto aprovado, o de antes (só o aviso das espessuras abaixo)
+    const ajUS = String(((I.textos_ajustes || {}).ultrassom_conclusao) || '').trim();
+    if (ajUS) par(ajUS, abaixo.length ? { bold: true } : undefined);
+    else if (abaixo.length) par(txt(M.ultrassom_conclusao_nc || M.ultrassom_abaixo, { componentes: eLista(abaixo) }), { bold: true });
+    else if (M.ultrassom_conclusao_ok && !signif.length) par(M.ultrassom_conclusao_ok);
   }
   // S154 · issue 9 (430): a foto da medição de espessura (lugar próprio; sem ela, o motivo); as outras fotos da seção, como antes
   fotosLugares(LUG.filter(l => l.secao === 'componentes'));
@@ -837,7 +895,9 @@ function montar(d, opc) {
   const padraoVars = pz => ({ padrao_marca: !vazio(pz.marca) ? ' da marca ' + pz.marca : '',
     laboratorio: pz.laboratorio ? (/^laborat/i.test(pz.laboratorio) ? ' pelo ' + pz.laboratorio.replace(/^Laborat/, 'laborat') : ' pelo laboratório ' + pz.laboratorio) + ',' : '',
     certificado: pz.certificado_num || '—' });
-  const bancadaTxt = bz => { const m = [bz.marca, bz.modelo].filter(x => !vazio(x)).join(' '); return m ? ' (modelo ' + m + ')' : ''; };
+  // S178 · issue 226: a bancada pela marca do cadastro de instrumentos ("da marca X, modelo Y"); sem marca nem modelo, nada
+  const bancadaTxt = bz => { const mc = !vazio(bz.marca) ? bz.marca : null, md = !vazio(bz.modelo) ? bz.modelo : null;
+    return mc ? ' da marca ' + mc + (md ? ', modelo ' + md + ',' : '') : md ? ' (modelo ' + md + ')' : ''; };
   const conc = { man: [], valv: [] }, K = M.conc || {};
   // S144 · item 69: a foto da aferição (tirada no celular, no lugar próprio do acessório) entra como figura
   // S149 · item 83: as 3 fotos com nome — a bancada montada em cima, larga; o padrão e o instrumento em teste lado a lado embaixo
@@ -912,7 +972,7 @@ function montar(d, opc) {
       const acima = f.acima_adotada === true || (maior != null && pmtaBar != null && emBar(maior, f.unidade) > pmtaBar + 1e-6);
       const comAj = t => f.ajuste == null || f.ajuste === '' ? semFrase(t, 'ajuste') : t;   // sem a pressão de ajuste, a frase dela não sai
       const lacre = f.lacre_colocado || a.lacre_num;
-      const ident = [!vazio(a.marca) ? 'da marca ' + a.marca : null, a.conexao ? 'com conexão ' + a.conexao : null].filter(Boolean);
+      const ident = [!vazio(a.marca) ? 'da marca ' + a.marca : null, !vazio(a.numero_serie) ? 'nº de série ' + a.numero_serie : null, a.conexao ? 'com conexão ' + a.conexao : null].filter(Boolean);   // S178 · issue 216
       const vars = Object.assign({ tipo: tipoNome, ident: ident.length ? ', ' + ident.join(', ') + ',' : '',
         bancada: bancadaTxt(bz), ajuste: unidadeTxt(f.ajuste, f.unidade), aberturas: ab.length ? numsTxt(ab, f.unidade) : '—', assentamentos: asv.length ? numsTxt(asv, f.unidade) : '—',
         ciclos: ab.length || 3, maior: maior != null ? unidadeTxt(maior, f.unidade) : '—', pmta: pmtaBar != null ? bar(kc.pmta_adotada_mpa) : '—',
@@ -960,11 +1020,21 @@ function montar(d, opc) {
   const TIT_FAM = { costado: 'Costado', tampos: 'Tampos', cone: 'Cone', janela: 'Janelas de visita' };
   // S153 · issue 6, item 13: o bloco da conta — o nome em negrito com a referência da norma em cinza à direita; a fórmula e a
   // conta numa faixa cinza-clara (os "e =" e os "PMTA =" alinhados à esquerda); o resultado em negrito logo abaixo
-  const blocoConta = (nome, ref, contas, resultado) => ({ unbreakable: true, margin: [0, 2, 0, 14], stack: [
+  // S178 · issue 224 (Bruno, 19/11: o formato dos laudos anteriores, com a vírgula): cada fórmula em fração, no meio da página, com o
+  // número dela à direita ([1], [2]…); primeiro com as letras, depois com os números; o resultado em destaque amarelo
+  let nEq = 0;
+  const fracao = (F, numero) => !F ? null : { columns: [{ width: '*', text: '' },
+      { width: 'auto', text: F.esq, style: 'formula', margin: [0, F.den ? 9 : 1, 5, 0] },
+      F.den ? { width: 'auto', table: { body: [[{ text: F.num, style: 'formula', alignment: 'center' }], [{ text: F.den, style: 'formula', alignment: 'center' }]] },
+        layout: { hLineWidth: i => i === 1 ? 0.8 : 0, vLineWidth: () => 0, hLineColor: () => PRETO, paddingLeft: () => 3, paddingRight: () => 3, paddingTop: () => 1, paddingBottom: () => 1 } }
+        : { width: 'auto', text: F.num, style: 'formula', margin: [0, 1, 0, 0] },
+      { width: '*', text: '' },
+      { width: 34, text: numero ? '[' + numero + ']' : '', style: 'formula', alignment: 'right', margin: [0, F.den ? 9 : 1, 0, 0] }], columnGap: 0, margin: [0, 3, 0, 3] };
+  const destaque = t => ({ columns: [{ width: '*', text: '' }, { width: 'auto', table: { body: [[{ text: t, style: 'formulaRes', fillColor: AMARELO }]] },
+      layout: { hLineWidth: () => 0, vLineWidth: () => 0, paddingLeft: () => 8, paddingRight: () => 8, paddingTop: () => 3, paddingBottom: () => 3 } }, { width: '*', text: '' }], margin: [0, 4, 0, 4] });
+  const blocoConta = (nome, ref, letras, numeros, res, resultado) => ({ unbreakable: true, margin: [0, 2, 0, 14], stack: [
     nome ? { columns: [{ width: '*', text: presos(nome), style: 'h3' }, { width: 'auto', text: ref || '', style: 'refNorma' }], columnGap: 10 } : null,
-    { table: { widths: ['*'], body: [[{ stack: contas.map(t => ({ text: t, style: 'formula' })), fillColor: FAIXA }]] },
-      layout: { hLineWidth: () => 0, vLineWidth: i => i === 0 ? 2.5 : 0, vLineColor: () => COR, paddingLeft: () => 10, paddingRight: () => 8, paddingTop: () => 5, paddingBottom: () => 5 },
-      margin: [0, 2, 0, 4] },
+    fracao(letras, ++nEq), fracao(numeros, null), destaque(res),
     resultado || null].filter(Boolean) });
   const siglasDe = rcs => eLista(rcs.map(rc => siglaComp(compDe(rc.componente_id)) || rc.nome));
   gruposCalc.forEach((g, k) => {
@@ -974,7 +1044,7 @@ function montar(d, opc) {
       const m = ct.m, emin = Math.max(...ct.rcs.map(rc => Number(rc.e_min_mm)));
       // conta única: o nome e a norma já estão no título da subseção
       junto(blocoConta(unica ? null : ct.rcs.map(rc => nomeComp(compDe(rc.componente_id)) || rc.nome).join(' e '), unica ? null : m.ref,
-        [m.fe, m.se + ' = ' + fmt(m.e, 3) + ' mm'],
+        m.Fe, m.Se, 'e = ' + fmt(m.e, 3) + ' mm',
         { text: 'Espessura mínima requerida: ' + fmt(emin, 3) + ' mm' + (m.e < 1.5 ? ' (mínimo de 1,5 mm)' : '') + (cor ? ', com ' + fmt(cor, 2) + ' mm de corrosão' : '') + '.', style: 'resConta' }));
     });
   });
@@ -983,7 +1053,17 @@ function montar(d, opc) {
   sec('9', T.pmta || 'PRESSÃO MÁXIMA DE TRABALHO ADMISSÍVEL (PMTA)');
   // 9.1 · o código de construção (S143 · item 78: sai do 8 e vem para cá, como no modelo)
   sub('9.1', T.pmta_codigo || 'Código de construção');
-  par(V.sem_codigo_construcao ? M.codigo_sem : V.codigo_construcao ? txt(M.codigo_conhecido, /\{\{edicao\}\}/.test(M.codigo_conhecido || '')
+  if (V.sem_codigo_construcao) par(M.codigo_sem);
+  else if (M.codigo_prontuario) {
+    // S178 · issue 223 (Bruno, 19/11): o texto do laudo antigo, em duas versões, escolhidas pela caixa "Reconstituir o prontuário"
+    // (marcada = o vaso não tem prontuário: a estimativa, com os indícios); o código é o da placa ou, sem ele, o ASME VIII Div. 1 adotado
+    const semPront = I.reconstituir_prontuario === true;
+    const cod = V.codigo_construcao ? V.codigo_construcao + (V.codigo_edicao ? ' / ' + V.codigo_edicao : '') : 'ASME Seção VIII, Divisão 1';
+    const indicios = eLista(['a reputação do fabricante do vaso', 'as características físicas observadas', placa !== 'sem' ? 'a placa de identificação fixada no corpo do vaso' : null].filter(Boolean));
+    String(txt(semPront ? M.codigo_estimado : M.codigo_prontuario, { tag: V.tag || '—', tap: numeroTap ? ', Número TAP ' + numeroTap : '', codigo: cod, indicios }))
+      .split(/\n\s*\n/).forEach(x => par(x.trim()));
+  } else
+  par(V.codigo_construcao ? txt(M.codigo_conhecido, /\{\{edicao\}\}/.test(M.codigo_conhecido || '')
     ? { codigo: V.codigo_construcao, edicao: V.codigo_edicao ? ', edição ' + V.codigo_edicao : '' } : { codigo }) : M.codigo_estimado);   // S146 · C1
   // 9.2 · os parâmetros
   sub('9.2', T.pmta_parametros || 'Parâmetros do cálculo');
@@ -998,7 +1078,23 @@ function montar(d, opc) {
   // 9.3 · a conta por componente (o costado pela região da menor leitura, S140 · item 51) e o quadro com o governante
   sub('9.3', T.pmta_calculo || 'Cálculo da PMTA');
   const rcCalc = [], vistos = {};
+  // S178 · issue 224: os tampos iguais (mesmo tipo, mesma geometria, mesmo E e mesma pressão) numa conta só, com o mais crítico (a menor
+  // espessura): "Tampos (TD e TE) — menor leitura no TE"; tampos diferentes, uma conta cada, como antes
+  const TAMPOS_T = ['eliptico', 'torisferico', 'hemisferico', 'plano'];
+  const vistosT = {};
   rcomps.forEach(rc => {
+    if (TAMPOS_T.indexOf(rc.tipo) >= 0 && MEM[rc.componente_id]) {
+      const ch = rc.camara_id + '|' + chaveGeo(MEM[rc.componente_id]);
+      const iguais = rcomps.filter(x => TAMPOS_T.indexOf(x.tipo) >= 0 && x.camara_id === rc.camara_id && MEM[x.componente_id] && chaveGeo(MEM[x.componente_id]) === chaveGeo(MEM[rc.componente_id]));
+      if (iguais.length > 1) {
+        if (vistosT[ch]) return; vistosT[ch] = true;
+        const comT = iguais.filter(x => x.t_min_mm != null).sort((a, b) => Number(a.t_min_mm) - Number(b.t_min_mm));
+        const rep = iguais.find(x => rcams.some(k => k.governante_id === x.componente_id)) || comT[0] || iguais[0];
+        const sgRep = siglaComp(compDe(rep.componente_id));
+        rcCalc.push(Object.assign({}, rep, { nome: 'Tampos (' + siglasDe(iguais) + ')' + (sgRep && comT.length ? ' — menor leitura no ' + sgRep : '') }));
+        return;
+      }
+    }
     const mesmos = rc.tipo === 'costado' ? rcomps.filter(x => x.tipo === 'costado' && x.camara_id === rc.camara_id) : [];
     if (mesmos.length < 2) { rcCalc.push(Object.assign({}, rc, { nome: nomeComp(compDe(rc.componente_id)) || rc.nome })); return; }
     if (vistos[rc.camara_id]) return; vistos[rc.camara_id] = true;
@@ -1010,7 +1106,7 @@ function montar(d, opc) {
   rcCalc.forEach(rc => {
     const m = MEM[rc.componente_id]; if (!m || !m.sp) return;
     const gov = rcams.some(x => x.governante_id === rc.componente_id);
-    junto(blocoConta(camNome(rc.camara_id) + rc.nome + (gov ? ' — governante' : ''), m.ref, [m.fp, m.sp + ' = ' + fmt(m.p, 3) + ' MPa (' + bar(m.p) + ')']));
+    junto(blocoConta(camNome(rc.camara_id) + rc.nome + (gov ? ' — governante' : ''), m.ref, m.Fp, m.Sp, 'PMTA = ' + fmt(m.p, 3) + ' MPa (' + bar(m.p) + ')'));
   });
   tabela(['Componente', 't medida', 't útil', 'E', 'PMTA'], rcCalc.map(rc => {
     const m = MEM[rc.componente_id] || {}, gov = rcams.some(x => x.governante_id === rc.componente_id);
@@ -1222,7 +1318,7 @@ function montar(d, opc) {
       thl: { fontSize: 10, bold: true, color: '#164C77' },
       td: { fontSize: 10 },
       legenda: { fontSize: 10, alignment: 'center', color: PRETO, margin: [0, 3, 0, 0] },
-      formula: { fontSize: 11, margin: [0, 1, 0, 1] },
+      formula: { fontSize: 11, margin: [0, 1, 0, 1] }, formulaRes: { fontSize: 11.5, bold: true, color: PRETO },
       refNorma: { fontSize: 10, color: CLARO, margin: [0, 8, 0, 0] },
       resConta: { fontSize: 12, bold: true, color: PRETO },
       caixaPmta: { fontSize: 12, bold: true, color: PRETO, alignment: 'center' },
@@ -1239,6 +1335,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, prazoReduzido, prazosNorma, prazoRotulo, prazosRedTxt, pressaoAbaixo, tipoRec, semFrase, pressaoVars, dataAfericao, versao: 'R06a-S177-2026-11-17' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, prazoReduzido, prazosNorma, prazoRotulo, prazosRedTxt, pressaoAbaixo, tipoRec, semFrase, pressaoVars, dataAfericao, versao: 'R06a-S178-2026-11-21' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);

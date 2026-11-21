@@ -16,7 +16,7 @@
    As pressões chegam em MPa (regra 4 do TapDoc) e saem na placa em kgf/cm², como no modelo de hoje. */
 (function (raiz) {
 'use strict';
-const VERSAO = 'P1';
+const VERSAO = 'P2';   // P2 (S210 · issue 215): o QR code pela imagem baixada do TapWeb (lerQR guarda os módulos; a placa os desenha em vetor); sem ela, pelo link, como no P1
 const MM = 72 / 25.4, W = 120 * MM, H = 100 * MM;
 const KGF = 10.197162;                                   // 1 MPa em kgf/cm²
 
@@ -47,7 +47,7 @@ function faltas(v){
   const f = [], m = modelo(v);
   if (!m.modelo) f.push(m.motivo);
   if (!limpo(v.tag)) f.push('Falta a TAG do vaso.');
-  if (!limpo(v.tapweb_link)) f.push('Falta o link da ficha do vaso no TapWeb (o QR code).');
+  if (!limpo(v.tapweb_link) && !qrDeTexto(v.tapweb_qr)) f.push('Falta o QR code do vaso no TapWeb (a imagem baixada do TapWeb ou o link da ficha).');   // P2 · issue 215
   if (!limpo(v.numero_tap)) f.push('Falta o Nº TAP do vaso.');
   if (!limpo(v.categoria)) f.push('Falta a categoria (resultado liberado).');
   if (m.modelo && camarasDe(v).some(c => c.pmta_mpa == null)) f.push('Falta a PMTA no resultado.');
@@ -145,6 +145,56 @@ function qrModulos(qrcode, texto){
   const n = q.getModuleCount(), linhas = [];
   for (let r = 0; r < n; r++){ const l = []; for (let c = 0; c < n; c++) l.push(q.isDark(r, c)); linhas.push(l); }
   return { n, linhas };
+}
+
+/** P2 · issue 215: os módulos guardados ("0" e "1", linha a linha: n × n) → { n, linhas }; formato errado, null. */
+function qrDeTexto(t){
+  t = typeof t === 'string' ? t.trim() : ''; const n = Math.round(Math.sqrt(t.length));
+  if (!t || n * n !== t.length || n < 21 || (n - 21) % 4 || /[^01]/.test(t)) return null;
+  const linhas = []; for (let r = 0; r < n; r++) linhas.push(t.slice(r * n, r * n + n).split('').map(c => c === '1'));
+  return { n, linhas };
+}
+/** P2 · issue 215 (Bruno, 19/11: a imagem do QR code que o TapWeb entrega, aba "QR Code" › Download): lê os módulos da imagem
+ *  ({ width, height, data } com RGBA, o ImageData do canvas) e devolve o texto de "0" e "1" (linha a linha) que o banco guarda.
+ *  Confere os 3 quadrados dos cantos e as linhas de tempo; o que não bate é recusado (a placa nunca sai com um QR errado).
+ *  A imagem precisa ter só o QR code em cima (a margem branca em volta pode; texto embaixo é ignorado). */
+function lerQR(img){
+  const W = img && img.width, H = img && img.height, px = img && img.data;
+  if (!W || !H || !px || px.length < W * H * 4) throw new Error('Não consegui abrir a imagem.');
+  const lum = new Float32Array(W * H); let mn = 255, mx = 0;
+  for (let i = 0; i < W * H; i++){ const a = px[i * 4 + 3] / 255, y = (0.299 * px[i * 4] + 0.587 * px[i * 4 + 1] + 0.114 * px[i * 4 + 2]) * a + 255 * (1 - a);
+    lum[i] = y; if (y < mn) mn = y; if (y > mx) mx = y; }
+  if (mx - mn < 60) throw new Error('A imagem não tem contraste de QR code (preto no branco).');
+  const lim = (mn + mx) / 2, esc = (x, y) => lum[y * W + x] < lim;
+  let x0 = W, y0 = H, x1 = -1;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (esc(x, y)){ if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; }
+  if (x1 < 0) throw new Error('A imagem está em branco.');
+  // o tamanho do módulo pelo quadrado do canto de cima, à esquerda (7 módulos de lado): o maior trecho escuro da 1ª faixa
+  let run = 0;
+  for (let dy = 0; dy < 4 && y0 + dy < H; dy++){ let x = x0, r = 0; while (x < W && esc(x, y0 + dy)){ r++; x++; } if (r > run) run = r; }
+  let runV = 0;
+  for (let dx = 0; dx < 4 && x0 + dx < W; dx++){ let y = y0, r = 0; while (y < H && esc(x0 + dx, y)){ r++; y++; } if (r > runV) runV = r; }
+  const modEst = (run + runV) / 14;
+  if (!(modEst >= 1)) throw new Error('A imagem é pequena demais para ler o QR code: baixe a imagem maior do TapWeb.');
+  const larg = x1 - x0 + 1, n0 = larg / modEst, n = 21 + 4 * Math.max(0, Math.round((n0 - 21) / 4));
+  if (Math.abs(n0 - n) > 1.5 || n > 177) throw new Error('A imagem não foi lida como um QR code: anexe só a imagem do QR code baixada do TapWeb.');
+  const mod = larg / n;
+  if (y0 + n * mod > H + 1) throw new Error('A imagem está cortada embaixo: baixe de novo do TapWeb.');
+  const escuro = (r, c) => { const cx = x0 + (c + 0.5) * mod, cy = y0 + (r + 0.5) * mod, d = Math.max(0, Math.floor(mod / 4)); let s = 0, k = 0;
+    for (let yy = Math.round(cy) - d; yy <= Math.round(cy) + d; yy++) for (let xx = Math.round(cx) - d; xx <= Math.round(cx) + d; xx++)
+      if (xx >= 0 && yy >= 0 && xx < W && yy < H){ s += lum[yy * W + xx]; k++; }
+    return k && s / k < lim; };
+  const M = []; for (let r = 0; r < n; r++){ const l = []; for (let c = 0; c < n; c++) l.push(escuro(r, c)); M.push(l); }
+  // a conferência: os 3 quadrados (borda escura, anel claro, miolo 3 × 3 escuro), a faixa clara em volta e as linhas de tempo
+  let erros = 0;
+  const quad = (r0, c0) => { for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++){
+    const borda = r === 0 || r === 6 || c === 0 || c === 6, miolo = r >= 2 && r <= 4 && c >= 2 && c <= 4;
+    if (M[r0 + r][c0 + c] !== (borda || miolo)) erros++; } };
+  quad(0, 0); quad(0, n - 7); quad(n - 7, 0);
+  for (let k = 0; k < 8; k++){ if (M[7][k] || M[k][7] || M[7][n - 1 - k] || M[k][n - 8] || M[n - 8][k] || M[n - 1 - k][7]) erros++; }
+  for (let k = 8; k < n - 8; k++){ if (M[6][k] !== (k % 2 === 0)) erros++; if (M[k][6] !== (k % 2 === 0)) erros++; }
+  if (erros > 3) throw new Error('A imagem não foi lida como um QR code (' + erros + ' pontos não batem): anexe a imagem do QR code baixada do TapWeb, sem cortar nem girar.');
+  return M.map(l => l.map(b => b ? '1' : '0').join('')).join('');
 }
 
 // ── o desenho ───────────────────────────────────────────────────────────────
@@ -290,12 +340,12 @@ function gerar(v, ctx, libs){
   if (typeof Q !== 'function') throw new Error('Falta a biblioteca do QR code (vendor/qrcode.js).');
   const f = faltas(v); if (f.length) throw new Error('A placa do ' + (limpo(v.tag) || 'vaso') + ' não pode ser gerada: ' + f.join(' '));
   const cc = campos(v, ctx), C = cc.campos, avisos = cc.avisos.slice();
-  const d = conteudo(C, L, qrModulos(Q, C.qr));
+  const d = conteudo(C, L, qrDeTexto(v.tapweb_qr) || qrModulos(Q, C.qr));   // P2 · issue 215: a imagem do TapWeb manda
   if (d.trocas.length) avisos.push('Letra(s) que a placa não tem e foram trocadas: ' + Array.from(new Set(d.trocas)).join(' ') + '.');
   if (d.apertos.length) avisos.push('Texto comprido demais para a caixa (saiu apertado): ' + d.apertos.join(' · ') + '.');
   return { bytes: pdf(d.ops, 'Placa ' + C.tag), nome: nomeArquivo(C.tag), modelo: C.modelo, campos: C, avisos };
 }
 
-const PlacaPDF = { gerar, faltas, campos, modelo, nomeArquivo, kgf, versao: VERSAO, LARGURA_MM: 120, ALTURA_MM: 100 };
+const PlacaPDF = { gerar, faltas, campos, modelo, nomeArquivo, kgf, lerQR, qrDeTexto, versao: VERSAO, LARGURA_MM: 120, ALTURA_MM: 100 };
 if (typeof module !== 'undefined' && module.exports) module.exports = PlacaPDF; else raiz.PlacaPDF = PlacaPDF;
 })(typeof window !== 'undefined' ? window : globalThis);

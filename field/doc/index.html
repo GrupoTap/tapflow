@@ -194,7 +194,8 @@ input.t.suspeita{border-color:var(--crit);background:var(--crit-soft);color:var(
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 32';   // S208 · issues 220 e 221 (Rodada R18 da auditoria): "Girar" (↻) em cada foto, de 90 em 90 graus, pela fila (vale no laudo e nos documentos; 449); o Fechamento avisa em amarelo quando falta o comprimento do costado ou a altura de um tampo (com um link para cada campo; o envio continua liberado) e o cartão "Medidas do vaso" mostra "faltam N medidas"
+const VERSAO = 'TapDoc 33';   // S210 · issue 216 (Rodada R19 da auditoria): o número de série da válvula (opcional), que vai para a revisão, o laudo e o certificado; "Trazer os da inspeção anterior" traz o número junto (450)
+// const VERSAO = 'TapDoc 32';   // S208 · issues 220 e 221 (Rodada R18 da auditoria): "Girar" (↻) em cada foto, de 90 em 90 graus, pela fila (vale no laudo e nos documentos; 449); o Fechamento avisa em amarelo quando falta o comprimento do costado ou a altura de um tampo (com um link para cada campo; o envio continua liberado) e o cartão "Medidas do vaso" mostra "faltam N medidas"
 // const VERSAO = 'TapDoc 31';   // S175 · issues 48, 49, 50, 51 e 53 (Revisão TapDoc · Rodada 4b): tocar no que já está marcado não apaga a resposta e trocar com texto escrito pergunta (visual, boroscopia, teste); a pressão volta como foi digitada (sem 10,0004) e "1.013" pergunta; mensagens da conta em português simples, avisos na unidade do inspetor, "pelo PLH"; acessórios: "Trazer os da anterior" fica e a pressão não redesenha a tela; ajustes pequenos (laudo sem páginas, janela, código "Outro", GPS, ordem das fotos, CSV); sem SQL
 // const VERSAO = 'TapDoc 30';   // S174 · issues 38, 39, 52, 82 e 83 (Revisão TapDoc · Rodada 4a): o CSV do medidor com uma leitura inválida entra com as boas e diz quais ficaram de fora; o PDF do laudo anterior que não coube avisa; a miniatura renova o acesso antes de baixar; depois de a câmera fechar o app, volta para a mesma tela e avisa que a foto não chegou; PDF até 50 MB (441); o GPS do vaso volta no pacote da OS (441)
 // const VERSAO = 'TapDoc 29';   // S173 · issues 43, 44, 45, 46 e 47 (Revisão TapDoc · Rodada 3): a aferição reprovada põe "substituir" só ao sair do campo e a situação volta quando o resultado deixa de ser reprovado (o banco não troca mais: 440); "Cancelar esta aferição" (com o motivo) e trocar o tipo do acessório pede para cancelá-la; sem a PMTA vigente, a válvula é conferida (aviso) contra a menor entre a PMTA da plaqueta e a da prévia; "Gerar os pontos" pergunta antes de apagar leituras; o prazo menor não grava a cada letra, só aparece com a categoria e a escolha pela metade fica guardada
@@ -2348,7 +2349,9 @@ function gravarVisual(v){
     anomalia: x.conforme === false ? (x.anomalia || '').trim() || null : null }));
   enfileirar(v, 'visual', 'exame visual', { funcao:'tf_insp_visual_gravar', payload:{ p_id:v.inspecao.id, p_itens:itens } });
 }
-const ACESS_OK = ['id','tipo','tag','marca','modelo','conexao','escala','pressao_ajuste_mpa','lacre_num','situacao','camara_id','unidade_campo','observacao','ordem','origem_id','afericao_motivo','afericao_caso','caso_campos'];   // S146 · item 79
+const VALV_SERIE = ['valvula_seguranca', 'valvula_alivio', 'quebra_vacuo'];   // TapDoc 33 · issue 216: o nº de série é só da válvula
+const ACESS_OK = ['id','tipo','tag','marca','modelo','conexao','escala','pressao_ajuste_mpa','lacre_num','situacao','camara_id','unidade_campo','observacao','ordem','origem_id','afericao_motivo','afericao_caso','caso_campos',
+  'numero_serie'];   // S146 · item 79 · TapDoc 33 (S210 · issue 216, 450): o nº de série da válvula
 function gravarAcess(v, a){
   enfileirar(v, 'acess-' + a.id, (TIPOS_ACESS[a.tipo] || 'acessório').toLowerCase(), { funcao:'tf_insp_acessorio_gravar',
     payload:{ p_id:v.inspecao.id, p_dados:pegar(a, ACESS_OK) } });
@@ -2939,6 +2942,8 @@ function telaAcessorios(v){
       h += campoTexto('Marca', 'ac_mar_' + a.id, a.marca, 'data-k="marca"');   // S144 · item 72: acessório não tem "modelo"
       h += '<label class="f">Conexão<select class="t" data-k="conexao"><option value="">—</option>' + BITOLAS.map(b => '<option' + (b === a.conexao ? ' selected' : '') + '>' + esc(b) + '</option>').join('') +
         (a.conexao && BITOLAS.indexOf(a.conexao) < 0 ? '<option selected>' + esc(a.conexao) + '</option>' : '') + '<option value="+">Outra…</option></select></label>';
+      // TapDoc 33 (S210 · issue 216): o nº de série da válvula, opcional; quem preencher primeiro (aqui ou na revisão) vale para todos
+      if (VALV_SERIE.includes(a.tipo)) h += campoTexto('Número de série (opcional)', 'ac_ns_' + a.id, a.numero_serie, 'data-k="numero_serie" maxlength="60" placeholder="Como está na plaqueta da válvula"');
       if (VALVULAS.includes(a.tipo)) h += campoPressao('Pressão de abertura (plaqueta/certificado)', 'ac_p_' + a.id, a.pressao_ajuste_mpa, u, 'Como está na válvula ou no certificado');
       if (a.tipo === 'disco_ruptura'){   // S146 · T4 (D4): vale a pressão do certificado do fabricante
         const pm = pmtaVigenteCam(v, a.camara_id);
@@ -3016,7 +3021,7 @@ function telaAcessorios(v){
     });
   }));
   ligar('acAnt', () => {
-    ant.forEach(x => novoAcess(v, { tipo:x.tipo, tag:x.tag, marca:x.marca, modelo:x.modelo, conexao:x.conexao, escala:x.escala,
+    ant.forEach(x => novoAcess(v, { tipo:x.tipo, tag:x.tag, marca:x.marca, modelo:x.modelo, conexao:x.conexao, escala:x.escala, numero_serie:x.numero_serie || null,   // TapDoc 33 · issue 216
       pressao_ajuste_mpa:x.pressao_ajuste_mpa, lacre_num:x.lacre_num, camara_id:x.camara_id, unidade_campo:x.unidade_campo || unidadeDe(v), origem_id:x.id }));
     pintar();
   }, 'click');
