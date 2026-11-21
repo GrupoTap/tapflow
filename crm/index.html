@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapCRM 9 · Comercial</title>
+<title>TapCRM 10 · Comercial</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -2309,9 +2309,9 @@ th.num .tfThFixo{text-align:right}
 <!-- S63 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js.
      S76 · ?v=N2, igual ao hub e ao Field (o N2 aceita tudo do N1: o Manager já rodava o N2 com o
      endereço ?v=N1). O sw.js da raiz guarda estes três endereços: trocou aqui, troca lá (é do central). -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N15">
-<script src="../nucleo/config.js?v=N15"></script>
-<script src="../nucleo/nucleo.js?v=N15"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N16">
+<script src="../nucleo/config.js?v=N16"></script>
+<script src="../nucleo/nucleo.js?v=N16"></script>
 <!-- S82 · H10: a tabela única dos módulos (cor, miniatura, menu "Trocar de módulo"). Mudou o ?v=? Troque no sw.js da raiz também (é do central). -->
 <script src="../nucleo/modulos.js?v=M4"></script>
 <!-- CRM1 · C2: as propostas (comuns com o Manager). Mudou o ?v=? Troque no sw.js da raiz também. -->
@@ -2403,7 +2403,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'CRM9';   // TapCRM 9 (S205): Rodada R12 da auditoria (TapHub) — issue 156 (o "Sair" do núcleo: encerra o acesso também no servidor; no celular da empresa, guarda a sessão); núcleo N15
+const APP_VERSION = 'CRM10';   // TapCRM 10 (S211): Rodada R17 da auditoria — issue 129 (Novo negócio: o cliente digitando, pela busca do núcleo N16; o lead com nome de cliente parecido avisa)
+// const APP_VERSION = 'CRM9';   // TapCRM 9 (S205): Rodada R12 da auditoria (TapHub) — issue 156 (o "Sair" do núcleo: encerra o acesso também no servidor; no celular da empresa, guarda a sessão); núcleo N15
 // const APP_VERSION = 'CRM8';   // TapCRM 8 (S204): Rodada R11 da auditoria — issues 127 (remarcar e cancelar a visita), 130 (a tarefa: responsável da equipe, itens, editar, cancelar), 131 (o total "em jogo"), 132 (o rascunho da proposta em montagem) e 133 (responsável do negócio, contato do lead); banco 702
 // const APP_VERSION = 'CRM7';   // TapCRM 7 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 126 (o motivo de trocar/desligar o cliente vai para o histórico) e 128 (textos, situação da proposta com o nome que se lê, o exemplo sem empresa de verdade, Sair pela janela); propostas.js PR2; núcleo N13
 // const APP_VERSION = 'CRM6';   // TapCRM 6 (S159): issue 11 — com proposta aprovada esperando OS, a aba Ações não abre OS (manda para a aba Proposta); o banco (701) também recusa
@@ -5439,9 +5440,8 @@ function opcoesServico(atual){
 }
 
 async function formNegocio(){
-  let clientes = [];
-  try{ clientes = DEMO ? demoClientes()
-      : await get('clientes?select=id,razao_social,nome_fantasia&ativo=eq.true&order=razao_social'); }catch(e){}
+  // CRM10 (S211, issue 129): o cliente se acha digitando (nome, nome fantasia ou CNPJ), pela busca do núcleo (N16),
+  // com o CNPJ e a cidade em cada resultado — a mesma da Nova OS do TapFlow. A lista inteira não é mais baixada.
   await carregarServicosNeg(true);
   // Sem o 61 (lista não veio), o campo volta a ser texto — melhor que
   // travar o cadastro de lead por falta de uma migration.
@@ -5469,12 +5469,11 @@ async function formNegocio(){
     + '<input id="nnObs" type="text" maxlength="80" autocomplete="off" name="nno_nofill" '
     + 'placeholder="ex.: pedido do comprador · a segunda caldeira é urgência">'
     + '<div class="dica" id="nnObsN">Aparece no card, logo abaixo da logomarca. Até 80 caracteres.</div></div>'
-    + '<div class="campo"><label for="nnC">Cliente já cadastrado</label><select id="nnC">'
-    +   '<option value="">— ainda é só um lead —</option>'
-    +   clientes.map(c => '<option value="' + c.id + '">' + esc(nomeCliente(c)) + '</option>').join('')
-    + '</select></div>'
+    + '<div class="campo"><label for="nnC">Cliente já cadastrado</label><div id="nnCBusca"></div>'
+    +   '<div class="dica">Ainda não é cliente? Deixe em branco e preencha o lead abaixo.</div></div>'
     + '<div id="nnLead"><div class="campo"><label for="nnN">Nome do lead</label>'
-    +   '<input id="nnN" type="text" placeholder="empresa ou pessoa"></div>'
+    +   '<input id="nnN" type="text" placeholder="empresa ou pessoa">'
+    +   '<div id="nnParec" class="dica" role="status"></div></div>'
     + '<div class="dupla"><div class="campo"><label for="nnCt">Contato</label>'
     +   '<input id="nnCt" type="text"></div>'
     + '<div class="campo"><label for="nnTe">Telefone</label><input id="nnTe" type="text"></div></div>'
@@ -5492,9 +5491,35 @@ async function formNegocio(){
     + '<p class="nota">Só isto. Lead com formulário grande é lead que ninguém cadastra — '
     + 'o resto entra quando existir.</p>';
 
-  const selC = document.getElementById('nnC');
   const bloco = document.getElementById('nnLead');
-  selC.addEventListener('change', () => { bloco.hidden = !!selC.value; });
+  const bcNeg = Nucleo.busca.cliente('nnCBusca', { id: 'nnC', aoEscolher: c => { bloco.hidden = !!c; },
+    buscar: DEMO ? (t => demoClientes().filter(c => norm(nomeCliente(c) + ' ' + (c.cnpj || '')).includes(norm(t)))) : null });
+  const cliEscolhido = () => (bcNeg ? bcNeg.valor() : null);
+  // CRM10 (129): ao escrever o nome do lead, o aviso de cliente parecido (o mesmo da ficha do negócio), com "usar este"
+  const nnN = document.getElementById('nnN'), parec = document.getElementById('nnParec');
+  let tParec = null, seqParec = 0;
+  nnN.addEventListener('input', () => {
+    clearTimeout(tParec);
+    const nome = nnN.value.trim(), meu = ++seqParec;
+    if (nome.length < 4 || DEMO){ parec.innerHTML = ''; return; }
+    tParec = setTimeout(async () => {
+      let r = [];
+      try{ r = await rpc('tf_clientes_semelhantes', { p_razao_social: nome, p_cnpj: null, p_excluir: null }) || []; }catch(e){ r = []; }
+      if (meu !== seqParec) return;
+      r = (Array.isArray(r) ? r : []).slice(0, 4);
+      if (!r.length){ parec.innerHTML = ''; return; }
+      parec.innerHTML = '<div class="aviso"><b>Já existe cliente parecido:</b> se for o mesmo, use o cadastro (a ficha guarda os vasos, '
+        + 'os contatos e o histórico); se for outra empresa ou outra filial, siga com o lead.'
+        + '<div class="parecidos">' + r.map((c, i) => '<button class="btn parecidoLinha" type="button" data-par="' + i + '">'
+          + '<span class="pn">' + esc(nomeCliente(c)) + '</span><span class="pd">' + esc(c.cnpj || 'sem CNPJ')
+          + (c.cidade ? ' · ' + esc(c.cidade) : '') + '</span><span class="chip">usar este</span></button>').join('') + '</div></div>';
+      parec.querySelectorAll('[data-par]').forEach(b => b.addEventListener('click', () => {
+        const c = r[Number(b.dataset.par)];
+        if (c && bcNeg) bcNeg.escolher(c);
+        parec.innerHTML = '';
+      }));
+    }, 500);
+  });
 
   ligarContadorObs('nnObs', 'nnObsN');
   document.getElementById('nnOk').addEventListener('click', async (e) => {
@@ -5503,7 +5528,7 @@ async function formNegocio(){
     if (selS && !selS.value){ toast('Escolha o que o cliente quer na lista.','err'); selS.focus(); return; }
     if (!selS && !t){ toast('Escreva o que o cliente quer.','err'); return; }
     const obsNovo = (document.getElementById('nnObs').value || '').trim();
-    if (!selC.value && !document.getElementById('nnN').value.trim()){
+    if (!cliEscolhido() && !document.getElementById('nnN').value.trim()){
       toast('Escolha um cliente ou escreva o nome do lead.','err'); return; }
     e.target.disabled = true;
     const num = document.getElementById('nnV').value;
@@ -5513,7 +5538,7 @@ async function formNegocio(){
       if (!selS && obsNovo) toast('A observação não foi gravada: falta uma atualização do sistema: avise o administrador.', 'err');
       const r = DEMO ? {numero:'NEG-DEMO'} : await rpc('tf_criar_negocio', Object.assign({
         p_titulo: t || null,
-        p_cliente_id: selC.value || null,
+        p_cliente_id: cliEscolhido() || null,
         p_lead_nome: document.getElementById('nnN').value.trim() || null,
         p_lead_contato: document.getElementById('nnCt').value.trim() || null,
         p_lead_telefone: document.getElementById('nnTe').value.trim() || null,

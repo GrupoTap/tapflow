@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H19-S210';   // S210: Rodada R19 da auditoria (TapDoc laudo, documentos e regras; issues 215, 216, 217, 223 a 228; banco 450): TapDoc E54, doc/laudo-pdf.js S178, doc/documentos-pdf.js D10, doc/placa-pdf.js P2, celular 33
+const VERSAO = 'H19-S211';   // S211: Rodada R17 da auditoria (TapFlow agenda e listas; issues 125, 168, 175, 179, 113, 114, 124, 129, 229 e 230; banco 313): núcleo N16 (a busca digitando), TapFlow S211, TapCRM CRM10
+// const VERSAO = 'H19-S210';   // S210: Rodada R19 da auditoria (TapDoc laudo, documentos e regras; issues 215, 216, 217, 223 a 228; banco 450): TapDoc E54, doc/laudo-pdf.js S178, doc/documentos-pdf.js D10, doc/placa-pdf.js P2, celular 33
 // const VERSAO = 'H19-S209';   // S209: Rodada R14 da auditoria (TapFin dinheiro; issues 93, 94, 188, 96, 99 e 105; banco 527): TapFin F31, nucleo/fin-painel FP3, TapGestão GE6
 // const VERSAO = 'H19-S208';   // S208: Rodada R18 da auditoria (TapDoc revisão e celular; issues 218, 219, 220, 221 e 222; banco 449): TapDoc escritório E53, documentos-pdf.js D9, mapa-3d.js M3, celular 32
 // const VERSAO = 'H19-S207';   // S207: Rodada R13 da auditoria (TapSeg; issues 121, 190, 191, 192, 193, 195 e 196; banco 627): TapSeg G10, Field S69
@@ -114,9 +115,9 @@ const ESSENCIAIS = [
   // O núcleo comum. O endereço tem que ser IDÊNTICO ao do <script>, com o ?v=
   // (o cache compara a consulta inteira). Trocou o ?v= nas páginas? Troque aqui também.
   // S76: hub, Manager, Field e fin/ pedem todos ?v=N2 — saíram as linhas ?v=N1. S123: todos pedem ?v=N3 (Passkey 1). S124: ?v=N4. S131: ?v=N5 (IndexedDB do iPhone).
-  './nucleo/nucleo.js?v=N15',
-  './nucleo/nucleo.css?v=N15',
-  './nucleo/config.js?v=N15',
+  './nucleo/nucleo.js?v=N16',
+  './nucleo/nucleo.css?v=N16',
+  './nucleo/config.js?v=N16',
   // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo" (mesmo ?v= das páginas)
   './nucleo/modulos.js?v=M4',
   // S110 · o gerador de documentos (o Manager o pede com ?v=D1; o jszip e o pdfmake vêm sob demanda)
