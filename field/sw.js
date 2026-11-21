@@ -24,7 +24,8 @@
  *   abrindo a versão antiga por tempo indeterminado.
  * ========================================================================== */
 
-const VERSAO = 'S68-T52';   // S205: Field S68 e núcleo N15 (Rodada R12 da auditoria, TapHub: o "Sair" do núcleo; issue 156)
+const VERSAO = 'S69-T53';   // S207: Field S69 (Rodada R13 da auditoria, TapSeg: a devolução em partes na Ficha de EPI do celular; issue 195; banco 627)
+// const VERSAO = 'S68-T52';   // S205: Field S68 e núcleo N15 (Rodada R12 da auditoria, TapHub: o "Sair" do núcleo; issue 156)
 // const VERSAO = 'S67-T51';   // S202: Field S67 e núcleo N14 (Rodada R10 da auditoria, TapFlow celular: issues 106, 107, 177, 178 e 207)
 // const VERSAO = 'S66-T50';   // S201: Field S66 (Rodada R9 da auditoria, TapRH: issues 165 e 141 parte 2)
 // const VERSAO = 'S65-T49';   // S200: Field S65 (Rodada R8 da auditoria, cartões: o canhoto pela fila comum; issue 187)

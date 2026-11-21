@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapSeg 9 · Segurança do Trabalho</title>
+<title>TapSeg 10 · Segurança do Trabalho</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -879,6 +879,8 @@ body.emQuadro .board:not(.livre){height:100%}
   border:1px solid var(--rule);border-radius:5px;margin:0 0 6px;background:var(--surface)}
 .rhDevL .chk small{display:block;color:var(--ink-3);font-size:11.5px;margin-left:22px}
 .rhDevOp{display:flex;gap:4px;flex-wrap:wrap}
+.rhDevPartes{flex-basis:100%;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;padding:6px 0 0 22px}
+.rhDevPartes .campo{margin:0;max-width:120px}
 .rhDevOp label{display:inline-flex;gap:5px;align-items:center;border:1px solid var(--rule);border-radius:4px;padding:4px 9px;
   font-size:12.5px;cursor:pointer;background:var(--surface-2)}
 .rhDevOp label:has(input:checked){border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
@@ -2373,7 +2375,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'G9';   // G9 (S205): Rodada R12 da auditoria (TapHub) — issue 156 (o "Sair" do núcleo: encerra o acesso também no servidor; no celular da empresa, guarda a sessão); núcleo N15
+const APP_VERSION = 'G10';   // G10 (S207): Rodada R13 da auditoria (TapSeg) — issues 121 (ASO sem PDF grava), 190 (Kit do cliente com a conferência atual), 191 (Textos e Vídeos salvam só a linha), 192 (Painel leva ao lugar certo; incluir numa lista), 193 (entrega sem repetir, Separar, Entrada, Contagem, Movimentos), 195 (reuso conferido, devolução em partes), 196 (13 acertos); banco 627
+// const APP_VERSION = 'G9';   // G9 (S205): Rodada R12 da auditoria (TapHub) — issue 156 (o "Sair" do núcleo: encerra o acesso também no servidor; no celular da empresa, guarda a sessão); núcleo N15
 // const APP_VERSION = 'G8';   // G8 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 122 (TapField nos textos, sem códigos internos nem nomes fixos, cancelar a lista com o motivo obrigatório, Sair pela janela, sem a cópia do desligamento); núcleo N13
 // const APP_VERSION = 'G7';   // G7 (S195): Rodada R4 da auditoria (issue 142) — o RG/CNH do Kit do cliente baixa com a página aberta há mais de 1 hora; núcleo N12
 // const APP_VERSION = 'G6';   // G6 (S135): item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
@@ -2642,6 +2645,7 @@ const segLinkCad = ir => '../cadastros/?ir=' + encodeURIComponent(ir) + '&area=t
 /** O único caminho para trocar de tela. */
 function irPara(v){
   if (v === 'sair'){ sairDaConta(); return; }
+  if (rhTemNaoSalvo()){ rhSairSemSalvar(() => irPara(v)); return; }   // G10 (S207, issue 191 item 3)
   const lk = NAV.reduce((a, g) => a.concat(g.itens || []), []).find(i => i.v === v && i.link);
   if (lk){ location.href = segLinkCad(lk.link); return; }
   if (v === 'hub'){ location.href = NO_SERVIDOR ? '../' : '#'; return; }
@@ -2839,8 +2843,20 @@ const RH_ABAS = [ ['painel','Painel'], ['entregas','Entregas'], ['pedidos','Pedi
   ['trein','Treinamentos'], ['docs','Documentos da empresa'], ['kit','Kit do cliente'],
   ['epis','Catálogo de EPI e uniforme'], ['textos','Textos e termo'], ['quem','Quem vê'] ];
 
+// G10 (S207, issue 191 item 3): Textos e termo e Vídeos da Integração avisam antes de sair com alteração sem salvar.
+// Quem tem linha digitada põe em RH.naoSalvo uma função que conta as linhas; trocar de aba, de tela ou fechar a página pergunta.
+function rhTemNaoSalvo(){ try{ return !!(RH.naoSalvo && RH.naoSalvo() > 0); }catch(e){ return false; } }
+async function rhSairSemSalvar(seguir){
+  const n = RH.naoSalvo ? RH.naoSalvo() : 0;
+  if (n > 0 && !(await confirmar('Sair sem salvar?', '<p>' + (n === 1 ? 'Há <b>1 alteração</b> que ainda não foi salva' : 'Há <b>' + n + ' alterações</b> que ainda não foram salvas')
+      + ' nesta tela. Saindo agora, ' + (n === 1 ? 'ela se perde' : 'elas se perdem') + '.</p>', 'Sair sem salvar', true))) return;
+  RH.naoSalvo = null; seguir();
+}
+window.addEventListener('beforeunload', ev => { if (rhTemNaoSalvo()){ ev.preventDefault(); ev.returnValue = ''; } });
+
 async function pintarRHSeguranca(){
   visao = 'rhs';
+  RH.naoSalvo = null;
   const board = document.getElementById('board');
   if (DEMO) return rhDemo(board, 'Segurança do Trabalho');
   board.innerHTML = '<div class="tela rhTela"><div class="telaCab"><h2>Segurança do Trabalho</h2>'
@@ -2851,7 +2867,7 @@ async function pintarRHSeguranca(){
   RH_ABAS.forEach(([k, r]) => {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'fchip' + (RH.aba === k ? ' on' : ''); b.textContent = r;
-    b.addEventListener('click', () => { RH.aba = k; pintarRHSeguranca(); });
+    b.addEventListener('click', () => rhSairSemSalvar(() => { RH.aba = k; pintarRHSeguranca(); }));
     ab.appendChild(b);
   });
   const corpo = document.getElementById('rhCorpo');
@@ -2875,10 +2891,17 @@ function rhAbrirFicha(uid){ RH.sel = uid; RH.fichaAba = 'dados'; irPara('rhf'); 
 const RH_ENT_FILTROS = [ ['abertas','Abertas'], ['confirmado','Confirmadas'], ['cancelada','Canceladas'], ['todas','Todas'] ];
 
 async function rhEntregas(corpo){
-  RH.entregas = await rpc('tf_rh_entregas', { p_status: RH.entFiltro === 'todas' ? null : RH.entFiltro, p_limite: 500 });
+  // G10 (S207, issue 196 item 10): diz quando mostra só as mais recentes e busca as mais antigas (até 2.000, o teto do banco)
+  const limE = RH.entLimite || 500;
+  RH.entregas = await rpc('tf_rh_entregas', { p_status: RH.entFiltro === 'todas' ? null : RH.entFiltro, p_limite: limE });
+  const maisE = RH.entregas.length >= limE;
   corpo.innerHTML = '<div class="rhBarra"><div class="chips" id="rhEF"></div>'
     + '<button class="btn pri" type="button" id="rhNova">Nova entrega de EPI</button></div>'
-    + '<div class="ccLista" id="rhEL"></div>';
+    + '<div class="ccLista" id="rhEL"></div>'
+    + (maisE ? '<p class="nota">Mostrando as <b>' + RH.entregas.length + ' mais recentes</b>.'
+        + (limE < 2000 ? ' <button class="btn mini" type="button" id="rhEMais">Ver mais antigas</button>' : '') + '</p>' : '');
+  const bm = document.getElementById('rhEMais');
+  if (bm) bm.addEventListener('click', () => { RH.entLimite = Math.min(limE + 500, 2000); pintarRHSeguranca(); });
   const f = document.getElementById('rhEF');
   RH_ENT_FILTROS.forEach(([k, r]) => {
     const b = document.createElement('button'); b.type = 'button';
@@ -2911,7 +2934,7 @@ function rhListaEntregas(el, L, comNome, depois){
     if (e.status === 'aguardando') sub.push(e.entregue_em ? 'entregue por ' + (e.entregue_por_nome || '?') + ' em ' + rhDT(e.entregue_em)
                                                           : 'lançada por ' + (e.lancado_por_nome || '?') + ' em ' + rhDT(e.lancado_em));
     if (e.origem_avaliado_em) sub.push('unidade avaliada em ' + rhDT(e.origem_avaliado_em).slice(0,10));
-    if (e.devolucao) sub.push((rhDevVale(e.devolucao) ? RH_DESTINO[e.devolucao.destino] + ' em ' + dataBR(e.devolucao.data)
+    if (e.devolucao) sub.push((rhDevVale(e.devolucao) ? (e.devolucao.destino_txt || RH_DESTINO[e.devolucao.destino]) + ' em ' + dataBR(e.devolucao.data)
       : 'devolução ' + (RH_DEV_ST[e.devolucao.status] || e.devolucao.status)) + (e.devolucao.status === 'sem_confirmacao' ? ' (sem a confirmação dele)' : ''));
     if (e.status === 'nao_recebido') sub.push('"não recebi" em ' + rhDT(e.nao_recebido_em) + (e.nao_recebido_obs ? ': ' + e.nao_recebido_obs : ''));
     if (e.status === 'cancelada') sub.push('cancelada por ' + (e.cancelado_por_nome || '?') + ': ' + (e.cancelado_motivo || ''));
@@ -3000,6 +3023,7 @@ async function rhNovaEntrega(uid){
   const epis = (cat.epis || []).filter(e => e.ativo && !e.componente && !e.livre_acesso);
   const optEpi = '<option value="">— escolha o EPI —</option>' + epis.map(e => '<option value="' + esc(e.id) + '">'
     + esc(e.nome) + (e.uniforme ? ' · uniforme' : e.ca ? ' · CA ' + esc(e.ca) : ' · SEM CA') + '</option>').join('');
+  const envio = rhUuid();   // G10 (S207, issue 193 item 1): o mesmo em todas as tentativas desta janela
   abrirModal('Nova entrega de EPI ou uniforme',
       '<div class="campo"><label for="rhNF">Funcionário</label><select id="rhNF">'
     + '<option value="">— escolha —</option>' + pessoas.map(f => '<option value="' + esc(f.usuario_id) + '">' + esc(f.nome)
@@ -3010,7 +3034,7 @@ async function rhNovaEntrega(uid){
     + 'com o PIN. Só depois ela entra na ficha. Vários EPIs lançados juntos se confirmam com um PIN só.</p>'
     + '<p class="nota" id="rhMsg" style="color:var(--crit)"></p>',
     [ { label:'Cancelar', onClick: fecharModal },
-      { label:'Lançar entrega', pri:true, onClick: () => rhGravarEntrega(epis) } ]);
+      { label:'Lançar entrega', pri:true, onClick: () => rhGravarEntrega(epis, envio) } ]);
   rhModalLargo();
   const sel = document.getElementById('rhNF');
   const linhas = document.getElementById('rhNLinhas');
@@ -3132,7 +3156,15 @@ async function rhNovaEntrega(uid){
   if (uid){ sel.value = uid; trocaPessoa(); }
 }
 
-async function rhGravarEntrega(epis){
+// G10 (S207): identificador sorteado no aparelho (uuid v4), para o banco reconhecer o mesmo envio
+function rhUuid(){
+  try{ if (crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
+  const b = new Uint8Array(16); crypto.getRandomValues(b); b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128;
+  const h = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+  return h.slice(0,8) + '-' + h.slice(8,12) + '-' + h.slice(12,16) + '-' + h.slice(16,20) + '-' + h.slice(20);
+}
+
+async function rhGravarEntrega(epis, envio){
   const msg = document.getElementById('rhMsg'); msg.textContent = '';
   const uid = document.getElementById('rhNF').value;
   if (!uid){ msg.textContent = 'Escolha o funcionário.'; return; }
@@ -3153,21 +3185,30 @@ async function rhGravarEntrega(epis){
   if (document.querySelector('#rhNLinhas .rhNL[data-sem-saldo="1"]')){
     msg.textContent = 'Há item sem saldo no estoque (em vermelho). Dê entrada ou faça a contagem antes — ou tire a linha.'; return;
   }
+  if (envio) itens[0].envio = envio;
+  let r;
+  try{ r = await rpc('tf_rh_lancar_entregas', { p_usuario: uid, p_itens: itens }); }
+  catch(e){ msg.textContent = e.message; return; }
+  // G10 (S207, issue 193 item 1): gravou. Daqui em diante, falha só tira o botão do WhatsApp — a janela fecha e diz "lançada"
+  // (antes, a busca da ficha que falhava deixava a janela aberta e o 2º clique lançava de novo).
+  const selNome = (document.querySelector('#rhNF option:checked') || {}).textContent || '';
+  fecharModal(); contarRH();
+  let f = null; try{ f = await rpc('tf_rh_funcionario', { p_usuario: uid }); }catch(e){}
   try{
-    const r = await rpc('tf_rh_lancar_entregas', { p_usuario: uid, p_itens: itens });
-    const f = await rpc('tf_rh_funcionario', { p_usuario: uid });
-    fecharModal(); contarRH();
     const nomes = itens.map(i => (epis.find(e => e.id === i.epi_id) || {}).nome).join(', ');
-    const w = rhWhats((f.ficha || {}).celular, f.usuario.nome, nomes);
+    const nomeP = f ? f.usuario.nome : selNome;
+    const w = f ? rhWhats((f.ficha || {}).celular, f.usuario.nome, nomes) : null;
     abrirModal('Entrega lançada',
-      '<p style="margin-top:0"><b>' + r.n + ' item(ns)</b> para <b>' + esc(f.usuario.nome) + '</b>, aguardando a confirmação dele.</p>'
+      '<p style="margin-top:0"><b>' + r.n + ' item(ns)</b> para <b>' + esc(nomeP) + '</b>, aguardando a confirmação dele.</p>'
+      + (r.repetido ? '<p class="nota">Esta entrega já tinha sido gravada (o clique repetido não lançou de novo).</p>' : '')
       + ((r.avisos || []).length ? '<div class="aviso">' + r.avisos.map(esc).join('<br>') + '</div>' : '')
       + '<p>Peça para ele abrir o <b>TapField › Minha Segurança</b>, conferir e confirmar com o PIN. '
       + 'Sem confirmação em 2 dias, a entrega fica vermelha no painel.</p>'
       + (w ? '<p><a class="btn pri" target="_blank" rel="noopener" href="' + esc(w) + '">Avisar pelo WhatsApp</a></p>'
-           : '<p class="nota">Cadastre o celular na ficha para avisar pelo WhatsApp com um toque.</p>'),
+           : f ? '<p class="nota">Cadastre o celular na ficha para avisar pelo WhatsApp com um toque.</p>'
+               : '<p class="nota">Sem sinal para montar o aviso do WhatsApp agora: avise pela lista de entregas quando a internet voltar.</p>'),
       [ { label:'Fechar', onClick: () => { fecharModal(); if (visao === 'rhs') pintarRHSeguranca(); else if (visao === 'rhf') pintarRHFuncionarios(); } } ]);
-  }catch(e){ msg.textContent = e.message; }
+  }catch(e){ toast('Entrega lançada.', 'ok'); }
 }
 
 async function rhCatalogo(corpo){
@@ -3272,21 +3313,29 @@ async function rhTextos(corpo){
   document.getElementById('rhTermoBranco').addEventListener('click', b => _semDuploEnvio_(b.currentTarget || b.target,
     () => rhImprimirTermo(null)));
   const cx = document.getElementById('rhTx');
+  // G10 (S207, issue 191): salvar uma linha não redesenha as outras (o que foi digitado nelas fica)
+  const salvos = {};
+  RH.naoSalvo = () => RH_TEXTOS_ORDEM.filter(k => salvos[k] !== undefined && document.getElementById('tx_' + k)
+                                               && document.getElementById('tx_' + k).value !== salvos[k]).length;
   RH_TEXTOS_ORDEM.forEach(k => {
     const t = RH.textos[k]; if (!t) return;
     const d = document.createElement('div'); d.className = 'rhTxt';
     d.innerHTML = '<div class="campo"><label for="tx_' + k + '"></label><textarea id="tx_' + k + '" rows="' + (k === 'empresa' ? 1 : (k === 'termo_adesao' || k === 'termo_ponto_recibo') ? 14 : 5) + '"></textarea>'
       + '<div class="dica"></div></div><button class="btn mini" type="button" style="margin-left:0">Salvar</button>';
     d.querySelector('label').textContent = t.titulo;
-    d.querySelector('textarea').value = t.texto;
+    d.querySelector('textarea').value = t.texto; salvos[k] = d.querySelector('textarea').value;
     d.querySelector('.dica').textContent = 'versão ' + t.versao + (t.por ? ' · alterado por ' + t.por + ' em ' + rhDT(t.atualizado_em)
       : t.versao > 1 ? ' · atualizado pelo sistema em ' + rhDT(t.atualizado_em) + ' (PIN ou desbloqueio do celular)' : ' · texto de partida')
       + ((k === 'termo_adesao' || k === 'termo_ponto_recibo') ? ' · {NOME}, {FUNCAO} e {EMPRESA} são trocados na impressão' : '')
       + (k === 'termo_ponto_recibo' ? ' · um termo só para o espelho de ponto e o recibo (imprime pela ficha › Ponto e recibo)' : '');
     const b = d.querySelector('button');
     b.addEventListener('click', () => _semDuploEnvio_(b, async () => {
-      try{ await rpc('tf_rh_salvar_texto', { p_chave: k, p_texto: d.querySelector('textarea').value });
-           toast('Texto salvo.', 'ok'); pintarRHSeguranca(); }
+      const txt = d.querySelector('textarea').value;
+      try{ const r = await rpc('tf_rh_salvar_texto', { p_chave: k, p_texto: txt });
+           salvos[k] = txt;
+           d.querySelector('.dica').textContent = 'versão ' + (r && r.versao != null ? r.versao : (t.versao + 1)) + ' · alterado por você agora'
+             + ((k === 'termo_adesao' || k === 'termo_ponto_recibo') ? ' · {NOME}, {FUNCAO} e {EMPRESA} são trocados na impressão' : '');
+           toast('Texto salvo.', 'ok'); }
       catch(e){ toast(e.message, 'err'); }
     }));
     cx.appendChild(d);
@@ -3307,6 +3356,14 @@ async function rhQuemVe(corpo){
     lb.querySelector('span').textContent = u.nome + (u.email ? ' · ' + u.email : '');
     cb.addEventListener('change', async () => {
       const msg = document.getElementById('rhMsg'); msg.textContent = '';
+      // G10 (S207, issue 196 item 2): dar ou tirar o acesso (inclui dado de saúde) pede o 2º toque
+      const sim = cb.checked; cb.checked = !sim;
+      const nome = esc(u.nome);
+      if (!(await confirmar(sim ? 'Dar acesso' : 'Tirar o acesso',
+          sim ? '<p><b>' + nome + '</b> passa a ver a Segurança do Trabalho e o TapRH, <b>com os dados de saúde</b> (ASO, receita, atestado). Dar o acesso?</p>'
+              : '<p><b>' + nome + '</b> deixa de ver a Segurança do Trabalho e o TapRH. Tirar o acesso?</p>',
+          sim ? 'Dar o acesso' : 'Tirar o acesso', !sim))) return;
+      cb.checked = sim;
       try{
         await rpc('tf_rh_definir_autorizado', { p_usuario_id: u.usuario_id, p_sim: cb.checked });
         if (u.usuario_id === eu && !cb.checked){ RH_AUT = false; montarNav(); irPara('eu'); toast('Você saiu da lista do RH.', 'ok'); }
@@ -3353,8 +3410,12 @@ function rhDesenharLista(){
     + (nDesl ? '<label class="chk" style="margin:0"><input type="checkbox" id="rhFDes"' + (RH.desligados ? ' checked' : '') + '> desligados (' + nDesl + ')</label>' : '') + '</div>'
     + (com.length ? com.map(lin).join('') : '<p class="nota">Nenhuma ficha aberta' + (q ? ' com essa busca' : '') + '.</p>')
     + (sem.length ? '<div class="secTit">Sem ficha de RH (' + sem.length + ')</div>' + sem.map(lin).join('') : '');
-  el.querySelectorAll('[data-u]').forEach(b => b.addEventListener('click', () => {
-    RH.sel = b.dataset.u; RH.fichaAba = 'tam'; pintarRHFuncionarios();
+  // G10 (S207, issue 196 item 12): trocar de pessoa só desenha a ficha dela (a lista já está na tela; antes buscava a lista inteira de novo)
+  el.querySelectorAll('[data-u]').forEach(b => b.addEventListener('click', async () => {
+    RH.sel = b.dataset.u; RH.fichaAba = 'tam';
+    el.querySelectorAll('[data-u]').forEach(x => x.classList.toggle('on', x.dataset.u === RH.sel));
+    const sp = document.querySelector('.rhSplit'); if (sp) sp.classList.add('comFicha');
+    await rhDesenharFicha();
   }));
   document.getElementById('rhFEnt').addEventListener('click', () => rhNovaEntrega(RH.sel));
   const cd = document.getElementById('rhFDes');
@@ -3432,12 +3493,13 @@ function rhFTam(c, f){
     catch(e){ toast(e.message, 'err'); rhDesenharFicha(); }
   }));
   c.querySelectorAll('[data-arq]').forEach(b => b.addEventListener('click', () => rhAbrirArquivo(b.dataset.arq)));
-  document.getElementById('rcArq').addEventListener('change', async ev => {
+  document.getElementById('rcArq').addEventListener('change', ev => {
     const file = ev.target.files && ev.target.files[0]; if (!file) return;
+    return rhComEnviando(ev.target, async () => {
     try{ const a = await rhLerArquivo(file, 1800);
          await rpc('tf_rh_enviar_receita', { p_usuario: f.usuario.id, p_nome: file.name, p_mime: a.mime, p_conteudo: a.dados });
          toast('Receita guardada.', 'ok'); rhDesenharFicha(); }
-    catch(e){ toast(e.message, 'err'); }
+    catch(e){ toast(e.message, 'err'); } });
   });
 }
 
@@ -3453,14 +3515,16 @@ async function rhLerArquivo(file, lado){
   return { mime:'image/jpeg', dados: r.dados };
 }
 
+// G10 (S207, issue 196 item 7): a aba nova abre NA HORA do toque (o Safari bloqueia a que abre depois de esperar a resposta)
 async function rhAbrirArquivo(id){
+  const w = window.open('', '_blank');
+  if (!w){ toast('O navegador bloqueou a janela nova — libere pop-ups para o TapHub.', 'err'); return; }
+  try{ w.document.title = 'Abrindo…'; w.document.body.innerHTML = '<p style="font:15px system-ui;padding:24px;color:#555">Abrindo o arquivo…</p>'; }catch(e){}
   try{
     const a = await rpc('tf_rh_arquivo', { p_id: id });
-    const w = window.open('', '_blank');
-    if (!w){ toast('O navegador bloqueou a janela nova — libere pop-ups para o TapHub.', 'err'); return; }
     const blob = await (await fetch(a.conteudo)).blob();
     w.location.href = URL.createObjectURL(blob);
-  }catch(e){ toast(e.message, 'err'); }
+  }catch(e){ try{ w.close(); }catch(er){} toast(e.message, 'err'); }
 }
 
 function rhFPrev(c, f){
@@ -3575,12 +3639,13 @@ function rhFEpis(c, f){
   b1.addEventListener('click', () => _semDuploEnvio_(b1, () => rhBaixarFicha(f.usuario.id, false)));
   b2.addEventListener('click', () => _semDuploEnvio_(b2, () => rhBaixarFicha(f.usuario.id, true)));
   c.querySelectorAll('[data-arq]').forEach(b => b.addEventListener('click', () => rhAbrirArquivo(b.dataset.arq)));
-  document.getElementById('feArq').addEventListener('change', async ev => {
+  document.getElementById('feArq').addEventListener('change', ev => {
     const file = ev.target.files && ev.target.files[0]; if (!file) return;
+    return rhComEnviando(ev.target, async () => {
     try{ const a = await rhLerArquivo(file, 2200);
          await rpc('tf_rh_anexar_ficha_antiga', { p_usuario: f.usuario.id, p_nome: file.name, p_mime: a.mime, p_conteudo: a.dados });
          toast('Ficha antiga anexada.', 'ok'); rhDesenharFicha(); }
-    catch(e){ toast(e.message, 'err'); }
+    catch(e){ toast(e.message, 'err'); } });
   });
 }
 
@@ -3646,6 +3711,11 @@ async function rhImprimirTermo(f){
       doc.splitTextToSize(p, 180).forEach(l => linhas.push(l)); });
     alt = linhas.length * fs * 0.42;
     if (36 + alt < RH_QUADRO.y - 18) break;
+  }
+  // G10 (S207, issue 196 item 5): mesmo com a letra mínima não coube: não imprime por cima do quadro da assinatura
+  if (36 + alt >= RH_QUADRO.y - 18){
+    toast('O texto do termo de adesão é comprido demais para caber acima do quadro da assinatura. Encurte o texto em Textos e termo e imprima de novo.', 'err');
+    return;
   }
   doc.setFontSize(fs); doc.text(linhas, 15, 37, { lineHeightFactor: 1.2 });
   const cidade = 'Divinópolis/MG, _____ de ____________________ de ________';
@@ -3791,8 +3861,12 @@ async function rhRecorte(f, file, arq){
                            : { nome: file.name, mime:'image/jpeg', conteudo: pg.cv.toDataURL('image/jpeg', 0.82) };
             if (termo.conteudo.length > 6800000) { msg.textContent = 'Arquivo grande demais. Envie uma foto ou um PDF menor.'; return; }
           }
+          // G10 (S207, issue 196 item 9): a data em branco não vai ao banco (dava uma mensagem técnica em inglês)
+          const dAss = document.getElementById('rcData').value;
+          if (!dAss){ msg.textContent = 'Informe a data em que o termo foi assinado.'; return; }
+          if (dAss > isoHoje()){ msg.textContent = 'A data da assinatura não pode ser no futuro.'; return; }
           try{ await rpc('tf_rh_enviar_termo', { p_usuario: f.usuario.id, p_termo: termo, p_assinatura: { conteudo: png },
-                 p_assinado_em: document.getElementById('rcData').value });
+                 p_assinado_em: dAss });
                fecharModal(); toast('Termo e assinatura gravados.', 'ok'); rhRecarregar(); }
           catch(e){ msg.textContent = e.message; }
       } } ]);
@@ -3886,7 +3960,10 @@ async function rhFichaPDF(jsPDF, ficha, ass){
   const rodape = () => {
     doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(90);
     doc.text('Ficha gerada em ' + rhDT(ficha.gerada_em).replace(' ', ' às ') + ', contendo entregas confirmadas até esta data.', M, 284);
-    doc.text(doc.splitTextToSize(ficha.rodape || '', W - 20), M, 288);
+    // G10 (S207, issue 196 item 4): o rodapé é editável; até 3 linhas cabem na página (o resto vira "…")
+    let rl = doc.splitTextToSize(ficha.rodape || '', W - 20);
+    if (rl.length > 3){ rl = rl.slice(0, 3); rl[2] = String(rl[2]).replace(/\s*\S*$/, '') + '…'; }
+    doc.text(rl, M, 288);
     doc.text('pág. ' + pagina, 210 - M, 288, { align:'right' });
     doc.setTextColor(0);
   };
@@ -3903,12 +3980,6 @@ async function rhFichaPDF(jsPDF, ficha, ass){
   const HROW = 17;
   L.forEach(l => {
     const anul = !!l.anulado_em;
-    const altura = HROW + (anul ? 5 : 0);
-    if (y + altura > 278){ rodape(); doc.addPage(); pagina++; cab(); }
-    let x = M;
-    doc.setDrawColor(215); doc.rect(M, y, W, altura);
-    col.reduce((acc, c) => { if (acc > M) doc.line(acc, y, acc, y + altura); return acc + c.w; }, M);
-    doc.setFont('helvetica','normal'); doc.setFontSize(7.6);
     const eq = [l.epi_nome + ' ×' + l.quantidade + (l.tamanho ? ' (' + l.tamanho + ')' : '')];
     const det = [];
     if (l.condicao === 'reaproveitado') det.push('reaproveitado' + (l.origem_avaliado_em ? ' — avaliado em ' + rhDT(l.origem_avaliado_em).slice(0,10) : ''));
@@ -3916,11 +3987,20 @@ async function rhFichaPDF(jsPDF, ficha, ass){
     if (l.serie_lote) det.push('série ' + l.serie_lote);
     if (l.anterior_ao_sistema) det.push('anterior ao sistema');
     det.push(RH_MOTIVO[l.motivo] || l.motivo);
-    doc.setFont('helvetica','bold');
+    // G10 (S207, issue 196 item 4): a linha cresce com o nome em 2 linhas + o detalhe em 3 (antes invadia a linha de baixo)
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.6);
     const eqL = doc.splitTextToSize(eq[0], col[0].w - 2.4).slice(0, 2);
+    doc.setFont('helvetica','normal'); doc.setFontSize(6.6);
+    const detL = doc.splitTextToSize(det.join(' · '), col[0].w - 2.4).slice(0, 3);
+    const altura = Math.max(HROW, 4 + eqL.length * 3.2 + detL.length * 2.6 + 1.2) + (anul ? 5 : 0);
+    if (y + altura > 278){ rodape(); doc.addPage(); pagina++; cab(); }
+    let x = M;
+    doc.setDrawColor(215); doc.rect(M, y, W, altura);
+    col.reduce((acc, c) => { if (acc > M) doc.line(acc, y, acc, y + altura); return acc + c.w; }, M);
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.6);
     doc.text(eqL, x + 1.2, y + 4);
     doc.setFont('helvetica','normal'); doc.setFontSize(6.6);
-    doc.text(doc.splitTextToSize(det.join(' · '), col[0].w - 2.4).slice(0, 3), x + 1.2, y + 4 + eqL.length * 3.2);
+    doc.text(detL, x + 1.2, y + 4 + eqL.length * 3.2);
     x += col[0].w;
     doc.setFontSize(7.6); doc.text(String(l.ca), x + 1.2, y + 5); x += col[1].w;
     doc.text(dataBR(l.data_entrega), x + 1.2, y + 5); x += col[2].w;
@@ -3928,7 +4008,7 @@ async function rhFichaPDF(jsPDF, ficha, ass){
     if (rhDevVale(l.devolucao)){
       doc.text(dataBR(l.devolucao.data), x + 1.2, y + 5);
       doc.setFontSize(5.6);
-      doc.text(doc.splitTextToSize(RH_DESTINO_CURTO[l.devolucao.destino] + (l.devolucao.status === 'sem_confirmacao'
+      doc.text(doc.splitTextToSize((l.devolucao.destino_txt || RH_DESTINO_CURTO[l.devolucao.destino]) + (l.devolucao.status === 'sem_confirmacao'
         ? ' · sem confirmação do funcionário' : ' · confirmada no celular'), col[3].w - 2), x + 1.2, y + 8.4);
       doc.setFontSize(7.6);
     } else doc.text('—', x + 1.2, y + 5);
@@ -3943,10 +4023,10 @@ async function rhFichaPDF(jsPDF, ficha, ass){
     doc.text(doc.splitTextToSize('Lançado por ' + (l.lancado_por_nome || '?') + ' em ' + rhDT(l.lancado_em), col[5].w - 2), x + 1, y + 11.6);
     if (anul){
       doc.setDrawColor(166, 45, 24); doc.setLineWidth(0.4);
-      doc.line(M + 1, y + HROW / 2, 210 - M - 1, y + HROW / 2);
+      doc.line(M + 1, y + (altura - 5) / 2, 210 - M - 1, y + (altura - 5) / 2);
       doc.setLineWidth(0.2); doc.setTextColor(166, 45, 24); doc.setFontSize(6.8);
       doc.text(doc.splitTextToSize('ANULADA em ' + rhDT(l.anulado_em) + ' por ' + (l.anulado_por_nome || '?') + ' — ' + (l.anulado_motivo || ''), W - 3)[0],
-               M + 1.5, y + HROW + 3.5);
+               M + 1.5, y + altura - 1.5);
       doc.setTextColor(0);
     }
     y += altura;
@@ -4188,8 +4268,8 @@ async function rhPainel(corpo){
   const ai = (p.admissoes_incompletas || []);
   blocos += sec('Admissões incompletas (checklist)', ai.length, ai.map(x =>
     '<div class="rhLin"><span class="t"><b>' + esc(x.funcionario) + '</b> — ' + x.feitos + '/' + x.total
-    + '<small>falta: ' + esc((x.falta || []).join(' · ')) + '</small></span><span class="a"><button class="btn mini" type="button" data-ficha="'
-    + esc(x.usuario_id) + '" data-fa="adm">Abrir checklist</button></span></div>').join(''));
+    + '<small>falta: ' + esc((x.falta || []).join(' · ')) + '</small></span><span class="a"><a class="btn mini" href="../rh/?func='
+    + encodeURIComponent(x.usuario_id) + '&fa=adm">Abrir checklist no TapRH</a></span></div>').join(''));   // G10 (S207, issue 192 item 1): o checklist mora no TapRH
   // 10 · dúvidas
   const du = (p.duvidas_abertas || []);
   blocos += sec('Dúvidas enviadas pelo TapField aguardando resposta', du.length, du.map(x =>
@@ -4199,9 +4279,17 @@ async function rhPainel(corpo){
   blocos += sec('Presença em treinamento ainda sem confirmação', pr.length, rhAgrupado(pr.map(x =>
     Object.assign({}, x, { rot: x.tema + ' de ' + dataBR(x.data) })), x => x.rot));
   const fi = (p.fichas_incompletas || []);
-  blocos += sec('Fichas incompletas', fi.length, fi.map(x =>
-    '<div class="rhLin"><span class="t"><b>' + esc(x.funcionario) + '</b><small>falta: ' + esc((x.falta || []).join(', ')) + '</small></span>'
-    + '<span class="a"><button class="btn mini" type="button" data-ficha="' + esc(x.usuario_id) + '">Abrir ficha</button></span></div>').join(''));
+  // G10 (S207, issue 192 item 2): cada falta tem o lugar dela — o termo e a assinatura no TapSeg; função e admissão na
+  // ficha do RH (TapRH); o PIN, a própria pessoa cria no TapField
+  blocos += sec('Fichas incompletas', fi.length, fi.map(x => {
+    const fl = x.falta || [];
+    const bt = fl.includes('termo/assinatura')
+      ? '<button class="btn mini" type="button" data-ficha="' + esc(x.usuario_id) + '" data-fa="termo">Abrir o termo</button>'
+      : (fl.includes('função') || fl.includes('admissão'))
+        ? '<a class="btn mini" href="../rh/?func=' + encodeURIComponent(x.usuario_id) + '&fa=dados">Abrir a ficha no TapRH</a>' : '';
+    const pin = fl.includes('PIN') ? '<span class="nota" style="margin:0">o PIN a pessoa cria no TapField › Minha Segurança</span>' : '';
+    return '<div class="rhLin"><span class="t"><b>' + esc(x.funcionario) + '</b><small>falta: ' + esc(fl.join(', ')) + '</small></span>'
+      + '<span class="a">' + bt + pin + '</span></div>'; }).join(''));
   if (!blocos) blocos = '<div class="aviso ok">Nenhuma pendência.</div>';
 
   const ativos = (lista || []).filter(f => f.tem_ficha && f.situacao === 'ativo');
@@ -4312,15 +4400,20 @@ async function rhPedidos(corpo){
 
 async function rhSepararPedido(x, depois){
   const precisaFab = x.pede_fabricacao || x.limite_meses;
-  let reap = [];
+  let reap = [], cat = null;
   try{ reap = (await rpc('tf_rh_reaproveitados', {})).filter(u => u.epi_id === x.epi_id); }catch(e){}
+  try{ cat = (await rhEpisCat()).find(e => e.id === x.epi_id) || null; }catch(e){}
+  // G10 (S207, issue 193 item 2): o tamanho é escolhido entre os do catálogo; a quantidade vai até o limite do banco (99)
+  const tams = cat && cat.tem_tamanho ? (cat.tamanhos || []) : [];
+  const tamOpc = tams.concat(x.tamanho && !tams.includes(x.tamanho) ? [x.tamanho] : []);
   const ctrlN = x.controlado_novo ?? x.controlado, ctrlR = x.controlado_reap ?? x.controlado;
   abrirModal('Separar o pedido',
     '<p style="margin-top:0"><b>' + esc(x.funcionario) + '</b> pediu <b>' + esc(x.epi) + (x.tamanho ? ' ' + esc(x.tamanho) : '')
     + '</b> ×' + x.quantidade + ' — ' + esc(RH_MOT_PED[x.motivo] || x.motivo) + (x.observacao ? ' ("' + esc(x.observacao) + '")' : '') + '.</p>'
     + '<div class="dupla">'
-    + (x.tamanho ? '<div class="campo"><label for="spT">Tamanho</label><input id="spT" type="text" maxlength="12" value="' + esc(x.tamanho) + '"></div>' : '')
-    + '<div class="campo"><label for="spQ">Quantidade</label><input id="spQ" type="number" min="1" max="10" value="' + x.quantidade + '"></div>'
+    + (x.tamanho || tams.length ? '<div class="campo"><label for="spT">Tamanho</label><select id="spT">' + tamOpc.map(t => '<option value="' + esc(t) + '"'
+        + (t === x.tamanho ? ' selected' : '') + '>' + esc(t) + (tams.includes(t) ? '' : ' (fora do catálogo)') + '</option>').join('') + '</select></div>' : '')
+    + '<div class="campo"><label for="spQ">Quantidade</label><input id="spQ" type="number" min="1" max="99" value="' + x.quantidade + '"></div>'
     + '<div class="campo"><label for="spC">Condição</label><select id="spC"><option value="novo">Novo (' + (ctrlN ? x.saldo : 'sem controle') + ' em estoque)</option>'
     + '<option value="reaproveitado">Reaproveitado (' + (ctrlR ? x.saldo_reap : 'sem controle') + ')</option></select></div></div>'
     + (reap.length ? '<div class="campo" id="spUC" hidden><label for="spU">Unidade reaproveitada (avaliada)</label><select id="spU"><option value="">— sem escolher a unidade —</option>'
@@ -4334,6 +4427,8 @@ async function rhSepararPedido(x, depois){
     [ { label:'Voltar', onClick: fecharModal },
       { label:'Separar', pri:true, onClick: async () => {
           const g = id => document.getElementById(id);
+          const qq = Number(g('spQ').value);
+          if (!Number.isInteger(qq) || qq < 1 || qq > 99){ g('rhMsg').textContent = 'A quantidade vai de 1 a 99.'; return; }
           try{
             const r = await rpc('tf_rh_separar_pedido', { p_id: x.id, p_dados: {
               tamanho: g('spT') ? g('spT').value : null, quantidade: g('spQ').value, condicao: g('spC').value,
@@ -4415,7 +4510,13 @@ async function rhRegistrarDevolucao(uid, contexto, depois){
     + '<div class="rhDevOp" role="radiogroup" aria-label="Destino de ' + esc(x.epi_nome) + '">'
     + ['reuso','descarte','nao_devolvido'].map(k => '<label><input type="radio" name="dv_' + esc(x.id) + '" value="' + k + '"'
         + (k === x.destino_sugerido ? ' checked' : '') + (k === 'reuso' && x.destino_sugerido !== 'reuso' ? ' disabled' : '') + '> '
-        + esc(RH_DESTINO_CURTO[k]) + '</label>').join('') + '</div></div>';
+        + esc(RH_DESTINO_CURTO[k]) + '</label>').join('') + '</div>'
+    // G10 (S207, issue 195 item 2): entrega de várias peças se devolve em partes, cada uma com o destino dela
+    + (x.quantidade > 1 ? '<button class="btn mini dvPartesBt" type="button">Em partes…</button><div class="rhDevPartes" hidden>'
+        + ['reuso','descarte','nao_devolvido'].map(k => (k === 'reuso' && x.destino_sugerido !== 'reuso') ? ''
+          : '<div class="campo"><label>' + esc(RH_DESTINO_CURTO[k]) + '</label><input type="number" min="0" max="' + x.quantidade + '" inputmode="numeric" data-parte="' + k + '"></div>').join('')
+        + '<span class="nota" style="margin:0">as partes somam ' + x.quantidade + ' (o que foi entregue); o que não voltou é "não devolvido"</span></div>' : '')
+    + '</div>';
   abrirModal((desl ? 'Devolução no desligamento — ' : 'Registrar devolução — ') + f.usuario.nome,
     '<p style="margin-top:0">' + (desl ? 'Tudo o que está com ' + esc(f.usuario.nome.split(' ')[0]) + ' hoje. Marque o destino de cada item.'
         : 'Marque o que voltou e o destino.') + ' Voltam para <b>reuso</b> (só os reaproveitáveis): capacete — só o casco —, cinto paraquedista, '
@@ -4431,15 +4532,27 @@ async function rhRegistrarDevolucao(uid, contexto, depois){
     + '<p class="nota" id="rhMsg" style="color:var(--crit)"></p>',
     [ { label:'Cancelar', onClick: fecharModal },
       { label:'Registrar e pedir a confirmação', pri:true, onClick: async () => {
-          const itens = [];
+          const itens = [], erros = [];
+          const ents = new Set();
           document.querySelectorAll('.rhDevL').forEach(d => {
             if (!d.querySelector('.dvInc').checked) return;
+            ents.add(d.dataset.e);
+            const pt = d.querySelector('.rhDevPartes');
+            if (pt && !pt.hidden){
+              const x = posse.find(y => y.id === d.dataset.e) || {};
+              let soma = 0;
+              pt.querySelectorAll('input[data-parte]').forEach(i => { const q = Number(i.value || 0);
+                if (q > 0){ soma += q; itens.push({ entrega_id: d.dataset.e, destino: i.dataset.parte, quantidade: q }); } });
+              if (soma !== x.quantidade) erros.push((x.epi_nome || 'item') + ': as partes somam ' + soma + ' e foram entregues ' + x.quantidade);
+              return;
+            }
             const r = d.querySelector('input[type=radio]:checked');
             itens.push({ entrega_id: d.dataset.e, destino: r ? r.value : null });
           });
           const msg = document.getElementById('rhMsg');
-          if (!itens.length){ msg.textContent = 'Marque ao menos um item.'; return; }
-          if (desl && itens.filter(i => noSeu.some(x => x.id === i.entrega_id)).length < noSeu.length){
+          if (!itens.length && !erros.length){ msg.textContent = 'Marque ao menos um item.'; return; }
+          if (erros.length){ msg.textContent = 'Diga o destino de todas as peças. ' + erros.join(' · ') + '.'; return; }
+          if (desl && [...ents].filter(id => noSeu.some(x => x.id === id)).length < noSeu.length){
             msg.textContent = 'No desligamento, todo item que está com a pessoa precisa de destino (mesmo que "não devolvido").'; return;
           }
           try{
@@ -4456,6 +4569,15 @@ async function rhRegistrarDevolucao(uid, contexto, depois){
           }catch(e){ msg.textContent = e.message; }
       } } ]);
   rhModalLargo();
+  document.querySelectorAll('#mBody .dvPartesBt').forEach(b => b.addEventListener('click', () => {
+    const d = b.closest('.rhDevL'), pt = d.querySelector('.rhDevPartes'), op = d.querySelector('.rhDevOp');
+    pt.hidden = !pt.hidden; op.hidden = !pt.hidden ? true : false;
+    b.textContent = pt.hidden ? 'Em partes…' : 'Tudo com um destino só';
+    d.querySelector('.dvInc').checked = true;
+    if (!pt.hidden){ const x = posse.find(y => y.id === d.dataset.e) || {}; const r = d.querySelector('input[type=radio]:checked');
+      const alvo = pt.querySelector('input[data-parte="' + (r ? r.value : 'descarte') + '"]') || pt.querySelector('input[data-parte]');
+      pt.querySelectorAll('input[data-parte]').forEach(i => { i.value = ''; }); if (alvo) alvo.value = x.quantidade; }
+  }));
 }
 
 function rhChecklistAval(d){
@@ -4493,6 +4615,7 @@ function rhAvaliar(d, depois){
     + '<label><input type="radio" name="avR" value="aprovado"> Aprovado — ' + (d.sob_encomenda ? 'armação disponível para a próxima encomenda' : 'volta ao estoque como reaproveitado') + '</label>'
     + '<label><input type="radio" name="avR" value="reprovado"> Reprovado — descarte</label></div>'
     + '<div class="campo"><label for="avO">Observação (obrigatória se reprovado)</label><input id="avO" type="text" maxlength="200"></div>'
+    + '<div id="avPend" hidden></div>'
     + '<p class="nota" id="rhMsg" style="color:var(--crit)"></p>',
     [ { label:'Voltar', onClick: fecharModal },
       { label:'Gravar a avaliação', pri:true, onClick: async () => {
@@ -4500,9 +4623,18 @@ function rhAvaliar(d, depois){
           const msg = document.getElementById('rhMsg');
           if (!r){ msg.textContent = 'Aprovado ou reprovado?'; return; }
           const q = document.getElementById('avQueda');
+          // G10 (S207, issue 195 item 1): aprovar com item da conferência sem marcar — o cinto não aprova; o resto confirma e diz o motivo
+          const pend = Array.from(document.querySelectorAll('.avCk')).filter(c => !c.checked).length;
+          const cinto = !!d.pede_serie || /cinto/i.test(d.epi_nome || '');
+          const conf = document.getElementById('avPendOk');
+          if (r.value === 'aprovado' && pend){
+            if (cinto){ msg.textContent = 'Cinto com item da conferência sem marcar não volta ao uso: confira todos os itens ou reprove (descarte).'; return; }
+            if (!conf || !conf.checked){ msg.textContent = 'Há ' + pend + ' item(ns) da conferência sem marcar: marque "Aprovar assim mesmo" e diga o motivo na observação.'; return; }
+            if (document.getElementById('avO').value.trim().replace(/\s/g, '').length < 5){ msg.textContent = 'Diga na observação por que aprova com item sem marcar (5 letras ou mais).'; return; }
+          }
           try{
             await rpc('tf_rh_avaliar_devolucao', { p_id: d.id, p_dados: { resultado: r.value, obs: document.getElementById('avO').value,
-              queda: !!(q && q.checked),
+              queda: !!(q && q.checked), confirmar_pendente: !!(conf && conf.checked && pend),
               itens: Array.from(document.querySelectorAll('.avCk')).map(c => ({ texto: c.value, ok: c.checked })),
               pecas: r.value === 'aprovado' ? Array.from(document.querySelectorAll('.avPc:checked')).map(c => ({ epi_id: c.value, quantidade: 1 })) : [] } });
             fecharModal(); contarRH();
@@ -4511,6 +4643,18 @@ function rhAvaliar(d, depois){
             depois && depois();
           }catch(e){ msg.textContent = e.message; }
       } } ]);
+  const pendAv = () => {
+    const r = document.querySelector('input[name=avR]:checked'), box = document.getElementById('avPend');
+    const pend = Array.from(document.querySelectorAll('.avCk')).filter(c => !c.checked).length;
+    const cinto = !!d.pede_serie || /cinto/i.test(d.epi_nome || '');
+    if (!r || r.value !== 'aprovado' || !pend){ box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    box.innerHTML = cinto
+      ? '<div class="aviso" style="background:var(--crit-soft);color:var(--crit);border-color:var(--crit)">Há ' + pend + ' item(ns) da conferência sem marcar. <b>Cinto só volta ao uso com todos conferidos</b>: confira ou reprove.</div>'
+      : '<div class="aviso">Há <b>' + pend + ' item(ns) da conferência sem marcar</b>. Aprovar assim mesmo?'
+        + '<label class="chk" style="margin:8px 0 0"><input type="checkbox" id="avPendOk"> Aprovar assim mesmo (o motivo vai na observação, obrigatório)</label></div>';
+  };
+  document.querySelectorAll('.avCk, input[name=avR]').forEach(i => i.addEventListener('change', pendAv));
   const q = document.getElementById('avQueda');
   if (q) q.addEventListener('change', () => { if (q.checked){ const rr = document.querySelector('input[name=avR][value=reprovado]'); rr.checked = true;
     const o = document.getElementById('avO'); if (!o.value) o.value = 'Sofreu queda'; } });
@@ -4518,10 +4662,9 @@ function rhAvaliar(d, depois){
 
 async function rhDevolucoes(corpo){
   RH.devFiltro = RH.devFiltro || 'abertas';
-  const [L, P, reap] = await Promise.all([rpc('tf_rh_devolucoes', { p_filtro: RH.devFiltro }), rpc('tf_rh_painel', {}),
-                                          rpc('tf_rh_reaproveitados', {})]);
-  corpo.innerHTML = '<p class="nota" style="margin-top:0">A devolução nasce do <b>desligamento</b> (Funcionários › a pessoa › Dados › Desligar…) '
-    + 'ou avulsa (a pessoa › EPIs › Registrar devolução). O funcionário confirma no celular com o PIN; o que voltou para <b>reuso</b> '
+  const [L, reap] = await Promise.all([rpc('tf_rh_devolucoes', { p_filtro: RH.devFiltro }), rpc('tf_rh_reaproveitados', {})]);   // G10 (S207, issue 195 item 3): sem o Painel
+  corpo.innerHTML = '<p class="nota" style="margin-top:0">A devolução nasce do <b>desligamento</b>, que é feito no <b>TapRH</b> (Funcionários › a pessoa › Desligar…), '
+    + 'ou avulsa (aqui: Funcionários › a pessoa › EPIs › Registrar devolução). O funcionário confirma no celular com o PIN; o que voltou para <b>reuso</b> '
     + 'passa pela avaliação — aprovado volta ao estoque como reaproveitado, reprovado vai para descarte.</p>'
     + '<div class="rhBarra"><div class="chips" id="rhDF"></div><button class="btn" type="button" id="rhDNova">Registrar devolução…</button></div>'
     + '<div class="ccLista" id="rhDL"></div>'
@@ -4535,8 +4678,10 @@ async function rhDevolucoes(corpo){
     let lista; try{ lista = (await rpc('tf_rh_funcionarios', {})).filter(f => f.tem_ficha && f.situacao === 'ativo'); }catch(e){ toast(e.message, 'err'); return; }
     abrirModal('Registrar devolução', '<div class="campo"><label for="rdF">De quem</label><select id="rdF"><option value="">— escolha —</option>'
       + lista.map(f => '<option value="' + esc(f.usuario_id) + '">' + esc(f.nome) + '</option>').join('') + '</select></div>'
-      + '<p class="nota">Para o desligamento, use Funcionários › a pessoa › Dados › <b>Desligar…</b> — ele guia a devolução inteira.</p>',
+      + '<p class="nota">Para o desligamento, use o <b>TapRH</b> (Funcionários › a pessoa › Desligar…) — ele guia a devolução inteira.</p>',
       [ { label:'Cancelar', onClick: fecharModal },
+        { label:'Desligar no TapRH', onClick: () => { const u = document.getElementById('rdF').value;
+            fecharModal(); location.href = '../rh/' + (u ? '?func=' + encodeURIComponent(u) + '&fa=dados' : ''); } },
         { label:'Continuar', pri:true, onClick: () => { const u = document.getElementById('rdF').value; if (!u) return;
             fecharModal(); rhRegistrarDevolucao(u, 'avulsa', pintarRHSeguranca); } } ]);
   });
@@ -4642,10 +4787,10 @@ async function rhEntradaEstoque(epiId, depois){
     + epis.map(e => '<option value="' + esc(e.id) + '">' + esc(e.nome) + '</option>').join('') + '</select></div>'
     + '<div id="enQ"></div>'
     + '<div class="dupla"><div class="campo"><label for="enD">Data da compra</label><input id="enD" type="date" max="' + isoHoje() + '" value="' + isoHoje() + '"></div>'
-    + '<div class="campo"><label for="enCA">CA da compra</label><input id="enCA" type="text" inputmode="numeric" maxlength="9"></div></div>'
+    + '<div class="campo" id="enCAc"><label for="enCA">CA da compra</label><input id="enCA" type="text" inputmode="numeric" maxlength="9"></div></div>'
     + '<div id="enCaAv"></div>'
     + '<div class="dupla"><div class="campo"><label for="enF">Fornecedor (opcional)</label><input id="enF" type="text" maxlength="120"></div>'
-    + '<div class="campo"><label for="enV">Valor unitário R$ (opcional)</label><input id="enV" type="text" inputmode="decimal" maxlength="12" placeholder="0,00"></div></div>'
+    + '<div class="campo"><label for="enV">Valor unitário R$ (opcional)</label><input id="enV" type="text" inputmode="decimal" maxlength="14" placeholder="0,00" data-valor="moeda"></div></div>'
     + '<div class="campo"><label for="enNF">Nota fiscal (opcional — foto ou PDF)</label><input id="enNF" type="file" accept="image/*,application/pdf"></div>'
     + '<div class="campo"><label for="enO">Observação (opcional)</label><input id="enO" type="text" maxlength="200"></div>'
     + '<p class="nota" id="rhMsg" style="color:var(--crit)"></p>',
@@ -4657,10 +4802,14 @@ async function rhEntradaEstoque(epiId, depois){
           const itens = [...document.querySelectorAll('#enQ input[data-t]')].map(i => ({ tamanho: i.dataset.t, quantidade: i.value }))
                           .filter(i => Number(i.quantidade) > 0);
           if (!itens.length){ msg.textContent = 'Informe a quantidade.'; return; }
+          // G10 (S207, issue 193 item 3): o valor pelo leitor único do núcleo ("1.250,00", "R$ 12,50", "1.250" = mil duzentos e cinquenta)
+          const val = Nucleo.util.lerValor(g('enV').value);
+          if (Number.isNaN(val)){ msg.textContent = 'O valor unitário não é um número (ex.: 12,50).'; return; }
+          if (val != null && val < 0){ msg.textContent = 'O valor unitário não pode ser negativo.'; return; }
           try{
             const nf = await rhArqDoInput(g('enNF'), false);
-            const r = await rpc('tf_rh_estoque_entrada', { p_dados: { epi_id: e.id, data: g('enD').value, ca: g('enCA').value,
-              fornecedor: g('enF').value, valor_unitario: g('enV').value, observacao: g('enO').value, itens,
+            const r = await rpc('tf_rh_estoque_entrada', { p_dados: { epi_id: e.id, data: g('enD').value, ca: e.uniforme ? '' : g('enCA').value,
+              fornecedor: g('enF').value, valor_unitario: val, observacao: g('enO').value, itens,
               confirmar_ca_vencido: !!(g('enCaOk') && g('enCaOk').checked) }, p_nf: nf });
             fecharModal(); toast('Entrada gravada: ' + r.unidades + ' un.' + (r.ca_vencido ? ' (CA vencido na compra, registrado)' : ''), 'ok');
             depois && depois();
@@ -4677,24 +4826,34 @@ async function rhEntradaEstoque(epiId, depois){
           '<div class="campo"><label for="enT_' + esc(t) + '">' + esc(t) + '</label><input id="enT_' + esc(t) + '" data-t="' + esc(t)
           + '" type="number" min="0" max="9999" inputmode="numeric" placeholder="0"></div>').join('') + '</div>'
       : '<div class="campo"><label for="enT_">Quantidade</label><input id="enT_" data-t="" type="number" min="0" max="9999" inputmode="numeric" value="1"></div>';
-    document.getElementById('enCA').value = e.ca || '';
+    document.getElementById('enCA').value = e.uniforme ? '' : (e.ca || '');
+    document.getElementById('enCAc').hidden = !!e.uniforme;   // G10 (S207, issue 193 item 3): uniforme não tem CA
     caAv();
   };
   const caAv = () => {
     const e = epis.find(x => x.id === sel.value), av = document.getElementById('enCaAv');
     const ca = document.getElementById('enCA').value.replace(/\D/g, ''), dt = document.getElementById('enD').value;
-    if (e && !e.componente && !e.livre_acesso && ca && ca === e.ca && e.ca_validade && dt && e.ca_validade < dt){
+    if (e && !e.uniforme && !e.componente && !e.livre_acesso && ca && ca === e.ca && e.ca_validade && dt && e.ca_validade < dt){
       av.innerHTML = '<div class="aviso" style="background:var(--crit-soft);color:var(--crit);border-color:var(--crit)">'
         + '<b>CA ' + esc(ca) + ' venceu em ' + esc(dataBR(e.ca_validade)) + ', antes da data da compra.</b> O que vale é o CA válido '
         + 'na data da compra — confira a nota e a embalagem.<label class="chk" style="margin:8px 0 0"><input type="checkbox" id="enCaOk"> '
         + 'Confirmo: gravar mesmo assim (fica marcado "CA vencido")</label></div>';
-    } else av.innerHTML = e && !e.ca && !e.componente && !e.livre_acesso
+    } else av.innerHTML = e && !e.uniforme && !e.ca && !e.componente && !e.livre_acesso
       ? '<p class="nota">Este EPI está sem CA no catálogo. Digite o CA da embalagem; para entregar, o catálogo precisa do CA.</p>' : '';
   };
   sel.addEventListener('change', acerta);
   document.getElementById('enD').addEventListener('change', caAv);
   document.getElementById('enCA').addEventListener('input', caAv);
   if (epiId){ sel.value = epiId; acerta(); }
+}
+
+// G10 (S207, issue 193 item 4): a contagem mostra os tamanhos do catálogo e também todo tamanho que tem saldo
+// (um tamanho que saiu do catálogo, ou digitado errado antes), para dar para zerar ou acertar
+function rhTamContagem(e){
+  if (!e.tem_tamanho) return [''];
+  const cat = e.tamanhos || [];
+  const extra = (e.linhas || []).filter(l => l.tamanho && !cat.includes(l.tamanho) && (Number(l.novo) || Number(l.reaproveitado))).map(l => l.tamanho);
+  return cat.concat(extra.filter((t, i, a) => a.indexOf(t) === i));
 }
 
 async function rhContagem(depois){
@@ -4708,8 +4867,9 @@ async function rhContagem(depois){
     + '<div class="dupla"><div class="campo"><label for="ctD">Data da contagem</label><input id="ctD" type="date" max="' + isoHoje() + '" value="' + isoHoje() + '"></div>'
     + '<div class="campo"><label for="ctM">Motivo dos ajustes (se houver)</label><input id="ctM" type="text" maxlength="200" placeholder="ex.: contagem trimestral"></div></div>'
     + ativos.map(e => '<div class="rhCtEpi"><b>' + esc(e.nome) + '</b>' + (e.controlado ? '' : ' <span class="nota" style="margin:0">— primeira contagem (inventário)</span>')
-      + '<div class="rhTamGrade">' + (e.tem_tamanho ? (e.tamanhos || []) : ['']).map(t =>
+      + '<div class="rhTamGrade">' + rhTamContagem(e).map(t =>
         '<div class="campo"><label for="ct_' + esc(e.epi_id) + '_' + esc(t) + '">' + esc(t || 'Quantidade')
+        + (e.tem_tamanho && !(e.tamanhos || []).includes(t) ? ' <span class="nota" style="margin:0;color:var(--warn)">(fora do catálogo)</span>' : '')
         + ' <span class="nota" style="margin:0">sistema: ' + saldo(e, t, 'novo') + '</span></label><input id="ct_' + esc(e.epi_id) + '_' + esc(t)
         + '" data-epi="' + esc(e.epi_id) + '" data-t="' + esc(t) + '" data-c="novo" type="number" min="0" max="9999" inputmode="numeric"></div>'
         + (saldo(e, t, 'reaproveitado') ? '<div class="campo"><label>' + esc(t) + ' reaproveitado <span class="nota" style="margin:0">sistema: '
@@ -4783,19 +4943,24 @@ function rhMinimo(e, depois){
       } } ]);
 }
 
-async function rhMovimentos(epiId){
-  let L; try{ L = await rpc('tf_rh_estoque_movimentos', { p_epi: epiId || null, p_limite: 400 }); }catch(e){ toast(e.message, 'err'); return; }
+// G10 (S207, issue 193 item 5): diz quantos mostra e busca os mais antigos (até 2.000, o teto do banco); o valor em R$
+async function rhMovimentos(epiId, limite){
+  const lim = Math.min(Number(limite) || 400, 2000);
+  let L; try{ L = await rpc('tf_rh_estoque_movimentos', { p_epi: epiId || null, p_limite: lim }); }catch(e){ toast(e.message, 'err'); return; }
+  const temMais = L.length >= lim && lim < 2000;
   abrirModal('Movimentos de estoque' + (epiId && L[0] ? ' — ' + L[0].epi : ''),
-    '<p class="nota" style="margin-top:0">Nada se apaga: contagem que não bate vira ajuste; entrega que não vale devolve.</p>'
+    '<p class="nota" style="margin-top:0">Nada se apaga: contagem que não bate vira ajuste; entrega que não vale devolve.'
+    + (L.length >= lim ? ' Mostrando os <b>' + L.length + ' mais recentes</b>.' : '') + '</p>'
     + (L.length ? '<div class="ccLista">' + L.map(m => '<div class="rhLin"><span class="t"><b class="' + (m.quantidade > 0 ? 'rhMais' : 'rhMenos') + '">'
       + (m.quantidade > 0 ? '+' : '') + m.quantidade + '</b> ' + esc(m.epi) + (m.tamanho ? ' ' + esc(m.tamanho) : '')
       + (m.condicao === 'reaproveitado' ? ' (reaproveitado)' : '') + ' — ' + esc(RH_TIPO_MOV[m.tipo] || m.tipo)
-      + '<small>' + esc([dataBR(m.data), m.motivo, m.fornecedor, m.valor_unitario != null ? 'R$ ' + String(Number(m.valor_unitario).toFixed(2)).replace('.', ',') + '/un.' : '',
+      + '<small>' + esc([dataBR(m.data), m.motivo, m.fornecedor, m.valor_unitario != null ? Nucleo.util.BRL(Number(m.valor_unitario)) + '/un.' : '',
         m.ca ? 'CA ' + m.ca + (m.ca_vencido ? ' (VENCIDO na compra)' : '') : '', m.para ? 'para ' + m.para : '',
         'por ' + (m.lancado_por_nome || '?') + ' em ' + rhDT(m.lancado_em)].filter(Boolean).join(' · ')) + '</small></span>'
       + (m.nf_arquivo_id ? '<span class="a"><button class="btn mini" type="button" data-arq="' + esc(m.nf_arquivo_id) + '">Nota</button></span>' : '')
       + '</div>').join('') + '</div>' : '<p class="nota">Nenhum movimento.</p>'),
-    [ { label:'Fechar', onClick: fecharModal } ]);
+    [ ...(temMais ? [{ label:'Ver mais antigos', onClick: () => rhMovimentos(epiId, lim + 400) }] : []),
+      { label:'Fechar', onClick: fecharModal } ]);
   rhModalLargo();
   document.querySelectorAll('#mBody [data-arq]').forEach(b => b.addEventListener('click', () => rhAbrirArquivo(b.dataset.arq)));
 }
@@ -4808,7 +4973,7 @@ async function rhTreinHub(corpo){
   const ab = document.getElementById('rhTA');
   RH_TR_ABAS.forEach(([k, r]) => {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'fchip' + (RH.trAba === k ? ' on' : '');
-    b.textContent = r; b.addEventListener('click', () => { RH.trAba = k; pintarRHSeguranca(); }); ab.appendChild(b);
+    b.textContent = r; b.addEventListener('click', () => rhSairSemSalvar(() => { RH.trAba = k; pintarRHSeguranca(); })); ab.appendChild(b);
   });
   const c = document.getElementById('rhTC');
   if (RH.trAba === 'tipos') return rhTreinamentos(c);
@@ -4818,11 +4983,17 @@ async function rhTreinHub(corpo){
 }
 
 async function rhListas(c){
-  const L = await rpc('tf_rh_sessoes', { p_limite: 200 });
+  const limL = RH.lsLimite || 200;   // G10 (S207, issue 196 item 10)
+  const L = await rpc('tf_rh_sessoes', { p_limite: limL });
+  const maisL = L.length >= limL;
   c.innerHTML = '<div class="rhBarra"><button class="btn pri" type="button" id="lsNova">Nova lista de treinamento</button>'
     + '<p class="nota" style="margin:0;flex:1">Os treinamentos INTERNOS (Uso de EPI e Integração) viram lista de presença: cada participante '
     + 'confirma no TapField com o PIN, e a confirmação vira o registro na ficha dele. Os externos (NR-35, NR-33, plataformas) se registram na '
-    + 'ficha de cada um, com o certificado.</p></div><div class="ccLista" id="lsL"></div>';
+    + 'ficha de cada um, com o certificado.</p></div><div class="ccLista" id="lsL"></div>'
+    + (maisL ? '<p class="nota">Mostrando as <b>' + L.length + ' listas mais recentes</b>.'
+        + (limL < 1000 ? ' <button class="btn mini" type="button" id="lsMais">Ver mais antigas</button>' : '') + '</p>' : '');
+  const bmL = document.getElementById('lsMais');
+  if (bmL) bmL.addEventListener('click', () => { RH.lsLimite = Math.min(limL + 200, 1000); pintarRHSeguranca(); });
   document.getElementById('lsNova').addEventListener('click', () => rhNovaSessao(pintarRHSeguranca));
   const el = document.getElementById('lsL');
   if (!L.length){ el.innerHTML = '<p class="nota" style="padding:12px">Nenhuma lista ainda.</p>'; return; }
@@ -4839,7 +5010,7 @@ async function rhListas(c){
   });
 }
 
-async function rhNovaSessao(depois){
+async function rhNovaSessao(depois, marcar){
   let cat, lista, vids = [];
   try{ [cat, lista, vids] = await Promise.all([rpc('tf_rh_epis', {}), rpc('tf_rh_funcionarios', {}),
          rpc('tf_rh_videos', {}).catch(() => [])]); RH.trein = cat.treinamentos; RH.lista = lista; }
@@ -4853,7 +5024,7 @@ async function rhNovaSessao(depois){
     + '<div class="dupla"><div class="campo"><label for="nsD">Data</label><input id="nsD" type="date" value="' + isoHoje() + '"></div>'
     + '<div class="campo"><label for="nsH">Horário</label><input id="nsH" type="text" maxlength="40"></div></div>'
     + '<label class="rotulo">Participantes</label><div class="rhChkGrade">' + pessoas.map(p => '<label class="chk"><input type="checkbox" data-u="'
-      + esc(p.usuario_id) + '"> ' + esc(p.nome) + (p.tem_pin ? '' : ' <span class="nota" style="margin:0">(sem PIN)</span>') + '</label>').join('') + '</div>'
+      + esc(p.usuario_id) + '"' + ((marcar || []).includes(p.usuario_id) ? ' checked' : '') + '> ' + esc(p.nome) + (p.tem_pin ? '' : ' <span class="nota" style="margin:0">(sem PIN)</span>') + '</label>').join('') + '</div>'
     + '<p class="nota">A lista copia o modelo de hoje (tema, declaração, conteúdo e instrutor com a qualificação completa). '
     + 'Cada participante confirma a presença no TapField, com o PIN — até lá ele aparece "aguardando".</p>'
     // S44 · resposta Q5 ao parecer S43 ("Bruno irá inserir em Nova Lista de Treinamento"): os links
@@ -4915,16 +5086,21 @@ async function rhAbrirSessao(id){
           if (!rr){ rhAbrirSessao(s.id); return; }
           try{ await rpc('tf_rh_cancelar_sessao', { p_sessao: s.id, p_motivo: rr.texto }); toast('Lista cancelada.', 'ok'); if (visao === 'rhs') pintarRHSeguranca(); }
           catch(e){ toast(e.message, 'err'); rhAbrirSessao(s.id); } } }] : []),
-      { label:'Lista em PDF', pri:true, onClick: () => rhBaixarLista(s.id, null) } ]);
+      { label:'Lista em PDF', pri:true, onClick: () => rhBaixarLista(s.id, null) } ],
+    // G10 (S207, issue 196 item 3): fechada pelo X (ou Esc), a lista de trás mostra a contagem nova
+    { aoFechar: () => { if (RH._sessMudou && visao === 'rhs'){ RH._sessMudou = false; pintarRHSeguranca(); } } });
   rhModalLargo();
+  // G10 (S207, issue 196 item 3): "Tirar" pede o 2º toque no próprio botão
   document.querySelectorAll('#mBody [data-tirar]').forEach(b => b.addEventListener('click', async () => {
-    try{ await rpc('tf_rh_sessao_participantes', { p_sessao: s.id, p_incluir: null, p_tirar: [b.dataset.tirar] }); rhAbrirSessao(s.id); }
+    if (!b.dataset.armado){ b.dataset.armado = '1'; b.textContent = 'Tirar? Toque de novo'; b.classList.add('perigo');
+      setTimeout(() => { if (b.isConnected){ delete b.dataset.armado; b.textContent = 'Tirar'; b.classList.remove('perigo'); } }, 5000); return; }
+    try{ await rpc('tf_rh_sessao_participantes', { p_sessao: s.id, p_incluir: null, p_tirar: [b.dataset.tirar] }); RH._sessMudou = true; rhAbrirSessao(s.id); }
     catch(e){ document.getElementById('rhMsg').textContent = e.message; }
   }));
   const inc = document.getElementById('asInc');
   if (inc) inc.addEventListener('change', async () => {
     if (!inc.value) return;
-    try{ await rpc('tf_rh_sessao_participantes', { p_sessao: s.id, p_incluir: [inc.value], p_tirar: null }); rhAbrirSessao(s.id); }
+    try{ await rpc('tf_rh_sessao_participantes', { p_sessao: s.id, p_incluir: [inc.value], p_tirar: null }); RH._sessMudou = true; rhAbrirSessao(s.id); }
     catch(e){ document.getElementById('rhMsg').textContent = e.message; }
   });
 }
@@ -4961,7 +5137,7 @@ async function rhListaDoc(jsPDF, sessaoId, soUsuarios, soConfirmados){
     const e = Math.min(w / d.w, h / d.h); try{ doc.addImage(u, 'PNG', x + (w - d.w * e) / 2, yy + (h - d.h * e) / 2, d.w * e, d.h * e); return true; }catch(er){ return false; } };
   const rod = () => { doc.setFont('helvetica','normal'); doc.setFontSize(6.8); doc.setTextColor(90);
     doc.text('Lista gerada em ' + rhDT(new Date().toISOString()).replace(' ', ' às ') + ' pelo TapHub, com as presenças confirmadas no celular de cada participante.', M, 285);
-    if (rodapeTxt) doc.text(doc.splitTextToSize(rodapeTxt, W - 16), M, 289);
+    if (rodapeTxt) doc.text(doc.splitTextToSize(rodapeTxt, W - 16).slice(0, 2), M, 289);   // G10: até 2 linhas (o rodapé é editável)
     doc.text('pág. ' + pag, 210 - M, 289, { align:'right' }); doc.setTextColor(0); };
   try{ doc.addImage(LOGO_ENGETAP, 'JPEG', M, y, 44, 10.7); }catch(e){}
   doc.setFont('helvetica','bold'); doc.setFontSize(12.5); doc.text('LISTA DE PRESENÇA EM TREINAMENTO', 210 - M, y + 5, { align:'right' });
@@ -4975,11 +5151,15 @@ async function rhListaDoc(jsPDF, sessaoId, soUsuarios, soConfirmados){
   campo('Horário:', s.horario || '—', 150, y, 48); y += 5;
   campo('Carga horária:', s.carga_horaria_h ? String(s.carga_horaria_h).replace('.', ',') + ' h' : '—', M, y, 90); y += 5;
   const nt = campo('Tema do curso/treinamento:', s.tema, M, y, W); y += 5 * nt + 1;
-  if (s.declaracao){ doc.setFont('helvetica','bold'); doc.setFontSize(8.3); doc.text('Declaração do participante:', M, y); y += 4;
-    doc.setFont('helvetica','italic'); doc.setFontSize(8); const t = doc.splitTextToSize('"' + s.declaracao + '"', W); doc.text(t, M, y); y += t.length * 3.5 + 2; }
-  if (s.conteudo){ doc.setFont('helvetica','bold'); doc.setFontSize(8.3); doc.text('Conteúdo programático:', M, y); y += 4;
+  // G10 (S207, issue 196 item 6): declaração e conteúdo compridos continuam na página seguinte (antes saíam da página)
+  const quebra = h => { if (y + h > 276){ rod(); doc.addPage(); pag++; y = 14; } };
+  if (s.declaracao){ quebra(8); doc.setFont('helvetica','bold'); doc.setFontSize(8.3); doc.text('Declaração do participante:', M, y); y += 4;
+    doc.setFont('helvetica','italic'); doc.setFontSize(8);
+    doc.splitTextToSize('"' + s.declaracao + '"', W).forEach(l => { quebra(3.5); doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.text(l, M, y); y += 3.5; }); y += 2; }
+  if (s.conteudo){ quebra(8); doc.setFont('helvetica','bold'); doc.setFontSize(8.3); doc.text('Conteúdo programático:', M, y); y += 4;
     doc.setFont('helvetica','normal'); doc.setFontSize(7.8);
-    String(s.conteudo).split('\n').forEach(l => { const t = doc.splitTextToSize(l, W - 4); doc.text(t, M + 2, y); y += t.length * 3.4; }); y += 2; }
+    String(s.conteudo).split('\n').forEach(l => { doc.splitTextToSize(l, W - 4).forEach(t => { quebra(3.4); doc.setFont('helvetica','normal'); doc.setFontSize(7.8); doc.text(t, M + 2, y); y += 3.4; }); }); y += 2; }
+  if (y + 6.5 + 16 > 250){ rod(); doc.addPage(); pag++; y = 14; }
   const col = [ { t:'Nome', w:58 }, { t:'Função', w:36 }, { t:'Data', w:20 }, { t:'Assinatura', w:W - 114 } ];
   const cab = () => { doc.setFillColor(227, 238, 247); doc.rect(M, y, W, 6.5, 'F'); doc.setFont('helvetica','bold'); doc.setFontSize(7.8);
     let x = M; col.forEach(c => { doc.text(c.t, x + 1.2, y + 4.3); x += c.w; }); y += 6.5; };
@@ -5095,8 +5275,13 @@ async function rhVideos(c){
   c.innerHTML = '<p class="nota" style="margin-top:0">Playlist não listada "OnBoarding - Engetap": cole aqui o link de <b>cada vídeo</b> '
     + '(no YouTube: Compartilhar › Copiar link). O funcionário assiste dentro do TapField, na pendência de admissão; conta como assistido '
     + 'só quem tocou 90% ou mais — arrastar a barra até o fim não conta. Módulo sem link não entra no "N/M".</p>'
-    + '<div class="ccLista" id="vdL"></div><div class="rhBarra" style="margin-top:10px"><button class="btn" type="button" id="vdNovo">+ Novo módulo</button></div>';
+    + '<div class="ccLista" id="vdL"></div><div class="rhBarra" style="margin-top:10px"><button class="btn" type="button" id="vdNovo">+ Novo módulo</button>'
+    + '<button class="btn pri" type="button" id="vdTodos">Salvar todos</button></div>';
   const el = document.getElementById('vdL');
+  // G10 (S207, issue 191): cada linha salva sozinha (sem redesenhar as outras); "Salvar todos" salva as que mudaram
+  const linhas = [];
+  const estado = d => [d.querySelector('.vO').value, d.querySelector('.vT').value, d.querySelector('.vL').value, d.querySelector('.vA').checked].join('|');
+  RH.naoSalvo = () => linhas.filter(x => x.d.isConnected && estado(x.d) !== x.salvo).length;
   const linha = v => {
     const d = document.createElement('div'); d.className = 'rhLin rhVid';
     d.innerHTML = '<span class="t"><div class="rhVidG"><input class="vO" type="number" aria-label="Ordem" value="' + esc(v.ordem || '') + '">'
@@ -5107,16 +5292,36 @@ async function rhVideos(c){
       + (v.youtube_id ? '<a class="btn mini" target="_blank" rel="noopener" href="https://youtu.be/' + esc(v.youtube_id) + '">Ver</a>' : '')
       + '<button class="btn mini pri" type="button">Salvar</button></span>';
     const b = d.querySelector('button');
-    b.addEventListener('click', () => _semDuploEnvio_(b, async () => {
-      try{ await rpc('tf_rh_salvar_video', { p_id: v.id || null, p_dados: { tipo_id: 'integracao', ordem: d.querySelector('.vO').value,
+    const reg = { d, v, salvo: v.id ? null : '' };
+    reg.salvar = async (calado) => {
+      const antes = estado(d);
+      try{ const r = await rpc('tf_rh_salvar_video', { p_id: v.id || null, p_dados: { tipo_id: 'integracao', ordem: d.querySelector('.vO').value,
              titulo: d.querySelector('.vT').value, link: d.querySelector('.vL').value, ativo: d.querySelector('.vA').checked } });
-           toast('Módulo salvo.', 'ok'); pintarRHSeguranca(); }
-      catch(e){ toast(e.message, 'err'); }
-    }));
+           if (r && r.id) v.id = r.id;
+           v.youtube_id = r ? r.youtube_id : v.youtube_id;
+           reg.salvo = antes;
+           d.querySelector('small').textContent = v.youtube_id ? 'salvo agora' : 'salvo agora · sem link — ainda a gravar?';
+           if (!calado) toast('Módulo salvo.', 'ok');
+           return true; }
+      catch(e){ toast((d.querySelector('.vT').value || 'Módulo') + ': ' + e.message, 'err'); return false; }
+    };
+    b.addEventListener('click', () => _semDuploEnvio_(b, () => reg.salvar(false)));
     el.appendChild(d);
+    reg.salvo = v.id ? estado(d) : '';
+    linhas.push(reg);
   };
   L.forEach(linha);
-  document.getElementById('vdNovo').addEventListener('click', () => linha({ ordem: (L.length ? Math.max(...L.map(v => v.ordem)) + 10 : 10), ativo:true }));
+  document.getElementById('vdNovo').addEventListener('click', () => {
+    const ords = linhas.map(x => Number(x.d.querySelector('.vO').value) || 0);
+    linha({ ordem: (ords.length ? Math.max(...ords) + 10 : 10), ativo:true });
+  });
+  const bt = document.getElementById('vdTodos');
+  bt.addEventListener('click', () => _semDuploEnvio_(bt, async () => {
+    const mud = linhas.filter(x => x.d.isConnected && estado(x.d) !== x.salvo);
+    if (!mud.length){ toast('Nada mudou desde o último salvar.', 'ok'); return; }
+    let ok = 0; for (const x of mud) if (await x.salvar(true)) ok++;
+    if (ok === mud.length) toast(ok + ' módulo(s) salvo(s).', 'ok');
+  }));
 }
 
 async function rhDuvidas(c){
@@ -5313,19 +5518,23 @@ async function rhKit(corpo){
   document.getElementById('kF').value = K.formato;
   const inp = document.getElementById('kC'), cl = document.getElementById('kCL');
   let tm = null;
-  inp.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => {
+  inp.addEventListener('input', () => {
+    // G10 (S207, issue 190 item 4): nome digitado sem escolher na lista não vale como o cliente de antes
+    if (K.cliente && inp.value !== nomeCliente(K.cliente)){ K.cliente = null; rhKitInvalidar('o cliente');
+      const ex = document.getElementById('kEx'); if (ex) ex.innerHTML = ''; }
+    clearTimeout(tm); tm = setTimeout(() => {
     const q = inp.value; cl.innerHTML = '';
     if (!q || q.length < 2) return;
     clientes.filter(c => casa(nomeCliente(c), q)).slice(0, 12).forEach(c => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'rhPes'; b.textContent = nomeCliente(c);
-      b.addEventListener('click', () => { K.cliente = c; K.res = null; cl.innerHTML = ''; inp.value = nomeCliente(c); rhKitExig(); rhKitHistorico(); });
+      b.addEventListener('click', () => { K.cliente = c; rhKitInvalidar('o cliente'); cl.innerHTML = ''; inp.value = nomeCliente(c); rhKitExig(); rhKitHistorico(); });
       cl.appendChild(b);
     });
   }, 140); });
   document.querySelectorAll('.rhKitG input[data-u]').forEach(i => i.addEventListener('change', () => {
-    K.pessoas = [...document.querySelectorAll('.rhKitG input[data-u]:checked')].map(x => x.dataset.u); }));
-  document.getElementById('kD').addEventListener('change', e => { K.data = e.target.value; });
-  document.getElementById('kF').addEventListener('change', e => { K.formato = e.target.value; });
+    K.pessoas = [...document.querySelectorAll('.rhKitG input[data-u]:checked')].map(x => x.dataset.u); rhKitInvalidar('quem vai'); }));
+  document.getElementById('kD').addEventListener('change', e => { K.data = e.target.value; rhKitInvalidar('a data'); });
+  document.getElementById('kF').addEventListener('change', e => { K.formato = e.target.value; rhKitInvalidar('o formato'); });
   document.getElementById('kConf').addEventListener('click', b => _semDuploEnvio_(b.currentTarget || b.target, rhKitConferir));
   if (K.cliente) rhKitExig();
   rhKitHistorico();
@@ -5382,6 +5591,15 @@ async function rhEditarExigencias(cli, depois){
   rhModalLargo();
 }
 
+// G10 (S207, issue 190): a conferência vale só para o cliente, as pessoas, a data e o formato de quando foi feita.
+// Mudou qualquer um: o resultado some e o "Gerar e baixar" só volta com "Conferir o kit" de novo.
+function rhKitInvalidar(oque){
+  const K = RH.kit; if (!K) return;
+  const tinha = !!K.res; K.res = null;
+  const cx = document.getElementById('kRes');
+  if (cx && tinha) cx.innerHTML = '<div class="aviso">Você mudou ' + esc(oque) + ' depois da conferência: clique em <b>Conferir o kit</b> de novo.</div>';
+}
+
 async function rhKitConferir(){
   const K = RH.kit;
   K.pessoas = [...document.querySelectorAll('.rhKitG input[data-u]:checked')].map(x => x.dataset.u);
@@ -5389,7 +5607,8 @@ async function rhKitConferir(){
   if (!K.cliente){ toast('Escolha o cliente.', 'err'); return; }
   if (!K.pessoas.length){ toast('Escolha quem vai à visita.', 'err'); return; }
   if (!K.data){ toast('Informe a data da visita.', 'err'); return; }
-  try{ K.res = await rpc('tf_rh_kit_montar', { p_cliente: K.cliente.id, p_funcionarios: K.pessoas, p_data: K.data }); rhKitDesenhar(K.res); }
+  try{ K.res = await rpc('tf_rh_kit_montar', { p_cliente: K.cliente.id, p_funcionarios: K.pessoas, p_data: K.data });
+       K.res._formato = K.formato; rhKitDesenhar(K.res); }
   catch(e){ toast(e.message, 'err'); }
 }
 
@@ -5408,9 +5627,10 @@ function rhKitDesenhar(k){
     + ((k.empresa || []).length ? '<div class="rhKitP"><div class="rhKitPT"><b>Empresa</b></div>' + k.empresa.map(it).join('') + '</div>' : '')
     + '<div class="dupla"><div class="campo"><label for="kDest">Para quem vai (opcional — fica no histórico)</label><input id="kDest" type="text" maxlength="160" placeholder="ex.: portal de terceiros · e-mail do Sr. Fulano"></div>'
     + '<div class="campo"><label for="kObs">Observação (opcional)</label><input id="kObs" type="text" maxlength="200"></div></div>'
-    + '<div class="rhBarra"><button class="btn pri" type="button" id="kGerar">Gerar e baixar (' + (RH.kit.formato === 'pdf' ? 'PDF único' : 'ZIP') + ')</button>'
+    + '<div class="rhBarra"><button class="btn pri" type="button" id="kGerar">Gerar e baixar (' + ((k._formato || RH.kit.formato) === 'pdf' ? 'PDF único' : 'ZIP') + ')</button>'
     + '<span class="nota" style="margin:0">Item vermelho sem arquivo fica fora; vencido vai assim mesmo, se você confirmar.</span></div>';
   document.getElementById('kGerar').addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => {
+    if (RH.kit.res !== k){ toast('Mudou algo depois da conferência: clique em Conferir o kit de novo.', 'err'); return; }
     if (verm && !(await confirmar('Há itens em vermelho', '<p>' + verm + ' documento(s) estão vencidos ou faltando na data da visita. '
         + 'Os que têm arquivo vão no kit mesmo assim; os que faltam ficam de fora. Gerar assim?</p>', 'Gerar assim mesmo')))
       return;
@@ -5426,6 +5646,7 @@ async function rhArqParaPdf(jsPDF, arquivoId){
 
 async function rhImgParaPdf(jsPDF, dataUrl, mime){
   const d = await rhDimImg(dataUrl);
+  if (!d || !d.w || !d.h) throw new Error('a imagem não abre');
   const doc = new jsPDF({ unit:'mm', format:'a4' });
   const e = Math.min(190 / d.w, 277 / d.h);
   doc.addImage(dataUrl, mime === 'image/png' ? 'PNG' : 'JPEG', (210 - d.w * e) / 2, 10, d.w * e, d.h * e);
@@ -5443,8 +5664,11 @@ async function rhKitBytes(jsPDF, i){
   return rhImgParaPdf(jsPDF, url, i.mime);
 }
 
-async function rhKitArquivos(jsPDF, k){
+// G10 (S207, issue 190 item 5): cada documento que não abre fica na lista "falhas" com o nome dele
+// ("O ASO de … não abre: anexe de novo"); no ZIP os outros seguem, no PDF único o kit não sai.
+async function rhKitArquivos(jsPDF, k, falhas){
   const out = [];
+  const tenta = async (qual, fn) => { try{ return await fn(); }catch(e){ if (falhas) falhas.push(qual); return null; } };
   const nomeTreino = t => String(t).replace(/\s+—.*$/, '');
   for (const p of (k.pessoas || [])){
     const pasta = rhNomeArq(p.nome);
@@ -5463,15 +5687,19 @@ async function rhKitArquivos(jsPDF, k){
                    bytes: new Uint8Array(doc.output('arraybuffer')), copia: { usuario_id: p.usuario_id }, cor: i.cor });
       } else if (i.arquivo_id || i.storage_path){
         const rot = i.doc === 'aso' ? 'ASO' : i.doc === 'doc_pessoal' ? 'Documento pessoal' : 'Certificado ' + nomeTreino(i.rotulo);
-        out.push({ pasta, nome: rhNomeArq(rot + ' - ' + p.nome + (i.validade ? ' - val ' + rhDataArq(i.validade) : '')) + '.pdf',
-                   bytes: await rhKitBytes(jsPDF, i), validade: i.validade || null, cor: i.cor });
+        const qual = (i.doc === 'aso' ? 'O ASO' : i.doc === 'doc_pessoal' ? 'O documento pessoal' : 'O certificado de ' + nomeTreino(i.rotulo)) + ' de ' + p.nome;
+        const bytes = await tenta(qual, () => rhKitBytes(jsPDF, i));
+        if (bytes) out.push({ pasta, nome: rhNomeArq(rot + ' - ' + p.nome + (i.validade ? ' - val ' + rhDataArq(i.validade) : '')) + '.pdf',
+                   bytes, validade: i.validade || null, cor: i.cor, qual });
       }
     }
   }
   for (const e of (k.empresa || [])){
     if (!e.arquivo_id) continue;
-    out.push({ pasta: 'Empresa', nome: rhNomeArq(e.tipo + ' - Engetap' + (e.validade ? ' - val ' + rhDataArq(e.validade) : '')) + '.pdf',
-               bytes: await rhArqParaPdf(jsPDF, e.arquivo_id), validade: e.validade || null, cor: e.cor });
+    const qual = 'O ' + e.tipo + ' da empresa';
+    const bytes = await tenta(qual, () => rhArqParaPdf(jsPDF, e.arquivo_id));
+    if (bytes) out.push({ pasta: 'Empresa', nome: rhNomeArq(e.tipo + ' - Engetap' + (e.validade ? ' - val ' + rhDataArq(e.validade) : '')) + '.pdf',
+               bytes, validade: e.validade || null, cor: e.cor, qual });
   }
   return out;
 }
@@ -5480,7 +5708,12 @@ async function rhKitEmpacotar(jsPDF, arquivos, formato, titulo){
   if (formato === 'pdf'){
     const PDFLib = await carregarPdfLib();
     const partes = [];
-    for (const a of arquivos){ const d = await PDFLib.PDFDocument.load(a.bytes, { ignoreEncryption: true }); partes.push({ a, d, n: d.getPageCount() }); }
+    for (const a of arquivos){
+      let d;
+      try{ d = await PDFLib.PDFDocument.load(a.bytes, { ignoreEncryption: true }); }
+      catch(e){ throw new Error((a.qual || a.nome.replace(/\.pdf$/i, '')) + ' não abre: anexe de novo (ou gere o kit em ZIP, que segue com os outros).'); }
+      partes.push({ a, d, n: d.getPageCount() });
+    }
     // o índice primeiro, com a página de início de cada documento. Monta uma
     // vez para saber quantas páginas o PRÓPRIO índice ocupa, e numera de novo
     // se passou de uma (senão todo "pág." sairia deslocado).
@@ -5518,23 +5751,29 @@ async function rhKitEmpacotar(jsPDF, arquivos, formato, titulo){
 async function rhKitGerar(k, destinatario, obs){
   try{
     const jsPDF = await carregarJsPDF();          // ANTES de registrar (§7)
-    if (RH.kit.formato === 'pdf') await carregarPdfLib(); else await carregarJSZip();
+    if ((k._formato || RH.kit.formato) === 'pdf') await carregarPdfLib(); else await carregarJSZip();
     toast('Montando o kit…', 'ok');
-    const arqs = await rhKitArquivos(jsPDF, k);
-    if (!arqs.length){ toast('Nenhum documento com arquivo para montar o kit.', 'err'); return; }
+    const formato = k._formato || RH.kit.formato;
+    const falhas = [];
+    const arqs = await rhKitArquivos(jsPDF, k, falhas);
+    if (falhas.length && formato === 'pdf'){
+      toast(falhas.join(' · ') + (falhas.length > 1 ? ' não abrem' : ' não abre') + ': anexe de novo (ou gere o kit em ZIP, que segue com os outros).', 'err'); return;
+    }
+    if (!arqs.length){ toast(falhas.length ? falhas.join(' · ') + ': não abre(m). Anexe de novo.' : 'Nenhum documento com arquivo para montar o kit.', 'err'); return; }
     const titulo = 'Documentos para ' + k.cliente + ' — visita de ' + dataBR(k.data_visita);
-    const blob = await rhKitEmpacotar(jsPDF, arqs, RH.kit.formato, titulo);
+    const blob = await rhKitEmpacotar(jsPDF, arqs, formato, titulo);
     // registra ANTES de entregar o arquivo: kit sem registro não existe.
     // S59: registro leve — só o nome, a pasta, a cor e a validade de cada
     // documento. Nenhuma cópia é guardada (o kit é sempre montado de novo).
     const lista = arqs.map(a => ({ pasta: a.pasta, nome: a.nome, cor: a.cor, validade: a.validade || null,
                                    origem: a.copia ? 'gerado' : 'guardado' }));
     await rpc('tf_rh_registrar_envio', { p_dados: { cliente_id: k.cliente_id, data_visita: k.data_visita,
-      funcionarios: (k.pessoas || []).map(p => p.usuario_id), formato: RH.kit.formato, destinatario, observacao: obs,
+      funcionarios: (k.pessoas || []).map(p => p.usuario_id), formato, destinatario, observacao: obs,
       conferencia: { cor: k.cor, pessoas: (k.pessoas || []).map(p => ({ nome: p.nome, cor: p.cor })), empresa: (k.empresa || []).map(e => ({ tipo: e.tipo, cor: e.cor })) },
       arquivos: lista }, p_copias: [] });
-    rhBaixarBlob(blob, rhNomeArq('Kit ' + k.cliente + ' - ' + rhDataArq(k.data_visita)) + (RH.kit.formato === 'pdf' ? '.pdf' : '.zip'));
-    toast('Kit gerado (' + arqs.length + ' arquivo(s)) e registrado no histórico.', 'ok');
+    rhBaixarBlob(blob, rhNomeArq('Kit ' + k.cliente + ' - ' + rhDataArq(k.data_visita)) + (formato === 'pdf' ? '.pdf' : '.zip'));
+    if (falhas.length) toast('Kit gerado (' + arqs.length + ' arquivo(s)) e registrado, SEM: ' + falhas.join(' · ') + ' (não abre: anexe de novo e gere outra vez).', 'err');
+    else toast('Kit gerado (' + arqs.length + ' arquivo(s)) e registrado no histórico.', 'ok');
     rhKitHistorico();
   }catch(e){ toast(e.message, 'err'); }
 }
@@ -5597,47 +5836,84 @@ function rhFAso(c, f){
   });
 }
 
+// G10 (S207, issue 196 item 8): enquanto o arquivo sobe, o botão diz "Enviando…" e não aceita outro toque
+async function rhComEnviando(inp, fn){
+  const lb = inp && inp.closest ? inp.closest('label') : null;
+  const tn = lb ? [...lb.childNodes].find(n => n.nodeType === 3 && n.textContent.trim()) : null;
+  const antes = tn ? tn.textContent : '';
+  if (tn) tn.textContent = 'Enviando…';
+  if (lb){ lb.style.pointerEvents = 'none'; lb.style.opacity = '.7'; lb.setAttribute('aria-busy', 'true'); }
+  try{ return await fn(); }
+  finally{
+    if (tn && tn.isConnected) tn.textContent = antes;
+    if (lb){ lb.style.pointerEvents = ''; lb.style.opacity = ''; lb.removeAttribute('aria-busy'); }
+    try{ inp.value = ''; }catch(e){}
+  }
+}
+
 function rhBotaoAnexar(registro, id){
   const l = document.createElement('label'); l.className = 'btn mini'; l.style.cursor = 'pointer'; l.textContent = 'Anexar PDF';
   const i = document.createElement('input'); i.type = 'file'; i.accept = 'application/pdf,image/*'; i.hidden = true; l.appendChild(i);
-  i.addEventListener('change', async () => {
+  i.addEventListener('change', () => rhComEnviando(i, async () => {
     try{ const a = await rhArqDoInput(i, false); await rpc('tf_rh_anexar_pdf', { p_registro: registro, p_id: id, p_arquivo: a });
          toast('PDF anexado.', 'ok'); rhRecarregar(); }
     catch(e){ toast(e.message, 'err'); }
-  });
+  }));
   return l;
 }
 
-function rhNovoAso(f){
+// G10 (S207, issue 196 item 11): os meses somados como o banco (make_interval): 31/08 + 6 meses = 28/02, não 03/03
+function rhSomarMeses(iso, meses){
+  const [a, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  const alvo = new Date(Date.UTC(a, m - 1 + Number(meses), 1));
+  const ult = new Date(Date.UTC(alvo.getUTCFullYear(), alvo.getUTCMonth() + 1, 0)).getUTCDate();
+  alvo.setUTCDate(Math.min(d, ult));
+  return alvo.toISOString().slice(0, 10);
+}
+
+// G10 (S207, issue 121): os campos são lidos ANTES da pergunta "Gravar sem o PDF?" (a pergunta ocupa a janela);
+// "Cancelar" volta para a janela do ASO com tudo preenchido (rasc).
+function rhNovoAso(f, rasc){
+  const R = rasc || {};
+  const sel = (v, x) => (v === x ? ' selected' : '');
   abrirModal('Novo ASO — ' + f.usuario.nome,
-    '<div class="dupla"><div class="campo"><label for="aT">Tipo</label><select id="aT">' + Object.keys(RH_TIPO_ASO).map(k => '<option value="' + k + '">'
+    '<div class="dupla"><div class="campo"><label for="aT">Tipo</label><select id="aT">' + Object.keys(RH_TIPO_ASO).map(k => '<option value="' + k + '"' + sel(R.tipo, k) + '>'
       + esc(RH_TIPO_ASO[k]) + '</option>').join('') + '</select></div>'
-    + '<div class="campo"><label for="aD">Data do exame</label><input id="aD" type="date" max="' + isoHoje() + '"></div></div>'
-    + '<div class="dupla"><div class="campo"><label for="aR">Resultado</label><select id="aR"><option value="apto">Apto</option><option value="inapto">Inapto</option></select></div>'
-    + '<div class="campo"><label for="aM">Médico (opcional)</label><input id="aM" type="text" maxlength="120"></div></div>'
-    + '<label class="chk"><input type="checkbox" id="aAl"> Apto para trabalho em altura (NR-35)</label>'
-    + '<label class="chk"><input type="checkbox" id="aCo"> Apto para espaço confinado (NR-33)</label>'
-    + '<div class="campo"><label for="aO">Observação (opcional)</label><input id="aO" type="text" maxlength="200"></div>'
+    + '<div class="campo"><label for="aD">Data do exame</label><input id="aD" type="date" max="' + isoHoje() + '" value="' + esc(R.data_exame || '') + '"></div></div>'
+    + '<div class="dupla"><div class="campo"><label for="aR">Resultado</label><select id="aR"><option value="apto">Apto</option><option value="inapto"' + sel(R.resultado, 'inapto') + '>Inapto</option></select></div>'
+    + '<div class="campo"><label for="aM">Médico (opcional)</label><input id="aM" type="text" maxlength="120" value="' + esc(R.medico || '') + '"></div></div>'
+    + '<label class="chk"><input type="checkbox" id="aAl"' + (R.apto_altura ? ' checked' : '') + '> Apto para trabalho em altura (NR-35)</label>'
+    + '<label class="chk"><input type="checkbox" id="aCo"' + (R.apto_confinado ? ' checked' : '') + '> Apto para espaço confinado (NR-33)</label>'
+    + '<div class="campo"><label for="aO">Observação (opcional)</label><input id="aO" type="text" maxlength="200" value="' + esc(R.observacao || '') + '"></div>'
     + '<div class="campo"><label for="aF">PDF do ASO</label><input id="aF" type="file" accept="application/pdf,image/*"></div>'
     + '<p class="nota" id="aVal">A validade é calculada: data do exame + ' + esc(f.ficha.aso_periodicidade_meses) + ' meses (a periodicidade do PCMSO para esta pessoa). Demissional não tem validade.</p>'
-    + '<p class="nota" id="rhMsg" style="color:var(--crit)"></p>',
+    + '<p class="nota" id="rhMsg" style="color:var(--crit)">' + esc(R._erro || '') + '</p>',
     [ { label:'Cancelar', onClick: fecharModal },
       { label:'Gravar ASO', pri:true, onClick: async () => {
           const g = id => document.getElementById(id);
+          const dados = { tipo: g('aT').value, data_exame: g('aD').value, resultado: g('aR').value, apto_altura: g('aAl').checked,
+                          apto_confinado: g('aCo').checked, medico: g('aM').value, observacao: g('aO').value };
+          let arq = null;
+          try{ arq = await rhArqDoInput(g('aF'), false); }catch(e){ g('rhMsg').textContent = e.message; return; }
+          if (!arq){
+            if (!(await confirmar('ASO sem PDF', '<p>Gravar sem o PDF? O kit do cliente vai mostrar este ASO em vermelho até alguém anexar.</p>', 'Gravar sem PDF'))){
+              rhNovoAso(f, dados); return;
+            }
+          }
           try{
-            const arq = await rhArqDoInput(g('aF'), false);
-            if (!arq && !(await confirmar('ASO sem PDF', '<p>Gravar sem o PDF? O kit do cliente vai mostrar este ASO em vermelho até alguém anexar.</p>', 'Gravar sem PDF'))) return;
-            const r = await rpc('tf_rh_lancar_aso', { p_usuario: f.usuario.id, p_dados: { tipo: g('aT').value, data_exame: g('aD').value,
-              resultado: g('aR').value, apto_altura: g('aAl').checked, apto_confinado: g('aCo').checked, medico: g('aM').value, observacao: g('aO').value },
-              p_arquivo: arq });
+            const r = await rpc('tf_rh_lancar_aso', { p_usuario: f.usuario.id, p_dados: dados, p_arquivo: arq });
             fecharModal(); toast('ASO gravado' + (r.validade ? ' — validade ' + dataBR(r.validade) : '') + '.', 'ok'); contarRH(); rhRecarregar();
-          }catch(e){ g('rhMsg').textContent = e.message; }
+          }catch(e){
+            if (arq) g('rhMsg').textContent = e.message;
+            else rhNovoAso(f, Object.assign({}, dados, { _erro: e.message }));   // a pergunta fechou a janela: volta com tudo preenchido
+          }
       } } ]);
   const d = document.getElementById('aD'), t = document.getElementById('aT'), v = document.getElementById('aVal');
   const ac = () => { if (t.value === 'demissional'){ v.textContent = 'Demissional não tem validade e não conta como ASO vigente.'; return; }
-    if (!d.value) return; const x = new Date(d.value + 'T12:00:00'); x.setMonth(x.getMonth() + Number(f.ficha.aso_periodicidade_meses));
-    v.textContent = 'Validade: ' + dataBR(isoHoje(x)) + ' (exame + ' + f.ficha.aso_periodicidade_meses + ' meses do PCMSO).'; };
+    if (!d.value) return;
+    v.textContent = 'Validade: ' + dataBR(rhSomarMeses(d.value, f.ficha.aso_periodicidade_meses)) + ' (exame + ' + f.ficha.aso_periodicidade_meses + ' meses do PCMSO).'; };
   d.addEventListener('change', ac); t.addEventListener('change', ac);
+  if (rasc){ ac(); Nucleo.janela.mexida(true); }
 }
 
 function rhFTrein(c, f){
@@ -5655,7 +5931,7 @@ function rhFTrein(c, f){
     + (pend.length ? '<div class="aviso" style="margin:10px 0">Aguardando a confirmação dele no TapField: ' + pend.map(l => esc(l.tema + ' de ' + dataBR(l.data))).join(' · ') + '</div>' : '')
     + '<div class="secTit">Registros</div><div class="ccLista" id="trL"></div>';
   document.getElementById('trNovo').addEventListener('click', () => rhNovoTreinamento(f));
-  document.getElementById('trLista').addEventListener('click', () => { RH.aba = 'trein'; RH.trAba = 'listas'; irPara('rhs'); });
+  document.getElementById('trLista').addEventListener('click', () => rhIncluirEmLista(f));   // G10 (S207, issue 192 item 4)
   const el = document.getElementById('trL');
   if (!T.length){ el.innerHTML = '<p class="nota" style="padding:12px">Nenhum treinamento registrado.</p>'; return; }
   T.forEach(t => {
@@ -5673,6 +5949,29 @@ function rhFTrein(c, f){
     if (!t.anulado_em) bt('Anular', () => rhAnularRegistro('treinamento', t.id, t.nome + ' de ' + dataBR(t.data), rhRecarregar));
     el.appendChild(d);
   });
+}
+
+// G10 (S207, issue 192 item 4): "Incluir numa lista interna" escolhe a lista em aberto (ou cria uma nova) já com a pessoa
+async function rhIncluirEmLista(f){
+  let L; try{ L = await rpc('tf_rh_sessoes', { p_limite: 200 }); }catch(e){ toast(e.message, 'err'); return; }
+  const uid = f.usuario.id;
+  const abertas = (L || []).filter(x => !x.cancelada_em && (x.participantes || []).some(p => p.status === 'aguardando')
+    && !(x.participantes || []).some(p => p.usuario_id === uid && p.status !== 'retirado'));
+  abrirModal('Incluir numa lista interna — ' + f.usuario.nome,
+    '<p class="nota" style="margin-top:0">Escolha a lista em aberto (com participante ainda por confirmar) ou crie uma nova já com '
+    + esc(f.usuario.nome.split(' ')[0]) + ' marcado(a). Ele(a) confirma a presença no TapField, com o PIN.</p>'
+    + (abertas.length ? '<div class="ccLista">' + abertas.map(x => { const pt = (x.participantes || []).filter(p => p.status !== 'retirado');
+        return '<div class="rhLin"><span class="t"><b>' + esc(x.tema) + '</b> — ' + esc(dataBR(x.data)) + '<small>' + pt.filter(p => p.status === 'confirmado').length
+          + '/' + pt.length + ' confirmaram</small></span><span class="a"><button class="btn mini pri" type="button" data-sess="' + esc(x.id) + '">Incluir nesta</button></span></div>'; }).join('') + '</div>'
+      : '<p class="nota">Nenhuma lista em aberto sem esta pessoa.</p>')
+    + '<p class="nota" id="rhMsg" style="color:var(--crit)"></p>',
+    [ { label:'Cancelar', onClick: fecharModal },
+      { label:'Nova lista com esta pessoa', pri: !abertas.length, onClick: () => { fecharModal(); rhNovaSessao(rhRecarregar, [uid]); } } ]);
+  document.querySelectorAll('#mBody [data-sess]').forEach(b => b.addEventListener('click', () => _semDuploEnvio_(b, async () => {
+    try{ await rpc('tf_rh_sessao_participantes', { p_sessao: b.dataset.sess, p_incluir: [uid], p_tirar: null });
+         fecharModal(); toast(f.usuario.nome.split(' ')[0] + ' incluído(a) na lista.', 'ok'); contarRH(); rhRecarregar(); }
+    catch(e){ document.getElementById('rhMsg').textContent = e.message; }
+  })));
 }
 
 async function rhNovoTreinamento(f){
