@@ -43,7 +43,7 @@ def _erro(msg):
 
 def chamar(espera=None, teto=None, janela=180):
     espera = espera if espera is not None else int(os.environ.get("PORTAO_ESPERA", "15"))
-    teto = teto if teto is not None else int(os.environ.get("PORTAO_TETO", str(50 * 60)))
+    teto = teto if teto is not None else int(os.environ.get("PORTAO_TETO", str(80 * 60)))   # S213: 50 → 80 min
     tok = os.environ.get("PORTAO_TOKEN", "").strip()
     repo, pr, sha = os.environ.get("REPO", ""), os.environ.get("PR", ""), os.environ.get("SHA", "")
     cab = os.environ.get("HEAD_REPO", repo)
