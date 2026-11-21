@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapField · S69</title>
+<title>TapField · S70</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -622,9 +622,9 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 #filaTxt{cursor:pointer}
 </style>
 <!-- S33 · N1a: o núcleo comum (login, PIN, trava). O ?v= é de propósito: ver o cabeçalho do nucleo.js. -->
-<link rel="stylesheet" href="../nucleo/nucleo.css?v=N16">
-<script src="../nucleo/config.js?v=N16"></script>
-<script src="../nucleo/nucleo.js?v=N16"></script>
+<link rel="stylesheet" href="../nucleo/nucleo.css?v=N17">
+<script src="../nucleo/config.js?v=N17"></script>
+<script src="../nucleo/nucleo.js?v=N17"></script>
 <script src="../nucleo/modulos.js?v=M4"></script>
 </head>
 <body>
@@ -686,7 +686,8 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S69';   // S69 (S207): Rodada R13 da auditoria (TapSeg) — issue 195 (a Ficha de EPI do celular mostra a devolução em partes: "2 descarte · 1 não devolvido"; 627)
+const APP_VERSION = 'S70';   // S70 (S212): Rodada R15 da auditoria (PIN provisório e digital) — issues 123 (a entrega e a devolução de EPI e uniforme com a digital ou o PIN, pela confirmação do servidor; 628), 194 (o PIN provisório e o vencido pedem a troca ali mesmo e voltam para confirmar; "Trocar meu PIN" pela troca da trava; receita com "Enviando…"; o PDF do ASO, da receita e do certificado no visualizador do app; o vídeo com "Tentar de novo"; as dúvidas que não carregaram) e 161 (a folha e o recibo com o PIN provisório); núcleo N17
+// const APP_VERSION = 'S69';   // S69 (S207): Rodada R13 da auditoria (TapSeg) — issue 195 (a Ficha de EPI do celular mostra a devolução em partes: "2 descarte · 1 não devolvido"; 627)
 // const APP_VERSION = 'S68';   // S68 (S205): Rodada R12 da auditoria (TapHub) — issue 156 (o "Sair" e o "Sair deste celular" do núcleo: encerram o acesso também no servidor; no celular da empresa, a fila continua com a sessão de quem fez); núcleo N15
 // const APP_VERSION = 'S67';   // S67 (S202): Rodada R10 da auditoria (TapFlow celular) — issues 106 (a foto da fila renova o acesso antes e não se perde com a sessão vencida; as que ficaram no aparelho voltam), 107 e 177 (levantamento, extras, execução e fotos pela fila do núcleo: o recusado fica em "Envios parados" com o motivo; o rascunho fecha quando vai para a fila; o "já recebi" com outra quantidade avisa), 178 (trocar foto e cancelar não perde a foto; fotos sem dono saem do aparelho; o catálogo volta para o formulário; TAG digitada no levantamento) e 207 (a medição avisa a quantidade sem o porquê; sem sinal o boletim é rascunho; o PDF não se repete; a assinatura sai do aparelho depois de subir)
 // const APP_VERSION = 'S66';   // S66 (S201): Rodada R9 da auditoria (TapRH) — issue 165 (Folga e férias com "Carregando…" e as abas; Diárias: dois toques na seta voltam dois dias, com "Carregando…") e 141 parte 2 (o celular conta ao escritório a batida parada na fila)
@@ -4882,28 +4883,20 @@ function pintarSeg(){
   if (!temPin){
     const p = document.createElement('div'); p.className = 'painel pinNovo';
     p.innerHTML = '<div class="et">Crie o seu PIN</div>'
-      + '<p style="margin:6px 0 10px">Seis números que <b>só você</b> sabe. É com ele que você confirma cada entrega de EPI — '
+      + '<p style="margin:6px 0 10px">Seis números que <b>só você</b> sabe. Com ele (ou com a digital do seu celular) você confirma cada entrega de EPI — '
       + 'vale como a sua assinatura na ficha. Não use sequência (123456) nem número repetido (111111).</p>'
-      + '<div class="campo"><label for="pn1">Novo PIN</label><input id="pn1" type="password" inputmode="numeric" maxlength="6" autocomplete="off" pattern="[0-9]*"></div>'
-      + '<div class="campo"><label for="pn2">Repita o PIN</label><input id="pn2" type="password" inputmode="numeric" maxlength="6" autocomplete="off" pattern="[0-9]*"></div>'
-      + '<button class="btn pri" type="button" id="pnOk">Criar PIN</button>';
+      + '<button class="btn pri" type="button" id="pnOk">Criar o meu PIN</button>';
     m.appendChild(p);
-    const b = p.querySelector('#pnOk');
-    b.addEventListener('click', async () => {
-      const a = p.querySelector('#pn1').value, c = p.querySelector('#pn2').value;
-      if (!/^\d{6}$/.test(a)){ toast('O PIN tem 6 números.', 'err'); return; }
-      if (a !== c){ toast('Os dois PINs não batem.', 'err'); return; }
-      b.disabled = true;
-      try{ const r = await rpc1('tf_rh_meu_pin_definir', { p_pin_novo: a, p_pin_atual: null });
-           if (r && r.status !== 'ok') throw new Error('Não deu para criar o PIN.');
-           toast('PIN criado.', 'ok'); await recarregarSeg(); }
-      catch(e){ toast(e.message, 'err'); b.disabled = false; }
-    });
+    // S70 (issue 194): o PIN se cria pela tela da trava do TapHub (a mesma do início), que acerta também o PIN guardado no aparelho
+    p.querySelector('#pnOk').addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => {
+      const novo = await Nucleo.pin.trocar({ criar: true });
+      if (novo) await recarregarSeg();
+    }));
   } else if (bloq){
     const p = document.createElement('div'); p.className = 'painel';
     p.style.borderLeft = '4px solid var(--crit)';
     p.innerHTML = '<div class="et" style="color:var(--crit)">PIN travado</div><p style="margin:6px 0 0">Cinco tentativas erradas. '
-      + 'Tente de novo depois de ' + esc(rhDTf(SEG.pin.bloqueado_ate).slice(11)) + '. Esqueceu? Peça um novo em "Esqueci o PIN", na tela do PIN.</p>';
+      + 'Tente de novo depois de ' + esc(rhDTf(SEG.pin.bloqueado_ate).slice(11)) + ' — com a digital dá para confirmar agora. Esqueceu? Peça um novo em "Esqueci o PIN: pedir um novo", na tela do PIN.</p>';
     m.appendChild(p);
   }
 
@@ -4911,9 +4904,9 @@ function pintarSeg(){
   const pend = SEG.pendentes || [];
   const lotes = {};
   pend.forEach(e => { (lotes[e.lote] = lotes[e.lote] || []).push(e); });
-  Object.keys(lotes).forEach(k => m.appendChild(painelLote(lotes[k], temPin && !bloq)));
-  // S18 · R4 — a devolução dos EPIs, com o PIN (ou "não concordo")
-  (SEG.devolucoes || []).forEach(dv => m.appendChild(painelDevolucao(dv, temPin && !bloq)));
+  Object.keys(lotes).forEach(k => m.appendChild(painelLote(lotes[k], temPin)));
+  // S18 · R4 — a devolução dos EPIs, com a digital ou o PIN (ou "não concordo"); S70: com o PIN travado, a digital ainda confirma
+  (SEG.devolucoes || []).forEach(dv => m.appendChild(painelDevolucao(dv, temPin)));
   // S17 · presença em treinamento, com o PIN
   (SEG.presencas || []).forEach(s => m.appendChild(painelPresenca(s, temPin && !bloq)));
 
@@ -4958,7 +4951,7 @@ function pintarSeg(){
       : 'Na sua ficha: não usa óculos de grau. Se usa, mande a receita.') + '</p>'
     + (SEG.receitas || []).map(r => '<div class="epiLin"><b>' + esc(r.nome) + '</b><small>enviada em ' + esc(rhDTf(r.criado_em))
       + '</small><button class="lnk" type="button" data-rec="' + esc(r.id) + '">abrir</button></div>').join('')
-    + '<label class="btn sm" style="cursor:pointer;margin-top:8px">Enviar receita nova (foto ou PDF)'
+    + '<label class="btn sm" id="recLbl" style="cursor:pointer;margin-top:8px"><span>Enviar receita nova (foto ou PDF)</span>'
     + '<input type="file" id="recArq" accept="image/*,application/pdf" hidden></label>'
     + '<p style="font-size:12.5px;color:var(--ink-3);margin:6px 0 0">Receita nova avisa o escritório para encomendar o óculos; o atual vale até o novo chegar. '
     + 'Só você e quem o escritório autorizou veem a receita.</p>';
@@ -4970,9 +4963,14 @@ function pintarSeg(){
     catch(e){ toast(e.message, 'err'); }
     s.disabled = false;
   }));
-  cad.querySelectorAll('[data-rec]').forEach(b => b.addEventListener('click', () => abrirArquivoRH(b.dataset.rec)));
+  cad.querySelectorAll('[data-rec]').forEach(b => b.addEventListener('click', () => abrirArquivoRH(b.dataset.rec, 'Receita')));
   cad.querySelector('#recArq').addEventListener('change', async ev => {
-    const f = ev.target.files && ev.target.files[0]; if (!f) return;
+    const inp = ev.target, f = inp.files && inp.files[0]; if (!f) return;
+    // S70 (issue 194, item 5): "Enviando…" e o botão travado enquanto a foto sobe (antes a pessoa tocava de novo)
+    const lbl = cad.querySelector('#recLbl'), txt = lbl.querySelector('span'), antes = txt.textContent;
+    if (lbl.classList.contains('enviando')) return;
+    lbl.classList.add('enviando'); lbl.style.pointerEvents = 'none'; lbl.style.opacity = '.6'; inp.disabled = true; txt.textContent = 'Enviando…';
+    const solta = () => { lbl.classList.remove('enviando'); lbl.style.pointerEvents = ''; lbl.style.opacity = ''; inp.disabled = false; inp.value = ''; txt.textContent = antes; };
     try{
       let mime = 'image/jpeg', dados;
       if (f.type === 'application/pdf'){
@@ -4982,8 +4980,8 @@ function pintarSeg(){
           fr.onerror = () => er(new Error('Não consegui ler o arquivo.')); fr.readAsDataURL(f); });
       } else dados = await reduzirFoto(f, 1800, 0.85);
       await rpc1('tf_rh_enviar_receita', { p_usuario: meuId(), p_nome: f.name || 'receita', p_mime: mime, p_conteudo: dados });
-      toast('Receita enviada. O escritório foi avisado.', 'ok'); await recarregarSeg();
-    }catch(e){ toast(e.message, 'err'); }
+      toast('Receita enviada. O escritório foi avisado.', 'ok'); solta(); await recarregarSeg();
+    }catch(e){ solta(); toast(e.message, 'err'); }
   });
 
   // 5 · a minha ficha e o PIN
@@ -4999,7 +4997,11 @@ function pintarSeg(){
     b.disabled = false;
   });
   const bt = dc.querySelector('#bTrocaPin');
-  if (bt) bt.addEventListener('click', trocarPin);
+  // S70 (issue 194, item 2): a mesma troca da trava do TapHub (aceita o PIN provisório e acerta o PIN guardado no aparelho)
+  if (bt) bt.addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => {
+    const novo = await Nucleo.pin.trocar();
+    if (novo) await recarregarSeg();
+  }));
   // S17 · treinamentos: vídeos da Integração e dúvidas frequentes
   const ht = document.createElement('div'); ht.className = 'sec'; ht.textContent = 'Treinamentos'; m.appendChild(ht);
   m.appendChild(painelTreinamentos());
@@ -5020,8 +5022,8 @@ function painelLote(itens, podeConfirmar){
     + (itens.some(e => e.uniforme) && itens.some(e => !e.uniforme) ? '<details class="termo" open><summary>Recebimento de uniforme</summary><p class="tUni"></p></details>' : '')
     + '<details class="termo"><summary>Orientações de uso</summary><p></p></details>'
     + (podeConfirmar
-      ? '<div class="campo" style="margin-top:12px"><label>Seu PIN</label><input class="pinC" type="password" inputmode="numeric" maxlength="6" autocomplete="off" pattern="[0-9]*"></div>'
-        + '<button class="btn pri" type="button" data-conf>Confirmo o recebimento</button>'
+      ? '<div class="segConf" style="margin-top:12px"><button class="btn pri" type="button" data-conf>Confirmo o recebimento</button>'
+        + '<p style="font-size:12.5px;color:var(--ink-3);margin:6px 0 0">Com a digital do celular ou o seu PIN.</p></div>'
       : '<p style="font-size:13px;color:var(--warn);margin:10px 0 0">Crie o seu PIN (acima) para confirmar.</p>');
   const ps = p.querySelectorAll('details.termo p:not(.tUni)');
   const eE = itens.find(e => !e.uniforme) || e0, eU = itens.find(e => e.uniforme);
@@ -5042,26 +5044,70 @@ function painelLote(itens, podeConfirmar){
     catch(er){ toast(er.message, 'err'); b.disabled = false; }
   }));
   const bc = p.querySelector('[data-conf]');
-  if (bc) bc.addEventListener('click', async () => {
-    const pin = p.querySelector('.pinC').value;
-    if (!/^\d{6}$/.test(pin)){ toast('Digite os 6 números do seu PIN.', 'err'); return; }
-    bc.disabled = true;
-    try{
-      const r = await rpc1('tf_rh_confirmar_entregas', { p_ids: itens.map(e => e.id), p_pin: pin });
-      if (r.status === 'ok'){ toast('Recebimento confirmado (' + r.n + ').', 'ok'); await recarregarSeg(); if (tela === 'lista') pintarLista(); return; }
-      if (r.status === 'pin_errado') toast('PIN errado. Restam ' + r.restantes + ' tentativa(s) antes de travar 15 minutos.', 'err');
-      else if (r.status === 'bloqueado') { toast('PIN travado por 15 minutos.', 'err'); await recarregarSeg(); return; }
-      else if (r.status === 'sem_pin') { toast('Crie o seu PIN antes.', 'err'); await recarregarSeg(); return; }
-      p.querySelector('.pinC').value = '';
-    }catch(e){ toast(e.message, 'err'); }
-    bc.disabled = false;
-  });
+  const ids = itens.map(e => e.id);
+  if (bc) bc.addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => {
+    const r = await confirmarSegF({ finalidade: 'epi_entrega', referencia: 'entrega ' + e0.lote,
+      titulo: 'Confirmar o recebimento', sub: itens.length === 1 ? itens[0].epi_nome : itens.length + ' itens',
+      gravar: conf => rpc1('tf_rh_confirmar_entregas_conf', { p_ids: ids, p_confirmacao: conf }),
+      antigo: pin => rpc1('tf_rh_confirmar_entregas', { p_ids: ids, p_pin: pin }),
+      cx: p.querySelector('.segConf'), rotulo: 'Confirmo o recebimento' });
+    if (r && r.status === 'ok'){ toast('Recebimento confirmado (' + r.n + ')' + seloMetodoF(r.metodo) + '.', 'ok'); await recarregarSeg(); if (tela === 'lista') pintarLista(); }
+  }));
   return p;
 }
 
+/** S70 (issue 123): a entrega e a devolução de EPI se confirmam como o espelho do ponto — a digital do celular
+ *  (conferida no servidor pela Edge Function) ou o PIN (no banco), pelo Nucleo.confirmarPessoa; o banco gasta a
+ *  confirmação uma vez, só para aquele lote, e grava o método, o aparelho e a hora do servidor (passkey, decisões 6
+ *  e 12: sem localização). O PIN provisório pede a troca na própria tela e volta para confirmar (núcleo N17).
+ *  Banco sem a 628 (a função nova não existe): cai no jeito antigo, com o PIN digitado ali (antigo).
+ *  Devolve a resposta do banco, ou null (cancelou, sem sinal ou erro já avisado). */
+const semFuncaoF = e => !!e && (e.status === 404 || /Could not find the function|schema cache/i.test(e.message || ''));
+const seloMetodoF = m => m === 'digital' || m === 'passkey' ? ' com a digital' : m === 'pin' ? ' com o PIN' : '';
+async function confirmarSegF(o){
+  if (o.cx && o.cx.dataset.antigo){ return null; }
+  const c = await Nucleo.confirmarPessoa({ modo: 'servidor', finalidade: o.finalidade, referencia: o.referencia, titulo: o.titulo, sub: o.sub || '' });
+  if (!c || !c.ok){ if (c && c.semSinal) toast('Sem sinal: a confirmação precisa de internet. Tente de novo com sinal.', 'err'); return null; }
+  try{ return await o.gravar(c.confirmacao); }
+  catch(e){
+    if (semFuncaoF(e) && o.cx && o.antigo){ pinAntigoSegF(o); return null; }
+    toast(e.message, 'err'); return null;
+  }
+}
+/** O jeito de antes (banco sem a 628): o PIN digitado no próprio quadro, com a troca do provisório do núcleo. */
+function pinAntigoSegF(o){
+  const cx = o.cx; cx.dataset.antigo = '1';
+  cx.innerHTML = '<div class="campo"><label>Seu PIN</label><input class="pinC" type="password" inputmode="numeric" maxlength="6" autocomplete="off" pattern="[0-9]*"></div>'
+    + '<button class="btn pri" type="button" data-antigo>' + esc(o.rotulo || 'Confirmar') + '</button>';
+  toast('Digite o seu PIN para confirmar.', 'ok');
+  const b = cx.querySelector('[data-antigo]');
+  b.addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => {
+    const inp = cx.querySelector('.pinC'), pin = inp.value;
+    if (!/^\d{6}$/.test(pin)){ toast('Digite os 6 números do seu PIN.', 'err'); return; }
+    try{
+      const r = await Nucleo.pin.assinar(o.antigo, pin);
+      if (r && r.status === 'ok'){ toast('Confirmado' + seloMetodoF('pin') + '.', 'ok'); await recarregarSeg(); return; }
+      inp.value = '';
+      const msg = Nucleo.pin.msg(r); if (msg) toast(msg, 'err');
+      if (r && r.status === 'bloqueado') await recarregarSeg();
+    }catch(e){ toast(e.message, 'err'); }
+  }));
+}
+/** S70 (issues 161 e 194): as telas que ainda assinam só com o PIN digitado (a presença em treinamento, a folha e o
+ *  recibo): o provisório pede a troca e volta a assinar; o vencido e os outros dizem o que houve (o campo não some calado). */
+async function assinarComPinF(inp, chamar){
+  const pin = inp.value;
+  if (!/^\d{6}$/.test(pin)){ toast('Digite os 6 números do seu PIN.', 'err'); return null; }
+  const r = await Nucleo.pin.assinar(chamar, pin);
+  if (r && r.status === 'ok') return r;
+  inp.value = '';
+  const msg = Nucleo.pin.msg(r); if (msg) toast(msg, 'err');
+  return r;
+}
+
 /** S18 · R4 — a devolução para confirmar (item 8: "o funcionário confirma com
- *  a digital" — hoje o PIN). Um PIN para o lote todo; "Não concordo" pede o
- *  motivo e avisa o Bruno. */
+ *  a digital"; desde o S70, a digital ou o PIN, pela confirmação do servidor). Uma
+ *  confirmação para o lote todo; "Não concordo" pede o motivo e avisa o escritório. */
 const RH_DEST_F = { reuso:'devolvido para reuso', descarte:'devolvido para descarte', nao_devolvido:'NÃO devolvido' };
 function painelDevolucao(dv, podeConfirmar){
   const p = document.createElement('div'); p.className = 'painel lote';
@@ -5075,26 +5121,20 @@ function painelDevolucao(dv, podeConfirmar){
     + '<p style="font-size:13px;margin:10px 0 0">Ao confirmar, você declara que a lista acima está certa: o que devolveu e o que não devolveu. '
     + 'A data entra na sua ficha de EPI.</p>'
     + (podeConfirmar
-      ? '<div class="campo" style="margin-top:12px"><label>Seu PIN</label><input class="pinD" type="password" inputmode="numeric" maxlength="6" autocomplete="off" pattern="[0-9]*"></div>'
-        + '<button class="btn pri" type="button" data-dconf>Confirmo a devolução</button> '
-        + '<button class="btn" type="button" data-dnao>Não concordo</button>'
+      ? '<div class="segConf" style="margin-top:12px"><button class="btn pri" type="button" data-dconf>Confirmo a devolução</button>'
+        + '<p style="font-size:12.5px;color:var(--ink-3);margin:6px 0 0">Com a digital do celular ou o seu PIN.</p></div>'
+        + '<button class="btn" type="button" data-dnao style="margin-top:8px">Não concordo</button>'
       : '<p style="font-size:13px;color:var(--warn);margin:10px 0 0">Crie o seu PIN (acima) para confirmar.</p>'
         + '<button class="btn" type="button" data-dnao style="margin-top:8px">Não concordo</button>');
   const bc = p.querySelector('[data-dconf]');
-  if (bc) bc.addEventListener('click', async () => {
-    const pin = p.querySelector('.pinD').value;
-    if (!/^\d{6}$/.test(pin)){ toast('Digite os 6 números do seu PIN.', 'err'); return; }
-    bc.disabled = true;
-    try{
-      const r = await rpc1('tf_rh_confirmar_devolucao', { p_lote: dv.lote, p_pin: pin });
-      if (r.status === 'ok'){ toast('Devolução confirmada.', 'ok'); await recarregarSeg(); return; }
-      if (r.status === 'pin_errado') toast('PIN errado. Restam ' + r.restantes + ' tentativa(s) antes de travar 15 minutos.', 'err');
-      else if (r.status === 'bloqueado') { toast('PIN travado por 15 minutos.', 'err'); await recarregarSeg(); return; }
-      else if (r.status === 'sem_pin') { toast('Crie o seu PIN antes.', 'err'); await recarregarSeg(); return; }
-      p.querySelector('.pinD').value = '';
-    }catch(e){ toast(e.message, 'err'); }
-    bc.disabled = false;
-  });
+  if (bc) bc.addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => {
+    const r = await confirmarSegF({ finalidade: 'epi_devolucao', referencia: 'devolucao ' + dv.lote,
+      titulo: 'Confirmar a devolução', sub: 'Devolução em ' + dataBR(dv.data),
+      gravar: conf => rpc1('tf_rh_confirmar_devolucao_conf', { p_lote: dv.lote, p_confirmacao: conf }),
+      antigo: pin => rpc1('tf_rh_confirmar_devolucao', { p_lote: dv.lote, p_pin: pin }),
+      cx: p.querySelector('.segConf'), rotulo: 'Confirmo a devolução' });
+    if (r && r.status === 'ok'){ toast('Devolução confirmada' + seloMetodoF(r.metodo) + '.', 'ok'); await recarregarSeg(); }
+  }));
   const bn = p.querySelector('[data-dnao]');
   if (bn) bn.addEventListener('click', async () => {
     const rr = await perguntar('A devolução não confere', '<div class="campo"><label for="dvObs">O que não confere? (o escritório vê)</label>'
@@ -5109,40 +5149,15 @@ function painelDevolucao(dv, podeConfirmar){
   return p;
 }
 
-function trocarPin(){
-  const m = document.getElementById('main');
-  const p = document.createElement('div'); p.className = 'painel'; p.id = 'pnTroca';
-  const velho = document.getElementById('pnTroca'); if (velho) velho.remove();
-  p.innerHTML = '<div class="et">Trocar o PIN</div>'
-    + '<div class="campo" style="margin-top:8px"><label for="pa">PIN atual</label><input id="pa" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></div>'
-    + '<div class="campo"><label for="pb">PIN novo</label><input id="pb" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></div>'
-    + '<div class="campo"><label for="pc">Repita o novo</label><input id="pc" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></div>'
-    + '<div class="linha"><button class="btn" type="button" id="pX">Cancelar</button><button class="btn pri" type="button" id="pOk">Trocar</button></div>'
-    + '<p style="font-size:12.5px;color:var(--ink-3);margin:8px 0 0">Esqueceu o atual? Peça um novo em "Esqueci o PIN", na tela do PIN.</p>';
-  m.insertBefore(p, m.children[1] || null);
-  p.scrollIntoView({ behavior:'smooth', block:'start' });
-  p.querySelector('#pX').addEventListener('click', () => p.remove());
-  p.querySelector('#pOk').addEventListener('click', async ev => {
-    const a = p.querySelector('#pa').value, b = p.querySelector('#pb').value, c = p.querySelector('#pc').value;
-    if (!/^\d{6}$/.test(b)){ toast('O PIN novo tem 6 números.', 'err'); return; }
-    if (b !== c){ toast('Os dois PINs novos não batem.', 'err'); return; }
-    const bt = ev.currentTarget; bt.disabled = true;   // depois do await o currentTarget é null (S17)
-    try{ const r = await rpc1('tf_rh_meu_pin_definir', { p_pin_novo: b, p_pin_atual: a });
-         if (r.status === 'ok'){ toast('PIN trocado.', 'ok'); await recarregarSeg(); return; }
-         toast(r.status === 'pin_errado' ? 'PIN atual errado. Restam ' + r.restantes + ' tentativa(s).' : 'PIN travado por 15 minutos.', 'err'); }
-    catch(e){ toast(e.message, 'err'); }
-    bt.disabled = false;
-  });
-}
-
-async function abrirArquivoRH(id){
-  try{
+// S70 (issue 194, item 6): o ASO, a receita e o certificado abrem no visualizador do próprio app (o dos Documentos),
+// com Fechar e Baixar — no iPhone com o app instalado, o PDF "solto" abria por cima do app sem botão de voltar.
+const tituloLinF = b => { const l = b.closest('.epiLin'), t = l && l.querySelector('b'); return (t && t.textContent) || 'Documento'; };
+async function abrirArquivoRH(id, titulo){
+  return visorArquivoF(titulo || 'Documento', async () => {
     const a = await rpc('tf_rh_arquivo', { p_id: id });
     const blob = await (await fetch(a.conteudo)).blob();
-    const url = URL.createObjectURL(blob);
-    const w = window.open(url, '_blank');
-    if (!w) location.href = url;
-  }catch(e){ toast(e.message, 'err'); }
+    return { blob, mime: a.mime || blob.type, nome: a.nome };
+  });
 }
 
 let _jspdfF = null;
@@ -5207,7 +5222,7 @@ async function minhaFichaPDF(){
     x += col[3].w;
     doc.setFontSize(6.8);
     doc.text(doc.splitTextToSize('Confirmado no celular do funcionário em ' + rhDTf(l.confirmado_em)
-      + (l.confirmado_metodo === 'pin' ? ' (PIN)' : '') + ' · lançado por ' + (l.lancado_por_nome || '?'), col[4].w - 2.4), x + 1.2, y + 4);
+      + (l.confirmado_metodo === 'pin' ? ' (PIN)' : l.confirmado_metodo === 'passkey' ? ' (digital)' : '') + ' · lançado por ' + (l.lancado_por_nome || '?'), col[4].w - 2.4), x + 1.2, y + 4);
     y += 12;
   });
   rod();
@@ -5274,20 +5289,13 @@ function painelPresenca(s, podeConfirmar){
   const bv = p.querySelector('[data-vid]');
   if (bv) bv.addEventListener('click', () => { const v = vids.find(x => !x.visto); if (v) pintarVideo(v); });
   const bc = p.querySelector('[data-conf]');
-  if (bc) bc.addEventListener('click', async () => {
-    const pin = p.querySelector('.pinC').value;
-    if (!/^\d{6}$/.test(pin)){ toast('Digite os 6 números do seu PIN.', 'err'); return; }
-    bc.disabled = true;
+  if (bc) bc.addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => {
     try{
-      const r = await rpc1('tf_rh_confirmar_presenca', { p_sessao: s.sessao_id, p_pin: pin });
-      if (r.status === 'ok'){ toast('Presença confirmada.', 'ok'); await recarregarSeg(); return; }
-      if (r.status === 'pin_errado') toast('PIN errado. Restam ' + r.restantes + ' tentativa(s) antes de travar 15 minutos.', 'err');
-      else if (r.status === 'bloqueado'){ toast('PIN travado por 15 minutos.', 'err'); await recarregarSeg(); return; }
-      else if (r.status === 'sem_pin'){ toast('Crie o seu PIN antes.', 'err'); await recarregarSeg(); return; }
-      p.querySelector('.pinC').value = '';
+      const r = await assinarComPinF(p.querySelector('.pinC'), pin => rpc1('tf_rh_confirmar_presenca', { p_sessao: s.sessao_id, p_pin: pin }));
+      if (r && r.status === 'ok'){ toast('Presença confirmada.', 'ok'); await recarregarSeg(); return; }
+      if (r && (r.status === 'bloqueado' || r.status === 'sem_pin')) await recarregarSeg();
     }catch(e){ toast(e.message, 'err'); }
-    bc.disabled = false;
-  });
+  }));
   return p;
 }
 
@@ -5298,7 +5306,7 @@ function painelPedidos(){
   const ST = { pedido:['alt','aguardando o escritório separar'], separado:['','separado'], recusado:['atr','recusado'], cancelado:['','cancelado'] };
   cx.innerHTML = '<button class="btn pri sm" type="button" id="bPedir">' + ((SEG.pediveis || []).some(e => e.uniforme) ? 'Pedir EPI ou uniforme' : 'Pedir EPI') + '</button>'
     + '<p style="font-size:12.5px;color:var(--ink-3);margin:6px 0 0">Estragou, perdeu ou o tamanho não serve? Peça aqui — o tamanho já vem da sua ficha. '
-    + 'Quando o escritório separar e deixar na sua mesa, a entrega aparece aqui em cima para você confirmar com o PIN.</p>'
+    + 'Quando o escritório separar e deixar na sua mesa, a entrega aparece aqui em cima para você confirmar com a digital ou o PIN.</p>'
     + P.map(x => { const st = ST[x.status] || ['', x.status];
         const sub = x.status === 'separado' ? (x.entrega_status === 'separado' ? 'separado — o escritório vai deixar na sua mesa'
                     : x.entrega_status === 'aguardando' ? 'entregue — confirme a entrega lá em cima'
@@ -5384,7 +5392,7 @@ function painelDocumentos(){
             : '<div class="chips" style="margin-top:4px"><span class="chip atr">previsto — ainda sem registro</span></div>') + '</div>'; }).join('')
       : '<p style="font-size:14px;margin:0">Nenhum treinamento registrado.</p>')
     + '<p style="font-size:12.5px;color:var(--ink-3);margin:8px 0 0">O ASO é dado de saúde: só você e quem o escritório autorizou o veem.</p>';
-  cx.querySelectorAll('[data-arq]').forEach(b => b.addEventListener('click', () => abrirArquivoRH(b.dataset.arq)));
+  cx.querySelectorAll('[data-arq]').forEach(b => b.addEventListener('click', () => abrirArquivoRH(b.dataset.arq, tituloLinF(b))));
   return cx;
 }
 
@@ -5452,13 +5460,25 @@ async function pintarVideo(v){
         // o último trecho, entre a última leitura e o fim (se não foi salto)
         if (ultimo != null && dur > ultimo && dur - ultimo <= 2.5) tocado += dur - ultimo;
         ultimo = null;
-        const st = document.getElementById('vidSt');
-        try{
-          const r = await rpc1('tf_rh_video_assistido', { p_video: v.id, p_segundos: Math.round(tocado), p_duracao: Math.round(dur) });
-          if (r.status === 'ok'){ contou = true; if (st) st.textContent = '✓ Contou: vídeo assistido até o fim.'; toast('Vídeo assistido.', 'ok');
-            try{ SEG = await rpc('tf_rh_meu_resumo', {}); }catch(e){} }
-          else if (st) st.textContent = r.msg || 'Não contou: assista sem pular.';
-        }catch(e){ if (st) st.textContent = e.message; }
+        // S70 (issue 194, item 7): se a gravação falhar (a internet caiu no fim), "Tentar de novo" manda o mesmo tempo
+        const seg = Math.round(tocado), durS = Math.round(dur);
+        const enviar = async () => {
+          const st = document.getElementById('vidSt');
+          if (st) st.textContent = 'Gravando…';
+          try{
+            const r = await rpc1('tf_rh_video_assistido', { p_video: v.id, p_segundos: seg, p_duracao: durS });
+            if (r.status === 'ok'){ contou = true; if (st) st.textContent = '✓ Contou: vídeo assistido até o fim.'; toast('Vídeo assistido.', 'ok');
+              try{ SEG = await rpc('tf_rh_meu_resumo', {}); }catch(e){} }
+            else if (st) st.textContent = r.msg || 'Não contou: assista sem pular.';
+          }catch(e){
+            if (!st) return;
+            st.textContent = (e.rede ? 'Não deu para gravar (sem sinal).' : e.message) + ' ';
+            const b = document.createElement('button'); b.type = 'button'; b.className = 'lnk'; b.id = 'vidDeNovo'; b.textContent = 'Tentar de novo';
+            b.addEventListener('click', () => { if (!contou) enviar(); });
+            st.appendChild(b);
+          }
+        };
+        await enviar();
       }
     } } });
   _ytTimer = setInterval(() => {
@@ -5489,10 +5509,19 @@ function blocoEnviarDuvida(videoId){
   });
   return d;
 }
+function faqErroF(msg, deNovo){
+  const d = document.createElement('div'); d.className = 'painel'; d.style.borderLeft = '4px solid var(--crit)';
+  d.innerHTML = '<p style="margin:0 0 8px;font-size:14px"></p><button class="btn sm" type="button">Tentar de novo</button>';
+  d.querySelector('p').textContent = 'Não deu para carregar as dúvidas: ' + msg;
+  d.querySelector('button').addEventListener('click', deNovo);
+  return d;
+}
 const faqItem = f => '<details class="termo faq"><summary>' + esc(f.pergunta) + '</summary><p>' + esc(f.resposta) + '</p></details>';
 async function pintarFaqDoVideo(videoId){
   await carregarFaq();
   const cx = document.getElementById('vidFaq'); if (!cx || tela !== 'video') return;
+  // S70 (issue 194, item 8): a busca que falhou não vira "nenhuma dúvida"
+  if (FAQ.erro){ cx.innerHTML = ''; cx.appendChild(faqErroF(FAQ.erro, () => pintarFaqDoVideo(videoId))); return; }
   const L = (FAQ.publicadas || []).filter(f => f.video_id === videoId);
   cx.innerHTML = L.length ? '<div class="painel">' + L.map(faqItem).join('') + '</div>' : '<p style="font-size:13px;color:var(--ink-3)">Nenhuma dúvida publicada sobre este vídeo.</p>';
   cx.appendChild(blocoEnviarDuvida(videoId));
@@ -5507,6 +5536,7 @@ async function pintarFaq(){
   m.innerHTML = '<p style="font-size:13px;color:var(--ink-3)">Carregando…</p>';
   await carregarFaq();
   if (tela !== 'faq') return;
+  if (FAQ.erro){ m.innerHTML = ''; m.appendChild(faqErroF(FAQ.erro, () => pintarFaq())); return; }   // S70 (issue 194, item 8)
   m.innerHTML = '<div class="campo"><label for="fqB">Buscar</label><input id="fqB" type="search" autocomplete="off" name="fq_nofill" '
     + 'data-lpignore="true" data-1p-ignore placeholder="ex.: manômetro, classe do fluido"></div><div id="fqL"></div>'
     + '<div class="sec">Minhas dúvidas</div><div id="fqM"></div>';
@@ -7750,7 +7780,7 @@ async function pintarDocsF(){
     + 'Termo do ponto e do recibo pendente</div><p style="margin:6px 0 0">Para assinar pelo celular, falta assinar no papel o termo do ponto e do recibo '
     + '(uma folha, uma vez só). Fale com o escritório. Você já pode abrir e conferir os documentos.</p></div>');
   if (!temPin && pend.length) m.insertAdjacentHTML('beforeend', '<div class="painel" style="border-left:4px solid var(--accent)"><div class="et">Crie o seu PIN</div>'
-    + '<p style="margin:6px 0 10px">A assinatura é com o mesmo PIN da Segurança.</p><button class="btn sm" type="button" id="dcPin">Ir para a Segurança</button></div>');
+    + '<p style="margin:6px 0 10px">A assinatura é com o mesmo PIN que destrava o TapHub.</p><button class="btn sm" type="button" id="dcPin">Criar o meu PIN</button></div>');
   if (bloq) m.insertAdjacentHTML('beforeend', '<div class="painel" style="border-left:4px solid var(--crit)"><div class="et" style="color:var(--crit)">PIN travado</div>'
     + '<p style="margin:6px 0 0">Cinco tentativas erradas. Tente depois de ' + esc(rhDTf(DOCS.pin.bloqueado_ate).slice(11)) + '.</p></div>');
   pend.forEach(d => m.appendChild(painelDocF(d, temPin && !bloq && DOCS.termo_ok)));
@@ -7767,7 +7797,10 @@ async function pintarDocsF(){
   if (!L.length) m.insertAdjacentHTML('beforeend', '<div class="vazio"><b>Nada por aqui ainda</b><p>Quando o escritório liberar a sua folha de ponto ou o seu recibo, eles aparecem aqui.</p></div>');
   m.querySelectorAll('[data-ver]').forEach(b => b.addEventListener('click', () => verDocF(L.find(d => d.id === b.dataset.ver))));
   m.querySelectorAll('[data-baixar]').forEach(b => b.addEventListener('click', () => baixarDocF(b.dataset.baixar)));
-  const bp = document.getElementById('dcPin'); if (bp) bp.addEventListener('click', pintarSeg);
+  const bp = document.getElementById('dcPin');
+  if (bp) bp.addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => {   // S70: pela tela da trava (núcleo N17)
+    if (await Nucleo.pin.trocar({ criar: true })){ await recarregarDocs(); pintarDocsF(); }
+  }));
   abasTopo(m, 'docs');
   meusDocsPessoaisF(m);   // S59
 }
@@ -7797,15 +7830,30 @@ async function meusDocsPessoaisF(m){
            'anexado em ' + rhDTf(d.criado_em).slice(0, 10)].filter(Boolean).join(' · ')) + '</small>'
     + '<div class="linha" style="margin-top:6px"><button class="btn sm" type="button" data-dp="' + esc(d.id) + '">Abrir</button></div></div>').join('');
   cx.querySelectorAll('[data-dp]').forEach(b => b.addEventListener('click', () => verDocPessoalF(V.find(x => x.id === b.dataset.dp))));
-  cx.querySelectorAll('[data-aso]').forEach(b => b.addEventListener('click', () => abrirArquivoRH(b.dataset.aso)));
+  cx.querySelectorAll('[data-aso]').forEach(b => b.addEventListener('click', () => abrirArquivoRH(b.dataset.aso, tituloLinF(b))));
 }
 /** Abre no próprio app (PDF pelo pdf.js, foto como imagem), com Baixar. */
 async function verDocPessoalF(d){
+  return visorArquivoF(d.rotulo + (d.descricao ? ' — ' + d.descricao : ''), async () => {
+    const a = await rpc1('tf_rh_doc_func_abrir', { p_id: d.id });
+    let blob;
+    if (a.conteudo) blob = await (await fetch(a.conteudo)).blob();
+    else {
+      const url = SUPABASE_URL + '/storage/v1/object/rh-docs/' + String(a.storage_path).split('/').map(encodeURIComponent).join('/');
+      const r = await stoGet(url);   // S62 · issue 142: renova também no HTTP 400 do acesso vencido
+      if (!r.ok) throw new Error('Não consegui abrir o arquivo. Tente de novo com internet.');
+      blob = await r.blob();
+    }
+    return { blob, mime: a.mime || blob.type, nome: a.nome || (d.rotulo + (a.mime === 'application/pdf' ? '.pdf' : '.jpg')) };
+  });
+}
+/** S70 · o visualizador do app para qualquer arquivo do RH e da Segurança: carregar() → { blob, mime, nome }. */
+async function visorArquivoF(titulo, carregar){
   const w = document.createElement('div'); w.className = 'docView';
   w.innerHTML = '<div class="dvTopo"><b></b><button type="button" class="dvX" aria-label="Fechar">✕</button></div>'
     + '<div class="dvPag"><p class="dvMsg">Abrindo…</p></div>'
     + '<div class="dvBar"><button type="button" class="btn sm" data-z>Ampliar</button><button type="button" class="btn sm" data-b disabled>Baixar</button></div>';
-  w.querySelector('.dvTopo b').textContent = d.rotulo + (d.descricao ? ' — ' + d.descricao : '');
+  w.querySelector('.dvTopo b').textContent = titulo;
   document.body.appendChild(w);
   const urls = [];
   const fecha = () => { w.remove(); urls.forEach(u => URL.revokeObjectURL(u)); document.removeEventListener('keydown', esc_); };
@@ -7819,24 +7867,17 @@ async function verDocPessoalF(d){
     pag.querySelectorAll('canvas,img').forEach(x => { x.style.width = (zoom * 100) + '%'; });
   });
   try{
-    const a = await rpc1('tf_rh_doc_func_abrir', { p_id: d.id });
-    let blob;
-    if (a.conteudo) blob = await (await fetch(a.conteudo)).blob();
-    else {
-      const url = SUPABASE_URL + '/storage/v1/object/rh-docs/' + String(a.storage_path).split('/').map(encodeURIComponent).join('/');
-      const r = await stoGet(url);   // S62 · issue 142: renova também no HTTP 400 do acesso vencido
-      if (!r.ok) throw new Error('Não consegui abrir o arquivo (HTTP ' + r.status + '). Tente de novo com internet.');
-      blob = await r.blob();
-    }
-    blob = new Blob([blob], { type: a.mime || blob.type });
+    const a = await carregar();
+    const mime = a.mime || (a.blob && a.blob.type) || '';
+    const blob = new Blob([a.blob], { type: mime });
     const obj = URL.createObjectURL(blob); urls.push(obj);
     const bb = w.querySelector('[data-b]'); bb.disabled = false;
     bb.addEventListener('click', () => {
-      const l = document.createElement('a'); l.href = obj; l.download = a.nome || (d.rotulo + (a.mime === 'application/pdf' ? '.pdf' : '.jpg'));
+      const l = document.createElement('a'); l.href = obj; l.download = a.nome || (titulo + (mime === 'application/pdf' ? '.pdf' : '.jpg'));
       document.body.appendChild(l); l.click(); l.remove();
     });
-    if (a.mime !== 'application/pdf'){
-      pag.innerHTML = ''; const im = document.createElement('img'); im.src = obj; im.alt = d.rotulo; im.style.width = '100%'; pag.appendChild(im); return;
+    if (mime !== 'application/pdf'){
+      pag.innerHTML = ''; const im = document.createElement('img'); im.src = obj; im.alt = titulo; im.style.width = '100%'; pag.appendChild(im); return;
     }
     let lib = null;
     try{ lib = await carregarPdfJsF(); }catch(e){}
@@ -7869,20 +7910,14 @@ function painelDocF(d, podeAssinar){
     + '<button class="btn danger sm" type="button" data-nao>Não é ' + meu + '</button>';
   p.querySelector('[data-abrir]').addEventListener('click', () => verDocF(d));
   const ba = p.querySelector('[data-ass]');
-  if (ba) ba.addEventListener('click', async () => {
-    const pin = p.querySelector('.pinC').value;
-    if (!/^\d{6}$/.test(pin)){ toast('Digite os 6 números do seu PIN.', 'err'); return; }
-    ba.disabled = true;
+  // S70 (issue 161): o PIN provisório pede a troca ali mesmo e volta para assinar; o campo não apaga mais calado
+  if (ba) ba.addEventListener('click', ev => _semDuploEnvio_(ev.currentTarget, async () => {
     try{
-      const r = await rpc1('tf_rhdoc_assinar', { p_id: d.id, p_pin: pin });
-      if (r.status === 'ok'){ toast('Assinado. Obrigado!', 'ok'); await recarregarDocs(); pintarDocsF(); return; }
-      if (r.status === 'pin_errado') toast('PIN errado. Restam ' + r.restantes + ' tentativa(s) antes de travar 15 minutos.', 'err');
-      else if (r.status === 'bloqueado'){ toast('PIN travado por 15 minutos.', 'err'); await recarregarDocs(); pintarDocsF(); return; }
-      else if (r.status === 'sem_pin'){ toast('Crie o seu PIN antes (Eu › Segurança).', 'err'); return; }
-      p.querySelector('.pinC').value = '';
-    }catch(e){ toast(e.message, 'err'); await recarregarDocs(); pintarDocsF(); return; }
-    ba.disabled = false;
-  });
+      const r = await assinarComPinF(p.querySelector('.pinC'), pin => rpc1('tf_rhdoc_assinar', { p_id: d.id, p_pin: pin }));
+      if (r && r.status === 'ok'){ toast('Assinado. Obrigado!', 'ok'); await recarregarDocs(); pintarDocsF(); return; }
+      if (r && r.status === 'bloqueado'){ await recarregarDocs(); pintarDocsF(); }
+    }catch(e){ toast(e.message, 'err'); await recarregarDocs(); pintarDocsF(); }
+  }));
   p.querySelector('[data-nao]').addEventListener('click', async ev => {
     if (!await perguntar('"Não é ' + meu + '"', '<p>O documento sai do seu celular agora e o escritório é avisado de que ele chegou à pessoa errada.</p>'
       + '<p>Use só se o nome no documento <b>não</b> for o seu. Dúvida sobre ' + (d.tipo === 'ponto' ? 'as horas' : 'os valores') + ' se resolve conversando, não por aqui.</p>', 'Continuar', true)) return;

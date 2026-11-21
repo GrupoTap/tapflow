@@ -11,8 +11,8 @@
  * aqui (fica no módulo e nas funções tf_*). Sem framework, sem build.
  *
  * COMO UM MÓDULO USA (duas linhas no <head> e uma no boot):
- *   <script src="../nucleo/config.js?v=N16"></script>
- *   <script src="../nucleo/nucleo.js?v=N16"></script>
+ *   <script src="../nucleo/config.js?v=N17"></script>
+ *   <script src="../nucleo/nucleo.js?v=N17"></script>
  *   ...
  *   const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
  *   if (g === 'hub') { irParaHub(Nucleo.recado); return; }     // ANTES do iniciar()
@@ -45,7 +45,8 @@
   'use strict';
   if (window.Nucleo && window.Nucleo.versao) return;
 
-  var VERSAO = 'N16';   // N16 (S211): Rodada R17 da auditoria (TapFlow agenda e listas) — issues 114 e 129 (achar o cliente digitando, um componente só: Nucleo.busca.cliente, na Nova OS do TapFlow e no Novo negócio do TapCRM; Nucleo.busca.digitando serve a outras listas, como o fornecedor da R16)
+  var VERSAO = 'N17';   // N17 (S212): Rodada R15 da auditoria (PIN provisório e digital) — issues 161 e 194 (o PIN provisório numa assinatura pede a troca ali mesmo e volta para assinar; Nucleo.pin.trocar/assinar/msg para as telas que ainda assinam só com o PIN; "Trocar meu PIN" pela troca da trava, que acerta também o PIN guardado no aparelho) e 123 (a entrega e a devolução de EPI pelo confirmarPessoa)
+  // var VERSAO = 'N16';   // N16 (S211): Rodada R17 da auditoria (TapFlow agenda e listas) — issues 114 e 129 (achar o cliente digitando, um componente só: Nucleo.busca.cliente, na Nova OS do TapFlow e no Novo negócio do TapCRM; Nucleo.busca.digitando serve a outras listas, como o fornecedor da R16)
   // var VERSAO = 'N15';   // N15 (S205): Rodada R12 da auditoria (TapHub) — issues 156 (um "Sair" só, Nucleo.sairDaConta, que encerra o acesso também no servidor e respeita o celular da empresa) e 151 (a janela "fixa", que só fecha pelo botão dela; o aviso "erro" em vermelho)
   // var VERSAO = 'N14';   // N14 (S202): Rodada R10 da auditoria — issues 106, 107 e 177 (a fila envia também os envios antigos do TapField — levantamento, extras, execução e fotos do Drive — pelo tratador que a página registra: recusado fica parado com o motivo, nada some)
   // var VERSAO = 'N13';   // N13 (S196): Rodada R5 da auditoria — issues 108, 109, 126, 144, 169 (a janela devolve o campo digitado e confere o obrigatório/CONFIRMO; com algo digitado não fecha clicando fora e o X/Esc pede 2º toque; o Esc fecha a janela em todas as páginas)
@@ -1152,8 +1153,10 @@
       return telaConfirmar({
         titulo: o.titulo || 'Confirme que é você', sub: o.sub || '', dig: dig, autoDigital: so && !ehIOS(), semPin: so,
         digital: function () { return digitalDe().then(semPinTxt); },
-        pin: function (pin) { return pinDe(pin); },
-        links: [{ txt: 'Cancelar', cancela: true }]
+        pin: function (pin, t) { return pinDe(pin, t); },
+        // N17 (issue 194): o PIN provisório vencido manda "pedir um novo": o link fica nesta tela também
+        links: so ? [{ txt: 'Cancelar', cancela: true }]
+                  : [{ txt: 'Esqueci o PIN: pedir um novo', fn: function (h) { pedirPinNovo(h); } }, { txt: 'Cancelar', cancela: true }]
       });
       function digitalDe() {
           if (!modoS) {
@@ -1181,28 +1184,108 @@
             }, function () { return { ok: false, msg: 'Não reconheceu. Tente de novo ou use o PIN.' }; });
           }, function (e) { return { ok: false, msg: e.rede ? 'Sem sinal. A assinatura fica pendente até ter sinal.' : limpaMsg(e.message) }; });
       }
-      function pinDe(pin) {
+      // N17 (issues 161 e 194): o PIN provisório (207) não assina, mas também não some calado — a tela pede
+      // para criar o PIN ali mesmo (como a trava faz) e, criado, confirma com o PIN novo sem a pessoa digitar de novo.
+      function trocarAqui(pin, t) {
+        t.ocupado(false); t.limpar(); t.msg('');
+        return criarPin(t, pin).then(function (novo) {
+          if (!novo) return { ok: false, msg: 'Crie o seu PIN para assinar.' };
+          return atualizarResumo(s.email, novo).then(function () {
+            toast('PIN novo criado.', 'ok');
+            t.titulo(o.titulo || 'Confirme que é você', o.sub || '');
+            return pinDe(novo, null);
+          });
+        });
+      }
+      function pinDe(pin, t) {
           if (!modoS) return conferir(pin, c, s).then(function (r) {
+            if (r.trocar && t) return trocarAqui(pin, t);
             if (r.ok) res = { ok: true, metodo: 'pin', aparelho: c && c.ap || null, em: new Date().toISOString(), offline: !!r.local };
             return r;
           });
           return rpc('tf_confirmar_pin', { p_pin: pin, p_aparelho: c && c.ap || null, p_finalidade: fin, p_referencia: o.referencia || null }).then(function (j) {
             if (j && j.status === 'ok') { res = { ok: true, metodo: 'pin', aparelho: c && c.ap || null, em: j.em, confirmacao: j.confirmacao }; return { ok: true }; }
-            if (j && j.status === 'pin_errado') return { ok: false, msg: 'PIN errado. Restam ' + j.restantes + ' tentativas.' };
-            if (j && j.status === 'bloqueado') return { ok: false, msg: 'PIN travado até ' + horaDe(j.ate) + '.' };
-            if (j && j.status === 'trocar_pin') return { ok: false, msg: 'Este é o PIN provisório: crie o seu PIN na trava do TapHub antes.' };
-            if (j && j.status === 'pin_vencido') return { ok: false, msg: MSG_PIN_VENCIDO };
-            return { ok: false, msg: 'Crie o seu PIN no início do TapHub.' };
+            if (j && j.status === 'trocar_pin' && t) return trocarAqui(pin, t);
+            return { ok: false, msg: msgDoPin(j) || 'Crie o seu PIN no início do TapHub.' };
           }, function (e) { return { ok: false, msg: e.rede ? 'Sem sinal. A assinatura fica pendente até ter sinal.' : limpaMsg(e.message) }; });
       }
     }).then(function (ok) { return ok && res ? res : (res && res.semDigital ? res : { ok: false, cancelado: true }); });
   }
 
+  /* ── N17 · Nucleo.pin: as telas que ainda assinam só com o PIN (issues 161 e 194) ─────────
+   * msg(r): o texto de cada resposta da conferência do PIN ('' para ok/cancelado).
+   * trocar(o): a troca do PIN pela tela da trava (a mesma do início): pede o PIN atual (ou usa
+   *   o.provisorio, já digitado) e cria o novo; acerta o PIN guardado neste aparelho (para destravar
+   *   sem sinal). Resolve o PIN novo, ou null (cancelou).
+   * assinar(chamar, pin): chama(pin) → { status… }; se a resposta for 'trocar_pin' (o PIN provisório),
+   *   abre a troca e, criado o PIN, chama de novo com o PIN novo ("volta para assinar"). Resolve a
+   *   última resposta ({ status:'cancelado' } se a pessoa desistiu da troca).
+   * ────────────────────────────────────────────────────────────────────────────────────────── */
+  function msgDoPin(r) {
+    var st = r && r.status;
+    if (!st || st === 'ok' || st === 'cancelado') return '';
+    if (st === 'pin_errado') return 'PIN errado. Restam ' + r.restantes + ' tentativa(s) antes de travar 15 minutos.';
+    if (st === 'bloqueado') return r.ate ? 'PIN travado até ' + horaDe(r.ate) + '.' : 'PIN travado por 15 minutos.';
+    if (st === 'trocar_pin') return 'Este é o PIN provisório: crie o seu PIN antes de assinar.';
+    if (st === 'pin_vencido') return MSG_PIN_VENCIDO;
+    if (st === 'sem_pin') return 'Você ainda não tem PIN: crie o seu na tela do PIN do TapHub.';
+    return 'Não deu para conferir o PIN. Tente de novo.';
+  }
+  function trocarMeuPin(o) {
+    o = o || {};
+    var s = sessao();
+    var links = [{ txt: 'Esqueci o PIN: pedir um novo', fn: function (h) { pedirPinNovo(h); } },
+                 { txt: 'Cancelar', fn: function (h) { h.cancelar(); } }];
+    function fim(t, novo) {
+      t.fechar();
+      if (!novo) return null;
+      return atualizarResumo(s.email, novo).then(function () { toast(o.provisorio ? 'PIN novo criado.' : 'PIN trocado.', 'ok'); return novo; });
+    }
+    if (o.provisorio) {
+      var tp = abrirTela({ titulo: 'Crie o seu PIN', links: links });
+      return criarPin(tp, o.provisorio).then(function (novo) { return fim(tp, novo); });
+    }
+    if (o.criar) {
+      var tc = abrirTela({ titulo: 'Crie o seu PIN', links: [{ txt: 'Cancelar', fn: function (h) { h.cancelar(); } }] });
+      return criarPin(tc).then(function (novo) { return fim(tc, novo); });
+    }
+    var t = abrirTela({ titulo: 'Trocar o PIN', sub: 'Digite o seu PIN atual (ou o provisório que recebeu).', links: links });
+    return (function laco() {
+      return t.pin().then(function (pin) {
+        if (pin === null) { t.fechar(); return null; }
+        t.ocupado(true);
+        return rpc('tf_meu_pin_conferir', { p_pin: pin, p_aparelho: null }).then(function (j) {
+          t.ocupado(false); t.limpar();
+          if (j && (j.status === 'ok' || j.status === 'trocar_pin')) {
+            t.msg('');
+            return criarPin(t, pin, j.status === 'ok').then(function (novo) { return fim(t, novo); });
+          }
+          t.msg(msgDoPin(j) || 'Não deu para conferir.', true);
+          return laco();
+        }, function (e) {
+          t.ocupado(false); t.limpar(); t.msg(e.rede ? 'Sem sinal. Tente de novo com internet.' : limpaMsg(e.message), true);
+          return laco();
+        });
+      });
+    })();
+  }
+  function assinarComPin(chamar, pin) {
+    return Promise.resolve(chamar(pin)).then(function (r) {
+      if (!r || r.status !== 'trocar_pin') return r;
+      return trocarMeuPin({ provisorio: pin }).then(function (novo) {
+        return novo ? chamar(novo) : { status: 'cancelado' };
+      });
+    });
+  }
+
   /* ── fluxo de entrada (hub): criar PIN e lembrar o aparelho ────────────── */
-  function criarPin(t, provisorio) {
+  function criarPin(t, provisorio, comum) {
     // pede duas vezes; devolve o PIN criado no servidor.
     // N4: com o PIN provisório (207), ele vai como "PIN atual" e o novo tem que ser diferente.
-    t.titulo('Crie o seu PIN', provisorio ? 'O PIN provisório confere. Agora crie o seu: 6 números, diferente do provisório.'
+    // N17 (issue 194): comum = true → "provisorio" é o PIN atual de sempre (Trocar meu PIN)
+    var oQue = comum ? 'atual' : 'provisório';
+    t.titulo('Crie o seu PIN', provisorio ? (comum ? 'O PIN atual confere. Agora crie o novo: 6 números, diferente do atual.'
+                                                   : 'O PIN provisório confere. Agora crie o seu: 6 números, diferente do provisório.')
                              : '6 números. Ele destrava o TapHub neste aparelho e confirma assinaturas.');
     return (function laco() {
       return t.pin().then(function (p1) {
@@ -1213,13 +1296,13 @@
           if (p2 === null) return null;
           t.limpar();
           if (p1 !== p2) { t.titulo('Crie o seu PIN'); t.msg('Os dois PINs não batem. Comece de novo.', true); return laco(); }
-          if (provisorio && p1 === provisorio) { t.titulo('Crie o seu PIN'); t.msg('O PIN novo tem que ser diferente do provisório.', true); return laco(); }
+          if (provisorio && p1 === provisorio) { t.titulo('Crie o seu PIN'); t.msg('O PIN novo tem que ser diferente do ' + oQue + '.', true); return laco(); }
           t.ocupado(true);
           return rpc('tf_meu_pin_definir', provisorio ? { p_pin_novo: p1, p_pin_atual: provisorio } : { p_pin_novo: p1 }).then(function (r) {
             t.ocupado(false);
             if (r && r.status === 'ok') return p1;
             t.titulo('Crie o seu PIN');
-            t.msg(r && r.status === 'pin_vencido' ? MSG_PIN_VENCIDO : 'Não deu para criar o PIN.', true);
+            t.msg(msgDoPin(r) || 'Não deu para criar o PIN.', true);
             return laco();
           }, function (e) {
             t.ocupado(false); t.titulo('Crie o seu PIN');
@@ -1465,7 +1548,8 @@
     pedirDestrave: pedirDestrave,
     // N3 · Passkey 1
     confirmarPessoa: confirmarPessoa,
-    temDigital: temDigital,                            // N10 · issue 29: este aparelho tem a digital da pessoa (antes de pedir)
+    temDigital: temDigital,
+    pin: { trocar: trocarMeuPin, assinar: assinarComPin, msg: msgDoPin },   // N17 · issues 161 e 194                            // N10 · issue 29: este aparelho tem a digital da pessoa (antes de pedir)
     meusAparelhos: meusAparelhos,
     relatar: relatar,                                  // N6 · "Relatar problema ou sugerir" (209)
     errosRecentes: function () { return ERROS.slice(); },
