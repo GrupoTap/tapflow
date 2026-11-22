@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapField · S71</title>
+<title>TapField · S72</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -481,6 +481,15 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 .canData{margin:12px 0 4px;font-size:14px;color:var(--ink-2)}
 .canData input{display:block;margin-top:6px;padding:9px;border:1px solid var(--rule);border-radius:5px;font-size:16px}
 .canEnviar{width:100%;padding:16px;font-size:17px;margin-top:12px}
+/* S72 (S218, issue 115): "É de uma OS?" no canhoto */
+.canOs{margin:14px 0 4px}
+.canSN{display:flex;gap:8px;margin-top:6px}
+.canSN .btn{flex:1;padding:12px;font-size:16px}
+.canSN .btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.canOsLista{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.canOsOp{display:block;text-align:left;width:100%;padding:10px 12px;border:1px solid var(--rule);border-radius:6px;background:var(--surface);font:inherit;color:var(--ink);cursor:pointer}
+.canOsOp b{display:block;font-size:15px}.canOsOp small{display:block;font-size:12.5px;color:var(--ink-3)}
+.canOsOp.on{border-color:var(--accent);background:var(--accent-soft)}
 .canDica{font-size:12.5px;color:var(--ink-3);margin:8px 0 0}
 .canMot{display:block;color:var(--crit);margin-top:4px}
 .epiLin.riscado b{text-decoration:line-through;color:var(--ink-3)}
@@ -686,7 +695,8 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S71';   // S71 (S215): Rodada R24 (issue 231) — as perguntas da abertura ao servidor vão juntas (antes uma esperava a outra); a lista não espera os parâmetros do Drive
+const APP_VERSION = 'S72';   // S72 (S218): Rodada R21 (issue 115 parte 1) — o canhoto do cartão pergunta "É de uma OS? Sim/Não" (obrigatório; Sim escolhe numa lista curta das OS em que a pessoa está) e vai pela fila com a resposta (banco 530)
+// const APP_VERSION = 'S71';   // S71 (S215): Rodada R24 (issue 231) — as perguntas da abertura ao servidor vão juntas (antes uma esperava a outra); a lista não espera os parâmetros do Drive
 // const APP_VERSION = 'S70';   // S70 (S212): Rodada R15 da auditoria (PIN provisório e digital) — issues 123 (a entrega e a devolução de EPI e uniforme com a digital ou o PIN, pela confirmação do servidor; 628), 194 (o PIN provisório e o vencido pedem a troca ali mesmo e voltam para confirmar; "Trocar meu PIN" pela troca da trava; receita com "Enviando…"; o PDF do ASO, da receita e do certificado no visualizador do app; o vídeo com "Tentar de novo"; as dúvidas que não carregaram) e 161 (a folha e o recibo com o PIN provisório); núcleo N17
 // const APP_VERSION = 'S69';   // S69 (S207): Rodada R13 da auditoria (TapSeg) — issue 195 (a Ficha de EPI do celular mostra a devolução em partes: "2 descarte · 1 não devolvido"; 627)
 // const APP_VERSION = 'S68';   // S68 (S205): Rodada R12 da auditoria (TapHub) — issue 156 (o "Sair" e o "Sair deste celular" do núcleo: encerram o acesso também no servidor; no celular da empresa, a fila continua com a sessão de quem fez); núcleo N15
@@ -8024,7 +8034,7 @@ async function baixarDocF(id){
 // deixa o recusado parado, com o motivo, até a pessoa ver. A fila própria antiga ('tff_canhotos', sem autor) só
 // esvazia: no celular pessoal, o que sobrou dela passa para a fila comum sozinho; no da empresa, a pessoa escolhe.
 const K_CANH = 'tff_canhotos';
-const CAN = { meus: null, voltar: null, foto: null, pre: null, enviando: false, demo: [] };
+const CAN = { meus: null, voltar: null, foto: null, pre: null, enviando: false, demo: [], osResp: null, osId: null };
 const CAN_TELAS = ['lista', 'eu', 'dia', 'fer', 'docs', 'seg', 'os'];
 const canFila = () => LS.get(K_CANH, []);                         // a antiga (só o que sobrou)
 const canFilaSet = L => LS.set(K_CANH, L);
@@ -8099,7 +8109,27 @@ function canVoltarPara(){
   if (t === 'os' && a) return () => { atual = a; pintarOS(); };
   return pintarLista;
 }
-function canVoltar(){ CAN.foto = null; CAN.pre = null; const f = CAN.voltar || pintarLista; CAN.voltar = null; f(); }
+function canVoltar(){ CAN.foto = null; CAN.pre = null; CAN.osResp = null; CAN.osId = null; const f = CAN.voltar || pintarLista; CAN.voltar = null; f(); }
+/* S72 (S218, issue 115, CO1.4): "É de uma OS?" no canhoto, obrigatório (um toque). Sim escolhe numa lista curta das OS abertas
+   em que a pessoa está (as do roteiro e as "Para você"; sem nenhuma, todas as da lista do celular). Vai junto pela fila. */
+function canMinhasOS(){
+  const vistas = new Map();
+  (MEU_DIA || []).forEach(t => { if (t.os_id && !vistas.has(t.os_id)) vistas.set(t.os_id, { os_id: t.os_id, numero: t.os_numero, cliente: t.cliente }); });
+  (listaOS || []).filter(o => o.minha_de_fato || o.minha).forEach(o => { if (!vistas.has(o.os_id)) vistas.set(o.os_id, { os_id: o.os_id, numero: o.numero, cliente: o.cliente }); });
+  if (!vistas.size) (listaOS || []).forEach(o => { if (!vistas.has(o.os_id)) vistas.set(o.os_id, { os_id: o.os_id, numero: o.numero, cliente: o.cliente }); });
+  return [...vistas.values()].filter(o => o.numero).slice(0, 12);
+}
+function canOsPintar(){
+  const cx = document.getElementById('canOs'); if (!cx) return;
+  const L = canMinhasOS();
+  cx.querySelectorAll('[data-osr]').forEach(b => b.classList.toggle('on', b.dataset.osr === CAN.osResp));
+  const li = document.getElementById('canOsLista');
+  li.hidden = CAN.osResp !== 'sim';
+  li.innerHTML = L.length ? L.map(o => '<button type="button" class="canOsOp' + (o.os_id === CAN.osId ? ' on' : '') + '" data-osid="' + esc(o.os_id) + '"><b>' + esc(o.numero) + '</b>'
+      + (o.cliente ? '<small>' + esc(o.cliente) + '</small>' : '') + '</button>').join('')
+    : '<p class="canDica" style="margin:6px 0">Nenhuma OS sua aberta neste celular. Toque em “Não” e escreva a OS em “O que foi”: o escritório liga depois.</p>';
+  li.querySelectorAll('[data-osid]').forEach(b => b.addEventListener('click', () => { CAN.osId = b.dataset.osid; canOsPintar(); }));
+}
 
 function canFormulario(){
   tela = 'canhoto';
@@ -8122,6 +8152,9 @@ function canFormulario(){
     + (frases.length ? '<div class="chips canFrases">' + frases.map(f => '<button type="button" class="chip" data-fr="' + esc(f) + '">' + esc(f) + '</button>').join('') + '</div>' : '')
     + '<div class="canData"><span id="canDTxt"></span> <button type="button" class="lnk" id="canDBtn">foi outro dia?</button>'
       + '<input id="canD" type="date" hidden max="' + canHoje() + '" value="' + esc(pre.data || canHoje()) + '"></div>'
+    + '<div class="canOs" id="canOs"><span class="canRot">É de uma OS?</span><div class="canSN">'
+      + '<button type="button" class="btn" data-osr="sim">Sim</button><button type="button" class="btn" data-osr="nao">Não</button></div>'
+      + '<div id="canOsLista" class="canOsLista" hidden></div></div>'
     + '<button type="button" class="btn pri canEnviar" id="canEnv">Enviar</button>'
     + '<p class="canDica">Só compras no cartão da empresa. Alimentação é da diária — não entra aqui.</p>';
   m.appendChild(p);
@@ -8148,6 +8181,9 @@ function canFormulario(){
   const bo = document.getElementById('canOutra'); if (bo) bo.addEventListener('click', tirar);
   const im = p.querySelector('.canFoto img'); if (im) im.addEventListener('click', () => im.classList.toggle('zoom'));
   document.getElementById('canEnv').addEventListener('click', canEnviar);
+  p.querySelectorAll('[data-osr]').forEach(b => b.addEventListener('click', () => {
+    CAN.osResp = b.dataset.osr; if (CAN.osResp !== 'sim') CAN.osId = null; canOsPintar(); }));
+  canOsPintar();
   if (CAN.foto && !pre.valor) setTimeout(() => v.focus(), 80);
 }
 /** S62 (issues 167 e 189): o leitor único do núcleo. Antes tirava todos os pontos ("2.5" virava 25). 0 = vazio ou não é número. */
@@ -8161,6 +8197,8 @@ async function canEnviar(){
   const data = document.getElementById('canD').value || canHoje();
   if (!CAN.foto){ toast('Tire a foto do canhoto primeiro.', 'err'); return; }
   if (!(valor > 0)){ toast('Digite o valor do canhoto.', 'err'); document.getElementById('canV').focus(); return; }
+  if (!CAN.osResp){ toast('É de uma OS? Toque em Sim ou Não.', 'err'); return; }
+  if (CAN.osResp === 'sim' && !CAN.osId){ toast('Escolha a OS da compra (ou toque em Não).', 'err'); return; }
   if (valor > 2000 && !await perguntar('Confira o valor', '<p><b>R$ ' + esc(canValTxt(valor)) + '</b> — é isso mesmo?</p>', 'Sim, é isso')) return;
   // o mesmo canhoto duas vezes é o erro mais comum do grupo: avisa
   const igual = canFila().concat(((CAN.meus && CAN.meus.comprovantes) || []).filter(c => c.situacao !== 'cancelado'))
@@ -8175,7 +8213,8 @@ async function canEnviar(){
   const uid = canUid();
   if (!uid){ toast('Entre de novo para mandar o canhoto (a foto continua na tela).', 'err'); return; }
   CAN.enviando = true;
-  const r = await canPorNaFila({ id, valor, frase, data, linha_id: (CAN.pre && CAN.pre.linha_id) || null, foto: CAN.foto, uid });
+  const r = await canPorNaFila({ id, valor, frase, data, linha_id: (CAN.pre && CAN.pre.linha_id) || null, foto: CAN.foto, uid,
+                                os_resposta: CAN.osResp, os_id: CAN.osResp === 'sim' ? CAN.osId : null });
   CAN.enviando = false;
   if (!r){
     // S65 · 187 (item 2): não coube no aparelho — nada é dito como guardado; a foto e o formulário ficam na tela
@@ -8199,10 +8238,15 @@ async function canPorNaFila(it){
     chave = await Nucleo.fila.guardarFoto(blob);
     const path = 'comprovantes/' + it.uid + '/' + it.id + '.jpg';
     const a = Nucleo.fila.adicionar({ tipo: 'canhoto', id: it.id, grupo: 'canhoto|' + it.id,
-      rotulo: 'Canhoto · ' + canBRL(it.valor) + (it.frase ? ' · ' + it.frase : '') + ' · ' + dataBR(it.data),
+      rotulo: 'Canhoto · ' + canBRL(it.valor) + (it.frase ? ' · ' + it.frase : '') + ' · ' + dataBR(it.data)
+        + (it.os_resposta === 'sim' ? ' · OS ' + ((canMinhasOS().find(o => o.os_id === it.os_id) || {}).numero || '') : ''),
       fotos: [{ chave, bucket: 'cartoes', caminho: path, tipo: 'image/jpeg' }],
-      rpc: { funcao: 'tf_cartao_comprovante_enviar', payload: { p_id: it.id, p_valor: it.valor, p_frase: it.frase || null, p_data: it.data,
-        p_foto_path: path, p_foto_bytes: blob.size, p_linha_id: it.linha_id || null } } });
+      // S72 (issue 115): com a resposta "É de uma OS?" vai pela função nova (530); o canhoto antigo da fila, sem resposta, pela de antes
+      rpc: it.os_resposta
+        ? { funcao: 'tf_cartao_comprovante_enviar_os', payload: { p_id: it.id, p_valor: it.valor, p_frase: it.frase || null, p_data: it.data,
+            p_foto_path: path, p_foto_bytes: blob.size, p_linha_id: it.linha_id || null, p_os_resposta: it.os_resposta, p_os_id: it.os_id || null } }
+        : { funcao: 'tf_cartao_comprovante_enviar', payload: { p_id: it.id, p_valor: it.valor, p_frase: it.frase || null, p_data: it.data,
+            p_foto_path: path, p_foto_bytes: blob.size, p_linha_id: it.linha_id || null } } });
     if (!a){ IDB.del(chave).catch(() => {}); return null; }
     return a;
   }catch(e){ if (chave) IDB.del(chave).catch(() => {}); return null; }
