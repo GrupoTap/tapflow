@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 33 · Financeiro</title>
+<title>TapFin 34 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- o ícone da aba: o "E" da Engetap dentro do arquivo (SVG), aparece em qualquer pasta; o app instalado usa os PNG de field/icons/ -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22104%22 fill=%22%231B6FA9%22/%3E%3Cg transform=%22translate(0,512) scale(1,-1) translate(256,256.5) scale(1.3) translate(-256,-256.5)%22 fill=%22%23fff%22 stroke=%22%23fff%22 stroke-width=%2222%22 stroke-linejoin=%22round%22 stroke-linecap=%22round%22%3E%3Cpath d=%22M117 414 l-1 0 0 -121 0 -120 19 0 19 0 0 -37 0 -38 121 0 121 0 -45 45 -44 45 -69 0 -69 0 0 12 0 11 90 0 89 0 0 1 0 1 -44 44 -45 44 -45 0 -45 0 0 12 0 11 99 0 99 0 0 1 0 0 -45 45 -44 45 -81 0 -80 0 0 -1z m184 -44 l30 -29 0 -1 0 -1 -88 0 -89 0 0 -75 0 -76 -11 0 -12 0 0 105 0 106 1 0 0 1 70 0 69 0 30 -30z m-19 -113 l30 -29 0 -1 0 -1 -67 0 -67 0 0 30 0 30 1 0 0 1 37 0 36 0 30 -30z m47 -114 l30 -29 0 -1 0 0 -95 0 -95 0 0 30 0 30 65 0 66 0 29 -30z%22/%3E%3C/g%3E%3C/svg%3E">
@@ -1130,7 +1130,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'F33';   // TapFin 33 (S215): Rodada R24 — issue 232 (saiu o estilo sem uso; o estilo comum às quatro páginas vem do nucleo/telas.css T1; nada muda na tela) e 231 (as perguntas da abertura vão juntas)
+const APP_VERSION = 'F34';   // TapFin 34 (S217): Rodada R25 — issue 238 (a condição de pagamento na janela da nota, no Editar e na conta nova; 15/30/45/60 e 0/15/30 nos botões; o chip da condição em toda conta A faturar; banco 529)
+// const APP_VERSION = 'F33';   // TapFin 33 (S215): Rodada R24 — issue 232 (saiu o estilo sem uso; o estilo comum às quatro páginas vem do nucleo/telas.css T1; nada muda na tela) e 231 (as perguntas da abertura vão juntas)
 // const APP_VERSION = 'F32';   // TapFin 32 (S213): Rodada R16 da auditoria — issues 91 (a data de hoje de Brasília em Transferir entre contas e na Nota fiscal ⚙), 92 (Estornar em Relatórios › Extrato), 97 (textos sem nome técnico; sempre "caixinha"; a subcategoria não se perde na edição), 101 (o fornecedor digitando e cadastrar ali mesmo; valor vazio; a competência do mês), 95 (os meses esquecidos com a pergunta; valor fixo > 0), 102 ("Até quando", "Encerrada", excluir), 103 (desativar a subcategoria), 100 (o saldo linha a linha, o período e exportar o extrato) e 104 (o resultado por categoria mês a mês, exportar e imprimir); 528; nucleo/fin-painel FP4
 // const APP_VERSION = 'F31';   // TapFin 31 (S209): Rodada R14 da auditoria — issues 93 (a reserva = a soma das caixinhas, no Painel, nas Projeções, no Fôlego e em Contas Bancárias), 94 (caixinha nova, "Ver movimentos" e estornar a transferência), 188 (os botões do Painel e das Projeções que voltavam ao Painel; o "Precisa de ação" abre a conta), 96 (a baixa refaz o valor e pergunta pela data antes do início da conta e no futuro), 99 (pago em dd/mm · banco na linha; filtro pela data do pagamento) e 105 (baixar várias contas a pagar); 527; nucleo/fin-painel FP3
 // const APP_VERSION = 'F30';   // TapFin 30 (S205): Rodada R12 da auditoria (TapHub) — issue 156 (o "Sair" do núcleo: encerra o acesso também no servidor; no celular da empresa, guarda a sessão); núcleo N15
@@ -4048,7 +4049,7 @@ function modalMudarVencimento(t, rasc){
 // data da nota + os dias. "Parcelas da nota" ajusta valor e data (sem boleto nem baixa, B5)
 // e "Emitir todos os boletos" emite um por vez, sempre com clique (B7).
 // ════════════════════════════════════════════════════════════════════════════
-const CONDICOES_SUG = ['30', '45', '60', '30/60', '0/30', '0/30/60', '28/56/84'];
+const CONDICOES_SUG = ['30', '45', '60', '30/60', '0/30', '0/30/60', '28/56/84', '15/30/45/60', '0/15/30'];   // F34 · 238 (M3): +15/30/45/60 e 0/15/30
 /** Os dias da condição ([] = vazia; null = escrita errada). A mesma regra do banco (tf__fin_condicao_dias). */
 function condDias(c){
   const s = String(c == null ? '' : c).trim().replace(/\s*(dias|dia|d)\s*$/i, '');
@@ -4060,21 +4061,96 @@ function condDias(c){
   return d;
 }
 const condTexto = d => d.map(x => x === 0 ? 'no ato' : x + ' dias').join(', ');
+// ── F34 · issue 238 (529): a condição na janela da nota (M1), no "Editar" e na conta criada fora da OS (M2)
+// e o chip em toda conta "A faturar" (M4). Trocar grava pela tf_fin_titulo_condicao_gravar (histórico da conta);
+// só antes da nota, sem baixa e sem boleto; a conta de medição de contrato fica fora (B6).
+const COND_CLI = { ok: false, mapa: {} };   // cliente → condição (só os que não estão no padrão de 30 dias)
+async function condCarregar(){
+  try{
+    const L = await rpc('tf_fin_prazos_listar', {});
+    COND_CLI.mapa = {}; (L || []).forEach(c => { COND_CLI.mapa[c.id] = String(c.condicao || c.prazo || '30'); });
+    COND_CLI.ok = true;
+  }catch(e){ COND_CLI.ok = false; }   // sem a lista, o chip mostra só a condição gravada na conta
+}
+const condCanon = c => { const d = condDias(c); return d && d.length ? d.join('/') : ''; };
+const condCliente = t => (t && COND_CLI.mapa[t.cliente_id]) || '30';
+/** Pode trocar a condição desta conta? (o banco confere de novo) */
+const FINCOND = { ativo: true };   // false quando o banco ainda não tem a 529 (a tela cai no jeito de antes)
+const condPodeTrocar = t => FINCOND.ativo && !!t && !t.anulado && t.etapa === 'a_faturar' && !t.medicao_id && !finTemBaixa(t) && !boVivo(t);
+/** A condição que vale hoje: a da conta ou, sem ela, a do cliente. */
+const condAtual = t => t && t.condicao ? { cond: condCanon(t.condicao) || t.condicao, de: 'da conta' } : { cond: condCanon(condCliente(t)) || '30', de: 'do cliente' };
+const condRot = c => { const d = condDias(c) || []; return d.length === 1 ? (d[0] ? d[0] + ' dias' : 'no ato') : c; };
 function condChip(t){
-  if (!t || !t.condicao || t.anulado || t.etapa !== 'a_faturar') return '';
-  const d = condDias(t.condicao) || [];
-  return ' <span class="chip" title="Condição de pagamento: ' + esc(condTexto(d)) + ' depois da nota. Quando a nota sair, '
-    + (d.length > 1 ? 'a conta se divide em ' + d.length + ' parcelas' : 'o vencimento sai pela condição') + '.">Cond. ' + esc(t.condicao) + '</span>';
+  if (!t || t.anulado || t.etapa !== 'a_faturar' || t.medicao_id) return '';
+  if (!t.condicao && !COND_CLI.ok) return '';
+  const a = condAtual(t), d = condDias(a.cond) || [];
+  return ' <span class="chip" title="Condição de pagamento (' + esc(a.de) + '): ' + esc(condTexto(d)) + ' depois da nota. Quando a nota sair, '
+    + (d.length > 1 ? 'a conta se divide em ' + d.length + ' parcelas' : 'o vencimento sai pela condição') + '.">Cond. ' + esc(condRot(a.cond)) + '</span>';
 }
-function condAvisoNota(t){
-  const d = t && t.condicao ? (condDias(t.condicao) || []) : [];
-  if (!d.length) return '';
-  return '<div class="nfAvisos" style="padding:8px 10px;margin-bottom:10px">Condição de pagamento <b>' + esc(t.condicao) + '</b>: '
-    + (d.length > 1
-        ? 'a nota sai do total (' + esc(BRL(t.valor)) + ') e, quando ela sair, esta conta se divide sozinha em <b>' + d.length + ' parcelas</b> ('
-          + esc(condTexto(d)) + ' depois da data da nota). Depois, no ⋯: <b>Parcelas da nota</b> › <b>Emitir todos os boletos</b>.'
-        : 'o vencimento passa a ser a data da nota ' + (d[0] ? '+ ' + d[0] + ' dias' : '(no ato)') + '.') + '</div>';
+/** M1: a linha "Condição: … · trocar" das janelas da nota. ini = o que a janela reabriu com (rascunho). */
+function condLinhaNota(t, ini, valorNota){
+  if (!t || t.medicao_id || t.etapa !== 'a_faturar') return '';
+  const a = condAtual(t), v = ini != null ? ini : a.cond, mudou = ini != null && condCanon(ini) !== condCanon(a.cond);
+  const pode = condPodeTrocar(t);
+  return '<div class="campo" id="ncBloco" data-ini="' + esc(a.cond) + '">'
+    + '<div class="nota" style="margin:0 0 4px">Condição de pagamento: <b id="ncAtual">' + esc(condRot(mudou ? condCanon(ini) : a.cond)) + '</b> '
+    +   '<span id="ncDe">(' + esc(mudou ? 'trocada aqui' : a.de) + ')</span>'
+    +   (pode ? ' · <a href="#" id="ncTrocar">trocar</a>' : (finTemBaixa(t) ? ' <small>(com baixa: não muda)</small>' : boVivo(t) ? ' <small>(com boleto: não muda)</small>' : '')) + '</div>'
+    + (pode ? '<div id="ncEdita"' + (mudou ? '' : ' hidden') + '>'
+        + '<input id="ncCond" type="text" inputmode="numeric" autocomplete="off" placeholder="15/30/45/60" value="' + esc(v) + '">'
+        + condBotoes('ncCond') + '</div>' : '')
+    + '<p class="nota" id="ncPrev" style="margin:6px 0 0">' + condPrevia(mudou ? ini : a.cond, valorNota) + '</p>'
+    + '</div>';
 }
+/** Liga o "trocar" e a prévia (depois de abrir a janela). aoMudar(dias) avisa a janela (o vencimento do Preparar). */
+function condLigarNota(t, valorNota, aoMudar){
+  const tr = document.getElementById('ncTrocar'), ed = document.getElementById('ncEdita'), el = document.getElementById('ncCond');
+  if (!el){ if (aoMudar && document.getElementById('ncBloco')) aoMudar(condDias(condAtual(t).cond)); return; }
+  const prev = () => {
+    const p = document.getElementById('ncPrev'); if (p) p.innerHTML = condPrevia(el.value, valorNota);
+    const d = condDias(el.value), at = document.getElementById('ncAtual'), de = document.getElementById('ncDe');
+    const ini = document.getElementById('ncBloco').dataset.ini;
+    if (at && d && d.length) at.textContent = condRot(d.join('/'));
+    if (de && d && d.length) de.textContent = '(' + (d.join('/') === condCanon(ini) ? condAtual(t).de : 'trocada aqui') + ')';
+    if (aoMudar) aoMudar(d);
+  };
+  if (tr) tr.addEventListener('click', e => { e.preventDefault(); ed.hidden = false; el.focus(); prev(); });
+  el.addEventListener('input', prev);
+  prev();
+}
+/** Lê o campo da janela: undefined = nada a gravar; null = escrita errada; texto = a condição a gravar ('' volta à do cliente). */
+function condLidaNota(t){
+  const el = document.getElementById('ncCond'); if (!el) return condAuto(t);
+  const v = el.value.trim();
+  if (!v) return t.condicao ? '' : undefined;
+  if (condDias(v) === null) return null;
+  const c = condCanon(v);
+  if (c === condCanon(t.condicao || '')) return undefined;
+  if (!t.condicao && c === condCanon(condCliente(t)) && (condDias(c) || []).length < 2) return undefined;   // a do cliente, de um prazo só: o banco já usa
+  return c;
+}
+/** Sem mexer: a conta sem condição de um cliente que paga em parcelas recebe a do cliente (senão a nota não dividiria). */
+function condAuto(t){
+  if (!t || t.condicao || t.medicao_id || !condPodeTrocar(t)) return undefined;
+  const c = condCanon(condCliente(t));
+  return (condDias(c) || []).length > 1 ? c : undefined;
+}
+/** Grava a condição lida (antes da nota). Devolve false se não deu (o motivo já foi mostrado). */
+async function condGravarAntes(t, c, auto){
+  if (c === undefined) return true;
+  try{
+    const r = await rpc('tf_fin_titulo_condicao_gravar', { p_titulo_id: t.id, p_condicao: c });
+    t.condicao = (r && r.condicao) || null;
+    return true;
+  }catch(e){
+    const falta = /does not exist|não existe|PGRST202|Could not find the function/i.test(e.message || '');
+    if (falta) FINCOND.ativo = false;
+    if (falta && auto) return true;   // sem a 529, a nota segue como antes (sem a troca automática)
+    toast((falta ? 'Trocar a condição aqui precisa de uma atualização do sistema: avise o administrador.' : e.message) + ' A nota não saiu.', 'err');
+    return false;
+  }
+}
+// (F34: o antigo condAvisoNota virou a linha "Condição … · trocar" das janelas da nota, condLinhaNota)
 function condPrevia(c, valor){
   const d = condDias(c);
   if (d === null) return '<small class="finTrava">Escreva os dias separados por barra, crescendo: 30/60, 0/30/60 (0 = no ato).</small>';
@@ -4267,7 +4343,7 @@ async function pintarContasReceber(){
   boFaixas();
 }
 
-async function finreCarregar(){ await Promise.all([nfCarregar(), jfCarregar(), boCarregar(), osCarregar(), medCarregar()]); boFaixas(); medFaixa(); osDesenhar(); await finCarregarLista('finre', 'tf_fin_titulos_receber_listar', FINRE, 'as contas a receber');
+async function finreCarregar(){ await Promise.all([nfCarregar(), jfCarregar(), boCarregar(), osCarregar(), medCarregar(), condCarregar()]); boFaixas(); medFaixa(); osDesenhar(); await finCarregarLista('finre', 'tf_fin_titulos_receber_listar', FINRE, 'as contas a receber');
   finAndamentoBuscar().catch(() => {}); }   // F27 · 184 (item 1)
 
 function finreDesenhar(){ finDesenhar('finre'); }
@@ -5211,8 +5287,9 @@ async function modalJaFaturada(t){
   abrirModal('Já tem nota — ' + finTituloRot(t),
       (i.aviso ? '<div class="nfAvisos" style="padding:8px 10px">' + esc(i.aviso) + '</div>' : '')
     + '<p class="nota" style="margin-top:0">A nota desta conta já foi emitida (no portal, fora do TapFin). '
-    + (t.condicao ? 'Grave o número e a data: a conta passa a “faturada”.</p>' + condAvisoNota(t)
-       : 'Grave o número e a data: a conta passa a “faturada” <b>e o vencimento continua ' + esc(dataBR(t.vencimento)) + '</b>.</p>')
+    + 'Grave o número e a data: a conta passa a “faturada”'
+    + (t.condicao || condAuto(t) || t.medicao_id ? '.</p>' : ' e, sem trocar a condição, <b>o vencimento continua ' + esc(dataBR(t.vencimento)) + '</b>.</p>')
+    + condLinhaNota(t, null, t.valor)   // F34 · 238 (M1)
     + (i.nota ? '<div class="nfBloco"><b>Nota lida da contabilidade</b><div>NF' + esc(String(i.nota.numero)) + ' · ' + esc(BRL(i.nota.valor)) + ' · emitida em ' + esc(dataBR(i.nota.emitida_em)) + '</div>'
          + (i.parcelas > 1 ? '<div class="nota" style="margin:2px 0 0">' + esc(String(i.parcelas)) + ' contas com esse número (parcelas) somam ' + esc(BRL(i.soma_parcelas)) + '.</div>' : '') + '</div>' : '')
     + '<div class="dupla">'
@@ -5225,11 +5302,15 @@ async function modalJaFaturada(t){
         const num = document.getElementById('jfNum').value.trim(), dia = document.getElementById('jfData').value, val = document.getElementById('jfValor').value;
         if (!num){ toast('Digite o número da nota.', 'err'); return; }
         if (!dia){ toast('Digite a data da nota.', 'err'); return; }
+        const cond = condLidaNota(t);   // F34 · 238 (M1)
+        if (cond === null){ Nucleo.janela.erro('Condição de pagamento: escreva os dias separados por barra, crescendo (15/30/45/60; 0 = no ato).', document.getElementById('ncCond')); return; }
+        if (!(await condGravarAntes(t, cond, cond !== undefined && cond === condAuto(t)))) return;
         try{
           await rpc('tf_fin_marcar_faturado', { p_titulo_id: t.id, p_numero: Number(num), p_data: dia, p_valor: val ? Number(val) : null });
           fecharModal(); toast('Conta marcada como faturada (NF' + num + ').' + (condDias(t.condicao).length > 1 ? ' Dividida em ' + condDias(t.condicao).length + ' parcelas pela condição ' + t.condicao + '.' : t.condicao ? ' Vencimento pela condição (' + t.condicao + ' dias).' : ' O vencimento não mudou.'), 'ok'); finreCarregar();
         }catch(e){ toast(e.message, 'err'); }
      }}]);
+  condLigarNota(t, t.valor);
 }
 
 async function jfDesfazer(t){
@@ -5434,7 +5515,7 @@ async function modalEmitirNota(t, rasc){
   const lista = (L, cls) => (L && L.length) ? '<ul class="' + cls + '">' + L.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '';
   abrirModal('Emitir nota — ' + finTituloRot(t),
       nfFaixaTeste(prep.ambiente)
-    + jfAvisoEmitir(t) + condAvisoNota(t)
+    + jfAvisoEmitir(t) + condLinhaNota(t, R.cond, r.valor)   // F34 · 238 (M1): a condição, com "trocar"
     + lista(prep.erros, 'nfErros')
     + ((prep.erros || []).some(x => /Cadastros/.test(x)) && NO_SERVIDOR
        ? '<p class="nota" style="margin:-4px 0 10px"><a href="../cadastros/?ir=cad&area=tapfin" target="_blank" rel="noopener">Abrir Cadastros › Clientes</a> (em outra aba). Corrigido, feche esta janela e clique em "Emitir nota" de novo.</p>' : '')
@@ -5476,7 +5557,10 @@ async function modalEmitirNota(t, rasc){
         // 181: tudo lido AQUI, antes da confirmação (ela fecha esta janela); o e-mail e o pedido só gravam depois do "Emitir"
         const email = v('nfEmail'), pedido = v('nfPedido'), cid = v('nfCid'), uf = v('nfUf').toUpperCase();
         const indop = document.getElementById('nfIndOp') ? v('nfIndOp') : '';
-        const novo = { desc, email, pedido, cid, uf, indop, info: v('nfInfo'), infoMexeu };
+        const cond = condLidaNota(t), cEl = document.getElementById('ncCond');   // F34 · 238 (M1)
+        const novo = { desc, email, pedido, cid, uf, indop, info: v('nfInfo'), infoMexeu, cond: cEl ? cEl.value.trim() : undefined };
+        if (cond === null){ Nucleo.janela.erro('Condição de pagamento: escreva os dias separados por barra, crescendo (15/30/45/60; 0 = no ato).', cEl); return; }
+        const condVale = cond !== undefined ? cond : (t.condicao || ''), condN = (condDias(condVale) || []).length;
         if (!cid){ Nucleo.janela.erro('Escreva a cidade onde o serviço foi feito.', document.getElementById('nfCid')); return; }
         if (!/^[A-Z]{2}$/.test(uf)){ Nucleo.janela.erro('UF do local do serviço: use a sigla de 2 letras (ex.: MG).', document.getElementById('nfUf')); return; }
         const opcoes = { info_complementar: novo.info, local_cidade: cid, local_uf: uf, descricao: desc };
@@ -5489,8 +5573,11 @@ async function modalEmitirNota(t, rasc){
           + '<p style="margin:0 0 8px" id="nfConfLocal">Local do serviço: <b>' + esc(cid + '/' + uf) + '</b>'
           +   (indop ? ' · local da operação: <b>' + esc(rotOp[indop] || indop) + '</b>' : '') + '</p>'
           + (email !== (r.email || '') ? '<p class="nota" style="margin:0 0 6px">O e-mail da nota deste cliente passa a ser ' + esc(email || '(nenhum)') + '.</p>' : '')
+          + (condN > 1 ? '<p style="margin:0 0 8px">Condição <b>' + esc(condVale) + '</b>: a nota sai do total e a conta se divide em <b>' + condN + ' parcelas</b>.</p>'
+             : cond !== undefined && condN === 1 ? '<p style="margin:0 0 8px">Condição <b>' + esc(condRot(condVale)) + '</b> depois da nota.</p>' : '')
           + '<p class="nota">Depois de emitida, a nota só se desfaz por cancelamento.</p>', 'Emitir');
         if (!ok){ modalEmitirNota(t, novo); return; }
+        if (!(await condGravarAntes(t, cond, cond !== undefined && cond === condAuto(t)))){ modalEmitirNota(t, novo); return; }
         try{
           if (email !== (r.email || '')) await rpc('tf_fin_cliente_nf_gravar', { p_cliente_id: t.cliente_id, p_email: email });
           if (pedido !== (r.pedido_compra || '')) await rpc('tf_fin_titulo_pedido_compra', { p_titulo_id: t.id, p_pedido: pedido });
@@ -5506,6 +5593,7 @@ async function modalEmitirNota(t, rasc){
     bEmitir.title = bEmitir.disabled ? (vazio ? 'Escreva a descrição do serviço' : 'Corrija o que está em vermelho') : '';
   };
   dEl.addEventListener('input', travar); travar();
+  condLigarNota(t, r.valor);
   const sug = document.getElementById('nfDescSug');
   if (sug) sug.addEventListener('change', () => { if (sug.value){ dEl.value = sug.value; sug.value = ''; travar(); dEl.focus(); } });
   // o texto das informações complementares acompanha o pedido, enquanto ninguém o editou à mão
@@ -7139,6 +7227,16 @@ async function modalTituloReceber(t){
   const trava = motivo ? ' disabled' : '';
   const porque = motivo ? '<small class="finTrava">Não pode ser alterado: ' + esc(motivo) + '.</small>' : '';
   const val = (k, def) => editando ? (t[k] == null ? '' : t[k]) : def;
+  // F34 · 238 (M2): a condição de pagamento no "Editar" (antes da nota, sem baixa e sem boleto) e na conta nova
+  const condCampo = editando ? condPodeTrocar(t) : FINCOND.ativo;
+  const trCondHtml = condCampo
+    ? '<div class="campo"><label for="trCond">Condição de pagamento (dias depois da nota)</label>'
+      + '<input id="trCond" type="text" inputmode="numeric" autocomplete="off" value="' + esc(editando ? (t.condicao || '') : '') + '" placeholder="'
+      + esc(editando ? 'vazio = a do cliente (' + condRot(condCanon(condCliente(t)) || '30') + ')' : 'vazio = a do cliente') + '">'
+      + condBotoes('trCond') + '<p class="nota" id="trCondPrev" style="margin:6px 0 0"></p></div>'
+    : (editando && t.etapa === 'a_faturar' && !t.anulado && !t.medicao_id && t.condicao
+        ? '<div class="campo"><label>Condição de pagamento</label><input type="text" value="' + esc(t.condicao) + '" disabled>'
+          + '<small class="finTrava">Não muda: ' + (finTemBaixa(t) ? 'a conta já tem baixa' : 'a conta tem boleto valendo') + '.</small></div>' : '');
 
   abrirModal(editando ? 'Editar — ' + (finDescOk(t.descricao) ? t.descricao : (t.cliente_nome || 'conta a receber')) : 'Nova conta a receber',
       (editando
@@ -7166,6 +7264,7 @@ async function modalTituloReceber(t){
     +  '<div class="campo"><label for="trComp">Competência (mês do serviço)</label><input id="trComp" type="month" value="' + (editando ? esc(String(t.competencia || '').slice(0, 7)) : finMesHoje()) + '"' + trava + '>' + porque + '</div>'
     +  '<div class="campo"><label for="trVenc">Vencimento' + (editando && t.etapa !== 'a_faturar' ? '' : ' (estimativa)') + '</label><input id="trVenc" type="date" value="' + (editando ? esc(t.vencimento) : '') + '"' + trava + '>' + porque
     +    (editando && !finTemBaixa(t) && t.etapa === 'faturado' && !t.anulado ? '<small class="nota">O cliente pediu mais prazo? No ⋯ da conta: “Mudar o vencimento”.</small>' : '') + '</div></div>'
+    + trCondHtml
     + '<div class="campo"><label for="trOs">OS (opcional)</label><input id="trOs" type="text" placeholder="Ex.: OS-26043" value="' + esc(val('os_codigo', '')) + '" autocomplete="off"></div>'
     + (editando ? finHistHtml() : ''),
     [{ label:'Cancelar', onClick: fecharModal },
@@ -7185,6 +7284,16 @@ async function modalTituloReceber(t){
         if (!comp){ toast('Informe a competência.', 'err'); return; }
         const venc = motivo ? t.vencimento : v('trVenc');
         if (!venc){ toast('Informe o vencimento.', 'err'); return; }
+        // F34 · 238 (M2): a condição lida antes de gravar; vazio = a do cliente
+        const condTxt = v('trCond'), condNova = condTxt ? condCanon(condTxt) : '';
+        if (condCampo && condTxt && condDias(condTxt) === null){
+          Nucleo.janela.erro('Condição de pagamento: escreva os dias separados por barra, crescendo (15/30/45/60; 0 = no ato).', document.getElementById('trCond')); return; }
+        const condMuda = condCampo && (editando ? condNova !== condCanon(t.condicao || '') : !!condNova);
+        const condGravar = async id => {
+          if (!condMuda) return '';
+          try{ await rpc('tf_fin_titulo_condicao_gravar', { p_titulo_id: id, p_condicao: condNova }); return condNova ? ' Condição ' + condNova + '.' : ' Condição: a do cliente.'; }
+          catch(e){ return ' A condição não foi gravada: ' + e.message; }
+        };
         try{
           if (editando){
             await rpc('tf_fin_titulo_receber_editar', {
@@ -7192,20 +7301,31 @@ async function modalTituloReceber(t){
               p_competencia: comp + '-01', p_vencimento: venc,
               p_subcategoria_id: subId, p_forma_prevista: v('trForma') || null,
               p_os_codigo: v('trOs') || null });
-            fecharModal(); toast('Conta a receber atualizada.', 'ok'); await finreCarregar();
+            const cm = await condGravar(t.id);
+            fecharModal(); toast('Conta a receber atualizada.' + cm, /não foi gravada/.test(cm) ? 'err' : 'ok'); await finreCarregar();
             return;
           }
           const clienteId = v('trCliId');
           if (!clienteId){ toast('Busque e selecione o cliente.', 'err'); return; }
-          await rpc('tf_fin_titulo_receber_criar', {
+          const novoId = await rpc('tf_fin_titulo_receber_criar', {
             p_cliente_id: clienteId, p_descricao: desc, p_valor: valor,
             p_competencia: comp + '-01', p_vencimento: venc,
             p_subcategoria_id: v('trSub') || null, p_forma_prevista: v('trForma') || null,
             p_os_codigo: v('trOs') || null });
-          fecharModal(); toast('Conta a receber lançada.', 'ok'); await finreCarregar();
+          const cm = novoId ? await condGravar(novoId) : '';
+          fecharModal(); toast('Conta a receber lançada.' + cm, /não foi gravada/.test(cm) ? 'err' : 'ok'); await finreCarregar();
         }catch(e){ toast(e.message, 'err'); }
      }}]);
 
+  // F34 · 238 (M2): a prévia da condição
+  const tcEl = document.getElementById('trCond');
+  const tcPrev = () => {
+    const p = document.getElementById('trCondPrev'); if (!p || !tcEl) return;
+    const cli = editando ? condCanon(condCliente(t)) : condCanon(COND_CLI.mapa[(document.getElementById('trCliId') || {}).value] || '30');
+    p.innerHTML = tcEl.value.trim() ? condPrevia(tcEl.value, finValorLido('trValor') || (editando ? t.valor : 0))
+      : 'Vazio: vale a condição do cliente (' + esc(condRot(cli || '30')) + ') quando a nota sair.';
+  };
+  if (tcEl){ tcEl.addEventListener('input', tcPrev); tcPrev(); }
   if (editando){
     // faturado: avisa que a nota já saiu com o texto anterior
     const dEl = document.getElementById('trDesc'), aviso = document.getElementById('trDescAviso');
@@ -7253,6 +7373,7 @@ async function modalTituloReceber(t){
           cx.value = b.dataset.nome;
           cl.innerHTML = '';
           estimarVenc(b.dataset.cli);
+          if (tcEl) tcPrev();   // F34 · 238: a condição do cliente escolhido
         }));
       }catch(e){ cl.innerHTML = '<p class="nota">Não deu para buscar: ' + esc(e.message) + '</p>'; }
     }, 200);
@@ -7302,8 +7423,9 @@ function modalPrepararNota(t){
   // S59 · item 4: o vencimento aparece antes de gravar (nota + prazo do
   // cliente) e pode ser corrigido aqui, só para esta nota.
   let prazo = 30, vencMao = false;
+  let condD = null;   // F34 · 238 (M1): os dias da condição que vale (da conta, do cliente ou trocada aqui)
   abrirModal('Preparar nota — ' + finTituloRot(t),
-      jfAvisoEmitir(t)
+      jfAvisoEmitir(t) + condLinhaNota(t, null, t.valor)
     + '<p class="nota" style="margin-top:0">Dados pra copiar na emissão, no Emissor Nacional da NFS-e:</p>'
     + '<div class="campo"><label>Cliente</label><input type="text" value="' + esc(t.cliente_nome || '') + '" readonly></div>'
     + '<div class="campo"><label>Descrição do serviço</label><input type="text" value="' + esc(t.descricao) + '" readonly></div>'
@@ -7335,6 +7457,8 @@ function modalPrepararNota(t){
         const venc = v('tfVenc');
         if (vencMao && !venc){ toast('Informe o vencimento (ou volte ao prazo do cliente).', 'err'); return; }
         if (vencMao && venc < v('tfData')){ toast('O vencimento não pode ser antes da data da nota.', 'err'); return; }
+        const cond = condLidaNota(t);   // F34 · 238 (M1)
+        if (cond === null){ Nucleo.janela.erro('Condição de pagamento: escreva os dias separados por barra, crescendo (15/30/45/60; 0 = no ato).', document.getElementById('ncCond')); return; }
         let xmlUrl = null, pdfUrl = null;
         try{
           const sobe = async (f, cat, mime, pre) => (await subirArquivoDrive(await arquivoParaBase64(f), {
@@ -7342,6 +7466,7 @@ function modalPrepararNota(t){
           if (xmlArq) xmlUrl = await sobe(xmlArq, 'nfse_xml', 'text/xml', 'nfxml-');
           if (pdfArq) pdfUrl = await sobe(pdfArq, 'nfse_pdf', 'application/pdf', 'nfpdf-');
         }catch(e){ Nucleo.janela.erro('Não consegui guardar os arquivos no Drive: ' + e.message + ' Nada foi faturado.'); return; }
+        if (!(await condGravarAntes(t, cond, cond !== undefined && cond === condAuto(t)))) return;
         try{
           await rpc('tf_fin_faturar_titulo', { p_titulo_id: t.id, p_nf_numero: numero,
             p_nf_data: v('tfData'), p_nf_valor: v('tfValor') ? Number(v('tfValor')) : null,
@@ -7370,7 +7495,16 @@ function modalPrepararNota(t){
   dEl.addEventListener('change', vencAtualizar);
   vEl.addEventListener('input', () => { vencMao = true; vencAtualizar(); });
   vencAtualizar();
-  finPrazoCliente(t.cliente_id).then(p => { prazo = p; vencAtualizar(); });
+  finPrazoCliente(t.cliente_id).then(p => { if (!(condD && condD.length === 1)) prazo = p; vencAtualizar(); });
+  // F34 · 238 (M1): a condição manda no vencimento (uma parcela: nota + dias; várias: cada parcela tem o seu)
+  condLigarNota(t, t.valor, d => {
+    condD = d && d.length ? d : null;
+    const multi = !!(condD && condD.length > 1), cv = vEl.closest('.campo');
+    if (cv) cv.hidden = multi;
+    if (multi) vencMao = false;
+    if (condD && condD.length === 1){ prazo = condD[0]; }
+    vencAtualizar();
+  });
 
   document.getElementById('tfXml').addEventListener('change', async ev => {
     const f = ev.target.files[0]; if (!f) return;
