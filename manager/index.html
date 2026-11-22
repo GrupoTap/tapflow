@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow · S214</title>
+<title>TapFlow · S215</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1656,7 +1656,8 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S214';   // S214: Rodada R20 da auditoria (issue 117, M7) — saiu o estilo que nenhuma tela usa; as telas não mudam
+const APP_VERSION = 'S215';   // S215: Rodada R24 — issue 231 (as perguntas da abertura vão juntas: as permissões, as colunas, os parâmetros e a equipe; o quadro com as vendas adicionais; as atrasadas do dono e as de apoio)
+// const APP_VERSION = 'S214';   // S214: Rodada R20 da auditoria (issue 117, M7) — saiu o estilo que nenhuma tela usa; as telas não mudam
 // const APP_VERSION = 'S211';   // S211: Rodada R17 da auditoria (TapFlow agenda e listas) — issues 168 (mês seguinte/anterior nos dias 29 a 31), 179 (8 acertos da Agenda e do designar), 125 (compromisso que se repete), 175 (Tarefas por perfil: as caixas travam enquanto gravam; o nome do perfil), 113 (Todas as OS), 114 (Nova OS: o cliente digitando, núcleo N16), 124 (anexar arquivo e tirar da lista), 229 (o Relatório Financeiro pela proposta aprovada) e 230 (a data da OS em Brasília); banco 313
 // const APP_VERSION = 'S205';   // S205: Rodada R12 da auditoria (TapHub) — issue 156 (o "Sair" do núcleo: diz quantos envios ficam na fila, encerra o acesso também no servidor; no celular da empresa, guarda a sessão); núcleo N15
 // const APP_VERSION = 'S203';   // S203: Rodada R10 da auditoria (contratos) — issues 206 (o boletim depois de um reajuste: cada linha com o preço que valia; o total conferido antes de gerar), 111 (Desmarcar só no dia sem letra; "sem RDO" no lugar de "0 pessoas"; saldo "—" sem o previsto), 176 (Configurações › Documentos busca no banco, em partes, sem as fotos) e 180 (os 10 acertos dos contratos); documentos.js D3
@@ -2042,9 +2043,10 @@ async function carregar(opt){
   if (DEMO){ cards = demoCards(); pintar(); setConn('ok','Modo demo'); return; }
   if (!opt.silencioso) setConn('sync','Carregando…');
   try{
+    const pVendas = carregarVendasAdicionais();   // S215 (issue 231): junto com o quadro (ela trata o próprio erro)
     cards = await get('v_os_kanban?select=*&order=coluna_ordem,numero');
     falhaCarga = null;
-    await carregarVendasAdicionais();
+    await pVendas;
     atualizarPendencias();   // sem await: o menu não segura o quadro
     pararRecon();
     setConn('ok','Conectado');
@@ -13234,14 +13236,16 @@ async function iniciar(){
   // O menu é remontado AQUI, não só no carregamento do arquivo: quando o
   // script roda, a sessão ainda não foi lida, e o menu saía inteiro para todo
   // mundo. Foi o teste de tela que pegou — o perfil comercial via Compras.
-  await carregarCC();
-  await carregarRH();          // S42 · Recursos Humanos: quem vê é o banco
-  await carregarFin();         // Financeiro: quem vê é o banco (mesmo padrão)
+  // S215 (issue 231): as consultas da abertura vão juntas (antes uma esperava a outra; cada uma trata o próprio erro)
+  const fundo = Promise.all([carregarColunas(), carregarParametros(), carregarEquipe()]);
+  await Promise.all([
+    carregarCC(),
+    carregarRH(),              // S42 · Recursos Humanos: quem vê é o banco
+    carregarFin()              // Financeiro: quem vê é o banco (mesmo padrão)
+  ]);
   montarNav();
   pintarCracha();
-  await carregarColunas();
-  await carregarParametros();
-  await carregarEquipe();
+  await fundo;
   // N1b: o botão do hub leva a uma tela daqui (`?ir=`). Só vale se a tela existir no
   // menu; se a pessoa não puder vê-la, o irPara abre a primeira que ela pode.
   try{
@@ -13316,10 +13320,13 @@ let ATR_APOIO = [];
 let ATR_PAR = new Map();     // chaveReag(os, tarefa) → { card, t }
 async function carregarAtrasadas(){
   if (DEMO){ ATRASADAS = []; ATR_APOIO = []; ATR_PAR = new Map(); return ATRASADAS; }
-  try{ ATRASADAS = await rpc('tf_minhas_atrasadas', {}) || []; }
-  catch(e){ ATRASADAS = []; }       // banco sem o 61: sem aviso, sem erro na cara de ninguém
-  try{ ATR_APOIO = await rpc('tf_atrasadas_como_apoio', {}) || []; }
-  catch(e){ ATR_APOIO = []; }       // banco sem o 62: só as do dono, como no S41
+  // S215 (issue 231): as duas perguntas vão juntas (antes a 2ª esperava a 1ª)
+  const [dono, apoio] = await Promise.all([
+    rpc('tf_minhas_atrasadas', {}).catch(() => null),       // banco sem o 61: sem aviso, sem erro na cara de ninguém
+    rpc('tf_atrasadas_como_apoio', {}).catch(() => null)    // banco sem o 62: só as do dono, como no S41
+  ]);
+  ATRASADAS = dono || [];
+  ATR_APOIO = apoio || [];
   const m = new Map();
   await Promise.all(ATRASADAS.filter(a => a.os_id && a.tarefa_id && a.origem !== 'avulso').map(async a => {
     const par = await paralelaFora(a.os_id, a.tarefa_id);

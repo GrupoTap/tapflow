@@ -1,186 +1,220 @@
 /* ============================================================================
- * TAPFLOW — SERVICE WORKER DO HUB E DO MANAGER (S45 · item 1, PWA)
+ * TAPHUB — SERVICE WORKER DO INÍCIO E DOS MÓDULOS DO ESCRITÓRIO
  * ----------------------------------------------------------------------------
- * Mora na RAIZ do TapFlow (/tapflow/sw.js) e cuida de duas páginas: a porta
- * (/tapflow/) e o Manager (/tapflow/manager/). O Field NÃO é dele: o Field
- * tem o próprio service worker (field/sw.js, com a fila offline), de escopo
- * mais longo, e o navegador entrega cada página ao escopo mais longo que a
- * cobre. Por garantia, este aqui nem olha para /field/ — se o Field ainda não
- * registrou o dele, a página vai direto para a rede, como antes.
+ * Mora na RAIZ (/tapflow/sw.js) e cuida do início e das páginas dos módulos
+ * (manager/, fin/, doc/, rh/, seg/, crm/, gestao/, cadastros/, acessos/).
+ * O TapField NÃO é dele: o TapField tem o próprio service worker (field/sw.js),
+ * de escopo mais longo, e o navegador entrega cada página ao escopo mais longo
+ * que a cobre. Por garantia, este aqui nem olha para /field/.
  *
- * O que ele faz, em uma frase: deixa o TapFlow ser INSTALADO (ícone na tela
- * inicial, abre em tela cheia) e abrir o "esqueleto" sem sinal.
+ * O que ele faz: deixa o TapHub ser INSTALADO (ícone na tela inicial) e abrir
+ * sem sinal a última versão que funcionou.
  *
- * O que ele NÃO faz, de propósito (a mesma regra do Field):
+ * O que ele NÃO faz, de propósito:
  *   · não guarda resposta de API (/rest/v1, /auth/v1, /storage/v1) nem nada de
- *     outro endereço (o Supabase, o Google). Os dados continuam vindo da
- *     internet — cachear API criaria uma segunda verdade: um card que já
- *     andou continuaria parado na tela.
+ *     outro endereço (o Supabase, o Google): os dados vêm sempre da internet.
  *
- * A ESTRATÉGIA, e por quê:
- *   · Abrir uma página: REDE PRIMEIRO, com 4 s de paciência, e o cache como
- *     rede de segurança. Quem está online sempre pega a versão nova — é isso
- *     que impede o app instalado de ficar preso numa versão velha (S45, S46…)
- *     sem ninguém precisar "limpar o cache". Sem sinal, abre a última que
- *     funcionou, e o próprio Manager diz que não conseguiu carregar os dados.
- *   · Ícones e manifesto: cache primeiro, atualizando por baixo.
+ * A ESTRATÉGIA (S215, issue 231):
+ *   · Abrir uma página: INTERNET PRIMEIRO, com 1,5 s de prazo. Com a cópia
+ *     guardada, a pergunta à internet é "mudou?" (If-None-Match): se não mudou,
+ *     a resposta é curta (304) e a página sai da cópia. Passado o prazo, abre a
+ *     cópia e a resposta da internet, quando chegar, fica guardada para a
+ *     próxima vez (sem aviso e sem recarregar sozinho). Sem cópia, espera a
+ *     internet.
+ *   · Arquivo com a versão no endereço (?v=…): a cópia guardada primeiro — a
+ *     mesma versão é sempre o mesmo arquivo. Sem ?v=: internet primeiro, 1,5 s.
+ *   · Ícones e manifesto: a cópia primeiro, atualizando por baixo.
+ *   · Versão nova (a linha VERSAO): o cache é um só e fica. O aparelho pergunta
+ *     só pelas páginas que ele já abriu (e pelo início), baixa só as que
+ *     mudaram e os arquivos ?v= novos delas; as páginas que ele nunca abriu
+ *     não são baixadas.
  *
- * ⚠ AO PUBLICAR UMA VERSÃO NOVA DO HUB OU DO MANAGER, TROQUE A LINHA `VERSAO`.
- *   É ela que apaga o cache velho no aparelho de todo mundo.
+ * ⚠ AO PUBLICAR UMA VERSÃO NOVA DE QUALQUER PÁGINA, TROQUE A LINHA `VERSAO`.
+ *   É ela que faz o aparelho perguntar pelas páginas novas. Trocou o ?v= de um
+ *   arquivo do núcleo nas páginas? Troque aqui também (FIXOS ou JUNTO).
+ *   O histórico das versões está nos Pull requests.
  * ========================================================================== */
 
-const VERSAO = 'H19-S214';   // S214: Rodada R20 da auditoria (issue 117): saiu do manager/ o estilo que nenhuma tela usa; TapFlow S214
-// const VERSAO = 'H19-S213';   // S213: Rodada R16 da auditoria (TapFin telas; issues 91, 92, 97, 101, 95, 102, 103, 100 e 104; banco 528): TapFin F32, nucleo/fin-painel FP4, TapGestão GE7
-// const VERSAO = 'H19-S212';   // S212: Rodada R15 da auditoria (PIN provisório e digital; issues 123, 161 e 194; banco 628): núcleo N17 (Nucleo.pin e o provisório que troca na própria tela), TapRH RH22, TapSeg G11
-// const VERSAO = 'H19-S211';   // S211: Rodada R17 da auditoria (TapFlow agenda e listas; issues 125, 168, 175, 179, 113, 114, 124, 129, 229 e 230; banco 313): núcleo N16 (a busca digitando), TapFlow S211, TapCRM CRM10
-// const VERSAO = 'H19-S210';   // S210: Rodada R19 da auditoria (TapDoc laudo, documentos e regras; issues 215, 216, 217, 223 a 228; banco 450): TapDoc E54, doc/laudo-pdf.js S178, doc/documentos-pdf.js D10, doc/placa-pdf.js P2, celular 33
-// const VERSAO = 'H19-S209';   // S209: Rodada R14 da auditoria (TapFin dinheiro; issues 93, 94, 188, 96, 99 e 105; banco 527): TapFin F31, nucleo/fin-painel FP3, TapGestão GE6
-// const VERSAO = 'H19-S208';   // S208: Rodada R18 da auditoria (TapDoc revisão e celular; issues 218, 219, 220, 221 e 222; banco 449): TapDoc escritório E53, documentos-pdf.js D9, mapa-3d.js M3, celular 32
-// const VERSAO = 'H19-S207';   // S207: Rodada R13 da auditoria (TapSeg; issues 121, 190, 191, 192, 193, 195 e 196; banco 627): TapSeg G10, Field S69
-// const VERSAO = 'H19-S206';   // S206: Rodada R12 da auditoria, parte 2 (Cadastros; issues 145, 147, 148, 157 e 158; banco 216 do S205): Cadastros CAD10; saíram config.js, nucleo.js e nucleo.css da raiz
-// const VERSAO = 'H19-S205';   // S205: Rodada R12 da auditoria (TapHub; issues 149, 150, 151, 152 e 156; banco 216): núcleo N15, hub H19, Pessoas e acessos A12, Cadastros CAD9, o "Sair" do núcleo em todas as páginas (TapFlow S205, TapCRM 9, TapFin 30, TapRH 21, TapSeg 9, TapField S68)
-// const VERSAO = 'H18-S204';   // S204: Rodada R11 da auditoria (TapCRM e TapGestão; issues 127, 130–138; banco 312, 526, 702, 153): TapCRM CRM8, TapGestão GE5
-// const VERSAO = 'H18-S203';   // S203: Rodada R10 da auditoria (contratos; issues 206, 111, 176 e 180): TapFlow S203, documentos.js D3
-// const VERSAO = 'H18-S202';   // S202: Rodada R10 da auditoria (TapFlow celular; issues 106, 107, 177, 178 e 207; banco 311): núcleo N14, Field S67, TapFlow S202
-// const VERSAO = 'H18-S201';   // S201: Rodada R9 da auditoria (TapRH; issues 118, 120, 159, 160, 162, 163, 164, 165 e 141 parte 2; banco 618): TapRH RH20, Field S66
-// const VERSAO = 'H18-S200';   // S200: Rodada R8 da auditoria, parte 2 (cartões e canhoto; issues 185, 186 e 187): TapFin F28, Field S65
-// const VERSAO = 'H18-S199';   // S199: Rodada R8 da auditoria, parte 1 (nota e boleto; issues 98, 181, 182, 183 e 184; banco 525): TapFin F27
-// const VERSAO = 'H18-S198';   // S198: Rodada R7 da auditoria (TapFlow escritório) (issues 112, 170, 171, 172, 173 e 174; banco 310): TapFlow S198, TapRH RH19
-// const VERSAO = 'H18-S197';   // S197: Rodada R6 da auditoria (celular: ponto e diária; issues 140, 141, 143 e 166): Field S64 e TapRH 18
-// const VERSAO = 'H18-S196';   // S196: Rodada R5 da auditoria (padrões de todas as telas) (issues 108, 109, 126, 144, 169, 110, 119, 122, 128, 155): núcleo N13, propostas PR2, TapFlow S196, TapCRM 7, TapRH 17, TapSeg 8, Cadastros 8, TapFin 26, Pessoas e acessos A11, hub H18
-// const VERSAO = 'H17-S195';   // S195: Rodada R4 da auditoria — núcleo N12 (issues 142, 146, 153, 154, 167 e 189): hub H17, TapFlow S195, TapRH RH16, TapFin F25, TapSeg G7, Cadastros CAD7, Field S62, documentos.js D2
-// const VERSAO = 'H16-S194';   // S194: Rodada R3 da auditoria — o ponto no banco (617, issues 139, 203, 204 e 205): TapRH RH15 e Field S61
-// const VERSAO = 'H16-S191';   // S191: Rodada R2 da auditoria (issues 200, 202 e 208): TapFlow S191, Cadastros CAD6 e TapFin F24 pegam os parâmetros do Drive pela função (215); o TapFlow aceita o script do Drive v3
-// const VERSAO = 'H16-S190';   // S190: Rodada R1 da auditoria — as portas do banco (214, issues 197, 198 e 199); nenhuma tela mudou
-// const VERSAO = 'H16-S189';   // S189: TapGestão GE4 — a aba Reunião (bloco Financeiro, com os quadros do TapFin, a meta de recebimento e a ata); TapFin F23 e nucleo/fin-painel FP2 (524, 152)
-// const VERSAO = 'H16-S188';   // S188: TapFin F22 — os quadros do Painel e das Projeções em nucleo/fin-painel.js e .css (FP1), para o TapGestão usar os mesmos (sem SQL)
-// const VERSAO = 'H16-S187';   // S187: issue 86 — Revisão TapDoc · Rodada 12 (só banco: 448; nenhuma tela mudou)
-// const VERSAO = 'H16-S186';   // S186: issues 74 e 75 — TapDoc escritório E52, laudo-pdf.js S177 e documentos-pdf.js D8 (ajustes pequenos do que o laudo e os documentos escrevem e das telas do laudo e dos documentos; sem SQL)
-// const VERSAO = 'H16-S185';   // S185: issues 70 e 73 — TapDoc escritório E51 e assinatura-pdf.js S174 (o laudo emitido antes da reabertura da inspeção não se assina mais; a devolução do PDF assinado recusa certificado vencido e grava o tipo certo da assinatura; 447)
-// const VERSAO = 'H16-S184';   // S184: issue 90 — a T16 "Emitir boleto / nota fiscal" da inspeção comum abre junto com a OS (309): TapFlow S184 ("medição em aberto" na T16) e TapFin F21 (o aviso no painel da OS)
-// const VERSAO = 'H16-S183';   // S183: issues 69 e 84 — TapDoc escritório E50 (a válvula aprovada em campo que abre acima da PMTA adotada sai NÃO CONFORME no laudo, com a recomendação; a PMTA adotada vira a vigente na assinatura do laudo; laudo-pdf.js S176, documentos-pdf.js D7; 446)
-// const VERSAO = 'H16-S182';   // S182: issues 71, 72 e 33 — TapDoc escritório E49 (a emissão para quando falta uma foto do laudo; a tela do laudo não mostra os documentos de outro vaso; aceitar o desenho da assinatura só com a digital; sem SQL)
-// const VERSAO = 'H16-S181';   // S181: issues 65 e 67 — TapDoc escritório E48 (a revisão grava mais rápido; ajustes pequenos da preparação e da revisão; sem SQL)
-// const VERSAO = 'H16-S180';   // S180: issues 59, 66 e 32 — TapDoc escritório E47 ("Não deu para medir" tira o componente da conta e o PLH aprova; os componentes fora da conta aparecem com o motivo; na revisão, tirar do laudo uma foto do campo e pôr de volta; a foto do estado geral do 7.4: laudo-pdf.js S175; 445)
-// const VERSAO = 'H16-S179';   // S179: issues 56, 61 e 81 — TapDoc escritório E46 (na revisão, corrigir o ano de fabricação e o ajuste da válvula grava, o ajuste na unidade da inspeção; a circunferência, a situação do acessório e o E e a geometria dos componentes se corrigem; a correção desmarca o "conferido" do quadro; 444)
-// const VERSAO = 'H16-S178';   // S178: issues 58, 60 e 62 — TapDoc escritório E45 (na aprovação, o que o PLH digitou fica ao gravar outra parte; a PMTA adotada abaixo da pressão de operação com a justificativa do PLH: o laudo e o Registro saem "não liberado para operar nessa pressão", laudo-pdf.js S174 e documentos-pdf.js D6; o aviso da vida remanescente na lista do sistema; 443)
-// const VERSAO = 'H16-S177';   // S177: issues 54, 63, 64 e 85 — TapDoc escritório E44 (a PMTA recalculada do vaso aberto; o laudo anterior sem perder o digitado; desativar com confirmação e reativar; "Nova calibração" e o certificado do dia de cada inspeção; 442)
-// const VERSAO = 'H16-S174';   // S174: issues 38, 39, 52, 82 e 83 — TapDoc escritório E43 (o CSV do medidor com leitura inválida entra com as boas) e celular 30 (441)
-// const VERSAO = 'H16-S173';   // S173: issues 43, 44, 45, 46, 47 e 57 — TapDoc escritório E42 (o prazo reduzido pelas datas aprovadas: laudo-pdf.js S173, documentos-pdf.js D5) e celular 29 (aferição, acessórios e prazo; 440)
-// const VERSAO = 'H16-S172';   // S172: issues 40, 42 e 55 — TapDoc escritório E41 e celular 28 (a leitura do número com ponto de milhar; sem SQL)
-// const VERSAO = 'H16-S171';   // S171: issues 35, 36, 37 e 41 — núcleo N11 (a fila avisa quando o aparelho está sem espaço) e TapDoc celular 27 (a base da coleta)
-// const VERSAO = 'H16-S170';   // S170: issues 76 a 80 — permissões do banco do TapDoc (213, 438 e 439; só SQL, nenhuma tela muda)
-// const VERSAO = 'H16-S169';   // S169: issue 68 — TapDoc E40 (com a caixa "Reconstituir o prontuário" marcada, o Relatório de Inspeção sai com o conteúdo do relatório, não com o do Prontuário)
-// const VERSAO = 'H16-S168';   // S168: issue 34 — TapDoc E39 (na revisão, o link do TapWeb do vaso: o QR da placa e da lombada)
-// const VERSAO = 'H16-S167';   // S167: issue 30, Parte 4 — TapDoc E38 (o fichário: capa, folha de rosto e divisórias; as lombadas de 40 ou 60 mm; doc/documentos-pdf.js D4) e Cadastros CAD5 ("Imprime a pasta" no cliente) (212, 437)
-// const VERSAO = 'H16-S166';   // S166: issue 30, Parte 3 — TapDoc E37 (o Prontuário (Reconstituído), com número P; a caixa "Reconstituir o prontuário"; doc/laudo-pdf.js S166; doc/documentos-pdf.js D3; 436)
-// const VERSAO = 'H16-S165';   // S165: issue 30, Parte 2 — TapDoc E36 (o Registro de Segurança, livro completo ou só a anotação; a caixa "já tem a pasta"; doc/documentos-pdf.js D2; 435)
-// S164: issue 30, Parte 1 — TapDoc E35 (os documentos da inspeção em arquivos próprios: o relatório só com a ART; o Resumo; os certificados M/V; todos assinados com o token; "Baixar tudo"; doc/documentos-pdf.js D1; laudo-pdf.js S164; 434)
-// const VERSAO = 'H16-S163';   // S163: TapDoc E34 (issues 12, 18, 20 e 21: as recomendações numa lista só e a justificativa do prazo; doc/recomendacoes.js RC1; laudo-pdf.js S163; 433)
-// const VERSAO = 'H16-S162';   // S162: TapDoc E33 (issues 13, 14, 15, 19 e 23: revisão e campo)
-// const VERSAO = 'H16-S161';   // S161: issues 16, 17, 22, 24, 25 e 26 — TapDoc E32 (a aparência do laudo e do certificado: laudo-pdf.js S161)
-// const VERSAO = 'H16-S160';   // S160: issues 28, 29, 31 e 27 — TapDoc E31 (aprovar o laudo: o mapa carregado antes, só a digital, o andamento em %; a aba Laudos no celular) e núcleo N10 (confirmarPessoa só com a digital)
-// const VERSAO = 'H16-S158';   // S158: TapDoc E30 (assinatura-pdf.js S158: lê a assinatura do gov.br, reserva do token) e o modo de teste das revisões (432)
-// const VERSAO = 'H16-S157';   // S157: issue 10 — núcleo N9 (o acesso vencido, "exp" claim, renovado antes de enviar a fila e no envio das fotos) e Field S58
-// const VERSAO = 'H16-S156';   // S156: issue 1 (passo 2) — o Manager vira o TapFlow puro (manager/ S156: sem o código parado de Cadastros, das Configurações que saíram e de Fornecedores; o nome nas telas é "TapFlow"); TapDoc E29, Pessoas e acessos A10 e TapRH RH14 (só as frases que diziam "Manager")
-// const VERSAO = 'H16-S155';   // S155: issue 8 — TapDoc E28 (a arte da placa de identificação para a gráfica: doc/placa-pdf.js P1, doc/vendor/placa-letras.js e doc/vendor/qrcode.js) (431)
-// const VERSAO = 'H16-S154';   // S154: issue 9 — TapDoc E27 (laudo-pdf.js S154: a foto da medição de espessura no 7.3) e celular 24 (a foto no Ultrassom) (430)
-// const VERSAO = 'H16-S153';   // S153: issue 6 — TapDoc E26 (a aparência do laudo: laudo-pdf.js S153)
-// const VERSAO = 'H16-S152';   // S152: issue 7, Parte 2 — TapDoc E25 (modelo de vaso, outras medidas, o desenho na ficha do vaso; mapa-3d.js M2) e celular 23 (a seção "Medidas do vaso") (429)
-// const VERSAO = 'H16-S151';   // S151: issue 7 — TapDoc E24 (o mapa dos pontos de medição em 3D na revisão: doc/mapa-3d.js e doc/vendor/three.min.js; laudo-pdf.js S151) (428)
-// const VERSAO = 'H16-S150';   // S150: item 81 — TapDoc E23 (os documentos de aferição no pacote do laudo; laudo-pdf.js S150), celular 22 e o motor R00.6 (427)
-// const VERSAO = 'H16-S149';   // S149: itens 82, 83, 84, 88 e 92 — TapDoc E22 (revisão; laudo-pdf.js S149) e celular 21 (426)
-// const VERSAO = 'H16-S148';   // S148: itens 80, 85, 89, 90, 91 e 93 — TapDoc E21 (revisão e laudo-pdf.js S148; celular: a ordem do medidor; 425)
-// const VERSAO = 'H16-S147';   // S147: item 86 — TapDoc E20 (laudo assinado e arquivos da inspeção até 50 MB; 423)
-// const VERSAO = 'H16-S146';   // S146: item 79 — TapDoc E19 (os textos prontos do laudo: revisão e a aba Textos do laudo; laudo-pdf.js S146; 422)
-// const VERSAO = 'H16-S145';   // S145: rodada E — TapDoc E18 (a assinatura do laudo: desenho do PLH, aprovar com a digital, carimbo, pacote para o token e a conferência; laudo-pdf.js e assinatura-pdf.js S145; 421)
-// const VERSAO = 'H16-S144';   // S144: rodada D2 — TapDoc E17 (laudo-pdf.js S144), Pessoas e acessos A9, TapHub Cadastros CAD4 (itens 63, 69 a 72, 74, 75, 77 e 78; 211 e 420)
-// const VERSAO = 'H16-S143';   // S143: TapDoc E16 (rodada D1: texto e cara do laudo, itens 62 a 69, 73 a 76 e 78; laudo-pdf.js S143; 419)
-// const VERSAO = 'H16-S142';   // S142: núcleo N8 (item 37), Pessoas e acessos A8 (itens 36 e 39), TapRH RH13 (item 38; 616)
-// const VERSAO = 'H16-S141';   // S141: TapDoc E15 (rodada B da lista; 417) e o motor R00.5
-// const VERSAO = 'H16-S140';   // S140: TapDoc E14 (doc/: itens 44, 49, 50, 51, 53 e 56 da lista; laudo-pdf.js S140; 416)
-// const VERSAO = 'H16-S139';   // S139: Manager S139 (item 28 da lista: nomes de empresas fictícios no modo demonstração)
-// const VERSAO = 'H16-S136';   // S136: o celular da empresa (210): hub H16, núcleo N7, modulos M4, Pessoas e acessos A7, Field S53
-// const VERSAO = 'H15-S135';   // S135: item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
-// const VERSAO = 'H14-S134';   // S134 · TapHub Cadastros 1 (cadastros/: Clientes, Catálogo, Duplicados e as Configurações do TapHub), Manager S134 (sem CADASTROS, Configurações só do TapFlow, sem o comercial parado), TapCRM 3 (Configurações do comercial), TapFin 17, TapRH 10, TapSeg 5 e o card Cadastros (modulos M3)
-// const VERSAO = 'H13-S132';   // S132 · lista de melhorias: TapHub nas telas (#10), Relatar problema ou sugerir (#1: hub H13, núcleo N6, modulos M2, acessos A6, 209), TapRH 9 (615: banco dia a dia, EzPoint até a data-base, ASO, documentos por vínculo), TapSeg 4 (626: uniforme), TapFin 16, TapCRM 2, TapGestão 3, TapDoc E12/13 (só o nome)
-// const VERSAO = 'H12-S131';   // S131 · Manager: dispensa de parte do dia em Feriados; TapRH 8, TapSeg 3 · S130 · Contratos, a mobilização do mês (308): visita sem vaso, tipo do dia de campo, aba Vasos na OS do contrato (vaso novo a conferir), fiscal e gestor do fornecedor no boletim, "entra sozinho na medição" (Manager S130) · S129 · os documentos do gov.br pelo TapField (612): TapRH 7 e Field S47 · S128 · o termo de ciência e a advertência do ponto em texto formal (611): TapRH 6 e Field S46 · S127 · Ponto Etapa 2: TapRH 5 (parâmetros, banco por lote, espelho com o cálculo) e o Manager S127 (tipo de cada data em Feriados) · S126 · TapRH 4: o espelho em PDF com a logo, quadros, uma coluna por batida, ajustes e assinaturas e o nome no padrão do escritório; Field S44 (o mesmo nome em "Meus espelhos"); no banco 604 (escala automática) e 605 (folga e atestado de parte do dia) · S125 · Ponto próprio, Etapa 1: TapRH 3 (aba Ponto: Hoje, Pedidos, Espelhos com aprovação e PDF, Escalas e regras, Importar EzPoint) e Field S43 (o ponto no alto do Eu: botão único, foto, local, PIN/digital, sem internet, comprovante, lembretes, pedidos de ajuste); no banco 600, 601 e 602 · S124 · Recuperar senha e PIN: "Esqueci minha senha" na entrada, a troca obrigatória da senha provisória, a letra clara nos campos e a faixa dos pedidos (hub H12); "Pedir PIN novo" e a troca do PIN provisório na trava (núcleo N4); os pedidos e "Gerar senha/PIN provisório" em Pessoas e acessos (A5); Field S42 só com o núcleo novo; no banco a 207 · S123 · Passkey 1: a digital (ou o rosto) destrava a trava do PIN em todos os módulos (núcleo N3), "Meus aparelhos e digital" pelo nome no topo do hub, a liberação de aparelho novo e o indicador em Pessoas e acessos (A4); Field S41 só com o núcleo novo; no banco a 206 e a Edge Function confirmar-pessoa · S122 · TapGestão 2 (GE2): mês em andamento sem cor, "como é calculado", módulo com erro avisado no card, Enter grava a meta; no banco 151 (e a 521 + as notas de 2026) · S121 · TapGestão 1 (GE1): os indicadores em gestao/ (painel do mês, ano, metas e fechamento) e o card TapGestão; no banco 520, 700, 307, 415 e 150 · S120 · TapFin F15: o tipo de custo de cada subcategoria (variável, fixo ou fora dos custos) em Categorias e Orçamento, para a margem do TapGestão; no banco a 519 · S119 · TapCRM 1 (CRM1): a Equipe Comercial em crm/, fora do Manager; as propostas no nucleo/propostas.js (PR1), comuns ao Manager e ao crm/; Manager S119 (sem o comercial e sem o código parado do RH); o card TapCRM abre o crm/ · S118 · TapRH 1 (RH1): as 6 telas do RH em rh/, fora do Manager; Manager S118 (sem o menu do RH e sem o código parado da Segurança); TapSeg G2 ("Ficha do RH →" abre o rh/); o card TapRH abre o rh/ · S117 · Manager S117: saiu o código parado do Financeiro (o TapFin é a fonte; Fornecedores ficou em CADASTROS) · S116 · TapSeg 1 (G1): a Segurança do Trabalho em seg/, fora do Manager; Manager S116 (a ficha do RH sem as abas de segurança, com "Segurança desta pessoa →"); o card TapSeg abre o seg/; junto vai o Field S40 (boletim com as logos e "Enviar pelo WhatsApp") · S114 · a medição da OS comum: Manager S114 (aba Medição na OS, "Ver a medição" na T06B, anexar o assinado, reabrir; a linha da tarefa na largura toda) e TapFin F14 (avisos das medições no Painel; "Medição fechada" no painel da OS); junto com o Field S39 e, no banco, 306 → 518 → dados das 4 OS · S113 · TapDoc E11 e 12: tirar vaso da OS, reabrir para o campo, boroscopia no escritório, válvula com 3 ciclos (414) · S111 · C1-Drive: os documentos dos contratos (pastas dos dias, RDOs, medições) gravados nas pastas do cliente no Drive pelos 3 links do contrato; o cliente com a cidade na escolha do contrato; no banco a 304; o script do Drive v2 · S110 · Contratos (C1): o Manager S110 com a tela Contratos, visitas, dias de campo, RDO, medição e boletim pelo modelo do cliente; a busca do Manager sem letras embaralhadas; no banco 301 → 510 → 509 · S109 · TapFin F13: as OS de contrato no financeiro (a faixa "Medições fechadas sem título", a nota com "Pedido/Contrato" e os itens juntos por código; aparecem quando a 301, a 510 e a 509 estiverem no banco) e a busca sem letras embaralhadas; o gerador de documentos no núcleo (nucleo/documentos.js, carregado sob demanda) · S108 · o modo treino no protótipo dos contratos (P2: exercícios guiados e perguntas, só no navegador) · S107 · TapDoc E10 e 10: o CSV do medidor anexado no escritório, na revisão; o celular não exige as leituras para enviar (412); o protótipo dos contratos em prototipo/contratos/ (sem banco) · S106 · Manager S106: cadastrar o contato na própria janela (Resposta do cliente, Agendar com, Para quem) e as tarefas seguintes voltam a esperar ao reabrir (303); TapFin F12: o comprovante do cancelamento da nota (517) · S105 · a T16 conclui sozinha quando a OS está faturada no TapFin e reabre se a nota for cancelada (302 + 516); Manager S105 mostra "concluída pelo TapFin · NF …" · S104 · Manager S104: o endereço completo do cliente no card e na gaveta da OS (com o mapa pelo endereço) e a montagem da proposta escondida de quem não monta · S103 · Manager S103: a proposta agrupada como o cliente vê (documento e card), com o desconto no pé e a situação dos vasos logo abaixo dos preços; Fornecedores para todos (515) · S102 · Faturar a partir da OS: o botão "Faturar no TapFin" na T16 (Manager S102) e o painel da OS no TapFin F11 (515); Fornecedores com cidade, UF e contato · S101 · Manager S101: o grupo CADASTROS em todos os módulos (com a cor de onde se veio, ?area=) e os Duplicados com pendentes no topo e "Já revisados" recolhido · S99 · TapFin F10: duas linhas fixas no boleto e "Ver no portal nacional" (513) · S98 · token do Inter no banco (514, só função) · S97 · TapFin F9: boleto com Pix pelo Inter (508, 508b, fin-boleto) e as correções da 512 · S96 · TapFin F8: descrição da nota editável e os ajustes do teste de 26/10 (511) · S95 · TapFin 7: contas que já têm nota (507, fin F7) · S94 · R06a: o laudo em PDF no TapDoc do escritório (410, TapDoc E9) · S93 · R05a: a revisão (409, E8)
-const CACHE  = 'tapflow-hub-' + VERSAO;
+const VERSAO = 'H20-S215';
+const CACHE  = 'tapflow-hub';          // um cache só, que passa de uma versão para a outra
+const PRAZO  = 1500;                   // ms de paciência com a internet antes de abrir a cópia
 
-const ESSENCIAIS = [
+// Sempre guardados (o início e o que toda página pede). O endereço tem que ser
+// IDÊNTICO ao da página, com o ?v= (o cache compara a consulta inteira).
+const FIXOS = [
   './',
   './manifest.webmanifest',
-  './manager/',
   './field/icons/icon-192.png',
   './field/icons/icon-512.png',
   './field/icons/icon-maskable-512.png',
   './field/icons/apple-touch-icon.png',
-  // O núcleo comum. O endereço tem que ser IDÊNTICO ao do <script>, com o ?v=
-  // (o cache compara a consulta inteira). Trocou o ?v= nas páginas? Troque aqui também.
-  // S76: hub, Manager, Field e fin/ pedem todos ?v=N2 — saíram as linhas ?v=N1. S123: todos pedem ?v=N3 (Passkey 1). S124: ?v=N4. S131: ?v=N5 (IndexedDB do iPhone).
   './nucleo/nucleo.js?v=N17',
   './nucleo/nucleo.css?v=N17',
   './nucleo/config.js?v=N17',
-  // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo" (mesmo ?v= das páginas)
-  './nucleo/modulos.js?v=M4',
-  // S110 · o gerador de documentos (o Manager o pede com ?v=D1; o jszip e o pdfmake vêm sob demanda)
-  './nucleo/documentos.js?v=D3',
-  './nucleo/fin-painel.js?v=FP4',   // S188 · os quadros do Painel do TapFin (TapFin e TapGestão) · FP4 (S213)
-  './nucleo/fin-painel.css?v=FP4',
-  // S74 · TapFin: a página (S76 · TapFin 2: o plano B fin/util.js saiu)
-  './fin/',
-  // S77 · TapDoc do escritório (R02b1) e o motor de cálculo que ele usa
-  './doc/',
-  './doc/motor-calculo-nr13.js?v=R00.6',
-  './doc/recomendacoes.js?v=RC1',   // S163: a lista das recomendações e do prazo (a revisão sem sinal precisa dela)
-  './doc/documentos-pdf.js?v=D10',   // S164: os nomes dos arquivos e o Resumo; S165: o Registro de Segurança; S166: os textos do Prontuário na minuta; S173: o prazo reduzido pelas datas
-  // S88 · Acessos P1: a tela do admin
-  './acessos/',
-  // S116 · TapSeg 1: a Segurança do Trabalho
-  './seg/',
-  // S118 · TapRH 1: os Recursos Humanos
-  './rh/',
-  // S119 · TapCRM 1: o comercial, e as propostas comuns ao Manager e ao crm/ (mesmo ?v= das páginas)
-  './crm/',
-  './nucleo/propostas.js?v=PR2',
-  // S121 · TapGestão 1: os indicadores
-  './gestao/',
-  // S134 · TapHub Cadastros 1: Clientes, Catálogo, Duplicados e as Configurações do TapHub
-  './cadastros/'
+  './nucleo/modulos.js?v=M4'
 ];
+// As páginas dos módulos: só as que o aparelho já abriu são conferidas a cada versão nova.
+const PAGINAS = ['./manager/', './fin/', './doc/', './acessos/', './seg/', './rh/', './crm/', './gestao/', './cadastros/'];
+// Arquivos que a página carrega depois de abrir (não estão no <script>/<link> dela) e que precisam funcionar sem sinal.
+const JUNTO = {
+  './doc/': ['./doc/documentos-pdf.js?v=D10']   // a revisão do TapDoc sem sinal: o Resumo, o Registro e os nomes dos arquivos
+};
 
-self.addEventListener('install', ev => {
-  ev.waitUntil((async () => {
-    const c = await caches.open(CACHE);
-    // um a um: um arquivo que falte não pode derrubar a instalação inteira
-    await Promise.all(ESSENCIAIS.map(u => c.add(u).catch(() => {})));
-    self.skipWaiting();
-  })());
-});
-
-self.addEventListener('activate', ev => {
-  ev.waitUntil((async () => {
-    const nomes = await caches.keys();
-    await Promise.all(nomes.map(n => (n.startsWith('tapflow-hub-') && n !== CACHE)
-      ? caches.delete(n) : null));
-    await self.clients.claim();
-  })());
-});
-
-/** Rede com prazo — sinal ruim não pode segurar a tela para sempre. */
-function comPrazo(req, ms) {
-  return new Promise((ok, err) => {
-    const t = setTimeout(() => err(new Error('prazo')), ms);
-    fetch(req).then(r => { clearTimeout(t); ok(r); },
-                    e => { clearTimeout(t); err(e); });
-  });
-}
+const abs = u => new URL(u, self.location).href;
+const temVersao = u => /[?&]v=/.test(new URL(u, self.location).search);
 
 /** A chave da página no cache: o caminho sem busca e sem "index.html"
  *  (/tapflow/?para=manager e /tapflow/index.html são a mesma porta). */
 function chave(url) {
   const u = new URL(url);
   return u.origin + u.pathname.replace(/index\.html$/, '');
+}
+
+/** Os arquivos ?v= que a página pede no <script src> e no <link href> (os mesmos endereços que ela vai pedir). */
+function arquivosDe(html, base) {
+  const out = new Set();
+  const re = /<(?:script|link)\b[^>]*?\b(?:src|href)\s*=\s*["']([^"'#]+\?v=[^"'#]+)["']/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    try {
+      const u = new URL(m[1], base);
+      if (u.origin === self.location.origin && u.pathname.startsWith(new URL('./', self.location).pathname)) out.add(u.href);
+    } catch (e) {}
+  }
+  return [...out];
+}
+
+/** Guarda o arquivo ?v= se ainda não está guardado (a mesma versão nunca muda). */
+async function guardarSeFalta(c, u) {
+  const url = abs(u);
+  if (await c.match(url)) return;
+  try {
+    const r = await fetch(url, { credentials: 'same-origin' });
+    if (r && r.ok && r.type === 'basic') await c.put(url, r);
+  } catch (e) {}
+}
+
+/** Pede à internet só se mudou (If-None-Match / If-Modified-Since). 304 = fica a cópia. */
+function pedirSeMudou(url, guardado) {
+  const h = {};
+  if (guardado) {
+    const et = guardado.headers.get('ETag'), lm = guardado.headers.get('Last-Modified');
+    if (et) h['If-None-Match'] = et; else if (lm) h['If-Modified-Since'] = lm;
+  }
+  return fetch(url, { headers: h, cache: 'no-store', credentials: 'same-origin' });
+}
+
+/** Página nova guardada: guarda junto os arquivos ?v= dela (para abrir sem sinal). */
+async function guardarPagina(c, url, r, comArquivos = true) {
+  const k = chave(url);
+  const junto = (JUNTO['./' + k.slice(abs('./').length)] || []).map(abs);
+  if (!comArquivos) {   // a página aberta agora pede os arquivos do <script>/<link> dela sozinha; os do JUNTO, não
+    await c.put(k, r);
+    return Promise.all(junto.map(u => guardarSeFalta(c, u)));
+  }
+  const texto = await r.clone().text();
+  await c.put(k, r);
+  const pede = arquivosDe(texto, k).concat(junto);
+  await Promise.all(pede.map(u => guardarSeFalta(c, u)));
+}
+
+/** Quais páginas este aparelho abre (fica num cache à parte, que a versão nova não apaga). */
+const USO = 'tapflow-uso-hub';
+async function lerUso() {
+  try { const r = await (await caches.open(USO)).match('uso'); return r ? await r.json() : null; } catch (e) { return null; }
+}
+async function marcarUso(url) {
+  const k = './' + chave(url).slice(abs('./').length);
+  if (!PAGINAS.includes(k)) return;
+  const u = (await lerUso()) || {};
+  if (u[k] && Date.now() - u[k] < 3600e3) return;   // uma marca por hora basta
+  u[k] = Date.now();
+  await (await caches.open(USO)).put('uso', new Response(JSON.stringify(u), { headers: { 'Content-Type': 'application/json' } }));
+}
+
+/** Confere uma página guardada (versão nova): baixa só se mudou. */
+async function conferirPagina(c, u) {
+  const url = abs(u), guardado = await c.match(url);
+  try {
+    const r = await pedirSeMudou(url, guardado);
+    if (r.status === 304) return;
+    if (r.ok && r.type === 'basic' && !r.redirected) await guardarPagina(c, url, r);
+  } catch (e) {}
+}
+
+/** A 1ª vez com este service worker: aproveita o cache da versão antiga (tapflow-hub-H…), sem baixar de novo. */
+async function herdar(c) {
+  if ((await c.keys()).length) return;
+  const nomes = (await caches.keys()).filter(n => n.startsWith('tapflow-hub-'));
+  for (const n of nomes) {
+    const v = await caches.open(n);
+    for (const req of await v.keys()) {
+      if (await c.match(req)) continue;
+      const r = await v.match(req);
+      if (r) await c.put(req, r).catch(() => {});
+    }
+  }
+}
+
+self.addEventListener('install', ev => {
+  ev.waitUntil((async () => {
+    const c = await caches.open(CACHE);
+    await herdar(c);
+    // os fixos: o ?v= que já está guardado não se baixa de novo; o resto (início, ícones, manifesto) pergunta se mudou
+    await Promise.all(FIXOS.map(u => temVersao(u) ? guardarSeFalta(c, u) : conferirFixo(c, u)));
+    // as páginas que este aparelho abriu nos últimos 60 dias (e as que estão abertas agora); as outras não se baixam
+    // (a 1ª vez, sem a anotação ainda, confere as que estão guardadas: o service worker antigo guardava todas)
+    const uso = await lerUso();
+    const abertas = (await self.clients.matchAll({ type: 'window', includeUncontrolled: true })).map(w => './' + chave(w.url).slice(abs('./').length));
+    const guardadas = [];
+    if (!uso) for (const p of PAGINAS) if (await c.match(abs(p))) guardadas.push(p);
+    const usadas = PAGINAS.filter(p => (uso ? (uso[p] && Date.now() - uso[p] < 60 * 864e5) : guardadas.includes(p)) || abertas.includes(p));
+    await Promise.all(usadas.map(p => conferirPagina(c, p)));
+    self.skipWaiting();
+  })());
+});
+
+async function conferirFixo(c, u) {
+  if (u === './') return conferirPagina(c, u);
+  const url = abs(u), guardado = await c.match(url);
+  try {
+    const r = await pedirSeMudou(url, guardado);
+    if (r.status === 304) return;
+    if (r.ok && r.type === 'basic') await c.put(url, r);
+  } catch (e) {}
+}
+
+self.addEventListener('activate', ev => {
+  ev.waitUntil((async () => {
+    const nomes = await caches.keys();
+    await Promise.all(nomes.map(n => (n.startsWith('tapflow-hub-') && n !== CACHE) ? caches.delete(n) : null));
+    await limparVersoesVelhas();
+    await self.clients.claim();
+  })());
+});
+
+/** Tira os arquivos ?v= de versão velha: só quando a versão nova do mesmo arquivo é a que as páginas guardadas pedem. */
+async function limparVersoesVelhas() {
+  try {
+    const c = await caches.open(CACHE);
+    const chaves = await c.keys();
+    const pedidos = new Set(FIXOS.map(abs));
+    for (const req of chaves) {
+      const u = new URL(req.url);
+      if (u.search) continue;
+      const r = await c.match(req);
+      const tipo = (r && r.headers.get('Content-Type')) || '';
+      if (!/html/.test(tipo)) continue;
+      arquivosDe(await r.text(), req.url).forEach(x => pedidos.add(x));
+      ((JUNTO['./' + req.url.slice(abs('./').length)]) || []).forEach(x => pedidos.add(abs(x)));
+    }
+    const caminhoPedido = new Set([...pedidos].map(x => new URL(x).pathname));
+    for (const req of chaves) {
+      const u = new URL(req.url);
+      if (!/[?&]v=/.test(u.search) || pedidos.has(req.url)) continue;
+      if (caminhoPedido.has(u.pathname)) await c.delete(req);
+    }
+  } catch (e) {}
 }
 
 self.addEventListener('fetch', ev => {
@@ -193,56 +227,40 @@ self.addEventListener('fetch', ev => {
   const base = new URL('./', self.location).pathname;           // /tapflow/
   if (!url.pathname.startsWith(base)) return;
   const resto = url.pathname.slice(base.length);
-  if (resto.startsWith('field/') && !resto.startsWith('field/icons/')) return;   // é do Field
-  if (/\/(rest|auth|storage)\/v1\//.test(url.pathname)) return;                 // API: nunca
+  if (resto.startsWith('field/') && !resto.startsWith('field/icons/')) return;   // é do TapField
+  if (/\/(rest|auth|storage|functions)\/v1\//.test(url.pathname)) return;      // API: nunca
 
   // ── abrir uma página ──
   if (req.mode === 'navigate') {
-    ev.respondWith((async () => {
-      const c = await caches.open(CACHE);
-      try {
-        const r = await comPrazo(req, 4000);
-        if (r && r.ok && r.type === 'basic') c.put(chave(req.url), r.clone()).catch(() => {});
-        return r;
-      } catch (e) {
-        return (await c.match(chave(req.url))) || (await c.match(req, { ignoreSearch: true })) ||
-          new Response('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            + '<body style="font:15px system-ui;padding:24px;color:#14181B"><h1 style="font-size:20px">Sem sinal</h1>'
-            + '<p>O TapFlow ainda não tinha sido aberto neste aparelho com internet. Abra de novo quando tiver conexão.</p>',
-            { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 503 });
-      }
-    })());
+    ev.respondWith(abrirPagina(ev, req));
     return;
   }
 
-  // ── o núcleo (N1a) ──
-  // Rede primeiro com 4 s e o cache como reserva: sem isto o Manager (que era um arquivo
-  // só e abria sem sinal) abriria SEM o núcleo e quebraria — o .js/.css não era guardado.
-  // S74: o mesmo vale para os .js/.css dos módulos que moram em pasta própria (fin/)
-  // S94 (R06a): as bibliotecas do PDF do laudo (doc/vendor/, ~2,8 MB, sempre com ?v=)
-  // vão do cache primeiro: com o prazo de 4 s do núcleo, num sinal fraco, o download
-  // grande cairia no "sem resposta" e o laudo não sairia.
-  if (resto.startsWith('doc/vendor/')) {
+  // ── arquivo com a versão no endereço: a cópia primeiro ──
+  if (/[?&]v=/.test(url.search)) {
     ev.respondWith((async () => {
       const c = await caches.open(CACHE);
       const guardado = await c.match(req);
       if (guardado) return guardado;
       const r = await fetch(req);
-      if (r && r.ok && r.type === 'basic') c.put(req, r.clone()).catch(() => {});
+      if (r && r.ok && r.type === 'basic') ev.waitUntil(c.put(req, r.clone()).catch(() => {}));
       return r;
     })());
     return;
   }
-  if (resto.startsWith('nucleo/') || /^(fin|doc)\/.*\.(js|css)$/.test(resto)) {
+
+  // ── o núcleo e os .js/.css sem versão: internet primeiro, 1,5 s ──
+  if (resto.startsWith('nucleo/') || /\.(js|css)$/.test(resto)) {
     ev.respondWith((async () => {
       const c = await caches.open(CACHE);
-      try {
-        const r = await comPrazo(req, 4000);
-        if (r && r.ok && r.type === 'basic') c.put(req, r.clone()).catch(() => {});
+      const daRede = fetch(req).then(r => {
+        if (r && r.ok && r.type === 'basic') ev.waitUntil(c.put(req, r.clone()).catch(() => {}));
         return r;
-      } catch (e) {
-        return (await c.match(req)) || new Response('', { status: 504 });
-      }
+      });
+      const guardado = await c.match(req);
+      if (!guardado) return daRede;
+      ev.waitUntil(daRede.catch(() => {}));
+      return corrida(daRede, PRAZO).then(r => r || guardado, () => guardado);
     })());
     return;
   }
@@ -256,8 +274,53 @@ self.addEventListener('fetch', ev => {
         if (r && r.ok) c.put(req, r.clone()).catch(() => {});
         return r;
       }).catch(() => null);
-      return guardado || (await daRede) || new Response('', { status: 504 });
+      if (guardado) { ev.waitUntil(daRede); return guardado; }
+      return (await daRede) || new Response('', { status: 504 });
     })());
   }
-  // o resto (bibliotecas, modelos .docx…) vai direto para a rede, como antes
+  // o resto (bibliotecas sem versão, modelos .docx…) vai direto para a internet
 });
+
+/** A resposta da internet, se chegar dentro do prazo; senão null (a internet continua por baixo). */
+function corrida(p, ms) {
+  return new Promise((ok, err) => {
+    const t = setTimeout(() => ok(null), ms);
+    p.then(r => { clearTimeout(t); ok(r); }, e => { clearTimeout(t); err(e); });
+  });
+}
+
+async function abrirPagina(ev, req) {
+  const c = await caches.open(CACHE);
+  const k = chave(req.url);
+  const guardado = (await c.match(k)) || (await c.match(req, { ignoreSearch: true }));
+  ev.waitUntil(marcarUso(req.url).catch(() => {}));
+  const nova = r => r && r.ok && r.type === 'basic' && !r.redirected;
+  if (!guardado) {
+    // sem cópia: espera a internet (sem prazo: não há o que mostrar no lugar)
+    try {
+      const r = await fetch(req);
+      if (nova(r)) ev.waitUntil(guardarPagina(c, req.url, r.clone(), false).catch(() => {}));
+      return r;
+    } catch (e) { return semSinal(); }
+  }
+  // com cópia: "mudou?" com 1,5 s de prazo
+  const daRede = pedirSeMudou(req.url, guardado);
+  let r = null;
+  try { r = await corrida(daRede, PRAZO); } catch (e) { return guardado; }
+  if (!r) {
+    // passou o prazo: abre a cópia; a resposta da internet fica guardada para a próxima vez
+    ev.waitUntil(daRede.then(x => nova(x) ? guardarPagina(c, req.url, x) : null).catch(() => {}));
+    return guardado;
+  }
+  if (r.status === 304) return guardado;
+  if (nova(r)) { ev.waitUntil(guardarPagina(c, req.url, r.clone(), false).catch(() => {})); return r; }
+  if (r.redirected) return fetch(req).catch(() => guardado);
+  return r.ok ? r : guardado;
+}
+
+function semSinal() {
+  return new Response('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<body style="font:15px system-ui;padding:24px;color:#14181B"><h1 style="font-size:20px">Sem sinal</h1>'
+    + '<p>O TapHub ainda não tinha sido aberto neste aparelho com internet. Abra de novo quando tiver conexão.</p>',
+    { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 503 });
+}

@@ -1,8 +1,8 @@
 /* ============================================================================
- * TAPFLOW FIELD — SERVICE WORKER
+ * TAPFIELD — SERVICE WORKER (o celular: /tapflow/field/ e o TapDoc do celular, field/doc/)
  * ----------------------------------------------------------------------------
  * O que ele faz, em uma frase: garante que o app ABRA dentro da planta, com o
- * celular sem sinal. Só isso.
+ * celular sem sinal.
  *
  * O que ele NÃO faz, de propósito:
  *   · não guarda resposta de API. Os dados vêm do Supabase e o app já tem a
@@ -11,96 +11,116 @@
  *   · não intercepta o Apps Script do Drive nem o Supabase: qualquer coisa que
  *     não seja deste mesmo endereço passa direto.
  *
- * A ESTRATÉGIA, e por quê:
- *   · Navegação (abrir o app): REDE PRIMEIRO, com 4 s de paciência e o cache
- *     como rede de segurança. Assim quem está online sempre pega a versão nova
- *     — nunca preciso pedir para nove pessoas "limparem o cache" — e quem está
- *     sem sinal abre a última que funcionou.
- *   · Ícones e manifesto: CACHE PRIMEIRO, atualizando por baixo. São arquivos
- *     que quase não mudam e não vale gastar sinal com eles.
+ * A ESTRATÉGIA (S215, issue 231):
+ *   · Abrir o app (o TapField ou o TapDoc do celular): INTERNET PRIMEIRO, com
+ *     1,5 s de prazo. Com a cópia guardada, a pergunta é "mudou?" (If-None-Match):
+ *     se não mudou, a resposta é curta e abre a cópia. Passado o prazo, abre a
+ *     cópia e a resposta da internet fica guardada para a próxima vez.
+ *   · Arquivo com a versão no endereço (?v=…) e as bibliotecas do PDF
+ *     (doc/vendor/): a cópia primeiro — a mesma versão é sempre o mesmo arquivo.
+ *   · Ícones, manifesto e o resto: a cópia primeiro, atualizando por baixo.
+ *   · Versão nova (a linha VERSAO): o cache é um só e fica; o celular pergunta
+ *     só o que mudou (as duas páginas e os arquivos sem versão) e baixa só os
+ *     arquivos ?v= novos. As duas páginas ficam sempre guardadas: o campo
+ *     precisa delas sem sinal.
  *
- * ⚠ AO PUBLICAR UMA VERSÃO NOVA DO index.html, TROQUE A LINHA `VERSAO` ABAIXO.
- *   É ela que apaga o cache velho. Sem isso, quem estiver offline continuaria
- *   abrindo a versão antiga por tempo indeterminado.
+ * ⚠ AO PUBLICAR UMA VERSÃO NOVA DO index.html (ou do doc/), TROQUE A LINHA `VERSAO`.
+ *   Trocou o ?v= nas páginas? Troque aqui também. O histórico está nos Pull requests.
  * ========================================================================== */
 
-const VERSAO = 'S70-T57';   // S212: Field S70 e núcleo N17 (Rodada R15 da auditoria: a entrega e a devolução de EPI com a digital ou o PIN, o PIN provisório, Trocar meu PIN, o ASO no visualizador do app; issues 123, 161 e 194; banco 628)
-// const VERSAO = 'S69-T56';   // S211: só o núcleo N16 (Rodada R17 da auditoria, TapFlow agenda e listas; a busca digitando do núcleo; o TapField não muda)
-// const VERSAO = 'S69-T55';   // S210: TapDoc celular 33 (Rodada R19 da auditoria, TapDoc: o número de série da válvula; issue 216; banco 450)
-// const VERSAO = 'S69-T54';   // S208: TapDoc celular 32 (Rodada R18 da auditoria, TapDoc: girar a foto e o aviso das medidas do vaso; issues 220 e 221; banco 449)
-// const VERSAO = 'S69-T53';   // S207: Field S69 (Rodada R13 da auditoria, TapSeg: a devolução em partes na Ficha de EPI do celular; issue 195; banco 627)
-// const VERSAO = 'S68-T52';   // S205: Field S68 e núcleo N15 (Rodada R12 da auditoria, TapHub: o "Sair" do núcleo; issue 156)
-// const VERSAO = 'S67-T51';   // S202: Field S67 e núcleo N14 (Rodada R10 da auditoria, TapFlow celular: issues 106, 107, 177, 178 e 207)
-// const VERSAO = 'S66-T50';   // S201: Field S66 (Rodada R9 da auditoria, TapRH: issues 165 e 141 parte 2)
-// const VERSAO = 'S65-T49';   // S200: Field S65 (Rodada R8 da auditoria, cartões: o canhoto pela fila comum; issue 187)
-// const VERSAO = 'S64-T48';   // S197: Field S64 (Rodada R6 da auditoria: celular, ponto e diária; issues 140, 141, 143 e 166)
-// const VERSAO = 'S63-T47';   // S196: Field S63 e núcleo N13 (Rodada R5 da auditoria (padrões de todas as telas))
-// const VERSAO = 'S62-T46';   // S195: Field S62 e núcleo N12 (Rodada R4 da auditoria: issues 142, 146, 153, 154, 167 e 189)
-// const VERSAO = 'S61-T45';   // S194: Field S61 (R3 da auditoria: o prazo do gov.br por pessoa, o espelho congelado, a saída da madrugada; 617)
-// const VERSAO = 'S60-T44';   // S191: Field S60 (os parâmetros do Drive pela função tf_drive_parametros, 215)
-// const VERSAO = 'S59-T43';   // S175: TapDoc 31 (issues 48, 49, 50, 51 e 53: toques que apagavam respostas, a pressão sem casas quebradas, mensagens, acessórios e ajustes pequenos; sem SQL)
-// const VERSAO = 'S59-T42';   // S174: TapDoc 30 (issues 38, 39, 52, 82 e 83: o CSV com leitura inválida entra com as boas; o PDF que não coube avisa; a miniatura renova o acesso; a câmera que fechou o app volta para a mesma tela e avisa; PDF até 50 MB e o GPS de volta no pacote: 441)
-// const VERSAO = 'S59-T41';   // S173: TapDoc 29 (issues 43 a 47: a aferição reprovada põe "substituir" ao sair do campo e volta atrás; cancelar a aferição; a válvula contra a PMTA da plaqueta; "Gerar os pontos" pergunta; o prazo menor sem gravar a cada letra; 440)
-// const VERSAO = 'S59-T40';   // S172: TapDoc 28 (issues 40, 42 e 55: "1.250" sem vírgula pergunta "1250 ou 1,25?" e não grava; volume abaixo de 20 litros e circunferência abaixo de 300 mm avisam)
-// const VERSAO = 'S59-T39';   // S171: Field S59, núcleo N11 e TapDoc 27 (issues 35, 36, 37 e 41: sem espaço avisa, o pacote não apaga a resposta pela metade, envio recusado não prende o vaso, PMTA/PTH maiores que zero)
-// const VERSAO = 'S58-T38';   // S163: TapDoc 26 (issues 12, 20 e 21: as recomendações do laudo no Fechamento e a justificativa do prazo numa lista; recomendacoes.js RC1; 433)
-// const VERSAO = 'S58-T37';   // S162: TapDoc 25 (issues 15, 19 e 23: o que falta leva até a parte; "substituir" × aferição conforme; leitura suspeita em vermelho)
-// const VERSAO = 'S58-T36';   // S160: núcleo N10 (confirmarPessoa só com a digital, para aprovar o laudo; issue 29)
-// const VERSAO = 'S58-T35';   // S157: issue 10 — Field S58 e núcleo N9 (o acesso vencido renovado antes de enviar a fila e no envio das fotos)
-// const VERSAO = 'S57-T34';   // S154: TapDoc 24 (issue 9: a foto da medição de espessura no Ultrassom; 430)
-// const VERSAO = 'S57-T33';   // S152: TapDoc 23 (issue 7: a seção "Medidas do vaso" em Componentes; 429)
-// const VERSAO = 'S57-T32';   // S150: TapDoc 22 e o motor R00.6 (item 81: a aferição em 2 etapas, Grau D, válvula V1–V5; 427)
-// const VERSAO = 'S57-T31';   // S149: TapDoc 21 (itens 82, 83, 84, 88 e 92; 426)
-// const VERSAO = 'S57-T30';   // S148: TapDoc 20 (itens 85 e 91: a ordem do medidor e a placa com três respostas; 425)
-// const VERSAO = 'S57-T29';   // S146: TapDoc 19 (item 79: os textos prontos do laudo; 422)
-// const VERSAO = 'S57-T28';   // S145: Field S57 e TapDoc 18 (rodada E: a confirmação da participação, A8; 421)
-// const VERSAO = 'S56-T27';   // S144: Field S56 e TapDoc 17 (rodada D2: itens 69, 70, 72, 74, 75 e 78 da lista; 420)
-// const VERSAO = 'S55-T26';   // S142: Field S55 e TapDoc 16 (itens 38 e 40 da lista; 418), núcleo N8 (item 37)
-// const VERSAO = 'S54-T25';   // S141: TapDoc 15 e o motor R00.5 (item 58 da lista: tolerância NBR 14105-1, classe B)
-// const VERSAO = 'S54-T24';   // S140: TapDoc 14 (field/doc/: itens 33, 44, 49 a 56, 59 e 60 da lista; 416)
-// const VERSAO = 'S54-T23';   // S54: item 28 da lista: nomes de empresas do modo demonstração trocados por fictícios
-// const VERSAO = 'S53-T22';   // S53: o celular da empresa (210): núcleo N7, modulos M4, sem a parte pessoal do Eu, a fila com a sessão de quem fez
-// const VERSAO = 'S52-T21';   // S52: item 27 da lista: nomes e e-mails do modo demonstração trocados por fictícios
-// const VERSAO = 'S51-T20';   // S51: só o modulos.js M3 (o card Cadastros abre o cadastros/)
-// const VERSAO = 'S50-T19';   // S50: "Meu espelho e banco" mais claro (item #19 da lista: "Seu banco hoje", "Horas do mês")
-// const VERSAO = 'S49-T18';   // S49: núcleo N6 e modulos M2 (Relatar problema), a coluna Banco, o uniforme (itens 11–13 e 16), TapField
-// const VERSAO = 'S48-T17';   // S48: o ponto com o EzPoint, o ajuste pelo celular, a câmera dentro do app e o atestado de vários dias; o uniforme na Minha Segurança · S47: os documentos do gov.br (acordo e termo de adesão) · S46: o termo de ciência em texto formal · S45: os avisos com o app fechado (push) · o meu espelho e banco no ponto, e folgar ou trabalhar nas datas a negociar · S44: o espelho baixa com o nome no padrão do escritório · S43: o ponto no alto do Eu (batida com foto, local e PIN, comprovante) · S42: só o núcleo N4 ("Pedir PIN novo" e a troca do PIN provisório) · S41: só o núcleo N3 (a digital na trava, Passkey 1) · S40: as logomarcas no boletim e "Enviar pelo WhatsApp" / "Baixar o PDF" · S39: a medição da OS (e o gerador de PDF guardado para o campo) · S113: TapDoc 12 (414: reabrir o que enviou; válvula com 3 ciclos) e o motor R00.4 · S112: TapDoc 11 (413: posição primeiro, aferição por ciclo e por escala, sem bancada/boroscopia/E/R em campo) · S107: TapDoc 10 (412: as leituras não travam o envio) · S94: TapDoc 9 (R06a: o ambiente na Localização) · S86: TapDoc 8 (R04a: aferição em campo) e o motor R00.3
-const CACHE  = 'tapflow-field-' + VERSAO;
+const VERSAO = 'S71-T58';
+const CACHE  = 'tapflow-field';        // um cache só, que passa de uma versão para a outra
+const PRAZO  = 1500;
 
-const ESSENCIAIS = [
-  './',
-  './index.html',
+// As duas páginas (sempre guardadas e conferidas a cada versão nova).
+const PAGINAS = ['./index.html', './doc/'];
+// Sempre guardados. O endereço tem que ser IDÊNTICO ao do <script> (o cache compara a consulta inteira).
+const FIXOS = [
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
   './icons/apple-touch-icon.png',
   './icons/favicon-32.png',
-  // N1a (S33): o núcleo comum, que mora FORA desta pasta (../nucleo/). O endereço tem que ser
-  // IDÊNTICO ao do <script> do index.html, com o ?v= (c.match compara a consulta inteira).
-  // Sem isto o Field sem sinal abriria sem o núcleo. Trocou o ?v= no index.html? Troque aqui também.
-  // S34: N2 (fila de envios e utilitários)
   '../nucleo/nucleo.js?v=N17',
   '../nucleo/nucleo.css?v=N17',
   '../nucleo/config.js?v=N17',
-  // H10 · S81: a tabela dos módulos e o menu "Trocar de módulo"
   '../nucleo/modulos.js?v=M4',
-  // S35 · TapDoc 1: a coleta da inspeção (página própria, abre sem sinal)
-  './doc/',
-  // S80 · TapDoc 4: o motor de cálculo para a prévia sem sinal. Mesmo ?v= do <script> de doc/index.html.
-  './doc/motor-calculo-nr13.js?v=R00.6',
-  './doc/recomendacoes.js?v=RC1',   // S163 · issues 12 e 21: a lista das recomendações e do prazo (a mesma da revisão e do laudo)
-  // S39 · a medição gera o PDF no campo, sem sinal: o pdfmake do TapDoc (mesmo endereço do <script> que a tela carrega)
+  './doc/motor-calculo-nr13.js?v=R00.6',   // a prévia do cálculo sem sinal
+  './doc/recomendacoes.js?v=RC1',
+  // a medição gera o PDF no campo, sem sinal: o pdfmake do TapDoc (mesmo endereço do <script> que a tela carrega)
   '../doc/vendor/pdfmake.min.js',
   '../doc/vendor/vfs_fonts.js'
 ];
 
+const abs = u => new URL(u, self.location).href;
+const temVersao = u => /[?&]v=/.test(new URL(u, self.location).search);
+const ehVendor = u => new URL(u, self.location).pathname.indexOf('/doc/vendor/') !== -1;
+
+/** Os arquivos ?v= que a página pede no <script src> e no <link href>. */
+function arquivosDe(html, base) {
+  const out = new Set();
+  const re = /<(?:script|link)\b[^>]*?\b(?:src|href)\s*=\s*["']([^"'#]+\?v=[^"'#]+)["']/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    try { const u = new URL(m[1], base); if (u.origin === self.location.origin) out.add(u.href); } catch (e) {}
+  }
+  return [...out];
+}
+
+async function guardarSeFalta(c, u) {
+  const url = abs(u);
+  if (await c.match(url)) return;
+  try { const r = await fetch(url, { credentials: 'same-origin' }); if (r && r.ok && r.type === 'basic') await c.put(url, r); } catch (e) {}
+}
+
+/** Pede à internet só se mudou (If-None-Match / If-Modified-Since). 304 = fica a cópia. */
+function pedirSeMudou(url, guardado) {
+  const h = {};
+  if (guardado) {
+    const et = guardado.headers.get('ETag'), lm = guardado.headers.get('Last-Modified');
+    if (et) h['If-None-Match'] = et; else if (lm) h['If-Modified-Since'] = lm;
+  }
+  return fetch(url, { headers: h, cache: 'no-store', credentials: 'same-origin' });
+}
+
+async function guardarPagina(c, chave, r) {
+  const texto = await r.clone().text();
+  await c.put(chave, r);
+  await Promise.all(arquivosDe(texto, abs(chave)).map(u => guardarSeFalta(c, u)));
+}
+
+/** Confere um arquivo guardado (página ou sem versão): baixa só se mudou. */
+async function conferir(c, u, pagina) {
+  const url = abs(u), guardado = await c.match(url);
+  try {
+    const r = await pedirSeMudou(url, guardado);
+    if (r.status === 304) return;
+    if (r.ok && r.type === 'basic' && !r.redirected) await (pagina ? guardarPagina(c, u, r) : c.put(url, r));
+  } catch (e) {}
+}
+
+/** A 1ª vez com este service worker: aproveita o cache da versão antiga (tapflow-field-S…), sem baixar de novo. */
+async function herdar(c) {
+  if ((await c.keys()).length) return;
+  const nomes = (await caches.keys()).filter(n => n.startsWith('tapflow-field-'));
+  for (const n of nomes) {
+    const v = await caches.open(n);
+    for (const req of await v.keys()) {
+      if (await c.match(req)) continue;
+      const r = await v.match(req);
+      if (r) await c.put(req, r).catch(() => {});
+    }
+  }
+}
+
 self.addEventListener('install', ev => {
   ev.waitUntil((async () => {
     const c = await caches.open(CACHE);
-    // addAll é tudo-ou-nada: um ícone que falte derrubaria a instalação inteira
-    // e o app ficaria sem service worker nenhum. Um a um, o que faltar só falta.
-    await Promise.all(ESSENCIAIS.map(u => c.add(u).catch(() => {})));
+    await herdar(c);
+    // um a um: o que faltar só falta (não derruba a instalação)
+    await Promise.all(FIXOS.map(u => temVersao(u) ? guardarSeFalta(c, u) : conferir(c, u, false)));
+    await Promise.all(PAGINAS.map(p => conferir(c, p, true)));
     self.skipWaiting();
   })());
 });
@@ -108,18 +128,32 @@ self.addEventListener('install', ev => {
 self.addEventListener('activate', ev => {
   ev.waitUntil((async () => {
     const nomes = await caches.keys();
-    await Promise.all(nomes.map(n => (n.startsWith('tapflow-field-') && n !== CACHE)
-      ? caches.delete(n) : null));
+    await Promise.all(nomes.map(n => (n.startsWith('tapflow-field-') && n !== CACHE) ? caches.delete(n) : null));
+    await limparVersoesVelhas();
     await self.clients.claim();
   })());
 });
 
-/** Rede com prazo — sinal ruim não pode segurar a tela para sempre. */
-function comPrazo(req, ms) {
+/** Tira os arquivos ?v= de versão velha: só quando a versão nova do mesmo arquivo é a que as páginas pedem. */
+async function limparVersoesVelhas() {
+  try {
+    const c = await caches.open(CACHE);
+    const pedidos = new Set(FIXOS.map(abs));
+    for (const p of PAGINAS) { const r = await c.match(p); if (r) arquivosDe(await r.text(), abs(p)).forEach(x => pedidos.add(x)); }
+    const caminhoPedido = new Set([...pedidos].map(x => new URL(x).pathname));
+    for (const req of await c.keys()) {
+      const u = new URL(req.url);
+      if (!/[?&]v=/.test(u.search) || pedidos.has(req.url)) continue;
+      if (caminhoPedido.has(u.pathname)) await c.delete(req);
+    }
+  } catch (e) {}
+}
+
+/** A resposta da internet, se chegar dentro do prazo; senão null (a internet continua por baixo). */
+function corrida(p, ms) {
   return new Promise((ok, err) => {
-    const t = setTimeout(() => err(new Error('prazo')), ms);
-    fetch(req).then(r => { clearTimeout(t); ok(r); },
-                    e => { clearTimeout(t); err(e); });
+    const t = setTimeout(() => ok(null), ms);
+    p.then(r => { clearTimeout(t); ok(r); }, e => { clearTimeout(t); err(e); });
   });
 }
 
@@ -150,39 +184,61 @@ self.addEventListener('fetch', ev => {
   let url;
   try { url = new URL(req.url); } catch (e) { return; }
   if (url.origin !== self.location.origin) return;   // Supabase, Drive: passa direto
-  // S39 · e API NUNCA, mesmo no mesmo endereço. Em produção o Supabase é outro
-  // endereço e já passava direto; no teste local (e em qualquer proxy que sirva
-  // a API junto do app) o ramo "ícones" abaixo guardava a PRIMEIRA resposta de
-  // /rest/v1 e a devolvia para sempre — a lista de extras ficava vazia depois
-  // do envio. É exatamente a "segunda verdade" que o cabeçalho deste arquivo proíbe.
-  if (url.pathname.indexOf('/rest/v1/') !== -1 || url.pathname.indexOf('/auth/v1/') !== -1 || url.pathname.indexOf('/storage/v1/') !== -1) return;
+  // API NUNCA, mesmo no mesmo endereço (no teste local a API vem do mesmo endereço do app)
+  if (url.pathname.indexOf('/rest/v1/') !== -1 || url.pathname.indexOf('/auth/v1/') !== -1 || url.pathname.indexOf('/storage/v1/') !== -1 || url.pathname.indexOf('/functions/v1/') !== -1) return;
 
   // ── abrir o app ──
-  // S35: cada página com a sua chave. Até o S34 TODA página aberta aqui era
-  // guardada como "./index.html": abrir o TapDoc (doc/) com sinal e depois
-  // abrir o Field sem sinal mostraria o TapDoc no lugar do Field.
+  // Cada página com a sua chave: o TapDoc do celular (doc/) e o TapField (index.html).
   if (req.mode === 'navigate') {
     const base = new URL('./', self.location).pathname;          // /tapflow/field/
     const resto = url.pathname.startsWith(base) ? url.pathname.slice(base.length) : '';
     const ehDoc = /^doc(\/|$)/.test(resto);
     const chave = ehDoc ? './doc/' : './index.html';
     ev.respondWith((async () => {
-      try {
-        const r = await comPrazo(req, 4000);
-        const c = await caches.open(CACHE);
-        if (r && r.ok && r.type === 'basic') c.put(chave, r.clone()).catch(() => {});
-        return r;
-      } catch (e) {
-        const c = await caches.open(CACHE);
-        return (await c.match(chave)) || (ehDoc ? null : (await c.match('./'))) ||
-          new Response('<h1>Sem sinal</h1><p>Abra de novo quando tiver conexão.</p>',
+      const c = await caches.open(CACHE);
+      const guardado = (await c.match(chave)) || (ehDoc ? null : (await c.match('./')));
+      const nova = r => r && r.ok && r.type === 'basic' && !r.redirected;
+      if (!guardado) {
+        try {
+          const r = await fetch(req);
+          if (nova(r)) ev.waitUntil(c.put(chave, r.clone()).catch(() => {}));
+          return r;
+        } catch (e) {
+          return new Response('<h1>Sem sinal</h1><p>Abra de novo quando tiver conexão.</p>',
             { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 503 });
+        }
       }
+      const daRede = pedirSeMudou(req.url, guardado);
+      let r = null;
+      try { r = await corrida(daRede, PRAZO); } catch (e) { return guardado; }
+      if (!r) {   // passou o prazo: abre a cópia; a resposta da internet fica guardada para a próxima vez
+        ev.waitUntil(daRede.then(x => nova(x) ? guardarPagina(c, chave, x) : null).catch(() => {}));
+        return guardado;
+      }
+      if (r.status === 304) return guardado;
+      if (nova(r)) { ev.waitUntil(c.put(chave, r.clone()).catch(() => {})); return r; }
+      if (r.redirected) return fetch(req).catch(() => guardado);
+      return r.ok ? r : guardado;
     })());
     return;
   }
 
-  // ── ícones, manifesto ──
+  // ── arquivo com a versão no endereço e as bibliotecas do PDF: a cópia primeiro ──
+  if (/[?&]v=/.test(url.search) || ehVendor(req.url)) {
+    ev.respondWith((async () => {
+      const c = await caches.open(CACHE);
+      const guardado = await c.match(req);
+      if (guardado) return guardado;
+      try {
+        const r = await fetch(req);
+        if (r && r.ok && r.type === 'basic') ev.waitUntil(c.put(req, r.clone()).catch(() => {}));
+        return r;
+      } catch (e) { return new Response('', { status: 504 }); }
+    })());
+    return;
+  }
+
+  // ── ícones, manifesto e o resto ──
   ev.respondWith((async () => {
     const c = await caches.open(CACHE);
     const guardado = await c.match(req);
@@ -190,7 +246,8 @@ self.addEventListener('fetch', ev => {
       if (r && r.ok) c.put(req, r.clone()).catch(() => {});
       return r;
     }).catch(() => null);
-    return guardado || (await daRede) || new Response('', { status: 504 });
+    if (guardado) { ev.waitUntil(daRede); return guardado; }
+    return (await daRede) || new Response('', { status: 504 });
   })());
 });
 

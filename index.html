@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Início · TapHub · H19</title>
+<title>Início · TapHub · H20</title>
 <meta name="theme-color" content="#0C1420">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -349,7 +349,8 @@ h1{font-size:27px;margin:0 0 22px;letter-spacing:-.02em}
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';
 
-const APP_VERSION = 'H19';   // H19 (S205): Rodada R12 da auditoria (TapHub) — issue 156 (quem tem um módulo só fica no início quando volta de propósito; as faixas se atualizam a cada minuto; o "Sair" do núcleo, que encerra também no servidor) e 152 (o link "Pessoas e acessos" para quem tem "Autoriza acesso" ou "Recebe relatos"); núcleo N15
+const APP_VERSION = 'H20';   // H20 (S215): Rodada R24 (issue 231) — as perguntas da abertura ao servidor vão juntas (antes uma esperava a outra)
+// const APP_VERSION = 'H19';   // H19 (S205): Rodada R12 da auditoria (TapHub) — issue 156 (quem tem um módulo só fica no início quando volta de propósito; as faixas se atualizam a cada minuto; o "Sair" do núcleo, que encerra também no servidor) e 152 (o link "Pessoas e acessos" para quem tem "Autoriza acesso" ou "Recebe relatos"); núcleo N15
 // const APP_VERSION = 'H18';   // H18 (S196): Rodada R5 da auditoria (padrões de todas as telas) — issue 155 (a entrada sem nomes fixos e sem recado de programador: o pedido vai para quem autoriza os acessos); núcleo N13
 // const APP_VERSION = 'H17';   // H17 (S195): issue 153 — sem sinal (ou erro passageiro do servidor) na hora de renovar não apaga o login: abre com o que estava guardado; erro de rede da entrada em português; núcleo N12
 // const APP_VERSION = 'H16';   // H16 (S136): o celular da empresa (210): "Quem vai usar?", "Trocar de pessoa", sem "Minha área", a faixa dos celulares
@@ -448,6 +449,8 @@ function msgErro(e, padrao){
 
 /** Quem sou eu — resposta do SERVIDOR, não desta página. Uma chamada. */
 async function meuAcesso(){
+  // H20 (S215, issue 231): as portas (tf_hub_modulos) não dependem da resposta de quem sou eu: vão juntas
+  const pPortas = api('/rest/v1/rpc/tf_hub_modulos', { method:'POST', body:{} }).then(p => ({ p }), e => ({ e }));
   const a = await api('/rest/v1/rpc/tf_meu_acesso', { method:'POST', body:{} });
   if (!a || !a.perfil)
     throw new Error('Seu acesso ainda não foi liberado. Avise o escritório.');   // H18 (issue 155): sem recado de programador
@@ -459,13 +462,14 @@ async function meuAcesso(){
   // H4 · S42: quem é de escritório e tem ficha de RH confirma EPI pelo Field
   // (Minha Segurança). Banco sem o 62 → falso, e o hub fica como no H3.
   sessao.rh_ficha = false;
-  if (!sessao.usa_campo){
-    try{ sessao.rh_ficha = !!(await api('/rest/v1/rpc/tf_rh_tenho_ficha', { method:'POST', body:{} })); }catch(e){}
-  }
+  const pFicha = sessao.usa_campo ? Promise.resolve(false)
+    : api('/rest/v1/rpc/tf_rh_tenho_ficha', { method:'POST', body:{} }).then(x => !!x, () => false);
   // H6 · N1a: as portas vêm do SERVIDOR (tf_hub_modulos): a regra mora num lugar só e o
   // hub só desenha. Banco sem o 200 → null, e o hub decide pelos três campos de antes.
-  try{ sessao.portas = await api('/rest/v1/rpc/tf_hub_modulos', { method:'POST', body:{} }); }
-  catch(e){ if (e.status === 401) throw e; sessao.portas = null; }
+  const [rp, rf] = await Promise.all([pPortas, pFicha]);
+  sessao.rh_ficha = rf;
+  if (rp.e){ if (rp.e.status === 401) throw rp.e; sessao.portas = null; }
+  else sessao.portas = rp.p;
   // H10: a lista vai para o aparelho; o menu "Trocar de módulo" dos módulos usa a mesma
   if (sessao.portas && window.TapModulos) TapModulos.guardarPortas(sessao.portas, sessao.email);
   gravar();
@@ -808,13 +812,13 @@ document.getElementById('frmTroca').addEventListener('submit', async ev => {
 async function pintarPedidos(){
   const f = document.getElementById('faixaPedidos');
   if (DEMO || !sessao.token){ f.hidden = true; return; }
+  pintarRelatos();      // H20 (S215, issue 231): as três faixas perguntam juntas (antes esperavam esta)
+  pintarCelulares();
   try{
     const n = Number(await api('/rest/v1/rpc/tf_acesso_pedidos_contar', { method:'POST', body:{} })) || 0;
     f.innerHTML = '<b>' + n + (n === 1 ? ' pedido' : ' pedidos') + ' de acesso</b> (senha ou PIN esquecido) esperando você · abrir';
     f.hidden = n === 0;
   }catch(e){ f.hidden = true; }
-  pintarRelatos();
-  pintarCelulares();
 }
 /* H13 · item #1 da lista (209, R8): a faixa "N relatos novos" só para quem tem "Recebe relatos"
    (o banco devolve 0 para os outros; banco sem a 209 → nada). */
