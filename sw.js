@@ -29,7 +29,8 @@
  *   É ela que apaga o cache velho no aparelho de todo mundo.
  * ========================================================================== */
 
-const VERSAO = 'H19-S213';   // S213: Rodada R16 da auditoria (TapFin telas; issues 91, 92, 97, 101, 95, 102, 103, 100 e 104; banco 528): TapFin F32, nucleo/fin-painel FP4, TapGestão GE7
+const VERSAO = 'H19-S214';   // S214: Rodada R20 da auditoria (issue 117): saiu do manager/ o estilo que nenhuma tela usa; TapFlow S214
+// const VERSAO = 'H19-S213';   // S213: Rodada R16 da auditoria (TapFin telas; issues 91, 92, 97, 101, 95, 102, 103, 100 e 104; banco 528): TapFin F32, nucleo/fin-painel FP4, TapGestão GE7
 // const VERSAO = 'H19-S212';   // S212: Rodada R15 da auditoria (PIN provisório e digital; issues 123, 161 e 194; banco 628): núcleo N17 (Nucleo.pin e o provisório que troca na própria tela), TapRH RH22, TapSeg G11
 // const VERSAO = 'H19-S211';   // S211: Rodada R17 da auditoria (TapFlow agenda e listas; issues 125, 168, 175, 179, 113, 114, 124, 129, 229 e 230; banco 313): núcleo N16 (a busca digitando), TapFlow S211, TapCRM CRM10
 // const VERSAO = 'H19-S210';   // S210: Rodada R19 da auditoria (TapDoc laudo, documentos e regras; issues 215, 216, 217, 223 a 228; banco 450): TapDoc E54, doc/laudo-pdf.js S178, doc/documentos-pdf.js D10, doc/placa-pdf.js P2, celular 33
