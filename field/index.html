@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapField · S70</title>
+<title>TapField · S71</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -686,7 +686,8 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S70';   // S70 (S212): Rodada R15 da auditoria (PIN provisório e digital) — issues 123 (a entrega e a devolução de EPI e uniforme com a digital ou o PIN, pela confirmação do servidor; 628), 194 (o PIN provisório e o vencido pedem a troca ali mesmo e voltam para confirmar; "Trocar meu PIN" pela troca da trava; receita com "Enviando…"; o PDF do ASO, da receita e do certificado no visualizador do app; o vídeo com "Tentar de novo"; as dúvidas que não carregaram) e 161 (a folha e o recibo com o PIN provisório); núcleo N17
+const APP_VERSION = 'S71';   // S71 (S215): Rodada R24 (issue 231) — as perguntas da abertura ao servidor vão juntas (antes uma esperava a outra); a lista não espera os parâmetros do Drive
+// const APP_VERSION = 'S70';   // S70 (S212): Rodada R15 da auditoria (PIN provisório e digital) — issues 123 (a entrega e a devolução de EPI e uniforme com a digital ou o PIN, pela confirmação do servidor; 628), 194 (o PIN provisório e o vencido pedem a troca ali mesmo e voltam para confirmar; "Trocar meu PIN" pela troca da trava; receita com "Enviando…"; o PDF do ASO, da receita e do certificado no visualizador do app; o vídeo com "Tentar de novo"; as dúvidas que não carregaram) e 161 (a folha e o recibo com o PIN provisório); núcleo N17
 // const APP_VERSION = 'S69';   // S69 (S207): Rodada R13 da auditoria (TapSeg) — issue 195 (a Ficha de EPI do celular mostra a devolução em partes: "2 descarte · 1 não devolvido"; 627)
 // const APP_VERSION = 'S68';   // S68 (S205): Rodada R12 da auditoria (TapHub) — issue 156 (o "Sair" e o "Sair deste celular" do núcleo: encerram o acesso também no servidor; no celular da empresa, a fila continua com a sessão de quem fez); núcleo N15
 // const APP_VERSION = 'S67';   // S67 (S202): Rodada R10 da auditoria (TapFlow celular) — issues 106 (a foto da fila renova o acesso antes e não se perde com a sessão vencida; as que ficaram no aparelho voltam), 107 e 177 (levantamento, extras, execução e fotos pela fila do núcleo: o recusado fica em "Envios parados" com o motivo; o rascunho fecha quando vai para a fila; o "já recebi" com outra quantidade avisa), 178 (trocar foto e cancelar não perde a foto; fotos sem dono saem do aparelho; o catálogo volta para o formulário; TAG digitada no levantamento) e 207 (a medição avisa a quantidade sem o porquê; sem sinal o boletim é rascunho; o PDF não se repete; a assinatura sai do aparelho depois de subir)
@@ -1416,6 +1417,17 @@ async function carregar(silencioso){
   try{
     // As duas juntas: a lista de OS do campo e o ROTEIRO de hoje desta pessoa.
     // O roteiro não substitui a lista — ele diz por onde começar.
+    // S71 (S215, issue 231): todas as perguntas da abertura vão juntas (antes o 2º grupo esperava o 1º)
+    const pOutros = Promise.all([
+      rpc('tf_rhdoc_meus', {}).catch(() => null),
+      rpc('tf_diarias_minhas', { p_mes: null, p_dia: null }).catch(() => null),
+      rpc('tf_ausencias_minhas', {}).catch(() => []),     // S24 · S53
+      rpc('tf_ferias_minhas', {}).catch(() => null),      // S25 · S54 (sem o 108, a aba não aparece)
+      carregarEquipeAus(),                                // S28 · quem da equipe estará fora
+      rpc('tf_ponto_meu_dia', {}).then(ptGuardar).catch(() => null),
+      ptCarregarPend(), ptCarregarDatas(), ptCarregarFech(), ptCarregarSaude(), ptPushEstado(), ptCarregarGov(),
+      rpc('tf_insp_participacao_pendentes', {}).then(x => { PARTIC = Array.isArray(x) ? x : []; }).catch(() => { PARTIC = []; }),   // S57 · A8 (sem a 421, nada aparece)   // S43 · ponto (sem a 601, nada aparece) · S45 · datas a negociar (sem a 606, nada aparece)
+      carregarEscaladas() ]).then(x => ({ x }), e => ({ e }));   // S15 · ela trata o próprio erro
     const [lst, dia, atr, reag, seg, apo] = await Promise.all([
       get('v_os_campo?select=*&order=coluna_ordem,numero'),
       get('v_meu_dia?select=*').catch(() => []),   // sem roteiro, o app segue igual
@@ -1430,15 +1442,9 @@ async function carregar(silencioso){
     ]);
     // S20 · documentos para assinar e as diárias de hoje. Sem o 104 no banco,
     // as duas voltam nulas e o app segue como no S19 (sem as abas novas).
-    const [docs, diar, aus, fer, eqa] = await Promise.all([
-      rpc('tf_rhdoc_meus', {}).catch(() => null),
-      rpc('tf_diarias_minhas', { p_mes: null, p_dia: null }).catch(() => null),
-      rpc('tf_ausencias_minhas', {}).catch(() => []),     // S24 · S53
-      rpc('tf_ferias_minhas', {}).catch(() => null),      // S25 · S54 (sem o 108, a aba não aparece)
-      carregarEquipeAus(),                                // S28 · quem da equipe estará fora
-      rpc('tf_ponto_meu_dia', {}).then(ptGuardar).catch(() => null),
-      ptCarregarPend(), ptCarregarDatas(), ptCarregarFech(), ptCarregarSaude(), ptPushEstado(), ptCarregarGov(),
-      rpc('tf_insp_participacao_pendentes', {}).then(x => { PARTIC = Array.isArray(x) ? x : []; }).catch(() => { PARTIC = []; }) ]);   // S57 · A8 (sem a 421, nada aparece)   // S43 · ponto (sem a 601, nada aparece) · S45 · datas a negociar (sem a 606, nada aparece)
+    const ro = await pOutros;
+    if (ro.e) throw ro.e;
+    const [docs, diar, aus, fer, eqa] = ro.x;
     EQUIPE_AUS = eqa;
     MINHAS_AUS = Array.isArray(aus) ? aus : [];
     FER = fer || null;
@@ -1449,8 +1455,7 @@ async function carregar(silencioso){
     listaOS = lst || [];
     MEU_DIA = dia || [];
     ATRASADAS = atr || [];
-    await carregarAtrParalelas();   // S21 · item 4 do S50
-    await carregarEscaladas();   // S15
+    await carregarAtrParalelas();   // S21 · item 4 do S50 (usa as atrasadas)
     REAG = new Map((reag || []).map(x => [chaveReag(x.os_id, x.tarefa_id, x.compromisso_id), x]));
     falhaCarga = null;
     pararRecon(); setConn('ok','conectado');
@@ -8401,14 +8406,16 @@ function iniciar(){
   pintarFila();
   setTimeout(() => varrerFotos().catch(() => {}), 4000);   // S67 (106, 178): as fotos de item sem dono
   medLimparAssinaturas();   // S67 (207): a assinatura do encarregado cujo fechamento já subiu
-  carregarParametros().finally(() => {
-    // S60 · depois da lista: o atalho/compartilhar do canhoto, a fila dele e "Meus canhotos"
-    carregar().then(pintarLista).catch(()=>pintarLista())
-      .finally(() => { canDoEndereco().catch(() => {}); canAtualizar().catch(() => {}); canFlush().catch(() => {}); });
+  // S71 (S215, issue 231): a lista não espera os parâmetros do Drive (só a fila e o canhoto precisam deles)
+  const pParam = carregarParametros().catch(() => {});
+  const pLista = carregar().then(pintarLista).catch(()=>pintarLista());
+  pParam.then(() => {
     flushFila().catch(()=>{});
     // o catálogo vem por último: se falhar, o app funciona igual, só sem a lista
     sincronizarCatalogo().catch(()=>{});
   });
+  // S60 · depois da lista: o atalho/compartilhar do canhoto, a fila dele e "Meus canhotos"
+  Promise.all([pParam, pLista]).finally(() => { canDoEndereco().catch(() => {}); canAtualizar().catch(() => {}); canFlush().catch(() => {}); });
 }
 
 // ════════════════════════════════════════════════════════════════════════════
