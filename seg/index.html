@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapSeg 12 · Segurança do Trabalho</title>
+<title>TapSeg 13 · Segurança do Trabalho</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- o ícone da aba: o "E" da Engetap dentro do arquivo (SVG), aparece em qualquer pasta; o app instalado usa os PNG de field/icons/ -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22104%22 fill=%22%231B6FA9%22/%3E%3Cg transform=%22translate(0,512) scale(1,-1) translate(256,256.5) scale(1.3) translate(-256,-256.5)%22 fill=%22%23fff%22 stroke=%22%23fff%22 stroke-width=%2222%22 stroke-linejoin=%22round%22 stroke-linecap=%22round%22%3E%3Cpath d=%22M117 414 l-1 0 0 -121 0 -120 19 0 19 0 0 -37 0 -38 121 0 121 0 -45 45 -44 45 -69 0 -69 0 0 12 0 11 90 0 89 0 0 1 0 1 -44 44 -45 44 -45 0 -45 0 0 12 0 11 99 0 99 0 0 1 0 0 -45 45 -44 45 -81 0 -80 0 0 -1z m184 -44 l30 -29 0 -1 0 -1 -88 0 -89 0 0 -75 0 -76 -11 0 -12 0 0 105 0 106 1 0 0 1 70 0 69 0 30 -30z m-19 -113 l30 -29 0 -1 0 -1 -67 0 -67 0 0 30 0 30 1 0 0 1 37 0 36 0 30 -30z m47 -114 l30 -29 0 -1 0 0 -95 0 -95 0 0 30 0 30 65 0 66 0 29 -30z%22/%3E%3C/g%3E%3C/svg%3E">
@@ -1033,7 +1033,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'G12';   // G12 (S215): Rodada R24 — issue 232 (saiu o estilo sem uso; o estilo comum vem do nucleo/telas.css T1; nada muda na tela) e 231 (o Painel pede o tf_rh_painel uma vez só ao abrir)
+const APP_VERSION = 'G13';   // G13 (S219): Rodada R22 — issue 209 (a rubrica colada no servidor pela carimbar, só com a confirmação de cada pessoa; quem entrega confirma o lote; o instrutor confirma a sessão; o desenho não volta à tela e pode ser apagado)
+// const APP_VERSION = 'G12';   // G12 (S215): Rodada R24 — issue 232 (saiu o estilo sem uso; o estilo comum vem do nucleo/telas.css T1; nada muda na tela) e 231 (o Painel pede o tf_rh_painel uma vez só ao abrir)
 // const APP_VERSION = 'G11';   // G11 (S212): Rodada R15 da auditoria — issue 123 (a Ficha de EPI e o recibo da devolução dizem "(digital)" quando o funcionário confirmou com a digital); núcleo N17
 // const APP_VERSION = 'G10';   // G10 (S207): Rodada R13 da auditoria (TapSeg) — issues 121 (ASO sem PDF grava), 190 (Kit do cliente com a conferência atual), 191 (Textos e Vídeos salvam só a linha), 192 (Painel leva ao lugar certo; incluir numa lista), 193 (entrega sem repetir, Separar, Entrada, Contagem, Movimentos), 195 (reuso conferido, devolução em partes), 196 (13 acertos); banco 627
 // const APP_VERSION = 'G9';   // G9 (S205): Rodada R12 da auditoria (TapHub) — issue 156 (o "Sair" do núcleo: encerra o acesso também no servidor; no celular da empresa, guarda a sessão); núcleo N15
@@ -1846,9 +1847,14 @@ async function rhGravarEntrega(epis, envio){
     msg.textContent = 'Há item sem saldo no estoque (em vermelho). Dê entrada ou faça a contagem antes — ou tire a linha.'; return;
   }
   if (envio) itens[0].envio = envio;
+  // G13 (S219, R22 · AS3.1): quem entrega confirma o lote antes de lançar; sem a confirmação, não lança
+  const ref = envio || rhUuid();
+  const conf = await rhConfirmarQuemEntrega(ref);
+  if (!conf){ msg.textContent = 'Não lançado: confirme com a digital ou o PIN para lançar a entrega.'; return; }
   let r;
   try{ r = await rpc('tf_rh_lancar_entregas', { p_usuario: uid, p_itens: itens }); }
   catch(e){ msg.textContent = e.message; return; }
+  await rhGravarQuemEntregou(r.ids, ref, conf);
   // G10 (S207, issue 193 item 1): gravou. Daqui em diante, falha só tira o botão do WhatsApp — a janela fecha e diz "lançada"
   // (antes, a busca da ficha que falhava deixava a janela aberta e o 2º clique lançava de novo).
   const selNome = (document.querySelector('#rhNF option:checked') || {}).textContent || '';
@@ -2319,9 +2325,9 @@ async function rhFTermo(c, f){
     + '<label class="btn pri" style="cursor:pointer">Enviar termo assinado<input type="file" id="tmArq" accept="image/*,application/pdf" hidden></label>'
     + (fi.termo_arquivo_id ? '<button class="btn" type="button" id="tmRef">Refazer o recorte</button>' : '') + '</div>'
     + '<div id="tmAtual"></div>'
-    + '<p class="nota">A assinatura recortada aparece na ficha de EPI <b>sempre junto</b> do selo "Confirmado no celular do funcionário". '
-    + 'Ela fica em área restrita: nem o próprio funcionário a baixa. O mesmo vale para a rubrica de quem dá o visto da empresa '
-    + '(coluna "Visto da empresa") — abra a ficha de RH dessa pessoa e faça o mesmo.</p>';
+    + '<p class="nota">O desenho recortado entra nos documentos <b>só no servidor</b> e <b>só</b> onde a própria pessoa confirmou com a digital ou o PIN, '
+    + 'sempre junto do selo "Assinado eletronicamente por …". Depois de gravado, ninguém o vê nem o baixa (nem quem recortou). '
+    + 'O mesmo vale para quem dá o visto da empresa (coluna "Visto da empresa") e para o instrutor — faça o mesmo na ficha dessa pessoa.</p>';
   const bi = document.getElementById('tmImp');
   bi.addEventListener('click', () => _semDuploEnvio_(bi, () => rhImprimirTermo(f)));
   document.getElementById('tmArq').addEventListener('change', ev => {
@@ -2333,16 +2339,21 @@ async function rhFTermo(c, f){
     catch(e){ toast(e.message, 'err'); }
   }));
   const at = document.getElementById('tmAtual');
-  if (!fi.assinatura_arquivo_id){ at.innerHTML = '<div class="aviso">Ainda sem termo e sem assinatura.</div>'; return; }
-  at.innerHTML = '<p class="nota">Carregando a assinatura…</p>';
-  try{
-    const a = await rpc('tf_rh_arquivo', { p_id: fi.assinatura_arquivo_id });
-    at.innerHTML = '<div class="rhAssCx"><div class="rhXadrez"><img alt="Assinatura recortada"></div><div>'
-      + '<b>Termo assinado em ' + esc(dataBR(fi.termo_assinado_em)) + '</b><br>'
-      + '<button class="btn mini" type="button" id="tmVer" style="margin:6px 0 0">Ver o termo escaneado</button></div></div>';
-    at.querySelector('img').src = a.conteudo;
-    document.getElementById('tmVer').addEventListener('click', () => rhAbrirArquivo(fi.termo_arquivo_id));
-  }catch(e){ at.innerHTML = '<p class="nota" style="color:var(--crit)"></p>'; at.firstChild.textContent = e.message; }
+  if (!fi.assinatura_arquivo_id){ at.innerHTML = '<div class="aviso">' + (fi.termo_arquivo_id ? 'Termo guardado, sem o desenho da assinatura: use "Refazer o recorte".'
+    : 'Ainda sem termo e sem assinatura.') + '</div>'; return; }
+  // G13 (S219, R22 · AS6/AS8): o desenho não volta à tela; dá para trocar (recortar de novo) ou apagar. O termo escaneado fica.
+  at.innerHTML = '<div class="rhAssCx"><div><b>Desenho da assinatura guardado</b> · termo assinado em ' + esc(dataBR(fi.termo_assinado_em)) + '<br>'
+    + '<button class="btn mini" type="button" id="tmVer" style="margin:6px 6px 0 0">Ver o termo escaneado</button>'
+    + '<button class="btn mini perigo" type="button" id="tmApagar" style="margin:6px 0 0">Apagar o desenho</button></div></div>';
+  document.getElementById('tmVer').addEventListener('click', () => rhAbrirArquivo(fi.termo_arquivo_id));
+  document.getElementById('tmApagar').addEventListener('click', async () => {
+    const ok = await confirmar('Apagar o desenho da assinatura',
+      '<p style="margin-top:0">O desenho de <b>' + esc(f.usuario.nome) + '</b> sai do sistema. Os documentos já gerados ficam como estão; '
+      + 'os próximos saem só com o nome e o selo, até um recorte novo. O termo escaneado continua guardado.</p>', 'Apagar o desenho', true);
+    if (!ok) return;
+    try{ await rpc('tf_rh_assinatura_apagar', { p_usuario: f.usuario.id }); toast('Desenho apagado.', 'ok'); rhDesenharFicha(); }
+    catch(e){ toast(e.message, 'err'); }
+  });
 }
 
 const RH_QUADRO = { x:45, y:218, w:120, h:38 };
@@ -2571,26 +2582,68 @@ async function rhBaixarFicha(uid, completa){
   try{
     const jsPDF = await carregarJsPDF();       // ANTES de qualquer coisa (§7)
     const ficha = await rpc('tf_rh_ficha', { p_usuario: uid, p_completa: !!completa });
-    const ids = [uid].concat((ficha.linhas || []).map(l => l.lancado_por)).filter((v, i, a) => v && a.indexOf(v) === i);
-    const ass = await rpc('tf_rh_assinaturas', { p_usuarios: ids });
-    const doc = await rhFichaPDF(jsPDF, ficha, ass);
-    doc.save('Ficha de EPI - ' + ficha.funcionario.nome + (completa ? ' (completa)' : '') + ' - ' + isoHoje() + '.pdf');
+    const doc = await rhFichaPDF(jsPDF, ficha);
+    // G13 (S219, R22): a rubrica e o selo entram no servidor (carimbar), só com a confirmação de cada um
+    const bytes = await rhCarimbarDoc(doc, { tipo: 'ficha_epi', usuario: uid });
+    rhBaixarBytes(bytes, 'Ficha de EPI - ' + ficha.funcionario.nome + (completa ? ' (completa)' : '') + ' - ' + isoHoje() + '.pdf');
   }catch(e){ toast(e.message, 'err'); }
+}
+
+// ── G13 (S219, Rodada R22, issue 209 · AS1/AS2/AS7): a rubrica é colada no SERVIDOR (Edge Function `carimbar`).
+// A página monta o PDF sem o desenho e anota as caixas (de quem é cada uma e onde fica); o servidor confere a
+// confirmação daquela pessoa para aquele documento, cola o desenho e escreve o selo "Assinado eletronicamente por …".
+// A imagem da rubrica nunca chega a este navegador.
+const RH_MM = 72 / 25.4;
+/** caixa em mm (jsPDF, A4, de cima para baixo) → em pontos do PDF (de baixo para cima). `t.y` é a linha de base do texto. */
+function rhCaixaMm(ref, pagina, im, t){
+  return { ref, pagina, img: { x: im.x * RH_MM, y: (297 - im.y - im.h) * RH_MM, w: im.w * RH_MM, h: im.h * RH_MM, meio: true },
+    txt: t ? { x: t.x * RH_MM, y: (297 - t.y) * RH_MM, w: t.w * RH_MM, tam: t.tam, linhas: t.linhas || 2, alinhar: t.alinhar } : null };
+}
+async function rhCarimbarDoc(doc, documento){
+  const bytes = new Uint8Array(doc.output('arraybuffer'));
+  if (!(doc._caixas || []).length || DEMO) return bytes;
+  return carimbarNoServidor(documento, bytes, doc._caixas);
+}
+function rhBaixarBytes(bytes, nome){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })); a.download = nome;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+}
+async function carimbarNoServidor(documento, bytes, caixas){
+  let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  let r;
+  try{
+    r = await Nucleo.storage.pedir(SUPABASE_URL + '/functions/v1/carimbar', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documento, caixas, pdf: btoa(bin) }) });
+  }catch(e){ if (e.sessaoVencida) throw e; throw new Error('O carimbo do servidor não respondeu. Tente de novo com internet.'); }
+  if (r.status === 404) throw new Error('O carimbo das assinaturas ainda não está no servidor: falta uma atualização do sistema: avise o administrador.');
+  let j = null; try{ j = await r.json(); }catch(e){}
+  if (!j || !j.ok || !j.pdf) throw new Error((j && j.erro) || ('O servidor deu erro (código ' + r.status + '). Tente de novo.'));
+  const b = atob(j.pdf), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+  return u;
+}
+/** AS3.1: quem entrega confirma o lote (digital ou PIN) no mesmo botão que lança. Devolve a confirmação ou null. */
+async function rhConfirmarQuemEntrega(ref){
+  const c = await Nucleo.confirmarPessoa({ modo: 'servidor', finalidade: 'epi_lancou', referencia: 'lancou ' + ref,
+    titulo: 'Confirme que é você quem entrega', sub: 'A sua rubrica entra na Ficha de EPI, no visto da empresa.' });
+  return c && c.ok && c.confirmacao ? c : null;
+}
+async function rhGravarQuemEntregou(ids, ref, c){
+  if (!c || !(ids || []).length) return;
+  try{ await rpc('tf_rh_entregas_lancou_conf', { p_ids: ids, p_ref: ref, p_confirmacao: c.confirmacao }); }
+  catch(e){ toast('A entrega foi lançada, mas a sua confirmação não foi gravada (' + e.message + '): a ficha mostra só o seu nome.', 'err', { fixo: true }); }
 }
 
 async function rhDimImg(url){
   return new Promise(ok => { const i = new Image(); i.onload = () => ok({ w:i.width, h:i.height }); i.onerror = () => ok(null); i.src = url; });
 }
 
-async function rhFichaPDF(jsPDF, ficha, ass){
-  const doc = new jsPDF({ unit:'mm', format:'a4' });
+async function rhFichaPDF(jsPDF, ficha){
+  const doc = new jsPDF({ unit:'mm', format:'a4' }); doc._caixas = [];
   const M = 12, W = 210 - 2 * M;
   const F = ficha.funcionario;
   const col = [ { t:'Equipamento', w:56 }, { t:'CA', w:16 }, { t:'Entrega', w:19 }, { t:'Devolução', w:19 },
                 { t:'Assinatura do funcionário', w:40 }, { t:'Visto da empresa', w:36 } ];
   let pagina = 1, y;
-  const dims = {};
-  for (const k of Object.keys(ass || {})) dims[k] = await rhDimImg(ass[k]);
   const cab = () => {
     try{ doc.addImage(LOGO_ENGETAP, 'JPEG', M, 10, 44, 10.7); }catch(e){}
     doc.setFont('helvetica','bold'); doc.setFontSize(12);
@@ -2627,13 +2680,8 @@ async function rhFichaPDF(jsPDF, ficha, ass){
     doc.text('pág. ' + pagina, 210 - M, 288, { align:'right' });
     doc.setTextColor(0);
   };
-  const img = (uid, x, yy, w, h) => {
-    const u = ass && ass[uid], d = dims[uid];
-    if (!u || !d) return false;
-    const e = Math.min(w / d.w, h / d.h);
-    const iw = d.w * e, ih = d.h * e;
-    try{ doc.addImage(u, 'PNG', x + (w - iw) / 2, yy + (h - ih) / 2, iw, ih); return true; }catch(er){ return false; }
-  };
+  // G13 (S219, R22 · AS1/AS3/AS7): a caixa da rubrica (no alto da célula) e o selo embaixo, que o servidor preenche
+  const caixa = (ref, x, yy, w, h, tam) => doc._caixas.push(rhCaixaMm(ref, pagina - 1, { x, y: yy, w, h }, { x, y: yy + h + 2.2, w, tam, linhas: 3 }));
   cab();
   const L = ficha.linhas || [];
   if (!L.length){ doc.setFontSize(9); doc.text('Nenhuma entrega confirmada até esta data.', M + 2, y + 8); y += 12; }
@@ -2673,14 +2721,12 @@ async function rhFichaPDF(jsPDF, ficha, ass){
       doc.setFontSize(7.6);
     } else doc.text('—', x + 1.2, y + 5);
     x += col[3].w;
-    // assinatura do funcionário: rubrica + selo, sempre juntos
-    img(F.usuario_id, x + 1, y + 0.8, col[4].w - 2, 8.6);
+    // assinatura do funcionário: rubrica + selo, sempre juntos (o servidor põe os dois)
+    caixa({ papel: 'func', entrega: l.id }, x + 1, y + 0.8, col[4].w - 2, 8.6, 5.6);
     doc.setFontSize(5.6);
-    doc.text(doc.splitTextToSize('Confirmado no celular do funcionário em ' + rhDT(l.confirmado_em)
-      + (l.confirmado_metodo === 'pin' ? ' (PIN)' : l.confirmado_metodo === 'passkey' ? ' (digital)' : ''), col[4].w - 2), x + 1, y + 11.6);
     x += col[4].w;
-    img(l.lancado_por, x + 1, y + 0.8, col[5].w - 2, 8.6);
-    doc.text(doc.splitTextToSize('Lançado por ' + (l.lancado_por_nome || '?') + ' em ' + rhDT(l.lancado_em), col[5].w - 2), x + 1, y + 11.6);
+    // o visto de quem entregou: com a confirmação do lote, rubrica + selo; o lote antigo, só "Lançado por …"
+    caixa({ papel: 'lancou', entrega: l.id }, x + 1, y + 0.8, col[5].w - 2, 8.6, 5.6);
     if (anul){
       doc.setDrawColor(166, 45, 24); doc.setLineWidth(0.4);
       doc.line(M + 1, y + (altura - 5) / 2, 210 - M - 1, y + (altura - 5) / 2);
@@ -3099,11 +3145,15 @@ async function rhSepararPedido(x, depois){
           const g = id => document.getElementById(id);
           const qq = Number(g('spQ').value);
           if (!Number.isInteger(qq) || qq < 1 || qq > 99){ g('rhMsg').textContent = 'A quantidade vai de 1 a 99.'; return; }
+          // G13 (S219, R22 · AS3.1): separar é o lançamento: quem separa confirma antes
+          const ref = rhUuid(), conf = await rhConfirmarQuemEntrega(ref);
+          if (!conf){ g('rhMsg').textContent = 'Não separado: confirme com a digital ou o PIN para lançar.'; return; }
           try{
             const r = await rpc('tf_rh_separar_pedido', { p_id: x.id, p_dados: {
               tamanho: g('spT') ? g('spT').value : null, quantidade: g('spQ').value, condicao: g('spC').value,
               devolucao_id: g('spU') && g('spC').value === 'reaproveitado' ? (g('spU').value || null) : null,
               fabricacao: g('spF') ? g('spF').value : null, serie_lote: g('spS') ? g('spS').value : null } });
+            await rhGravarQuemEntregou(r.entrega_id ? [r.entrega_id] : r.ids, ref, conf);
             fecharModal(); contarRH();
             abrirModal('Separado da caixa',
               '<p style="margin-top:0"><b>' + esc(x.epi) + '</b> de <b>' + esc(x.funcionario) + '</b> saiu do estoque.</p>'
@@ -3730,11 +3780,16 @@ async function rhAbrirSessao(id){
   try{ [s, lista] = await Promise.all([rpc('tf_rh_sessao', { p_sessao: id }), RH.lista ? Promise.resolve(RH.lista) : rpc('tf_rh_funcionarios', {})]); }
   catch(e){ toast(e.message, 'err'); return; }
   const cel = {}; (lista || []).forEach(f => { cel[f.usuario_id] = f.celular; });
+  // G13 (S219, R22 · AS3.2): o instrutor (usuário) confirma 1 vez ao encerrar a sessão; só então a rubrica dele entra na lista
+  let iv = null; if (s.instrutor_usuario_id) try{ iv = await rpc('tf_rh_sessao_instrutor_ver', { p_sessao: id }); }catch(e){}
   const part = s.participantes || [];
   const algumConf = part.some(p => p.status === 'confirmado');
   abrirModal(s.tema,
     '<p style="margin-top:0">' + esc(dataBR(s.data)) + (s.horario ? ' · ' + esc(s.horario) : '') + (s.carga_horaria_h ? ' · ' + esc(String(s.carga_horaria_h).replace('.', ',')) + 'h' : '')
-    + ' · instrutor: ' + esc(s.instrutor_nome || '—') + (s.cancelada_em ? '<br><b style="color:var(--crit)">Cancelada em ' + esc(rhDT(s.cancelada_em)) + ': ' + esc(s.cancelada_motivo || '') + '</b>' : '') + '</p>'
+    + ' · instrutor: ' + esc(s.instrutor_nome || '—')
+    + (iv ? (iv.confirmado_em ? ' <span class="rhSt confirmado">confirmou em ' + esc(rhDT(iv.confirmado_em)) + '</span>'
+                              : ' <span class="rhSt aguardando">aguardando a confirmação do instrutor</span>') : '')
+    + (s.cancelada_em ? '<br><b style="color:var(--crit)">Cancelada em ' + esc(rhDT(s.cancelada_em)) + ': ' + esc(s.cancelada_motivo || '') + '</b>' : '') + '</p>'
     + '<div class="ccLista">' + part.map(p => '<div class="rhLin' + (p.status === 'retirado' ? ' riscada' : '') + '"><span class="t"><span class="rhSt '
       + (p.status === 'confirmado' ? 'confirmado' : p.status === 'retirado' ? 'cancelada' : 'aguardando') + '">'
       + esc(p.status === 'confirmado' ? 'confirmou' : p.status === 'retirado' ? 'tirado da lista' : 'aguardando') + '</span> <b>' + esc(p.nome) + '</b>'
@@ -3756,6 +3811,7 @@ async function rhAbrirSessao(id){
           if (!rr){ rhAbrirSessao(s.id); return; }
           try{ await rpc('tf_rh_cancelar_sessao', { p_sessao: s.id, p_motivo: rr.texto }); toast('Lista cancelada.', 'ok'); if (visao === 'rhs') pintarRHSeguranca(); }
           catch(e){ toast(e.message, 'err'); rhAbrirSessao(s.id); } } }] : []),
+      ...(iv && iv.eu && !iv.confirmado_em && iv.pode_hoje && !s.cancelada_em ? [{ label:'Encerrar e confirmar como instrutor', onClick: () => rhInstrutorConfirmar(s.id) }] : []),
       { label:'Lista em PDF', pri:true, onClick: () => rhBaixarLista(s.id, null) } ],
     // G10 (S207, issue 196 item 3): fechada pelo X (ou Esc), a lista de trás mostra a contagem nova
     { aoFechar: () => { if (RH._sessMudou && visao === 'rhs'){ RH._sessMudou = false; pintarRHSeguranca(); } } });
@@ -3775,6 +3831,15 @@ async function rhAbrirSessao(id){
   });
 }
 
+async function rhInstrutorConfirmar(sessao){
+  const c = await Nucleo.confirmarPessoa({ modo: 'servidor', finalidade: 'treino_instrutor', referencia: 'instrutor ' + sessao,
+    titulo: 'Confirme que você deu este treinamento', sub: 'A sua rubrica de instrutor entra na lista de presença.' });
+  if (!c || !c.ok || !c.confirmacao){ if (c && c.msg) toast(c.msg, 'err'); return; }
+  try{ await rpc('tf_rh_sessao_instrutor_conf', { p_sessao: sessao, p_confirmacao: c.confirmacao }); toast('Confirmado como instrutor.', 'ok'); RH._sessMudou = true; }
+  catch(e){ toast(e.message, 'err'); }
+  rhAbrirSessao(sessao);
+}
+
 function rhWhatsLista(celular, nome, s){
   const campo = new URL('../field/', location.href).href;
   const txt = 'Olá, ' + String(nome || '').split(' ')[0] + '! Confirme a sua presença no ' + s.tema + ' de ' + dataBR(s.data)
@@ -3787,7 +3852,7 @@ async function rhBaixarLista(sessaoId, soUsuarios){
     const jsPDF = await carregarJsPDF();
     const doc = await rhListaDoc(jsPDF, sessaoId, soUsuarios, !!soUsuarios);
     const s = doc._sessao;
-    doc.save(rhNomeArq('Lista de Treinamento - ' + s.tema + ' - ' + rhDataArq(s.data)) + '.pdf');
+    rhBaixarBytes(await rhCarimbarDoc(doc, { tipo: 'presenca', sessao: sessaoId }), rhNomeArq('Lista de Treinamento - ' + s.tema + ' - ' + rhDataArq(s.data)) + '.pdf');
   }catch(e){ toast(e.message, 'err'); }
 }
 
@@ -3796,15 +3861,10 @@ async function rhListaDoc(jsPDF, sessaoId, soUsuarios, soConfirmados){
   let part = (s.participantes || []).filter(p => p.status !== 'retirado');
   if (soUsuarios) part = part.filter(p => soUsuarios.includes(p.usuario_id));
   if (soConfirmados) part = part.filter(p => p.status === 'confirmado');
-  const ids = part.map(p => p.usuario_id).concat(s.instrutor_usuario_id ? [s.instrutor_usuario_id] : []);
-  const ass = ids.length ? await rpc('tf_rh_assinaturas', { p_usuarios: ids }) : {};
-  const dims = {}; for (const k of Object.keys(ass || {})) dims[k] = await rhDimImg(ass[k]);
   let rodapeTxt = '';
   try{ rodapeTxt = ((RH.textos || await rpc('tf_rh_textos', {})).rodape_ficha || {}).texto || ''; }catch(e){}
-  const doc = new jsPDF({ unit:'mm', format:'a4' }); doc._sessao = s;
+  const doc = new jsPDF({ unit:'mm', format:'a4' }); doc._sessao = s; doc._caixas = [];
   const M = 12, W = 210 - 2 * M; let y = 10, pag = 1;
-  const img = (uid, x, yy, w, h) => { const u = ass && ass[uid], d = dims[uid]; if (!u || !d) return false;
-    const e = Math.min(w / d.w, h / d.h); try{ doc.addImage(u, 'PNG', x + (w - d.w * e) / 2, yy + (h - d.h * e) / 2, d.w * e, d.h * e); return true; }catch(er){ return false; } };
   const rod = () => { doc.setFont('helvetica','normal'); doc.setFontSize(6.8); doc.setTextColor(90);
     doc.text('Lista gerada em ' + rhDT(new Date().toISOString()).replace(' ', ' às ') + ' pelo TapHub, com as presenças confirmadas no celular de cada participante.', M, 285);
     if (rodapeTxt) doc.text(doc.splitTextToSize(rodapeTxt, W - 16).slice(0, 2), M, 289);   // G10: até 2 linhas (o rodapé é editável)
@@ -3850,10 +3910,9 @@ async function rhListaDoc(jsPDF, sessaoId, soUsuarios, soConfirmados){
     doc.text(doc.splitTextToSize(p.funcao || '—', col[1].w - 2.4).slice(0, 3), x + 1.2, y + 4.5); x += col[1].w;
     doc.text(dataBR(s.data), x + 1.2, y + 4.5); x += col[2].w;
     if (p.status === 'confirmado'){
-      img(p.usuario_id, x + 1, y + 0.8, col[3].w - 2, 8.4);
-      doc.setFontSize(5.8);
-      doc.text(doc.splitTextToSize('Confirmado no celular do funcionário em ' + rhDT(p.confirmado_em) + (p.confirmado_metodo === 'pin' ? ' (PIN)' : p.confirmado_metodo === 'passkey' ? ' (digital)' : ''),
-        col[3].w - 2), x + 1, y + 12);
+      // G13 (S219, R22): rubrica + selo pelo servidor (carimbar), com a presença confirmada no celular
+      doc._caixas.push(rhCaixaMm({ papel: 'part', usuario: p.usuario_id }, pag - 1, { x: x + 1, y: y + 0.8, w: col[3].w - 2, h: 8.4 },
+        { x: x + 1, y: y + 12, w: col[3].w - 2, tam: 5.8, linhas: 2 }));
     } else { doc.setFontSize(7.4); doc.setTextColor(140); doc.text('aguardando a confirmação no celular', x + 1.5, y + 8); doc.setTextColor(0); }
     y += H;
   });
@@ -3863,9 +3922,9 @@ async function rhListaDoc(jsPDF, sessaoId, soUsuarios, soConfirmados){
   if (y + hI + 6 > 280){ rod(); doc.addPage(); pag++; y = 14; }
   y += 5; doc.setFont('helvetica','bold'); doc.setFontSize(8.3); doc.text('Instrutor:', M, y);
   doc.setFont('helvetica','normal'); doc.text(s.instrutor_nome || '—', M + 15, y);
-  if (s.instrutor_usuario_id && img(s.instrutor_usuario_id, 210 - M - 55, y - 3, 55, 12)){
-    doc.setFontSize(6); doc.text('Rubrica do instrutor', 210 - M - 27.5, y + 11, { align:'center' });
-  }
+  // G13 (S219, R22 · AS3.2): o instrutor usuário entra com rubrica e selo só depois de confirmar a sessão; o externo, só o nome
+  if (s.instrutor_usuario_id) doc._caixas.push(rhCaixaMm({ papel: 'instrutor' }, pag - 1, { x: 210 - M - 55, y: y - 3, w: 55, h: 12 },
+    { x: 210 - M - 75, y: y + 11, w: 75, tam: 6, linhas: 2, alinhar: 'centro' }));
   y += 4; doc.setFontSize(7.2); doc.text(q, M, y);
   rod();
   return doc;
@@ -3895,7 +3954,7 @@ async function rhTreinamentos(corpo){
       + '<div class="campo"><label for="tD">Declaração do participante</label><textarea id="tD" rows="3">' + esc(t.declaracao || '') + '</textarea></div>'
       + '<div class="campo"><label for="tC">Conteúdo programático (um tópico por linha)</label><textarea id="tC" rows="7">' + esc(t.conteudo || '') + '</textarea></div>'
       + '<div class="dupla"><div class="campo"><label for="tIN">Instrutor</label><input id="tIN" type="text" maxlength="120" value="' + esc(t.instrutor_nome || '') + '"></div>'
-      + '<div class="campo"><label for="tIU">Rubrica do instrutor (usuário com termo assinado)</label><select id="tIU"><option value="">— sem rubrica —</option>'
+      + '<div class="campo"><label for="tIU">Instrutor (usuário)</label><select id="tIU"><option value="">— externo (sem usuário: só o nome na lista) —</option>'
       + pessoas.map(p => '<option value="' + esc(p.usuario_id) + '"' + (p.usuario_id === t.instrutor_usuario_id ? ' selected' : '') + '>' + esc(p.nome) + '</option>').join('') + '</select></div></div>'
       + '<div class="campo"><label for="tIQ">Qualificação do instrutor (vai completa na lista)</label><textarea id="tIQ" rows="5">' + esc(t.instrutor_qualificacao || '') + '</textarea></div>'
       + '<label class="chk"><input type="checkbox" id="tVid"' + (t.tem_videos ? ' checked' : '') + '> Tem vídeos no TapField (a lista registra "módulos assistidos N/M")</label></div>'
@@ -4346,15 +4405,13 @@ async function rhKitArquivos(jsPDF, k, falhas){
       if (i.doc === 'alerta') continue;
       if (i.doc === 'ficha_epi'){
         const ficha = await rpc('tf_rh_ficha', { p_usuario: p.usuario_id, p_completa: false });
-        const ids = [p.usuario_id].concat((ficha.linhas || []).map(l => l.lancado_por)).filter((v, n, a) => v && a.indexOf(v) === n);
-        const ass = await rpc('tf_rh_assinaturas', { p_usuarios: ids });
-        const doc = await rhFichaPDF(jsPDF, ficha, ass);
+        const doc = await rhFichaPDF(jsPDF, ficha);
         out.push({ pasta, nome: rhNomeArq('Ficha de EPI - ' + p.nome + ' - ' + rhDataArq(isoHoje())) + '.pdf',
-                   bytes: new Uint8Array(doc.output('arraybuffer')), copia: { usuario_id: p.usuario_id }, cor: i.cor });
+                   bytes: await rhCarimbarDoc(doc, { tipo: 'ficha_epi', usuario: p.usuario_id }), copia: { usuario_id: p.usuario_id }, cor: i.cor });
       } else if (i.doc === 'treinamento' && i.sessao_id){
         const doc = await rhListaDoc(jsPDF, i.sessao_id, [p.usuario_id], true);
         out.push({ pasta, nome: rhNomeArq('Lista de Treinamento - ' + nomeTreino(i.rotulo) + ' - ' + p.nome + ' - ' + rhDataArq(i.data)) + '.pdf',
-                   bytes: new Uint8Array(doc.output('arraybuffer')), copia: { usuario_id: p.usuario_id }, cor: i.cor });
+                   bytes: await rhCarimbarDoc(doc, { tipo: 'presenca', sessao: i.sessao_id }), copia: { usuario_id: p.usuario_id }, cor: i.cor });
       } else if (i.arquivo_id || i.storage_path){
         const rot = i.doc === 'aso' ? 'ASO' : i.doc === 'doc_pessoal' ? 'Documento pessoal' : 'Certificado ' + nomeTreino(i.rotulo);
         const qual = (i.doc === 'aso' ? 'O ASO' : i.doc === 'doc_pessoal' ? 'O documento pessoal' : 'O certificado de ' + nomeTreino(i.rotulo)) + ' de ' + p.nome;
