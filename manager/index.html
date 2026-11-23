@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow · S218</title>
+<title>TapFlow · S222</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1663,7 +1663,8 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S218';   // S218: Rodada R21 — issue 115 parte 1 (a aba Custos só de leitura com o real: peças, contas do TapFin com a OS, diárias sem nomes e o deslocamento por dia de campo com o veículo; o fornecedor da aba Itens do cadastro, com "+ Novo fornecedor"; o Relatório Financeiro pelo custo real; banco 530 e 315)
+const APP_VERSION = 'S222';   // S222: issue 239 parte 1 — na OS de inspeção nova, as tarefas que concluem sozinhas pelo TapDoc (T06, T07, T09, T10, T12 e T15) mostram "Abrir no TapDoc" e, só para o admin, "Concluir à mão" com o motivo (banco 453)
+// const APP_VERSION = 'S218';   // S218: Rodada R21 — issue 115 parte 1 (a aba Custos só de leitura com o real: peças, contas do TapFin com a OS, diárias sem nomes e o deslocamento por dia de campo com o veículo; o fornecedor da aba Itens do cadastro, com "+ Novo fornecedor"; o Relatório Financeiro pelo custo real; banco 530 e 315)
 // const APP_VERSION = 'S217';   // S217: Rodada R25 — issue 236 (a D01 "O cliente adota pedido / ordem de compra?" com Sim/Não e a T01 "Inserir pedido de compra (Cliente)"; só texto, banco 314)
 // const APP_VERSION = 'S215';   // S215: Rodada R24 — issue 231 (as perguntas da abertura vão juntas: as permissões, as colunas, os parâmetros e a equipe; o quadro com as vendas adicionais; as atrasadas do dono e as de apoio)
 // const APP_VERSION = 'S214';   // S214: Rodada R20 da auditoria (issue 117, M7) — saiu o estilo que nenhuma tela usa; as telas não mudam
@@ -3434,6 +3435,33 @@ function pintarAcoes_(){
     hint.textContent = 'Anexe o pedido de compra do cliente: ele vai para a pasta da OS no Drive e a tarefa se conclui.';
     return;
   }
+  // S222 · issue 239, parte 1 (453, LF3): a tarefa que conclui sozinha pelo TapDoc. Quem não é admin não tem "Concluir"
+  // (o banco recusa); o admin conclui à mão só com o motivo (vai ao histórico da OS)
+  if (pedeTapdoc(t)){
+    const rot = ROT_TAPDOC[t.requisitos.tapdoc] || 'pelo TapDoc';
+    const ad = document.createElement('a');
+    ad.className = 'btn pri'; ad.href = '../doc/#os=' + encodeURIComponent(card.os_id); ad.textContent = 'Abrir no TapDoc';
+    ad.addEventListener('click', ev => ev.stopPropagation());
+    row.appendChild(ad);
+    if (sessao.admin){
+      const bm = document.createElement('button');
+      bm.className = 'btn'; bm.textContent = 'Concluir à mão';
+      bm.addEventListener('click', async () => {
+        const m = await confirmar('Concluir à mão: ' + t.nome,
+          '<p style="margin-top:0">Esta tarefa conclui sozinha ' + esc(rot) + '. Concluir à mão é só para a exceção (ex.: o vaso inspecionado sem o celular); o motivo fica no histórico da OS.</p>'
+          + '<div class="campo"><label for="tdMotivo">Motivo</label><textarea id="tdMotivo" rows="3" placeholder="ex.: vaso inspecionado sem o celular"></textarea></div>',
+          'Concluir à mão', false, { campo: 'tdMotivo', obrigatorio: 'Escreva o motivo.', minimo: 5 });
+        if (!m) return;
+        try{ await rpc('tf_concluir_tarefa', { p_os_id: card.os_id, p_tarefa_id: t.tarefa_id, p_observacao: m.texto });
+          toast('"' + t.nome + '" concluída à mão.', 'ok');
+          await carregar({silencioso:true}); const novo = cards.find(x => x.os_id === card.os_id); if (novo) await abrirOS(novo); else fecharDrawer(); }
+        catch(e){ toast(e.message, 'err'); }
+      });
+      row.appendChild(bm);
+    }
+    hint.textContent = 'Esta tarefa conclui sozinha ' + rot + '.' + (sessao.admin ? ' "Concluir à mão" é só para a exceção, com o motivo.' : ' Só o administrador conclui à mão.');
+    return;
+  }
   // S78 · T05 com a trava: o botão principal é a preparação; o "Concluir"
   // fica como segunda opção (o banco só aceita com a preparação completa)
   if (pedePreparacao(t)){
@@ -3718,7 +3746,8 @@ function temRequisitosObrigatorios(t){
   return (r.fotos || []).some(f => (f.min || 0) > 0) || (r.checklist || []).some(q => q.obrigatoria)
       || !!r.agenda    // S61 · o "Agendar serviço" pede a janela de agendamento
       || !!r.medicao       // S114 · a T06B só conclui ao fechar a medição (306)
-      || !!r.preparacao;   // S78 · a T05 "Preparar a inspeção" só conclui com a preparação completa (401)
+      || !!r.preparacao    // S78 · a T05 "Preparar a inspeção" só conclui com a preparação completa (401)
+      || !!r.tapdoc;       // S222 · 453: conclui sozinha pelo TapDoc (à mão, só o admin com o motivo)
 }
 // ── S78 · A T05 "PREPARAR A INSPEÇÃO" (pedido do central, S77) ─────────────
 // A 401 pôs no banco a trava: a T05 com `requisitos.preparacao` (OS novas) não
@@ -3726,6 +3755,11 @@ function temRequisitosObrigatorios(t){
 // do Manager não refaz a conta: ela leva até a preparação, e o "Concluir" que
 // sobra recebe a mensagem do banco se ainda faltar alguma coisa.
 const pedePreparacao = t => !!(t && t.requisitos && t.requisitos.preparacao);
+// S222 · 453: as tarefas da OS de inspeção (nova) que concluem sozinhas pelo TapDoc
+const pedeTapdoc = t => !!(t && t.requisitos && t.requisitos.tapdoc);
+const ROT_TAPDOC = { envio:'quando o celular envia todos os vasos da OS', csv:'quando o CSV de todos os vasos é anexado na revisão',
+  rev1:'quando a Revisão 1 de todos os vasos fecha', rev2:'quando a Revisão 2 de todos os vasos fecha',
+  assinado:'quando o laudo assinado de todos os vasos é aceito', placa:'quando a placa de todos os vasos é gerada no TapDoc' };
 const linkPreparacao = osId => '../doc/#os=' + encodeURIComponent(osId);
 /** Quem abre a preparação daqui: quem faria a tarefa (o admin, ou o perfil da
  *  T05). A porta do TapDoc no hub segue a mesma gente (técnico adm e admin). */

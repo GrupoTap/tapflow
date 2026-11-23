@@ -206,7 +206,8 @@ tr[data-espver]{cursor:pointer} tr[data-espver]:hover{background:var(--surface-2
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E57';   // E57 (S221 · issue 239, parte 2): "Preparar para assinar" sem a digital (a validação do PLH é a assinatura do PDF, token ou gov.br); o desenho da assinatura vale com o primeiro laudo assinado; os PDFs não assinados só no pacote do PLH (fora das listas e do "Baixar tudo"); a minuta com o número tirado na Revisão 2; reaberta antes de assinar, o mesmo número; a numeração R, P, M e V automática; os números cancelados; o gov.br sem "reserva do token" (assinatura-pdf.js S221); 452
+const VERSAO = 'TapDoc E58';   // E58 (S222 · issue 239, parte 1): a placa baixada fica gravada (a T15 da OS nova de inspeção conclui sozinha quando a placa de todos os vasos foi gerada); 453
+// const VERSAO = 'TapDoc E57';   // E57 (S221 · issue 239, parte 2): "Preparar para assinar" sem a digital (a validação do PLH é a assinatura do PDF, token ou gov.br); o desenho da assinatura vale com o primeiro laudo assinado; os PDFs não assinados só no pacote do PLH (fora das listas e do "Baixar tudo"); a minuta com o número tirado na Revisão 2; reaberta antes de assinar, o mesmo número; a numeração R, P, M e V automática; os números cancelados; o gov.br sem "reserva do token" (assinatura-pdf.js S221); 452
 // const VERSAO = 'TapDoc E56';   // E56 (S220 · issue 240): as abas presas ao rolar; "Textos do laudo" texto por texto (Aprovar/Recusar em cada texto, o PIN para aprovar), com o nome de cada texto em português e o antes e depois aberto; as explicações das propostas em tópicos (451)
 // const VERSAO = 'TapDoc E55';   // E55 (S215 · issue 231, Rodada R24): as perguntas da abertura (as listas e os contadores das abas) vão juntas
 // const VERSAO = 'TapDoc E54';   // E54 (S210 · issues 215, 216, 217, 223, 224, 225, 226, 227 e 228, Rodada R19 da auditoria): o laudo (laudo-pdf.js S178: Quadro 1, 7.3 com a conclusão, 9.1 do laudo antigo, as fórmulas em fração e os tampos iguais numa conta, os anexos só do medidor e da ART, o relatório de aferição com carga e descarga e a bancada, a portaria da NR-13 pelo texto) e o certificado do medidor juntado ao PDF; os documentos (documentos-pdf.js D10: a boroscopia conta como exame interno no Registro, a frase do teste, a ART sem a OS); na revisão, o Número TAP sem motivo, o E e a geometria para quem revisa, o nº de série da válvula e o ajuste da conclusão do 7.3; o QR code da placa e da lombada pela imagem do TapWeb (placa-pdf.js P2); 450
@@ -1259,6 +1260,8 @@ async function juntarQR(vasos){
   let Q = {}; try{ Q = (await rpc('tf_placa_qr_ver', { p_equips: ids })) || {}; }catch(e){ Q = {}; }
   (vasos || []).forEach(v => { v.tapweb_qr = Q[v.equipamento_id] || null; });
 }
+// E58 · S222 · issue 239, parte 1 (453): a placa gerada fica gravada (a T15 da OS nova conclui quando todas foram geradas). Não trava o download.
+function placaGerada(ids){ rpc('tf_insp_placa_gerada', { p_insps: ids }).catch(() => {}); }
 async function quadroPlacas(os){
   const cx = $('cxPlacas'); if (!cx) return;
   let D;
@@ -1306,7 +1309,7 @@ async function quadroPlacas(os){
     catch(e){ erro(e); }
   })));
   cx.querySelectorAll('[data-plbaixa]').forEach(b => b.addEventListener('click', () => {
-    try{ const a = gerar(linhas.find(l => l.v.inspecao_id === b.dataset.plbaixa)); baixarBytes(a.nome, new Blob([a.bytes], { type:'application/pdf' })); avisarPlacas([a]); }
+    try{ const a = gerar(linhas.find(l => l.v.inspecao_id === b.dataset.plbaixa)); baixarBytes(a.nome, new Blob([a.bytes], { type:'application/pdf' })); avisarPlacas([a]); placaGerada([b.dataset.plbaixa]); }
     catch(e){ erro(e); }
   }));
   $('plTodas').addEventListener('click', () => {
@@ -1316,6 +1319,7 @@ async function quadroPlacas(os){
       if (arqs.length === 1) baixarBytes(arqs[0].nome, new Blob([arqs[0].bytes], { type:'application/pdf' }));
       else baixarBytes('Placas ' + String(D.os && D.os.numero || 'OS').replace(/[\\/:*?"<>|]+/g, '-') + '.zip', zipar(arqs));
       if (!avisarPlacas(arqs)) U.toast(arqs.length + ' placa(s) baixada(s).', 'ok');
+      placaGerada(prontas.map(l => l.v.inspecao_id));
     }catch(e){ erro(e); }
   });
 }
