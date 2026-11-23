@@ -206,7 +206,8 @@ tr[data-espver]{cursor:pointer} tr[data-espver]:hover{background:var(--surface-2
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E58';   // E58 (S222 · issue 239, parte 1): a placa baixada fica gravada (a T15 da OS nova de inspeção conclui sozinha quando a placa de todos os vasos foi gerada); 453
+const VERSAO = 'TapDoc E59';   // E59 (S224 · issues 242 parte 2, 243, 244 e 212, R27): a aferição avulsa nas telas ("Só aferição" na preparação, a conferência única "Conferir e liberar", os certificados preparados pelo PLH sem laudo, com o aviso sem PMTA, no mesmo pacote "Para assinar" e na lista de documentos); a bancada sem certificado nem validade em Instrumentos; a janela que fecha depois de gravar não fecha a janela aberta depois dela (o "Novo modelo" do mapa 3D); laudo-pdf.js S179; 454 e 455
+// const VERSAO = 'TapDoc E58';   // E58 (S222 · issue 239, parte 1): a placa baixada fica gravada (a T15 da OS nova de inspeção conclui sozinha quando a placa de todos os vasos foi gerada); 453
 // const VERSAO = 'TapDoc E57';   // E57 (S221 · issue 239, parte 2): "Preparar para assinar" sem a digital (a validação do PLH é a assinatura do PDF, token ou gov.br); o desenho da assinatura vale com o primeiro laudo assinado; os PDFs não assinados só no pacote do PLH (fora das listas e do "Baixar tudo"); a minuta com o número tirado na Revisão 2; reaberta antes de assinar, o mesmo número; a numeração R, P, M e V automática; os números cancelados; o gov.br sem "reserva do token" (assinatura-pdf.js S221); 452
 // const VERSAO = 'TapDoc E56';   // E56 (S220 · issue 240): as abas presas ao rolar; "Textos do laudo" texto por texto (Aprovar/Recusar em cada texto, o PIN para aprovar), com o nome de cada texto em português e o antes e depois aberto; as explicações das propostas em tópicos (451)
 // const VERSAO = 'TapDoc E55';   // E55 (S215 · issue 231, Rodada R24): as perguntas da abertura (as listas e os contadores das abas) vão juntas
@@ -423,11 +424,16 @@ const FLUIDOS = [['Ar comprimido','C'],['Vapor d’água','C'],['Água','D'],['N
 const TIPOS_COMP = { costado:'Costado', eliptico:'Elíptico', torisferico:'Torisférico', hemisferico:'Hemisférico', conico:'Cônico', plano:'Plano', janela:'Janela' };
 
 /** janela do núcleo: botões {rotulo, classe:'pri', acao}; acao que devolve false mantém aberta */
+// E59 · issue 212: cada janela aberta por aqui ganha um número; a ação que termina depois de outra janela ter sido aberta
+// (ex.: "Corrigir o modelo" grava e o "Novo modelo" já está aberto) não fecha a janela nova (antes, ela fechava e o que estava
+// digitado se perdia).
+let JAN_VEZ = 0;
 function janela(tit, html, bts){
   // E48 · issue 65, item 5: o núcleo já prende o botão enquanto a ação roda (semDuploEnvio); a ação que grava devolve a promessa
   // (return rpc(...)), para o 2º toque rápido em "Gravar" esperar a resposta do banco e não gravar de novo.
+  const minha = ++JAN_VEZ;
   N.janela.abrir(tit, html, (bts || []).map(b => ({ label:b.rotulo, pri:b.classe === 'pri',
-    onClick:async () => { const r = b.acao ? await b.acao() : undefined; if (r !== false) N.janela.fechar(); } })));
+    onClick:async () => { const r = b.acao ? await b.acao() : undefined; if (r !== false && minha === JAN_VEZ) N.janela.fechar(); } })));
 }
 function erro(e){ U.toast(e && e.message ? e.message : String(e), 'err'); }
 // E33 · issue 15: o aviso que bloqueia leva até a parte com problema e a marca em vermelho. A marca some quando a parte muda
@@ -750,7 +756,9 @@ async function telaInstrumentos(){
   INST_LISTA = TODOS;   // o aviso de repetido olha também os desativados
   const nDes = TODOS.filter(x => x.ativo === false).length, L = INST_DESAT ? TODOS : TODOS.filter(x => x.ativo !== false);
   let h = '<div class="card"><div class="linha" style="justify-content:space-between"><h3 style="margin:0">Instrumentos</h3><button class="btn pri" id="instNovo">+ instrumento</button></div>'
-    + '<p class="muted">O celular só oferece medidor, padrão e bancada com o certificado válido. Vencido não aparece para escolha. O padrão precisa da U do certificado. '
+    + '<p class="muted">O celular só oferece medidor e padrão com o certificado válido. Vencido não aparece para escolha. O padrão precisa da U do certificado. '
+    // E59 · issue 243: a bancada não tem aferição nem certificado (a rastreabilidade vem do manômetro padrão)
+    + '<b>A bancada não tem aferição nem certificado</b>: basta a descrição, a marca e o modelo, sem validade. O celular pergunta qual bancada foi usada em cada aferição. '
     + 'Quando o instrumento voltar da calibração, use <b>Editar › Nova calibração</b>: o certificado anterior fica guardado para as inspeções feitas com ele.</p>'
     + '<label class="linha" style="margin:4px 0 8px;font-size:13px"><input type="checkbox" id="instDesat"' + (INST_DESAT ? ' checked' : '') + '> Mostrar os desativados'
     + (nDes ? ' <span class="muted">(' + nDes + ')</span>' : '') + '</label>'
@@ -766,7 +774,8 @@ async function telaInstrumentos(){
         + (x.certificado_path ? '<div><a href="#" data-cert="' + esc(x.certificado_path) + '">PDF do certificado</a></div>'
            : (x.tipo === 'medidor_espessura' || x.tipo === 'manometro_padrao' ? '<div><span class="chip s-grave">sem o PDF</span></div>' : ''))
         + (x.tipo === 'manometro_padrao' ? '<div class="muted">' + (x.u_expandida != null ? 'U ' + fmt(x.u_expandida, 4) + ' ' + esc(x.unidade || '') + ' (k = ' + fmt(x.k || 2, 2) + ')' : '<span class="chip s-grave">sem a U</span>') + '</div>' : '') + '</td><td>'
-        + (x.validade ? (x.vencido ? '<span class="chip s-grave">vencido ' + dataBR(x.validade) + '</span>' : dataBR(x.validade)) : '<span class="muted">sem validade</span>')
+        + (x.tipo === 'bancada' ? '<span class="muted">não tem (não se afere)</span>'   // E59 · issue 243
+          : x.validade ? (x.vencido ? '<span class="chip s-grave">vencido ' + dataBR(x.validade) + '</span>' : dataBR(x.validade)) : '<span class="muted">sem validade</span>')
         + '</td><td>' + (x.ativo === false ? '<button class="btn mini pri" data-instreat="' + esc(x.id) + '">Reativar</button>' : '<button class="btn mini" data-inst="' + esc(x.id) + '">Editar</button>') + '</td></tr>').join('') + '</table>'
       : '<p class="vazio">Nenhum instrumento cadastrado. Cadastre o medidor de espessura antes da primeira inspeção.</p>') + '</div>';
   $('tela').lastElementChild.remove();   // o "Carregando…"
@@ -799,11 +808,18 @@ function editarInstrumento(x){
       janela('Certificado anterior', '<div id="certVis" class="visorrev" style="min-height:420px"></div>', [{ rotulo:'Fechar' }]);
       setTimeout(() => mostrarArquivoEm($('certVis'), { storage_path: a.dataset.certant }), 0); }));
     document.querySelectorAll('[data-calpdf]').forEach(b => b.addEventListener('click', () => anexarPdfCalibracao(x, b.dataset.calpdf)));
+    // E59 · issue 243: a bancada não tem certificado nem validade: esses campos somem quando o tipo é "Bancada"
+    const ajustarTipo = () => { const banc = (x.id ? x.tipo : ($('in_tipo') || {}).value) === 'bancada';
+      ['certificado_num','laboratorio','calibrado_em','validade','cert'].forEach(k => { const el = $('in_' + k), lb = el && el.closest('label'); if (lb) lb.hidden = banc; });
+      const fp = $('in_pad'); if (fp) fp.hidden = banc; const nb = $('in_banNota'); if (nb) nb.hidden = !banc; };
+    const st = $('in_tipo'); if (st) st.addEventListener('change', ajustarTipo);
+    ajustarTipo();
   }, 0);
   janela(x.id ? 'Editar instrumento' : 'Novo instrumento',
     (x.id ? '' : '<label class="f">Tipo<select class="t" id="in_tipo">' + Object.keys(TIPOS_INST).map(t => '<option value="' + t + '"' + (t === x.tipo ? ' selected' : '') + '>' + TIPOS_INST[t] + '</option>').join('') + '</select></label>')
     // S144 · item 69: cada campo no seu lugar (o laudo escreve "manômetro padrão da marca …, calibrado pelo laboratório …, certificado nº …")
     + c('descricao', 'Descrição <small>(o código interno e o que é, ex.: MAN-001 · manômetro digital)</small>') + c('marca', 'Marca <small>(só a marca, sem o modelo)</small>') + c('modelo', 'Modelo')
+    + '<p class="muted" id="in_banNota" hidden>A bancada não tem aferição nem certificado: a rastreabilidade vem do manômetro padrão. O laudo e o certificado citam a marca e o modelo dela.</p>'   // E59 · issue 243
     + c('numero_serie', 'Nº de série') + c('certificado_num', 'Nº do certificado de calibração <small>(o que o laboratório escreveu no certificado; não é o código interno)</small>')
     + c('laboratorio', 'Laboratório que calibrou') + c('calibrado_em', 'Calibrado em', 'date') + c('validade', 'Validade', 'date')
     // S86 · R04a: o manômetro padrão leva a U do certificado (a aferição calcula a incerteza com ela)
@@ -833,6 +849,8 @@ function editarInstrumento(x){
         U.toast('O nº do certificado está igual ao ' + (cod && d.certificado_num.toUpperCase() === cod ? 'código interno' : 'nº de série') + '. Use o número que o laboratório escreveu no certificado.', 'err'); return false; }
       if (d.marca && d.modelo && d.marca.toUpperCase() === d.modelo.toUpperCase()) d.modelo = null;
       if (x.id) d.id = x.id; else d.tipo = $('in_tipo').value;
+      // E59 · issue 243: a bancada não guarda certificado nem validade (os campos ficaram escondidos)
+      if ((x.id ? x.tipo : d.tipo) === 'bancada'){ d.certificado_num = d.laboratorio = d.calibrado_em = d.validade = null; }
       if ((x.id ? x.tipo : d.tipo) === 'manometro_padrao'){
         try{   // S172 · issue 55: "1.000" na faixa máxima pergunta; número inválido não vira "em branco" calado
           d.u_expandida = numMedida($('in_u'), 'U expandida'); d.k = numMedida($('in_k'), 'Fator k') || 2; d.unidade = $('in_un').value;
@@ -1079,6 +1097,8 @@ async function telaOS(os){
   if (!vigente(vez)) return;
   titulo(P.os.numero + ' · preparar a inspeção', P.os.cliente || '');
   const marc = P.vasos.filter(v => v.inspecao), fora = P.vasos.filter(v => !v.inspecao);
+  await lerSoAfericao(marc.map(v => v.inspecao.id));   // E59 · issue 242: quais vasos são "só aferição" (454)
+  if (!vigente(vez)) return;
   const t05 = P.t05 || {}, vis = P.visita || {};
   // 404 (23/10): TapDoc em paralelo. Sem a trava, o TapDoc NÃO conclui a T05: ela conclui no Manager, como sempre.
   const aberta = t05.status && t05.status !== 'completo' && t05.status !== 'dispensado' && t05.trava;
@@ -1108,7 +1128,9 @@ async function telaOS(os){
         : 'O cliente não tem vasos cadastrados. Importe a planilha do TapWeb pela ficha do cliente (Cadastros), ou cadastre abaixo.') + '</p>';
   h += '<div style="padding:8px"><button class="btn sec" id="novo">+ Vaso não cadastrado</button></div></div>';
   // E28 (S155 · issue 8): a arte das placas de identificação, para a gráfica
-  if (marc.some(v => v.inspecao && v.inspecao.situacao !== 'em_preparo')) h += '<h2>Placas de identificação (arte para a gráfica)</h2><div class="card" id="cxPlacas"><p class="muted">Carregando as placas…</p></div>';
+  // E59 · issue 242 (P8): o vaso só de aferição não tem placa
+  SO_AFER_EQ.clear(); marc.forEach(v => { if (soAfer(v.inspecao.id)) SO_AFER_EQ.add(v.id); });
+  if (marc.some(v => v.inspecao && v.inspecao.situacao !== 'em_preparo' && !soAfer(v.inspecao.id))) h += '<h2>Placas de identificação (arte para a gráfica)</h2><div class="card" id="cxPlacas"><p class="muted">Carregando as placas…</p></div>';
   // E35 (S164 · issue 30): os documentos da inspeção, quando algum vaso já foi liberado
   if (marc.some(v => v.inspecao && ['liberada','assinada'].indexOf(v.inspecao.situacao) >= 0)) h += '<h2>Documentos da inspeção</h2><div class="card" id="cxDocs"><p class="muted">Carregando os documentos…</p></div>';
   $('tela').innerHTML = h;
@@ -1149,6 +1171,13 @@ async function telaOS(os){
       + '<p>Tirando o vaso, elas saem da inspeção. Ficam guardadas neste computador: se marcar o vaso de novo nesta OS, elas voltam.</p>',
       [{ rotulo:'Cancelar', acao:() => { c.checked = true; } }, { rotulo:'Tirar o vaso', classe:'pri', acao:fazer }]);
     await fazer();
+  }));
+  // E59 · issue 242 (P9): marcar ou desmarcar "só aferição" (o banco só aceita com o vaso em preparo)
+  $('tela').querySelectorAll('[data-soafer]').forEach(c => c.addEventListener('change', async () => {
+    c.disabled = true;
+    try{ await rpc('tf_insp_so_afericao', { p_id: c.dataset.soafer, p_sim: c.checked });
+      U.toast(c.checked ? 'Só aferição: o celular mostra só os acessórios; o escritório confere e o PLH prepara os certificados, sem laudo.' : 'Volta a ser inspeção do vaso (com laudo).', 'ok'); pintar(); }
+    catch(e){ erro(e); c.checked = !c.checked; c.disabled = false; }
   }));
   $('tela').querySelectorAll('[data-instr]').forEach(t => t.addEventListener('change', async () => {
     try{ await rpc('tf_insp_preparar', { p_os_id: os, p_equip: t.dataset.instr, p_marcar: true, p_instrucoes: t.value }); U.toast('Instruções gravadas.', 'ok'); }
@@ -1203,20 +1232,33 @@ function ligarArt(os, P){
   });
   const v = $('artVer'); if (v) v.addEventListener('click', ev => { ev.preventDefault(); $('artVisor').className = 'visorrev'; mostrarArquivoEm($('artVisor'), { storage_path: art.arquivo_path }); });
 }
+// ── E59 · issue 242 (454): o vaso "só aferição" (válvula e manômetro, sem inspeção do vaso; desenho processos/afericao-avulsa-desenho.md) ──
+// Os pacotes de sempre não mudaram (regra 69): a tela pergunta à parte quais inspeções são só de aferição. Banco sem a 454: nenhuma.
+const SO_AFER = new Set(), SO_AFER_EQ = new Set();   // as inspeções e (na tela da OS) os vasos
+async function lerSoAfericao(ids){
+  ids = (ids || []).filter(Boolean); if (!ids.length) return SO_AFER;
+  try{ const r = await rpc('tf_insp_so_afericao_ver', { p_ids: ids }); ids.forEach(i => SO_AFER.delete(i)); (r || []).forEach(i => SO_AFER.add(i)); }catch(e){}
+  return SO_AFER;
+}
+const soAfer = id => !!id && SO_AFER.has(id);
+const CHIP_AFER = '<span class="chip s-provisorio" data-chipafer="1" title="Só aferição de válvula e manômetro, sem inspeção do vaso">Aferição</span>';
 function tabelaVasos(lista, marcados){
   return '<table class="tv"><tr><th style="width:42px">Na OS</th><th>Vaso</th><th>Situação</th>' + (marcados ? '<th class="h-ins">Instruções para o campo</th>' : '') + '<th></th></tr>'
     + lista.map(v => {
       const ins = v.inspecao, emCampo = ins && ins.situacao !== 'em_preparo';
       return '<tr><td><input type="checkbox" class="ck" data-marca="' + esc(v.id) + '"' + (ins ? ' checked' : '') + (emCampo ? ' disabled title="Já começou em campo"' : '') + '></td>'
-        + '<td><b>' + esc(v.tag) + '</b>' + (v.nome ? '<div class="muted">' + esc(v.nome) + '</div>' : '') + '</td>'
-        + '<td>' + (marcados ? chipSit(v.situacao) : '<span class="chip s-fora">fora desta OS</span>')
+        + '<td><b>' + esc(v.tag) + '</b>' + (ins && soAfer(ins.id) ? ' ' + CHIP_AFER : '') + (v.nome ? '<div class="muted">' + esc(v.nome) + '</div>' : '') + '</td>'
+        + '<td>' + (marcados ? (ins && soAfer(ins.id) && v.situacao === 'precisa_laudo' ? '<span class="chip s-pronto">sem laudo anterior (só aferição)</span>' : chipSit(v.situacao)) : '<span class="chip s-fora">fora desta OS</span>')
         + (emCampo ? '<div class="muted">em campo</div>' : '')
         + (!ins && v.coleta_anterior ? '<div class="muted" style="color:var(--warn)">tem coleta anterior nesta OS (' + (v.coleta_anterior.fotos || 0) + ' foto(s), ' + (v.coleta_anterior.leituras || 0) + ' leitura(s))</div>' : '')
         + (ins && ins.material_campo && !ins.material_campo.decisao ? '<div><span class="chip s-grave">material alterado em campo</span></div>' : '') + '</td>'
         + (marcados ? '<td class="h-ins"><textarea class="instr" data-instr="' + esc(v.id) + '" placeholder="Ex.: medir também o tampo inferior">' + esc(ins.instrucoes_campo || '') + '</textarea>'
             + '<label class="muted" style="display:flex;gap:6px;align-items:center;margin-top:4px">Ambiente previsto <select data-amb="' + esc(v.id) + '" style="padding:3px 6px;border:1px solid var(--rule);border-radius:4px">'
             + [['', '—'], ['fechado', 'local fechado'], ['aberto', 'céu aberto']].map(([k, r]) => '<option value="' + k + '"' + ((v.ambiente || '') === k ? ' selected' : '') + '>' + r + '</option>').join('')
-            + '</select> <small>(o inspetor confirma)</small></label></td>' : '')
+            + '</select> <small>(o inspetor confirma)</small></label>'
+            // E59 · issue 242 (AF1, P9): o vaso só de aferição; troca enquanto ele está "em preparo" (depois da coleta, não)
+            + '<label class="muted" style="display:flex;gap:6px;align-items:flex-start;margin-top:4px"><input type="checkbox" data-soafer="' + esc(ins.id) + '"' + (soAfer(ins.id) ? ' checked' : '')
+            + (emCampo ? ' disabled title="Já foi a campo: só se troca antes da coleta"' : '') + '> <span>Só aferição <small>(válvula e manômetro, sem inspeção do vaso e sem laudo; no celular, só Acessórios)</small></span></label></td>' : '')
         + '<td class="acoes" style="text-align:right;white-space:nowrap">' + (v.provisorio ? '<button class="btn mini sec" data-conf="' + esc(v.id) + '">Confirmar cadastro</button> ' : '')
         + (marcados && ins && ins.situacao === 'em_campo' ? '<button class="btn mini sec" data-tirar="' + esc(v.id) + '" data-tag="' + esc(v.tag) + '">Tirar da OS</button> ' : '')
         + (marcados ? '<button class="btn mini" data-abre="' + esc(v.id) + '">Laudo anterior ›</button>' : '') + '</td></tr>';
@@ -1268,6 +1310,7 @@ async function quadroPlacas(os){
   try{ D = await rpc('tf_placa_dados', { p_os: os }); await libsPlaca(); await juntarQR(D.vasos); }
   catch(e){ cx.innerHTML = '<p class="muted" style="color:var(--crit)">Não deu para carregar as placas: ' + esc(e && e.message ? e.message : String(e)) + '</p>'; return; }
   if (!$('cxPlacas')) return;                              // a tela mudou enquanto carregava
+  D.vasos = (D.vasos || []).filter(v => !SO_AFER_EQ.has(v.equipamento_id));   // E59 · issue 242 (P8): aferição avulsa não gera placa
   const ctx = { emissora: D.emissora || {}, cliente: D.cliente || '' };
   const linhas = (D.vasos || []).map(v => {
     const falt = v.liberada ? PlacaPDF.faltas(v) : [], pronta = v.liberada && !falt.length;
@@ -1335,6 +1378,7 @@ const rotVariante = x => x.tipo !== 'registro' || !x.variante ? '' : x.variante 
 // E57 · S221 · issue 239 (LF-AS3): o PDF não assinado (com o desenho e o "Aprovado eletronicamente") fica só no pacote do PLH;
 // nas listas e no "Baixar tudo" entra só o assinado. todos = true: a conta do que falta assinar (faltaAssinarDe).
 function arquivosVaso(D, v, todos){
+  if (v && v.so_afericao) return arquivosAfericao(D, v, todos);   // E59 · issue 242: o vaso só de aferição tem só os certificados
   const L = v && v.laudo; if (!L || L.situacao === 'emitindo' || !L.pdf_path) return [];
   if (!todos) return arquivosVaso(D, v, true).filter(x => x.situacao === 'assinado');
   const dup = (D.vasos || []).filter(w => w.tag === v.tag).length > 1;
@@ -1347,6 +1391,18 @@ function arquivosVaso(D, v, todos){
   docs.forEach(x => out.push({ tipo:x.tipo, rot:(window.DocumentosPDF ? DocumentosPDF.ROTULO[x.tipo] : x.tipo) + (total[x.tipo] > 1 ? ' ' + x.ordem : '') + rotVariante(x), numero:x.numero || '—',
     situacao:x.situacao, variante:x.variante || null, path:x.assinado_path || x.pdf_path, nome:nomeArq(x.tipo, Object.assign({}, base, { ordem:x.ordem, total:total[x.tipo], paraAssinar:x.situacao !== 'assinado' })) }));
   return out;
+}
+/** E59 · issue 242 (454): os certificados do vaso só de aferição (a última preparação "emitido" ou "assinado"), sem laudo.
+ *  Como o laudo (regra 67): sem o `todos`, só os assinados (listas e "Baixar tudo"); com ele, todos (a conta do "falta assinar"). */
+function arquivosAfericao(D, v, todos){
+  const M = v && v.afericao; if (!M) return [];
+  const dup = (D.vasos || []).filter(w => w.tag === v.tag).length > 1, base = { tag:v.tag, tap:v.numero_tap, duplicada:dup, cliente:D.cliente, revisao:M.revisao };
+  const docs = (M.docs || []).slice().sort((a, b) => (ORDEM_DOC[a.tipo] - ORDEM_DOC[b.tipo]) || (a.ordem - b.ordem));
+  const total = {}; docs.forEach(x => { total[x.tipo] = (total[x.tipo] || 0) + 1; });
+  const out = docs.map(x => ({ tipo:x.tipo, rot:(window.DocumentosPDF ? DocumentosPDF.ROTULO[x.tipo] : x.tipo) + (total[x.tipo] > 1 ? ' ' + x.ordem : '') + (M.revisao ? ' (Rev. ' + M.revisao + ')' : ''),
+    numero:x.numero || '—', situacao:x.situacao, path:x.assinado_path || x.pdf_path,
+    nome:nomeArq(x.tipo, Object.assign({}, base, { ordem:x.ordem, total:total[x.tipo], paraAssinar:x.situacao !== 'assinado' })) }));
+  return todos ? out : out.filter(x => x.situacao === 'assinado');
 }
 const artArquivo = D => D.art && D.art.path ? { tipo:'art', rot:'ART (da OS)', numero:D.art.numero || '—', path:D.art.path, nome:nomeArq('art', { cliente:D.cliente, os:(D.os || {}).numero }) } : null;
 /** Os certificados dos instrumentos (o PDF do laboratório como veio). v: só os de um vaso; sem v: os da OS inteira.
@@ -1531,6 +1587,15 @@ async function quadroDocumentos(os){
   h += '<table class="tv cartoes" id="docsTab"><tr><th>Vaso</th><th>Relatório (+ ART no fim)</th><th>Resumo</th><th>Registro de Segurança</th><th>Cert. manômetro</th><th>Cert. válvula</th><th>Prontuário</th><th>Fichário</th><th></th></tr>' + (D.vasos || []).map(v => {
     const A = arquivosVaso(D, v), L = v.laudo, so = t => A.filter(x => x.tipo === t), juntos = !!(L && L.docs_juntos);
     const fa = faltaAssinarDe(D, v);   // E52 · issue 75, item 7
+    if (v.so_afericao){   // E59 · issue 242: só os certificados (sem relatório, Resumo, Registro, Prontuário e fichário)
+      const fa2 = arquivosAfericao(D, v, true).filter(x => x.situacao !== 'assinado'), M = v.afericao;
+      return '<tr data-docv="' + esc(v.inspecao_id) + '"><td><b>' + esc(v.tag) + '</b> ' + CHIP_AFER + (v.numero_tap ? '<div class="muted">Nº TAP ' + esc(v.numero_tap) + '</div>' : '')
+        + (A.length && fa2.length ? '<div><span class="chip s-grave" data-faltaass="' + fa2.length + '">' + (fa2.length === 1 ? 'falta assinar 1' : 'faltam ' + fa2.length + ' por assinar') + '</span></div>' : '') + '</td>'
+        + (A.length ? '<td data-r="Relatório" colspan="3"><span class="muted">só aferição: sem laudo, Resumo e Registro</span></td><td data-r="Cert. manômetro">' + cel(so('cert_manometro'))
+            + '</td><td data-r="Cert. válvula">' + cel(so('cert_valvula')) + '</td><td data-r="Prontuário"><span class="muted">—</span></td><td data-r="Fichário"><span class="muted">—</span></td>'
+            + '<td class="acoes" style="text-align:right"><button class="btn mini" data-zipv="' + esc(v.inspecao_id) + '" style="white-space:nowrap">Baixar tudo do vaso</button></td>'
+          : '<td colspan="8" class="muted">' + (M ? 'certificados da aferição com o PLH para assinar: os PDFs aparecem aqui depois de assinados' : 'só aferição: certificados ainda não preparados (aba Laudos)') + '</td>') + '</tr>';
+    }
     return '<tr data-docv="' + esc(v.inspecao_id) + '"><td><b>' + esc(v.tag) + '</b>' + (v.numero_tap ? '<div class="muted">Nº TAP ' + esc(v.numero_tap) + '</div>' : '')
       + (fa.length ? '<div><span class="chip s-grave" data-faltaass="' + fa.length + '" title="' + esc(fa.map(x => x.rot).join(', ')) + '">' + (fa.length === 1 ? 'falta assinar 1' : 'faltam ' + fa.length + ' por assinar') + '</span></div>' : '') + '</td>'
       + (A.length ? '<td data-r="Relatório">' + cel(so('relatorio')) + '</td><td data-r="Resumo">' + cel(so('resumo'), juntos) + '</td><td data-r="Registro de Segurança">' + celReg(v, so('registro'), juntos) + '</td><td data-r="Cert. manômetro">' + cel(so('cert_manometro'), juntos)
@@ -1569,10 +1634,11 @@ function cartaoDocsVaso(D){
   const v = D && (D.vasos || [])[0]; if (!v) return '';
   const A = arquivosVaso(D, v);
   const fa = faltaAssinarDe(D, v);
-  if (!A.length) return v.laudo && v.laudo.pdf_path ? '<h2>Documentos deste vaso</h2><div class="card muted" id="cxDocsVaso">O laudo está com o PLH para assinar com o token. Os PDFs aparecem aqui depois de assinados.</div>' : '';
+  if (!A.length) return v.laudo && v.laudo.pdf_path ? '<h2>Documentos deste vaso</h2><div class="card muted" id="cxDocsVaso">O laudo está com o PLH para assinar com o token. Os PDFs aparecem aqui depois de assinados.</div>'
+    : v.so_afericao && v.afericao ? '<h2>Documentos deste vaso</h2><div class="card muted" id="cxDocsVaso">Os certificados estão com o PLH para assinar com o token. Os PDFs aparecem aqui depois de assinados.</div>' : '';   // E59 · issue 242
   const linhas = A.concat([artArquivo(D)].filter(Boolean), instrumentosArquivos(D, v));   // E44 · issue 85: o certificado do dia
   return '<h2>Documentos deste vaso</h2><div class="card" id="cxDocsVaso">' + faltaAssinarHtml(fa, 'ldFaltaAssinar') + '<div class="linha" style="justify-content:space-between;margin-bottom:6px"><span class="muted" id="docsAviso">'
-    + (v.laudo.docs_juntos ? 'Laudo emitido antes da separação dos documentos: os certificados estão dentro do relatório.' : 'Cada documento num arquivo; o oficial é o assinado com o token.') + '</span>'
+    + (v.laudo && v.laudo.docs_juntos ? 'Laudo emitido antes da separação dos documentos: os certificados estão dentro do relatório.' : 'Cada documento num arquivo; o oficial é o assinado com o token.') + '</span>'
     + '<button class="btn pri" data-zipv="' + esc(v.inspecao_id) + '">Baixar tudo do vaso (.zip)</button></div>'
     + '<table class="cartoes"><tr><th>Documento</th><th>Número</th><th>Nome do arquivo</th><th>Situação</th><th></th></tr>' + linhas.map(x => '<tr><td>' + esc(x.rot) + '</td><td data-r="Número">' + esc(x.numero || '—')
       + '</td><td data-r="Arquivo" class="muted">' + esc(x.nome) + '</td><td data-r="Situação">' + (x.tipo === 'art' ? '<span class="muted">arquivo do CREA</span>' : x.tipo === 'instrumento' ? '<span class="muted">do laboratório</span>' : chipDoc(x.situacao))
@@ -2408,16 +2474,19 @@ const somaAnos = (d, n) => { const [y, m, dd] = d.split('-').map(Number); const 
 async function abaRevisao(h){
   const vez = TELA_VEZ;   // E48 · issue 65, item 11
   const L = await rpc('tf_insp_revisao_lista');
+  await lerSoAfericao(L.map(x => x.id));   // E59 · issue 242: o vaso só de aferição tem uma conferência só
   if (!vigente(vez)) return;
   const col = e => L.filter(x => x.etapa === e);
   h += '<div class="revcols">' + [1, 2, 3].map(e => '<div class="card"><h3>' + REV_ETAPA[e] + ' <span class="muted">(' + col(e).length + ')</span></h3>'
     + (col(e).length ? col(e).map(x => '<div class="revitem' + (x.pode ? ' minha' : '') + '" data-rev="' + esc(x.id) + '"><b>' + esc(x.tag) + '</b> · ' + esc(x.cliente || '')
         + '<div class="muted">OS ' + esc(x.os || '—') + ' · há ' + diasDesde(x.desde) + ' dia(s) · equipe: ' + esc((x.equipe || []).join(', ') || '—') + '</div>'
-        + (x.vermelhos ? '<span class="chip s-precisa_laudo">' + x.vermelhos + ' pendência(s)</span> ' : '<span class="chip s-pronto">sem pendência</span> ')
-        + (x.pode ? '<span class="chip s-provisorio">é sua</span>' : '')
+        + (soAfer(x.id) ? CHIP_AFER + ' <span class="chip s-pronto">conferência única (o escritório)</span>'
+          : (x.vermelhos ? '<span class="chip s-precisa_laudo">' + x.vermelhos + ' pendência(s)</span> ' : '<span class="chip s-pronto">sem pendência</span> ')
+          + (x.pode ? '<span class="chip s-provisorio">é sua</span>' : ''))
         + (x.devolvida && e < 3 ? '<div class="alerta falta" style="margin-top:6px">Devolvida: ' + esc(x.devolvida) + '</div>' : '') + '</div>').join('')
       : '<p class="vazio">Nada aqui.</p>') + '</div>').join('') + '</div>'
-    + '<p class="muted">A Revisão 1 é de quem fez a inspeção. A Revisão 2 é de quem tem o TapDoc e não esteve nela. A aprovação é do PLH, que grava o cálculo oficial e libera para o laudo.</p>';
+    + '<p class="muted">A Revisão 1 é de quem fez a inspeção. A Revisão 2 é de quem tem o TapDoc e não esteve nela. A aprovação é do PLH, que grava o cálculo oficial e libera para o laudo. '
+    + 'O vaso "só aferição" tem uma conferência só, do escritório: "Conferir e liberar"; depois o PLH prepara os certificados (aba Laudos).</p>';
   $('tela').innerHTML = h;
   ligarAbas();
   $('tela').querySelectorAll('[data-rev]').forEach(d => d.addEventListener('click', () => { location.hash = 'rev=' + d.dataset.rev; }));
@@ -2448,7 +2517,8 @@ async function telaRevisao(id, manter){
   const pQ = reler ? qrVer(id) : Promise.resolve(ant.qr);          // E39 · issue 34: o link do TapWeb (o QR da placa e da lombada)
   // E53: o giro das fotos (issue 220) e o mapa-3d.js antes de pintar: o quadro do mapa nasce pronto, sem empurrar a tela depois
   const pG = reler ? giroCarregar(id, true) : Promise.resolve(), pLib = libMapa(false).catch(() => null);   // ao gravar, o giro fica (o "Girar" atualiza sozinho)
-  const [R, P, afs, M, TX, pasta, pront, qr] = await Promise.all([pR, pP, pAf, pM, pT, pPa, pPr, pQ, pG, pLib]);
+  const pSo = lerSoAfericao([id]);   // E59 · issue 242: o vaso só de aferição (454)
+  const [R, P, afs, M, TX, pasta, pront, qr] = await Promise.all([pR, pP, pAf, pM, pT, pPa, pPr, pQ, pG, pLib, pSo]);
   if (!vigente(vez) || vezR !== REV_VEZ) return;   // E48 · issue 65, item 11 e issue 67: outra tela (ou uma leitura mais nova) já está a caminho
   const v = (P.vasos || []).find(x => x.inspecao && x.inspecao.id === id);
   if (!v) throw new Error('O vaso desta inspeção não veio no pacote da OS.');
@@ -2462,7 +2532,52 @@ async function telaRevisao(id, manter){
   REV.afs = afs; REV.M = M;
   REV_TEXTOS = TX; REV_PRONTOS = TX.prontos || null;
   REV.pasta = pasta; REV.pront = pront; REV.qr = qr;
+  if (soAfer(id)) return pintarAfericaoConf();   // E59 · issue 242 (AF3, P3)
   pintarRevisao();
+}
+// ── E59 · issue 242 (AF3, P3, P5): a conferência única do vaso "só aferição" ─────────────────────────────────────────────
+// Sem Revisão 1 e 2, sem cálculo e sem laudo: o escritório confere as aferições (o resultado, os avisos e as fotos) e libera
+// (tf_insp_afericao_conferir, 454); depois o PLH prepara os certificados na aba Laudos. Sem a PMTA do vaso, a válvula foi testada
+// sem a comparação: o aviso aparece aqui e o certificado sai com ele em destaque (P5).
+const SEM_PMTA_AF = 'Sem comparação com a PMTA do vaso: PMTA não informada';
+const semPmtaAf = afs => (afs || []).some(x => x.tipo === 'valvula' && !x.cancelada_em && [].concat(((x.calculo || {}).avisos) || x.avisos || []).some(a => /^Sem a PMTA vigente/.test(String(a || ''))));
+function pintarAfericaoConf(){
+  const { R, v } = REV, I = R.inspecao, id = REV.id, sit = I.situacao, conf = ['enviada','em_revisao'].indexOf(sit) >= 0;
+  titulo('Aferição · ' + (v.tag || ''), (R.cliente || (REV.P.os || {}).cliente || '') + ' · OS ' + ((REV.P.os || {}).numero || '—'));
+  const NOMES = { manometro:'Manômetro', manovacuometro:'Manovacuômetro', valvula_seguranca:'Válvula de segurança', valvula_alivio:'Válvula de alívio', quebra_vacuo:'Quebra-vácuo' };
+  const SITS = { ok:'em ordem', substituir:'substituir', ausente:'ausente', retirado:'retirado' };
+  const acs = R.acessorios || v.inspecao.acessorios || [], fotos = (R.fotos || []).filter(f => /^afer:/.test(f.item_ref || '')), semAc = I.fotos_sem_acesso || {};
+  let h = '<div class="card"><div class="linha" style="justify-content:space-between"><div><b style="font-size:17px">' + esc(v.tag || '') + '</b> ' + CHIP_AFER
+    + '<div class="muted">Só aferição de válvula e manômetro, sem inspeção do vaso e sem laudo. Uma conferência só (sem Revisão 1 e 2): confira as leituras e as fotos e libere; depois o PLH prepara os certificados (aba Laudos) e assina com o token ou o gov.br.</div></div>'
+    + '<span class="chip ' + (conf ? 's-em_conferencia' : 's-pronto') + '" id="afcSit">' + esc(({ enviada:'enviada', em_revisao:'em conferência', liberada:'conferida e liberada', assinada:'certificados assinados', em_campo:'em campo' })[sit] || sit) + '</span></div></div>';
+  if (semPmtaAf(REV.afs)) h += '<div class="alerta falta" id="afcSemPmta"><b>' + SEM_PMTA_AF + '.</b> O vaso não tem PMTA cadastrada: a abertura da válvula não foi comparada com ela. '
+    + 'O certificado sai com essa frase em destaque. Se a PMTA existir, cadastre no vaso e peça à equipe para gravar a aferição de novo (reabrindo para o campo).</div>';
+  h += '<div class="card"><h3 style="margin-top:0">Acessórios</h3>' + (acs.length ? '<table><tr><th>Acessório</th><th>Situação</th><th>Aferição</th></tr>' + acs.map(a => '<tr><td>' + esc(NOMES[a.tipo] || a.tipo)
+      + (a.tag || a.marca ? '<div class="muted">' + esc([a.tag, a.marca].filter(Boolean).join(' · ')) + '</div>' : '') + '</td><td>' + esc(SITS[a.situacao] || a.situacao || '—') + '</td><td>'
+      + ((a.afericao_motivo || '').trim() ? '<span class="muted">não aferido: ' + esc(a.afericao_motivo) + '</span>' : NOMES[a.tipo] ? '<span class="muted">no quadro abaixo</span>' : '—') + '</td></tr>').join('') + '</table>'
+    : '<p class="muted">Nenhum acessório.</p>') + '</div>';
+  h += '<div class="card" id="cxAfer"><p class="muted">Carregando as aferições…</p></div>';
+  h += '<div class="card"><h3 style="margin-top:0">Fotos das aferições</h3>' + (fotos.length ? '<div class="linha" style="flex-wrap:wrap;gap:8px">' + fotos.map(f => '<div style="width:150px"><div class="mini" data-afmini="' + esc(f.storage_path) + '" style="height:110px;display:flex;align-items:center;justify-content:center;background:#F2F4F5;border-radius:6px;overflow:hidden"><span class="muted">…</span></div>'
+      + '<div class="muted" style="font-size:12px">' + esc(f.legenda || ({ bancada:'bancada montada', padrao:'manômetro padrão', instrumento:'instrumento em teste' })[String(f.item_ref).split(':')[2]] || 'aferição') + '</div></div>').join('') + '</div>'
+    : '<p class="muted">Nenhuma foto.</p>') + (Object.keys(semAc).filter(k => /^afer:/.test(k)).length ? '<p class="muted">Sem foto (com o motivo): ' + esc(Object.keys(semAc).filter(k => /^afer:/.test(k)).map(k => semAc[k]).join(' · ')) + '</p>' : '') + '</div>';
+  h += '<div class="card linha acoesrev">' + (conf ? '<button class="btn pri" id="afcLiberar">Conferir e liberar</button><button class="btn" id="afcCampo">Reabrir para o campo</button>'
+      : sit === 'liberada' ? '<span class="muted">Conferida e liberada' + (I.rev1_nome || R.rev1 ? ' por ' + esc(I.rev1_nome || R.rev1) : '') + '. O PLH prepara os certificados na aba Laudos.</span> <a class="btn" href="#laudo=' + esc(id) + '">Abrir os certificados</a>'
+      : '<span class="muted">Nada a conferir agora.</span>') + '<span class="muted" id="afcAviso"></span></div>';
+  $('tela').innerHTML = h;
+  cartaoAfericoes({ id });
+  $('tela').querySelectorAll('[data-afmini]').forEach(b => miniEm(b, b.dataset.afmini));
+  const bl = $('afcLiberar'); if (bl) bl.addEventListener('click', () => U.semDuploEnvio(bl, async () => {
+    try{ await rpc('tf_insp_afericao_conferir', { p_id: id }); U.toast('Conferida e liberada. O PLH prepara os certificados (aba Laudos).', 'ok'); await telaRevisao(id, true); }
+    catch(e){ erro(e); }
+  }));
+  const bc = $('afcCampo'); if (bc) bc.addEventListener('click', () => {
+    janela('Reabrir para o campo', '<p>A equipe volta a poder alterar o que coletou. Depois do novo envio, a conferência recomeça.</p>'
+      + '<label class="f">Motivo<textarea class="t" id="afcMot" rows="3" placeholder="o que o inspetor deve corrigir"></textarea></label>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Reabrir', classe:'pri', acao:async () => {
+        if (!($('afcMot').value || '').trim()){ U.toast('Diga o motivo.', 'err'); return false; }
+        try{ await rpc('tf_insp_reabrir', { p_id:id, p_para:'em_campo', p_motivo:$('afcMot').value }); U.toast('Reaberta para o campo.', 'ok'); location.hash = 'aba=rev'; }
+        catch(e){ erro(e); return false; } } }]);
+  });
 }
 // S148 · item 89: depois de gravar, a revisão volta ao MESMO quadro (não a um número de pixels) e realça a linha mexida
 const LUGAR_SEL = 'h2, h3, tr, .card, label.f, p.alerta';
@@ -3076,7 +3191,9 @@ function janelaModelo(x, depois){
         tampo_b_tipo: $('mdTb').value, tampo_b_altura_mm: nn('mdHb'), tampo_a_tipo: $('mdTa').value, tampo_a_altura_mm: nn('mdHa'), alfa_graus: nn('mdAlfa'), cone_saida_mm: nn('mdSaida'),
         cor_mapa: $('mdCor').value || null, pes: $('mdPes').checked, janela: $('mdJv').checked, observacao: $('mdObs').value }; }catch(e){ U.toast(e.message, 'err'); return false; }
       if (Object.values(p).some(v => typeof v === 'number' && isNaN(v))){ U.toast('Há um número que não entendi. Use só algarismos e vírgula.', 'err'); return false; }
-      try{ await rpc('tf_vaso_modelo_gravar', { p_dados: p }); U.toast('Modelo gravado.', 'ok'); if (depois) await depois(); }catch(e){ erro(e); return false; } } }]);
+      // E59 · issue 212: a janela fecha logo depois de gravar; o quadro do mapa se refaz depois (antes, a janela esperava o desenho 3D
+      // ser refeito e, se o PLH abrisse o "Novo modelo" nesse meio-tempo, o fim da espera fechava a janela nova)
+      try{ await rpc('tf_vaso_modelo_gravar', { p_dados: p }); U.toast('Modelo gravado.', 'ok'); if (depois) setTimeout(() => { Promise.resolve(depois()).catch(erro); }, 0); }catch(e){ erro(e); return false; } } }]);
 }
 const TIPO_TAMPO_ROT = { eliptico:'elíptico 2:1', torisferico:'torisférico', hemisferico:'hemisférico', conico:'cônico', plano:'plano' };
 /** S152 · decisão 10: o quadro "Desenho do mapa dos pontos" na ficha do vaso (a cor, o modelo e o comprimento do costado ficam no cadastro do vaso). */
@@ -4219,7 +4336,7 @@ function libsLaudo(){
     if (!window.pdfMake) await carregarScript('vendor/pdfmake.min.js?v=0.2.20');
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
-    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S178');
+    if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S179');
     if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D10');   // E35 · issue 30: o Resumo e os nomes dos arquivos
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S221');
     return true;
@@ -4432,9 +4549,10 @@ function laudosListaHtml(L){
   if (!F.length) return '<p class="vazio" id="ldNada">Nada encontrado para "' + esc(LD_BUSCA) + '".' + (L.length >= LD_LIMITE_BANCO ? ' A busca olha as ' + LD_LIMITE_BANCO + ' inspeções mais recentes; para uma mais antiga, abra pela OS (aba Preparação).' : '') + '</p>';
   return '<table class="cartoes" id="ldTab"><tr><th>Vaso</th><th>Cliente</th><th>OS</th><th>Laudo</th><th>Antes de emitir</th></tr>'   // E31 · issue 31: no celular, cartões
     + V.map(x => '<tr class="lin" data-ld="' + esc(x.id) + '"><td><b>' + esc(x.tag) + '</b><div class="muted">' + esc(x.situacao) + '</div></td><td data-r="Cliente">' + esc(x.cliente || '') + '</td><td data-r="OS">' + esc(x.os || '—') + '</td><td data-r="Laudo">'
-      + (x.laudo ? '<b>' + esc(x.laudo.numero) + (x.laudo.revisao ? ' Rev. ' + x.laudo.revisao : '') + '</b><div><span class="chip ' + (SIT_LAUDO[x.laudo.situacao] || ['', ''])[1] + '">' + esc((SIT_LAUDO[x.laudo.situacao] || [x.laudo.situacao])[0]) + '</span></div>'
+      + (soAfer(x.id) ? CHIP_AFER + '<div class="muted">certificados, sem laudo</div>'   // E59 · issue 242
+         : x.laudo ? '<b>' + esc(x.laudo.numero) + (x.laudo.revisao ? ' Rev. ' + x.laudo.revisao : '') + '</b><div><span class="chip ' + (SIT_LAUDO[x.laudo.situacao] || ['', ''])[1] + '">' + esc((SIT_LAUDO[x.laudo.situacao] || [x.laudo.situacao])[0]) + '</span></div>'
          : '<span class="muted">não emitido</span>') + '</td><td data-r="Antes de emitir">'
-      + (x.faltas ? '<span class="chip s-precisa_laudo">' + x.faltas + ' pendência(s)</span>' : '<span class="chip s-pronto">ok</span>') + '</td></tr>').join('') + '</table>'
+      + (soAfer(x.id) ? '<span class="chip s-pronto">conferida</span>' : x.faltas ? '<span class="chip s-precisa_laudo">' + x.faltas + ' pendência(s)</span>' : '<span class="chip s-pronto">ok</span>') + '</td></tr>').join('') + '</table>'
     + '<div class="linha" style="margin-top:6px"><span class="muted" id="ldConta">' + V.length + ' de ' + F.length + (ps.length ? ' encontrada(s)' : '') + '</span>'
     + (F.length > V.length ? '<button class="btn mini sec" id="ldMais">Ver mais ' + Math.min(LD_PASSO, F.length - V.length) + '</button>' : '')
     + (L.length >= LD_LIMITE_BANCO && V.length === F.length ? '<span class="muted">A lista traz as ' + LD_LIMITE_BANCO + ' inspeções mais recentes; para uma mais antiga, abra pela OS (aba Preparação).</span>' : '') + '</div>';
@@ -4452,7 +4570,7 @@ function ligarLaudosLista(L){
 }
 async function abaLaudos(h){
   const vez = TELA_VEZ;   // E48 · issue 65, item 11
-  const [L, cfg, DES, PAC, NP, CAN] = await Promise.all([rpc('tf_laudo_lista'), rpc('tf_laudo_config_ver'),
+  const [L, cfg, DES, PAC, NP, CAN] = await Promise.all([rpc('tf_laudo_lista').then(async L => { await lerSoAfericao((L || []).map(x => x.id)); return L; }), rpc('tf_laudo_config_ver'),   // E59 · issue 242
     rpc('tf_laudo_desenho_situacao').catch(() => null), PLH ? pacoteParaAssinar() : Promise.resolve([]),
     rpc('tf_laudo_prontuario_numeracao', { p_proximo: null }).catch(() => null),
     rpc('tf_laudo_numeros_cancelados').catch(() => [])]);   // E57 · LF-N3   // E37: o próximo P do mês   // E35 · issue 30: com os documentos
@@ -4635,7 +4753,7 @@ async function devolverDoc(x, b, aviso){
   if (c.erro) throw new Error(c.erro);
   let pags; try{ pags = (await PDFLib.PDFDocument.load(b, { ignoreEncryption:true, updateMetadata:false })).getPageCount(); }catch(e){ throw new Error('Não consegui ler o PDF assinado.'); }
   aviso('Enviando…');
-  const caminho = x.inspecao_id + '/' + x.tipo + '-' + String(x.laudo_numero || '').replace(/[^\w-]+/g, '-') + (x.revisao ? '-rev' + x.revisao : '') + '-' + x.ordem + '-assinado-' + uid().slice(0, 8) + '.pdf';
+  const caminho = x.inspecao_id + '/' + x.tipo + '-' + (x.so_afericao ? 'afericao' : String(x.laudo_numero || '').replace(/[^\w-]+/g, '-')) + (x.revisao ? '-rev' + x.revisao : '') + '-' + x.ordem + '-assinado-' + uid().slice(0, 8) + '.pdf';   // E59 · issue 242
   await enviarArq(caminho, new Blob([b], { type:'application/pdf' }), 'O documento assinado');
   delete c.original_fim;
   await rpc('tf_insp_doc_assinado', { p_doc: x.id, p_path: caminho, p_paginas: pags, p_conferencia: c });
@@ -4654,7 +4772,7 @@ async function devolverVarios(P, fs, aviso){
       if (!x) throw new Error('não é nenhum dos laudos do pacote nem dos documentos dele (ou foi mudado antes de assinar).');
       const c = x.laudo ? await devolverAssinado(x.laudo, b) : await devolverDoc(x.doc, b);
       // E51 · issue 73: o que foi conferido — de quem é o certificado, quem emitiu, até quando vale e o tipo da assinatura
-      ok++; res.push('<li>✅ ' + esc(f.name) + ': ' + esc(rotDoc(x) + ' do ' + x.laudo_numero + (x.revisao ? ' Rev. ' + x.revisao : '')) + ' assinado e conferido.'
+      ok++; res.push('<li>✅ ' + esc(f.name) + ': ' + esc(rotDoc(x) + (x.doc && x.doc.so_afericao ? ' da aferição' : ' do ' + x.laudo_numero) + (x.revisao ? ' Rev. ' + x.revisao : '')) + ' assinado e conferido.'
         + '<div class="muted" data-cert="' + esc(c.tipo || '') + '">' + esc(AssinaturaPDF.resumo(c)) + '</div>'
         + (c.tipo === 'nao_identificada' ? '<div style="color:var(--crit)">Atenção: o certificado não é da ICP-Brasil nem do gov.br. A assinatura ficou gravada como "tipo não identificado": confira com quem vai receber o laudo se ela é aceita.</div>' : '') + '</li>');
     }catch(e){ res.push('<li style="color:var(--crit)">✗ ' + esc(f.name) + ': ' + esc(e.message || String(e)) + '</li>'); }
@@ -4765,14 +4883,118 @@ async function telaLaudo(id){
   const pd = rpc('tf_laudo_dados', { p_id:id });
   const pDocs = (async () => { try{ await libDocs(); return await rpc('tf_insp_documentos', { p_os: null, p_insp: id }); }catch(e){ return null; } })();   // E35 · issue 30: os documentos deste vaso (DP14 b)
   const pPac = pd.then(d => (d && (d.eu || {}).plh) ? pacoteParaAssinar([id]).catch(() => []) : [], () => []);   // o que falta assinar dele (DP4)
-  const [d, docs, pac, pasta, pront] = await Promise.all([pd, pDocs, pPac, pastaVer(id), prontVer(id)]);   // E36 (DP8) · E37 (DP10)
+  const [d, docs, pac, pasta, pront] = await Promise.all([pd, pDocs, pPac, pastaVer(id), prontVer(id), lerSoAfericao([id])]);   // E36 (DP8) · E37 (DP10) · E59 (o vaso só de aferição)
   if (!vigente(vez) || meu !== VEZ_TELA_LD) return;   // outra tela (ou outra leitura deste laudo) chegou depois
+  if (soAfer(id)){ LD = { id, d, docs, pac: pac || [], pasta, pront }; return pintarLaudoAfericao(); }   // E59 · issue 242 (AF2, P3)
   // E47 · issue 66 (445): a foto tirada do laudo na revisão fica guardada, mas não vai no laudo nem nos documentos
   if (d && Array.isArray(d.fotos)) d.fotos = d.fotos.filter(f => !f.fora_laudo);
   LD = { id, d, docs, pac: pac || [], pasta, pront };
   pintarLaudo();
 }
 let VEZ_TELA_LD = 0;
+// ── E59 · issue 242 (AF2, P3, P5): os certificados da aferição avulsa, sem laudo ─────────────────────────────────────────
+// O PLH (logado, sem a digital, como o laudo desde o S221) prepara: tf_insp_afericao_preparar (a fotografia) → o carimbo
+// (tf_insp_afericao_carimbo, 455) → um PDF por aferição terminada (LaudoPDF.documentosAfericao, com o aviso sem PMTA) →
+// tf_insp_afericao_docs_gravar. Vão para o mesmo pacote "Para assinar" e voltam pela mesma devolução (o banco confere).
+/** Os certificados de uma fotografia (dados), cada um num PDF; com opc.carimbo, o carimbo do PLH em cada página. */
+async function gerarCertificadosAfer(d, opc){
+  opc = opc || {};
+  await libsLaudo();
+  const dd = Object.assign({}, d, { so_afericao: true });
+  const comAf = (dd.acessorios || []).filter(a => a.afericao && (a.afericao.resultado === 'aprovado' || a.afericao.resultado === 'reprovado'));
+  const lista = LaudoPDF.documentosAfericao(dd, opc), total = {}, vez = {}, out = [];
+  lista.forEach(dc => { const t = dc.tipo === 'valvula' ? 'cert_valvula' : 'cert_manometro'; total[t] = (total[t] || 0) + 1; });
+  for (let k = 0; k < lista.length; k++){
+    const dc = lista[k], t = dc.tipo === 'valvula' ? 'cert_valvula' : 'cert_manometro';
+    vez[t] = (vez[t] || 0) + 1;
+    let bytes = await pdfBytes(dc.def);
+    if (opc.carimbo){ const doc = await PDFLib.PDFDocument.load(bytes); await carimbarPaginas(doc, 0, opc.carimbo); bytes = await doc.save(); }
+    out.push({ tipo:t, ordem:vez[t], total:total[t], numero:dc.codigo, acessorio_id:(comAf[k] || {}).id || null, bytes,
+      sha: hexDe(await crypto.subtle.digest('SHA-256', bytes)), paginas: (await PDFLib.PDFDocument.load(bytes)).getPageCount() });
+  }
+  return out;
+}
+const semPmtaD = d => (d.acessorios || []).some(a => a.afericao && a.afericao.tipo === 'valvula' && ['aprovado','reprovado'].indexOf(a.afericao.resultado) >= 0
+  && [].concat((a.afericao.calculo || {}).avisos || []).some(x => /^Sem a PMTA vigente/.test(String(x || ''))));
+function pintarLaudoAfericao(){
+  const d = LD.d, I = d.inspecao, eu = d.eu || {}, V = (LD.docs && (LD.docs.vasos || [])[0]) || {}, M = V.afericao || null;
+  const terminadas = (d.acessorios || []).filter(a => a.afericao && ['aprovado','reprovado'].indexOf(a.afericao.resultado) >= 0);
+  const reaberta = M && d.reabertura && new Date(d.reabertura.em) > new Date(M.emitido_em);
+  titulo('Aferição · ' + (d.vaso.tag || ''), (d.empresa.nome_fantasia || d.empresa.razao_social || '') + ' · OS ' + ((d.os || {}).numero || '—'));
+  let h = '<div class="card"><div class="linha" style="justify-content:space-between"><div><b style="font-size:17px">' + esc(d.vaso.tag || '') + '</b> ' + CHIP_AFER + ' ' + esc(d.vaso.nome || '')
+    + '<div class="muted">' + esc(d.empresa.razao_social || '') + ' · OS ' + esc((d.os || {}).numero || '—') + ' · ' + terminadas.length + ' aferição(ões) terminada(s)'
+    + (d.art && d.art.numero ? ' · ART ' + esc(d.art.numero) : ' · sem ART (sai assim mesmo)') + '</div>'
+    + '<div class="muted">Só aferição: sem laudo, sem Resumo, sem Prontuário e sem placa. O PLH prepara um certificado por aferição e assina com o token ou o gov.br, no mesmo pacote "Para assinar".</div></div>'
+    + '<span class="chip ' + (I.situacao === 'assinada' ? 's-pronto' : 's-em_conferencia') + '">' + esc(({ liberada:'conferida', assinada:'certificados assinados' })[I.situacao] || I.situacao) + '</span></div></div>';
+  if (semPmtaD(d)) h += '<div class="alerta falta" id="ldAfSemPmta"><b>' + SEM_PMTA_AF + '.</b> O certificado da válvula sai com essa frase em destaque (o vaso não tem PMTA cadastrada).</div>';
+  if (reaberta) h += '<div class="alerta falta" id="ldAfReaberta"><b>A aferição foi reaberta depois que os certificados foram preparados.</b> Os PDFs de antes não se assinam mais: depois da nova conferência, prepare de novo.</div>';
+  if (['liberada','assinada'].indexOf(I.situacao) < 0) h += '<div class="alerta falta"><b>A aferição ainda não foi conferida.</b> O escritório confere e libera na aba "A revisar".</div>';
+  const novaRev = M && M.situacao === 'assinado';
+  h += '<div class="card linha acoesrev" id="ldAcoes"><button class="btn" id="ldAfRascunho"' + (terminadas.length ? '' : ' disabled') + '>Gerar o rascunho dos certificados (PDF)</button>';
+  if (eu.plh && I.situacao === 'liberada' && terminadas.length)
+    h += '<button class="btn pri" id="ldAfPreparar">' + (novaRev ? 'Preparar a revisão (Rev. ' + (M.revisao + 1) + ') para assinar' : M ? 'Preparar de novo para assinar' : 'Preparar os certificados para assinar') + '</button>';
+  if (eu.plh && (LD.pac || []).length && !reaberta) h += '<button class="btn pri" id="ldAssinado">Devolver os PDFs assinados com o token (' + LD.pac.length + ')</button><input type="file" id="ldArqAss" accept="application/pdf" multiple hidden>';
+  if (['liberada','assinada'].indexOf(I.situacao) >= 0 && (eu.plh || !M)) h += '<button class="btn" id="ldReabrir">Reabrir a aferição</button>';
+  h += '<span class="muted" id="ldAviso"></span></div>';
+  if (eu.plh) h += '<div class="card"><b>Você assina como:</b> ' + (d.plh ? esc(d.plh.nome) + (d.plh.titulo ? ' — ' + esc(d.plh.titulo) : '') + ' · ' + esc(d.plh.registro) : '<span style="color:var(--crit)">não cadastrado (nome e registro no CREA)</span>') + '</div>';
+  h += cartaoDocsVaso(LD.docs);
+  h += '<div id="ldRes"></div><div id="ldVisor"></div>';
+  $('tela').innerHTML = h;
+  ligarLaudoAfericao();
+}
+function ligarLaudoAfericao(){
+  const LD = LD_ATUAL(), d = LD.d, aviso = t => { const a = $('ldAviso'); if (a) a.textContent = t || ''; };
+  const vezTela = TELA_VEZ, recarregar = async () => { if (!vigente(vezTela)) return; const m = rolador(), y = m.scrollTop; await telaLaudo(LD.id); m.scrollTop = y; };
+  const br = $('ldAfRascunho'); if (br) br.addEventListener('click', () => U.semDuploEnvio(br, async () => {
+    try{ aviso('Montando os certificados…');
+      const docs = await gerarCertificadosAfer(d, { plh: d.plh });
+      aviso('Rascunho pronto (' + docs.length + ' certificado(s), sem a assinatura).');
+      if (docs.length){ mostrarPdf(docs[0].bytes, nomeArq(docs[0].tipo, { tag:d.vaso.tag, tap:d.vaso.numero_tap, cliente:clienteCurto(d), ordem:docs[0].ordem, total:docs[0].total }).replace(/\.pdf$/, ' (rascunho).pdf'));
+        mostrarDocs(docs.slice(1), d, { extra:'rascunho' }); }
+    }catch(e){ aviso(''); erro(e); }
+  }));
+  const bp = $('ldAfPreparar'); if (bp) bp.addEventListener('click', () => U.semDuploEnvio(bp, async () => {
+    if (!await N.janela.confirmar('Preparar os certificados para assinar', '<p>Gera um certificado por aferição terminada, com o número M ou V de cada uma. '
+        + 'Cada página sai com o desenho da sua assinatura e "Aprovado eletronicamente por …". Os PDFs ficam só no seu pacote "Para assinar" até você assinar com o token ou o gov.br.</p>'
+        + '<p class="muted">Preparar de novo descarta os PDFs ainda não assinados. Depois de assinados, para corrigir, só reabrindo a aferição (sai uma revisão).</p>', 'Preparar')) return;
+    try{
+      aviso('Preparando…');
+      const r = await rpc('tf_insp_afericao_preparar', { p_id: LD.id });
+      const carimbo = await rpc('tf_insp_afericao_carimbo', { p_emissao: r.id });
+      aviso('Montando os certificados…');
+      const docs = await gerarCertificadosAfer(r.dados, { numero: true, carimbo, plh: r.dados.plh, exigirAnexos: true });
+      const pre = LD.id + '/', lista = [];
+      for (let k = 0; k < docs.length; k++){
+        const x = docs[k], cam = pre + x.tipo + '-afericao' + (r.revisao ? '-rev' + r.revisao : '') + '-' + x.ordem + '-' + uid().slice(0, 8) + '.pdf';
+        aviso('Enviando o certificado ' + (k + 1) + ' de ' + docs.length + '…');
+        await enviarArq(cam, new Blob([x.bytes], { type:'application/pdf' }), 'O certificado');
+        lista.push({ tipo: x.tipo, ordem: x.ordem, numero: x.numero, acessorio_id: x.acessorio_id, path: cam, sha: x.sha, paginas: x.paginas });
+      }
+      await rpc('tf_insp_afericao_docs_gravar', { p_emissao: r.id, p_docs: lista });
+      aviso('');
+      U.toast(docs.length + ' certificado(s) preparado(s). Assine com o token ou o gov.br (aba Laudos › Para assinar).' + (carimbo && carimbo.desenho_novo ? ' O desenho da sua assinatura é novo: confira no PDF antes de assinar.' : ''), 'ok');
+      await recarregar();
+      if (docs.length) mostrarPdf(docs[0].bytes, nomeArq(docs[0].tipo, { tag:d.vaso.tag, tap:d.vaso.numero_tap, cliente:clienteCurto(d), ordem:docs[0].ordem, total:docs[0].total, paraAssinar:true }));
+    }catch(e){ aviso(''); erro(e); recarregar(); }
+  }));
+  const bs = $('ldAssinado'); if (bs) bs.addEventListener('click', () => { $('ldArqAss').value = ''; $('ldArqAss').click(); });
+  const fa = $('ldArqAss'); if (fa) fa.addEventListener('change', async () => {
+    const fs = Array.from(fa.files || []); if (!fs.length) return;
+    try{ const r = await devolverVarios(LD.pac || [], fs, aviso); if (r.ok) U.toast(r.ok + ' certificado(s) assinado(s) e conferido(s).', 'ok');
+      await recarregar(); const x = $('ldRes'); if (x) x.innerHTML = r.linhas; }catch(e){ aviso(''); erro(e); }
+  });
+  const cv = $('cxDocsVaso'); if (cv) ligarDownloads(cv, LD.docs, t => { const a = $('docsAviso'); if (a) a.textContent = t || ''; });
+  const bre = $('ldReabrir'); if (bre) bre.addEventListener('click', () => {
+    janela('Reabrir a aferição', '<label class="f">Para onde<select class="t" id="rbPara"><option value="em_revisao">A conferência do escritório</option>'
+      + '<option value="em_campo">O campo (a equipe corrige a coleta)</option></select></label>'
+      + '<label class="f">Motivo<textarea class="t" id="rbMot" rows="3"></textarea></label>'
+      + '<p class="muted">Os certificados já assinados ficam guardados; a próxima preparação sai como revisão.</p>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Reabrir', classe:'pri', acao:async () => {
+        try{ await rpc('tf_insp_reabrir', { p_id: LD.id, p_para: $('rbPara').value, p_motivo: $('rbMot').value }); U.toast('Reaberta.', 'ok');
+          location.hash = $('rbPara').value === 'em_revisao' ? 'rev=' + LD.id : 'aba=laudos'; }
+        catch(e){ erro(e); return false; } } }]);
+  });
+}
 /** E51 · issue 73: o que ficou gravado da assinatura do laudo (o nome do certificado, o emissor, a validade e o tipo). */
 const ROT_TIPO_ASS = { qualificada:'assinatura qualificada (certificado ICP-Brasil)', avancada:'assinatura avançada (gov.br)',
   nao_identificada:'tipo não identificado (certificado fora da ICP-Brasil e do gov.br)' };
