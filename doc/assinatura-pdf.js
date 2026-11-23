@@ -1,5 +1,5 @@
 /* ============================================================================
- * assinatura-pdf.js · TapDoc · S174 (antes S158; S145: rodada E, decisão A5 do desenho da assinatura)
+ * assinatura-pdf.js · TapDoc · S221 (o rótulo do gov.br sem "reserva do token": LF-AS9) · S174 (antes S158; S145: rodada E, decisão A5 do desenho da assinatura)
  * ----------------------------------------------------------------------------
  * Confere o PDF que o PLH devolve assinado com o token (Assinador SERPRO, PAdES):
  *   1. o começo do arquivo é EXATAMENTE o PDF aprovado (a assinatura PAdES é
@@ -12,7 +12,7 @@
  *      PLH que aprovou.
  * Não confere a cadeia até a raiz ICP-Brasil (para isso: verificador do ITI).
  * S158: lê também o CMS com tamanho indefinido (BER), que é como o assinador do
- *   gov.br grava (reserva do token: o banco aceita e grava como assinatura avançada).
+ *   gov.br grava (o banco aceita e grava como assinatura avançada; desde 22/11 o gov.br vale mesmo com o token funcionando, LF-AS9).
  * S174 (S185 · issue 73):
  *   5. a validade do certificado é conferida na data da assinatura (o atributo signingTime; sem ele, agora):
  *      certificado vencido (ou ainda não válido) nessa data é recusado;
@@ -138,7 +138,7 @@ function tipo(c) {
   if (/^icp-?brasil$/i.test(String(c.emissor_org || '').trim())) return 'qualificada';
   return 'nao_identificada';
 }
-const ROTULO_TIPO = { qualificada: 'assinatura qualificada (certificado ICP-Brasil)', avancada: 'assinatura avançada (gov.br, reserva do token)',
+const ROTULO_TIPO = { qualificada: 'assinatura qualificada (certificado ICP-Brasil)', avancada: 'assinatura avançada (gov.br)',
                       nao_identificada: 'tipo não identificado (certificado fora da ICP-Brasil e do gov.br)' };
 const rotuloTipo = t => ROTULO_TIPO[t] || 'tipo não registrado';
 const diaBR = iso => { const d = new Date(iso); return isNaN(d) ? '?' : d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }); };
