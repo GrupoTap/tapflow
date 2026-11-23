@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapCRM 13 · Comercial</title>
+<title>TapCRM 14 · Comercial</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- o ícone da aba: o "E" da Engetap dentro do arquivo (SVG), aparece em qualquer pasta; o app instalado usa os PNG de field/icons/ -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22104%22 fill=%22%231B6FA9%22/%3E%3Cg transform=%22translate(0,512) scale(1,-1) translate(256,256.5) scale(1.3) translate(-256,-256.5)%22 fill=%22%23fff%22 stroke=%22%23fff%22 stroke-width=%2222%22 stroke-linejoin=%22round%22 stroke-linecap=%22round%22%3E%3Cpath d=%22M117 414 l-1 0 0 -121 0 -120 19 0 19 0 0 -37 0 -38 121 0 121 0 -45 45 -44 45 -69 0 -69 0 0 12 0 11 90 0 89 0 0 1 0 1 -44 44 -45 44 -45 0 -45 0 0 12 0 11 99 0 99 0 0 1 0 0 -45 45 -44 45 -81 0 -80 0 0 -1z m184 -44 l30 -29 0 -1 0 -1 -88 0 -89 0 0 -75 0 -76 -11 0 -12 0 0 105 0 106 1 0 0 1 70 0 69 0 30 -30z m-19 -113 l30 -29 0 -1 0 -1 -67 0 -67 0 0 30 0 30 1 0 0 1 37 0 36 0 30 -30z m47 -114 l30 -29 0 -1 0 0 -95 0 -95 0 0 30 0 30 65 0 66 0 29 -30z%22/%3E%3C/g%3E%3C/svg%3E">
@@ -1122,7 +1122,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'CRM13';   // TapCRM 13 (S226): Rodada R28 (issue 237 parte 2) — o card do negócio dos itens a orçar mostra a etapa da OS de fornecimento que o aceite abre sozinho ("OS · Próximo: etapa · com · desde"); banco 317
+const APP_VERSION = 'CRM14';   // TapCRM 14 (S227): Rodada R29 (issue 237 parte 3, FE4) — na aba Proposta do negócio dos itens a orçar, o item que veio do TapDoc (aferição reprovada) com o selo "Sugestão do TapDoc", de onde veio e o que faltou completar; a foto do acessório lida do TapDoc; banco 318
+// const APP_VERSION = 'CRM13';   // TapCRM 13 (S226): Rodada R28 (issue 237 parte 2) — o card do negócio dos itens a orçar mostra a etapa da OS de fornecimento que o aceite abre sozinho ("OS · Próximo: etapa · com · desde"); banco 317
 // const APP_VERSION = 'CRM12';   // TapCRM 12 (S223): Rodada R26 (issue 237 parte 1) — o negócio dos itens a orçar que nasce da medição (na cotação, com os itens, os dados e as fotos na aba Proposta); "Próximo: etapa · com · desde" no card; "O cliente exige nota de produto (peças)?" na proposta (vai no texto do .docx e fica gravada); banco 316 e 703
 // const APP_VERSION = 'CRM11';   // TapCRM 11 (S215): Rodada R24 — issue 232 (saiu o estilo sem uso; o estilo comum vem do nucleo/telas.css T1; os nomes antigos nos comentários; nada muda na tela)
 // const APP_VERSION = 'CRM10';   // TapCRM 10 (S211): Rodada R17 da auditoria — issue 129 (Novo negócio: o cliente digitando, pela busca do núcleo N16; o lead com nome de cliente parecido avisa)
@@ -2781,6 +2782,14 @@ async function pintarOrcarNegocio(n){
       + (x.criado_por ? ' · lançado por ' + x.criado_por : '') + (x.criado_em ? ' em ' + rhDT(x.criado_em).slice(0, 10) : '')
       + (x.pmta_cadastro_mpa != null ? ' · PMTA no cadastro do vaso: ' + Number(x.pmta_cadastro_mpa).toLocaleString('pt-BR') + ' MPa' : '');
     sm[1].textContent = orcDadosCRM(x);
+    // CRM14 (R29, FE4): a sugestão do TapDoc e o que o inspetor não completou
+    if (x.origem === 'afericao' || x.falta){
+      const nt = document.createElement('small');
+      nt.textContent = (x.origem === 'afericao' ? 'Sugestão do TapDoc: ' + (x.sugestao || 'aferição reprovada') + '.' : '')
+        + (x.falta ? (x.origem === 'afericao' ? ' ' : '') + 'Faltou em campo: ' + x.falta + ' (confirme com o inspetor ou o cliente).' : '');
+      if (x.falta) nt.style.color = '#B3261E';
+      d.insertBefore(nt, d.querySelector('.orcFotos'));
+    }
     const F = d.querySelector('.orcFotos');
     (x.fotos || []).forEach(f => {
       const b = document.createElement('button'); b.type = 'button';
@@ -2788,7 +2797,9 @@ async function pintarOrcarNegocio(n){
       b.setAttribute('aria-label', b.title);
       F.appendChild(b);
       if (DEMO) return;
-      Nucleo.storage.pedir(SUPABASE_URL + '/storage/v1/object/authenticated/medicoes/' + String(f.storage).split('/').map(encodeURIComponent).join('/'))
+      // CRM14: a foto que veio do TapDoc fica no compartimento das inspeções (a regra deixa ler a que o item cita)
+      Nucleo.storage.pedir(SUPABASE_URL + '/storage/v1/object/authenticated/' + (f.bucket === 'inspecoes' ? 'inspecoes' : 'medicoes') + '/'
+                           + String(f.storage).split('/').map(encodeURIComponent).join('/'))
         .then(rr => rr.ok ? rr.blob() : null)
         .then(bl => {
           if (!bl) { b.textContent = 'sem foto'; return; }
