@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow · S222</title>
+<title>TapFlow · S226</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1404,6 +1404,12 @@ th.num .tfThFixo{text-align:right}
 /* ── S39 · venda adicional ─────────────────────────────────────────────── */
 .chip.va,.mini.va{background:#EFE7FA;color:#5B3C99;border-color:transparent}
 .chip.imp,.mini.imp{background:var(--crit-soft);color:var(--crit);border-color:transparent;font-weight:700}
+/* S226 · o próximo passo do fornecimento (FE10) */
+.chip.prox{background:var(--accent-soft,#E8F0FB);color:var(--accent-ink);border-color:transparent;font-weight:600;white-space:normal}
+.fcItem{display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center;padding:8px 0;border-top:1px solid var(--rule-2,#eee);font-size:13px}
+.fcItem:first-of-type{border-top:0}
+.fcItem .fcOp{display:flex;gap:10px;flex-wrap:wrap}
+.fcItem small{display:block;color:var(--ink-3)}
 .lnk{background:none;border:0;padding:0;color:var(--accent-ink);text-decoration:underline;
   cursor:pointer;font:inherit}
 .lnk:hover{color:var(--accent)}
@@ -1663,7 +1669,8 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S222';   // S222: issue 239 parte 1 — na OS de inspeção nova, as tarefas que concluem sozinhas pelo TapDoc (T06, T07, T09, T10, T12 e T15) mostram "Abrir no TapDoc" e, só para o admin, "Concluir à mão" com o motivo (banco 453)
+const APP_VERSION = 'S226';   // S226: Rodada R28 — issue 237 parte 2 (o fornecimento enxuto: o aceite do negócio dos itens a orçar abre a OS; o pedido "em nome da Engetap/da Proper" com a confirmação anexada; "Material chegou" (manômetro calibra, válvula pergunta o certificado do fabricante); a nota da Proper; trocar a forma de faturar com motivo; "Próximo · com · desde", o negócio e a inspeção de origem no card; banco 317)
+// const APP_VERSION = 'S222';   // S222: issue 239 parte 1 — na OS de inspeção nova, as tarefas que concluem sozinhas pelo TapDoc (T06, T07, T09, T10, T12 e T15) mostram "Abrir no TapDoc" e, só para o admin, "Concluir à mão" com o motivo (banco 453)
 // const APP_VERSION = 'S218';   // S218: Rodada R21 — issue 115 parte 1 (a aba Custos só de leitura com o real: peças, contas do TapFin com a OS, diárias sem nomes e o deslocamento por dia de campo com o veículo; o fornecedor da aba Itens do cadastro, com "+ Novo fornecedor"; o Relatório Financeiro pelo custo real; banco 530 e 315)
 // const APP_VERSION = 'S217';   // S217: Rodada R25 — issue 236 (a D01 "O cliente adota pedido / ordem de compra?" com Sim/Não e a T01 "Inserir pedido de compra (Cliente)"; só texto, banco 314)
 // const APP_VERSION = 'S215';   // S215: Rodada R24 — issue 231 (as perguntas da abertura vão juntas: as permissões, as colunas, os parâmetros e a equipe; o quadro com as vendas adicionais; as atrasadas do dono e as de apoio)
@@ -2021,6 +2028,8 @@ let cards = [];      // linhas de v_os_kanban
    de colunas a mais em v_os_kanban/v_negocios_kanban, que são reescritas a
    cada rodada. */
 let VA = { porOS:{}, porNeg:{}, porOrigem:{} };
+// S226 (R28, 317): as OS do fornecimento novo (molde enxuto): o próximo passo, o negócio, a inspeção de origem, o faturamento
+let FORN = {};
 /* S39 · o número do menu: `tf_pendencias_menu()`. Nulo = banco sem o 59 (a
    tela volta ao número antigo em vez de mostrar zero). */
 let PEND = null;
@@ -2054,9 +2063,10 @@ async function carregar(opt){
   if (!opt.silencioso) setConn('sync','Carregando…');
   try{
     const pVendas = carregarVendasAdicionais();   // S215 (issue 231): junto com o quadro (ela trata o próprio erro)
+    const pForn = carregarFornecimento();          // S226 (R28): idem
     cards = await get('v_os_kanban?select=*&order=coluna_ordem,numero');
     falhaCarga = null;
-    await pVendas;
+    await pVendas; await pForn;
     atualizarPendencias();   // sem await: o menu não segura o quadro
     pararRecon();
     setConn('ok','Conectado');
@@ -2125,6 +2135,21 @@ function contador(id, n){
 // ════════════════════════════════════════════════════════════════════════════
 // S39 · VENDAS ADICIONAIS E O NÚMERO DO MENU
 // ════════════════════════════════════════════════════════════════════════════
+/** S226 (R28, issue 237 parte 2): "Próximo: etapa · com · desde" das OS de fornecimento novas (FE10). */
+async function carregarFornecimento(){
+  if (DEMO) return;
+  try{
+    const r = await rpc('tf_forn_etapas', {});
+    const m = {};
+    (r || []).forEach(x => { m[x.os_id] = x; });
+    FORN = m;
+  }catch(e){ /* banco sem a 317: sem o próximo passo, o resto segue */ }
+}
+const fornDias = d => d == null ? '' : d === 0 ? 'hoje' : d === 1 ? '1 dia' : d + ' dias';
+const fornProx = f => f && f.etapa && f.etapa !== 'Encerrada'
+  ? 'Próximo: ' + f.etapa + ' · com: ' + (f.com || '—') + ' · desde: ' + fornDias(f.dias) : '';
+const ehFornNova = tarefas => (tarefas || []).some(t => t && t.requisitos && t.requisitos.forn);
+
 async function carregarVendasAdicionais(){
   if (DEMO) return;
   try{
@@ -2500,6 +2525,13 @@ function cardEl(c){
     chips.push('<span class="chip va" title="Venda adicional nascida na inspeção ' + esc(va.origem_numero)
       + '">de ' + esc(va.origem_numero) + '</span>');
   }
+  const fo = FORN[c.os_id];   // S226 (R28): o próximo passo, o negócio e o aviso do fornecimento
+  if (fo){
+    if (fo.aviso) chips.unshift('<span class="chip imp" title="' + esc(fo.aviso) + '">⚠ faturamento mudou</span>');
+    const px = fornProx(fo);
+    if (px) chips.push('<span class="chip prox">' + esc(px) + '</span>');
+    if (fo.negocio_numero) chips.push('<span class="chip va" title="O negócio de origem, no TapCRM">' + esc(fo.negocio_numero) + '</span>');
+  }
   const ger = VA.porOrigem[c.os_id];
   if (ger && ger.length) chips.push('<span class="chip va" title="Vendas adicionais nascidas nesta inspeção">+'
     + ger.length + ' venda' + (ger.length > 1 ? 's' : '') + ' adicional' + (ger.length > 1 ? 'is' : '') + '</span>');
@@ -2825,7 +2857,24 @@ function blocoVendaAdicional(card){
   box.className = 'vaBox';
   const linkOS = (id, num) => '<button type="button" class="lnk mono" data-os="' + esc(id) + '">' + esc(num) + '</button>';
 
-  if (va){
+  const fo = FORN[card.os_id];
+  const nova = !!(fo && osAberta && osAberta.card === card && ehFornNova(osAberta.tarefas));
+  if (va && nova){   // S226 (R28): o fornecimento novo — o negócio, a inspeção de origem, quem fatura (e trocar), o aviso
+    box.innerHTML = '<div class="vaT">Fornecimento sob encomenda</div>'
+      + (fornProx(fo) ? '<div class="vaL"><b>' + esc(fornProx(fo)) + '</b></div>' : '')
+      + '<div class="vaL">Nasceu na inspeção ' + linkOS(va.origem_os_id, va.origem_numero)
+      + (fo.negocio_id ? ' · negócio <a class="lnk mono" href="../crm/?neg=' + encodeURIComponent(fo.negocio_id) + '&aba=proposta">' + esc(fo.negocio_numero || 'no TapCRM') + '</a>' : '')
+      + (va.impede_operar ? ' <span class="chip imp">⚠ há item que impede operar</span>' : '') + '</div>'
+      + '<div class="vaL">Como vai ser faturado: <b>' + esc(FORN_FAT[fo.faturamento] || 'ainda não decidido') + '</b>'
+      + (fo.faturamento === 'produto_proper' ? ' <span class="chip">custo e nota pela Proper</span>' : '')
+      + (fo.faturamento && podeEscritorioOuComercial() && card.status_os !== 'concluida'
+          ? ' <button class="btn mini" type="button" id="fcFat">Mudar</button>' : '') + '</div>'
+      + (fo.aviso ? '<div class="vaL"><span class="chip imp">⚠ ' + esc(fo.aviso) + '</span></div>' : '')
+      + (card.tarefa_atual_id === 'T14' ? '<div id="vaVisitas"><p class="nota">Procurando visitas já marcadas no cliente…</p></div>' : '');
+    if (card.tarefa_atual_id === 'T14') setTimeout(() => pintarVisitasCliente(card), 0);
+    const bf = box.querySelector('#fcFat');
+    if (bf) bf.addEventListener('click', () => fornMudarFaturamento(card, fo));
+  } else if (va){
     box.innerHTML = '<div class="vaT">Venda adicional</div>'
       + '<div class="vaL">Nasceu na inspeção ' + linkOS(va.origem_os_id, va.origem_numero)
       + (va.impede_operar ? ' <span class="chip imp">⚠ há item que impede operar</span>' : '') + '</div>'
@@ -3283,6 +3332,7 @@ function pintarAcoes_(){
   }
 
   if (osmedAcoesTarefa(card, t, row, hint)) return;   // S114 · T06B: quem fecha é a equipe, no celular
+  if (fornAcoesTarefa(card, t, row, hint)) return;    // S226 · o pedido, a chegada e a nota do fornecimento novo
   if (!podeAgir){
     hint.textContent = 'Esta tarefa é de ' + nomesPerfis(t.perfis_responsaveis, ' ou ')
       + '. Ela aparece aqui para você saber por que a OS está parada — mas quem conclui é o perfil responsável.';
@@ -6147,8 +6197,8 @@ const CAT_ROTULO = {
   pedido_cliente:'Pedido do cliente', email:'E-mail'   // S211 (124, banco 313)
 };
 // S211 (issue 124): o que o escritório anexa pela aba Arquivos, e o que pode sair da lista ("Tirar da lista")
-const ANX_TIPOS = [['pedido_cliente','Pedido de compra do cliente'], ['certificado','Certificado'], ['email','E-mail'], ['outro','Outro']];
-const ANX_TIRA = ['pedido_cliente','certificado','email','outro','relatorio'];
+const ANX_TIPOS = [['pedido_cliente','Pedido de compra do cliente'], ['pedido_compra','Pedido ao fornecedor (confirmação)'], ['certificado','Certificado'], ['email','E-mail'], ['outro','Outro']];
+const ANX_TIRA = ['pedido_cliente','pedido_compra','certificado','email','outro','relatorio'];
 const ANX_MAX_MB = 10;
 
 /** S211 (issue 124): "Anexar arquivo" — escolhe o tipo e o arquivo; vai para a pasta da OS no Drive e entra na lista.
@@ -7037,7 +7087,8 @@ async function pintarCustos(){
   const cxPed = document.createElement('div');
   cxPed.style.marginTop = '22px';
   b.appendChild(cxPed);
-  const pedidosProntos = montarPedidos(cxPed);
+  // S226 (R28, FE8): no fornecimento novo não há pedido por peça nem requisição interna
+  const pedidosProntos = ehFornNova(osAberta && osAberta.tarefas) ? Promise.resolve() : montarPedidos(cxPed);
   pedidosProntos.then(() => {
     if (_msgPedido){
       const m = document.createElement('p');
@@ -12952,6 +13003,137 @@ function osmedAcoesTarefa(card, t, row, hint){
   hint.textContent = 'A equipe fecha a medição no celular (TapField), com o encarregado. Ao fechar, esta tarefa se conclui sozinha e libera "Emitir boleto / nota fiscal".';
   return true;
 }
+// ════════════════════════════════════════════════════════════════════════════
+// S226 · O FORNECIMENTO ENXUTO (317; desenho processos/fornecimento-encomenda-desenho.md, FE7 a FE16)
+// O pedido (T11), a chegada (T12) e a nota da Proper (T16) concluem pelas funções do banco (a trava recusa o
+// "Concluir" comum); a T16 da Engetap conclui sozinha pelo TapFin. A OS aceita não fecha sem a nota.
+// ════════════════════════════════════════════════════════════════════════════
+const FORN_FAT = { servico_engetap:'Engetap, como serviço', produto_proper:'Proper, nota de peças' };
+const podeEscritorioOuComercial = () => podeEscritorio() || sessao.perfil === 'comercial';
+async function fornRecarregar(card, msg){
+  if (msg) toast(msg, 'ok');
+  await carregar({silencioso:true});
+  const novo = cards.find(x => x.os_id === card.os_id);
+  if (novo) await abrirOS(novo); else fecharDrawer();
+}
+function fornAcoesTarefa(card, t, row, hint){
+  const f = t && t.requisitos && t.requisitos.forn;
+  if (!f || !['pedido','chegou','nota'].includes(f)) return false;
+  if (t.status !== 'pendente' && t.status !== 'em_andamento') return false;
+  const fo = FORN[card.os_id] || {};
+  if (f === 'nota' && fo.faturamento !== 'produto_proper'){
+    hint.textContent = 'A nota sai no TapFin (como serviço, pelo valor da medição). Esta tarefa conclui sozinha quando a OS estiver faturada; sem a nota a OS não fecha.';
+    return true;
+  }
+  if (!podeEscritorio()){
+    hint.textContent = 'Esta etapa é do escritório (' + (f === 'nota' ? 'financeiro' : 'compras ou técnico administrativo') + ').';
+    return true;
+  }
+  if (f === 'pedido'){
+    const quem = fo.faturamento === 'produto_proper' ? 'da Proper' : 'da Engetap';
+    const ba = document.createElement('button');
+    ba.className = 'btn pri'; ba.type = 'button'; ba.textContent = 'Anexar a confirmação e concluir';
+    ba.addEventListener('click', () => modalAnexar(card, 'pedido_compra', async () => {
+      try{ await rpc('tf_forn_pedido_feito', { p_os: card.os_id }); await fornRecarregar(card, 'Pedido feito. Próximo: "Material chegou".'); }
+      catch(e){ toast(e.message, 'err'); }
+    }, 'Anexar a confirmação do fornecedor'));
+    row.appendChild(ba);
+    const bj = document.createElement('button');
+    bj.className = 'btn'; bj.type = 'button'; bj.textContent = 'Já anexei: concluir';
+    bj.addEventListener('click', () => _semDuploEnvio_(bj, async () => {
+      try{ await rpc('tf_forn_pedido_feito', { p_os: card.os_id }); await fornRecarregar(card, 'Pedido feito. Próximo: "Material chegou".'); }
+      catch(e){ toast(e.message, 'err'); }
+    }));
+    row.appendChild(bj);
+    hint.textContent = 'Fazer o pedido ao fornecedor EM NOME ' + quem.toUpperCase() + ' e anexar a confirmação dele (o pedido ou o e-mail). A tarefa conclui com a confirmação anexada.';
+    return true;
+  }
+  if (f === 'chegou'){
+    const b = document.createElement('button');
+    b.className = 'btn pri'; b.type = 'button'; b.textContent = 'Material chegou';
+    b.addEventListener('click', () => fornModalChegou(card));
+    row.appendChild(b);
+    hint.textContent = 'Quando o material chegar à Engetap. O manômetro vai sempre para "Calibrar e lacrar"; a válvula pergunta se veio com o certificado do fabricante.';
+    return true;
+  }
+  // a nota de peças da Proper
+  const bn = document.createElement('button');
+  bn.className = 'btn pri'; bn.type = 'button'; bn.textContent = 'Registrar a nota da Proper';
+  bn.addEventListener('click', async () => {
+    const r = await confirmar('Registrar a nota de peças da Proper',
+      '<p style="margin-top:0">Custo e nota pela Proper: a OS não espera conta no TapFin da Engetap. Informe o número da nota de peças emitida pela Proper.</p>'
+      + '<div class="campo"><label for="fcNota">Número da nota</label><input id="fcNota" type="text" maxlength="40" autocomplete="off"></div>',
+      'Registrar', false, { campo: 'fcNota', obrigatorio: 'Informe o número da nota.' });
+    if (!r) return;
+    try{ await rpc('tf_forn_nota_proper', { p_os: card.os_id, p_numero: r.texto }); await fornRecarregar(card, 'Nota da Proper registrada.'); }
+    catch(e){ toast(e.message, 'err'); }
+  });
+  row.appendChild(bn);
+  hint.textContent = 'Custo e nota pela Proper: registre o número da nota de peças. Sem ela a OS não fecha.';
+  return true;
+}
+const FORN_TIPO = { valvula:'Válvula', manometro:'Manômetro', outro:'Item' };
+async function fornModalChegou(card){
+  let d;
+  try{ d = await rpc('tf_forn_os', { p_os: card.os_id }); }
+  catch(e){ return toast(e.message, 'err'); }
+  const itens = (d && d.itens) || [];
+  const linha = it => {
+    const q = Number(it.quantidade || 1);
+    const tipo = FORN_TIPO[it.tipo] || 'Item';
+    let op;
+    if (it.catalogo_calibra) op = '<span class="nota" style="margin:0">vai para Calibrar e lacrar (catálogo: requer calibração)</span>';
+    else if (it.tipo === 'manometro') op = '<span class="nota" style="margin:0">vai para Calibrar e lacrar</span>';
+    else if (it.tipo === 'valvula') op = '<div class="fcOp" role="radiogroup" aria-label="Veio com o certificado do fabricante?">'
+      + '<span>Veio com o certificado do fabricante?</span>'
+      + '<label><input type="radio" name="fc' + esc(it.id) + '" value="sim"> Sim</label>'
+      + '<label><input type="radio" name="fc' + esc(it.id) + '" value="nao"> Não</label></div>';
+    else op = '<span class="nota" style="margin:0">não calibra</span>';
+    return '<div class="fcItem"><div><b>' + esc(it.descricao) + '</b><small>' + tipo + ' · qtd ' + q + '</small></div>' + op + '</div>';
+  };
+  const fechar = await new Promise(res => abrirModal('Material chegou · ' + (card.numero || ''),
+      (itens.length ? itens.map(linha).join('') : '<p class="nota">Esta OS não tem peças (só serviço): nada a calibrar.</p>')
+      + '<p class="nota" style="margin:10px 0 0">Válvula com o certificado do fabricante: o certificado é anexado na OS (tipo "Certificado") e ela não calibra. '
+      + 'Sem o certificado, ou com o item marcado "requer calibração" no catálogo, vai para "Calibrar e lacrar" antes do agendamento.</p>',
+      [{ label:'Cancelar', onClick: () => { fecharModal(); res(null); } },
+       { label:'Confirmar a chegada', pri:true, onClick: () => {
+          const resp = [];
+          for (const it of itens.filter(x => x.tipo === 'valvula' && !x.catalogo_calibra)){
+            const m = document.querySelector('input[name="fc' + it.id + '"]:checked');
+            if (!m) return Nucleo.janela.erro('Responda se a válvula "' + it.descricao + '" veio com o certificado do fabricante.');
+            resp.push({ id: it.id, cert_fabricante: m.value === 'sim' });
+          }
+          fecharModal(); res(resp);
+        }}]));
+  if (!fechar) return;
+  const enviar = async () => {
+    await rpc('tf_forn_chegou', { p_os: card.os_id, p_itens: fechar });
+    await fornRecarregar(card, 'Chegada registrada.');
+  };
+  try{ await enviar(); }
+  catch(e){
+    if (/Anexe o certificado do fabricante/.test(e.message)){
+      return modalAnexar(card, 'certificado', async () => {
+        try{ await enviar(); }catch(e2){ toast(e2.message, 'err'); }
+      }, 'Anexar o certificado do fabricante');
+    }
+    toast(e.message, 'err');
+  }
+}
+async function fornMudarFaturamento(card, fo){
+  const outro = fo.faturamento === 'produto_proper' ? 'servico_engetap' : 'produto_proper';
+  const feito = !!fo.pedido_feito_em_nome || (osAberta && (osAberta.tarefas || []).some(t => t.tarefa_id === 'T11' && t.status === 'completo'));
+  const r = await confirmar('Mudar a forma de faturar',
+    '<p style="margin-top:0">Hoje: <b>' + esc(FORN_FAT[fo.faturamento] || '—') + '</b>. Passa a ser: <b>' + esc(FORN_FAT[outro]) + '</b>.</p>'
+    + (feito ? '<div class="aviso">O pedido ao fornecedor já foi feito. A troca fica registrada e a OS avisa: falar com o financeiro.</div>' : '')
+    + '<div class="campo"><label for="fcMot">Motivo' + (feito ? '' : ' <small>(opcional)</small>') + '</label><input id="fcMot" type="text" maxlength="200" autocomplete="off"></div>',
+    'Mudar', false, feito ? { campo: 'fcMot', obrigatorio: 'Escreva o motivo.', minimo: 5 } : { campo: 'fcMot' });
+  if (!r) return;
+  try{ await rpc('tf_forn_faturamento_mudar', { p_os: card.os_id, p_valor: outro, p_motivo: (r && r.texto) || null });
+       await fornRecarregar(card, 'Forma de faturar: ' + FORN_FAT[outro] + '.'); }
+  catch(e){ toast(e.message, 'err'); }
+}
+
 // BOOT
 // ════════════════════════════════════════════════════════════════════════════
 montarNav();
