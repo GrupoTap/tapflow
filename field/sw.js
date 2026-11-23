@@ -28,7 +28,7 @@
  *   Trocou o ?v= nas páginas? Troque aqui também. O histórico está nos Pull requests.
  * ========================================================================== */
 
-const VERSAO = 'S73-T63';
+const VERSAO = 'S74-T64';
 const CACHE  = 'tapflow-field';        // um cache só, que passa de uma versão para a outra
 const PRAZO  = 1500;
 
