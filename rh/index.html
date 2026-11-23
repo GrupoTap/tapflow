@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapRH 23 · Recursos Humanos</title>
+<title>TapRH 24 · Recursos Humanos</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- o ícone da aba: o "E" da Engetap dentro do arquivo (SVG), aparece em qualquer pasta; o app instalado usa os PNG de field/icons/ -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22104%22 fill=%22%231B6FA9%22/%3E%3Cg transform=%22translate(0,512) scale(1,-1) translate(256,256.5) scale(1.3) translate(-256,-256.5)%22 fill=%22%23fff%22 stroke=%22%23fff%22 stroke-width=%2222%22 stroke-linejoin=%22round%22 stroke-linecap=%22round%22%3E%3Cpath d=%22M117 414 l-1 0 0 -121 0 -120 19 0 19 0 0 -37 0 -38 121 0 121 0 -45 45 -44 45 -69 0 -69 0 0 12 0 11 90 0 89 0 0 1 0 1 -44 44 -45 44 -45 0 -45 0 0 12 0 11 99 0 99 0 0 1 0 0 -45 45 -44 45 -81 0 -80 0 0 -1z m184 -44 l30 -29 0 -1 0 -1 -88 0 -89 0 0 -75 0 -76 -11 0 -12 0 0 105 0 106 1 0 0 1 70 0 69 0 30 -30z m-19 -113 l30 -29 0 -1 0 -1 -67 0 -67 0 0 30 0 30 1 0 0 1 37 0 36 0 30 -30z m47 -114 l30 -29 0 -1 0 0 -95 0 -95 0 0 30 0 30 65 0 66 0 29 -30z%22/%3E%3C/g%3E%3C/svg%3E">
@@ -1159,7 +1159,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'RH23';   // TapRH 23 (S215): Rodada R24 — issue 232 (saiu o estilo sem uso; o estilo comum vem do nucleo/telas.css T1; nada muda na tela) e 231 (as perguntas da abertura vão juntas)
+const APP_VERSION = 'RH24';   // TapRH 24 (S219): Rodada R22 — issue 209 (a rubrica da folha, do recibo e do espelho assinado colada no servidor pela carimbar; o selo "Assinado eletronicamente por …")
+// const APP_VERSION = 'RH23';   // TapRH 23 (S215): Rodada R24 — issue 232 (saiu o estilo sem uso; o estilo comum vem do nucleo/telas.css T1; nada muda na tela) e 231 (as perguntas da abertura vão juntas)
 // const APP_VERSION = 'RH22';   // TapRH 22 (S212): Rodada R15 da auditoria — issue 161 ("Assinar como empresa" com o PIN provisório pede a troca do PIN ali mesmo e volta para assinar; só diz "assinada(s)" com a resposta de sucesso, sem "undefined"; o aviso de quem não tem PIN pelo caminho de hoje); núcleo N17
 // const APP_VERSION = 'RH21';   // TapRH 21 (S205): Rodada R12 da auditoria (TapHub) — issue 156 (o "Sair" do núcleo: encerra o acesso também no servidor; no celular da empresa, guarda a sessão); núcleo N15
 // const APP_VERSION = 'RH20';   // TapRH 20 (S201): Rodada R9 da auditoria — issues 118 (EzPoint fora dos textos; a Folha de Ponto antiga só até outubro/2026), 159 ("não postado" só de quem recebe; caixa na ficha), 160 (prazo de quem foi liberado tarde), 162 (fechar Diárias antes do fim pede FECHAR), 163 (mapa por mês/trimestre; parte do dia), 164 (linha de assinatura e o carimbo que falha), 165 (13 acertos), 120 (desligado com o login ativo), 141 parte 2 (batida parada no celular, em Ponto › Hoje); banco 618
@@ -3822,7 +3823,6 @@ const DOC_POS_PONTO = { func: { x0: 410, x1: 539, y: 65 }, emp: { x0: 410, x1: 5
 const DOC_POS_RECIBO = [ { ass: { x0: 249, x1: 520, y: 462 }, data: { x0: 102, x1: 232, y: 462 }, rot: 449 },
                          { ass: { x0: 249, x1: 520, y: 95 },  data: { x0: 102, x1: 232, y: 95 },  rot: 82 } ];
 
-const docSelo = (em, metodo) => 'Confirmado por ' + (metodo === 'passkey' ? 'digital' : 'PIN') + ' em ' + rhDT(em);
 
 async function docPosicoes(tipo, bytes){
   const pdfjs = await carregarPdfJs();
@@ -3874,6 +3874,9 @@ function docTrechosData(s, x0, x1){
   return out;
 }
 
+/** RH24 (S219, R22, issue 209 · AS1/AS2/AS7): a página escreve as datas e o rodapé; a rubrica e o selo ("Assinado
+ *  eletronicamente por …") quem põe é a Edge Function `carimbar`, no servidor, só com a assinatura gravada daquela
+ *  pessoa para este documento. A imagem da rubrica nunca chega a este navegador. */
 async function docCarimbarUm(lib, x){
   const bytes = dataUrlParaBytes(x.pdf);
   const { pos } = await docPosicoes(x.tipo, bytes);
@@ -3881,33 +3884,27 @@ async function docCarimbarUm(lib, x){
   const pg = pdf.getPages()[0];
   const font = await pdf.embedFont(lib.StandardFonts.Helvetica);
   const cinza = lib.rgb(0.15, 0.25, 0.45);
-  const rubrica = async (dataUrl, x0, x1, yLinha, alt) => {
-    if (!dataUrl) return 0;
-    const img = dataUrl.startsWith('data:image/png') ? await pdf.embedPng(dataUrlParaBytes(dataUrl)) : await pdf.embedJpg(dataUrlParaBytes(dataUrl));
-    let h = alt, w = img.width * h / img.height;
-    const maxW = Math.min(110, x1 - x0); if (w > maxW){ w = maxW; h = img.height * w / img.width; }
-    pg.drawImage(img, { x: x0 + (x1 - x0 - w) / 2, y: yLinha + 1, width: w, height: h });
-    return w;
+  const caixas = [];
+  // a caixa da rubrica: até 110 pt de largura, centrada na linha, 1 pt acima dela; o selo logo abaixo da linha
+  const caixa = (papel, x0, x1, yLinha, alt, alinhar) => {
+    const w = Math.min(110, x1 - x0);
+    caixas.push({ ref: { papel }, pagina: 0, img: { x: x0 + (x1 - x0 - w) / 2, y: yLinha + 1, w, h: alt },
+      txt: alinhar === 'direita' ? { x: x1 - 260, y: yLinha - 5.5, w: 260, tam: 4.6, linhas: 1, alinhar: 'direita' }
+                                 : { x: x0, y: yLinha - 5.5, w: 260, tam: 4.6, linhas: 1 } });
   };
   const texto = (t, xx, yy, tam) => pg.drawText(t, { x: xx, y: yy, size: tam, font, color: cinza });
   if (x.tipo === 'ponto'){
-    await rubrica(x.func.rubrica, pos.func.x0, pos.func.x1, pos.func.y, 15);
-    texto(docSelo(x.func.em, x.func.metodo), pos.func.x0, pos.func.y - 5.5, 4.6);
-    if (x.etapa === 'final' && x.emp){
-      await rubrica(x.emp.rubrica, pos.emp.x0, pos.emp.x1, pos.emp.y, 13);
-      texto(docSelo(x.emp.em, x.emp.metodo), pos.emp.x0, pos.emp.y - 5.5, 4.6);
-    }
+    caixa('func', pos.func.x0, pos.func.x1, pos.func.y, 15);
+    if (x.etapa === 'final' && x.emp) caixa('emp', pos.emp.x0, pos.emp.x1, pos.emp.y, 13);
     texto('Assinaturas reproduzidas eletronicamente. Autenticidade comprovada pelo registro de confirmação individual.', 18, 22, 5.2);
     texto('TapHub · verificação do original ' + String(x.pdf_hash).slice(0, 24) + '…', 18, 15.5, 4.6);
   } else {
     const dia = rhDT(x.func.em).slice(0, 10);
     for (const v of pos){
-      await rubrica(x.func.rubrica, v.ass.x0, v.ass.x1, v.ass.y, 18);
       // o selo logo ABAIXO da linha, encostado à direita: entre a linha e o
       // rótulo "Assinatura do Funcionário" (centralizado) há ~12 pt — no 1º
       // teste ele ia para baixo do rótulo e cruzava a borda do quadro.
-      const selo = docSelo(x.func.em, x.func.metodo);
-      texto(selo, v.ass.x1 - font.widthOfTextAtSize(selo, 4.6), v.ass.y - 5.5, 4.6);
+      caixa('func', v.ass.x0, v.ass.x1, v.ass.y, 18, 'direita');
       // a linha da data é "____/____/____": dia, mês e ano, cada um no seu
       // trecho. Centralizar a data inteira punha as barras do papel em cima
       // dos números (visto no 1º teste com o recibo real).
@@ -3921,8 +3918,25 @@ async function docCarimbarUm(lib, x){
     texto('Assinatura reproduzida eletronicamente. Autenticidade comprovada pelo registro de confirmação individual.', 60, yRod, 5.2);
     texto('TapHub · verificação do original ' + String(x.pdf_hash).slice(0, 24) + '…', 60, yRod - 6.5, 4.6);
   }
-  pdf.setProducer('TapHub · Engetap');
-  return bytesParaDataUrl(await pdf.save());
+  const pronto = await carimbarNoServidor({ tipo: 'rhdoc', id: x.id }, await pdf.save(), caixas);
+  return bytesParaDataUrl(pronto);
+}
+
+/** RH24 (S219, R22): chama a Edge Function `carimbar` (a rubrica entra no servidor; ver o comentário acima).
+ *  `documento` diz qual é o documento; `caixas` = [{ ref: { papel, … }, pagina, img: { x, y, w, h }, txt: { x, y, w, tam } }]
+ *  em pontos do PDF, de baixo para cima. Devolve os bytes do PDF pronto. */
+async function carimbarNoServidor(documento, bytes, caixas){
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let bin = ''; for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  let r;
+  try{
+    r = await Nucleo.storage.pedir(SUPABASE_URL + '/functions/v1/carimbar', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documento, caixas, pdf: btoa(bin) }) });
+  }catch(e){ if (e.sessaoVencida) throw e; throw new Error('O carimbo do servidor não respondeu. Tente de novo com internet.'); }
+  if (r.status === 404) throw new Error('O carimbo das assinaturas ainda não está no servidor: falta uma atualização do sistema: avise o administrador.');
+  let j = null; try{ j = await r.json(); }catch(e){}
+  if (!j || !j.ok || !j.pdf) throw new Error((j && j.erro) || ('O servidor deu erro (código ' + r.status + '). Tente de novo.'));
+  return dataUrlParaBytes('data:application/pdf;base64,' + j.pdf);
 }
 
 async function docCarimbar(tipo, ids){
@@ -5305,7 +5319,7 @@ function ptGovConferir(p, tipo, s){
 // RH5 · FECHAMENTO DO MÊS (Ponto Etapa 2B, 607) — P4 com o limite do IR, P5, P25, P32, P35
 // 1) o funcionário diz a intenção até o 2º dia útil; 2) o resumo vai ao contador; 3) o escritório lança
 // as horas pagas e libera até o 4º dia útil (o mês congela e trava); 4) o funcionário assina até o 5º dia útil
-// (ou "Discordo"); o Fernando assina pela empresa. O PDF assinado (com as rubricas) é montado AQUI (regra do S49).
+// (ou "Discordo"); o Fernando assina pela empresa. O PDF assinado é montado aqui sem as rubricas; elas entram no servidor (carimbar, R22).
 // ════════════════════════════════════════════════════════════════════════════
 const PT_FST = { em_andamento: ['mês em andamento', ''], aberto: ['aguardando o lançamento', 'aviso'], para_assinar: ['liberado · falta assinar', 'aviso'],
   assinado: ['assinado', 'ok'], fechado_sem_assinatura: ['fechou sem a assinatura', 'crit'], contestado: ['fechou contestado', 'crit'] };
@@ -5508,22 +5522,44 @@ async function ptResumoContador(tipo){
   }catch(e){ toast('Não consegui montar o PDF: ' + e.message, 'err'); }
 }
 
+/** RH24 (S219, R22): acha as marcas do espelho (TFCARIMBOFUNC/TFCARIMBOEMP e o "S" do selo) e manda à `carimbar`.
+ *  Sem nenhuma marca (ninguém assinou ainda), o PDF sai como está. */
+async function ptCarimbarFech(bytes, usuario, mes){
+  const pdfjs = await carregarPdfJs();
+  const d = await pdfjs.getDocument({ data: bytes.slice() }).promise;
+  const caixas = [];
+  for (let n = 1; n <= d.numPages; n++){
+    const { itens } = await docLinhasTexto(await d.getPage(n));
+    [['TFCARIMBOFUNC', 'func'], ['TFCARIMBOEMP', 'emp']].forEach(([m, papel]) => {
+      const a = itens.find(i => i.s.trim() === m), b = itens.find(i => i.s.trim() === m + 'S');
+      if (!a) return;
+      // a marca fica no alto do espaço da rubrica (34 pt acima da linha); o selo, na linha da marca "S"
+      caixas.push({ ref: { papel }, pagina: n - 1, img: { x: a.x, y: a.y - 33, w: 160, h: 32 },
+        txt: { x: a.x, y: b ? b.y - 5 : a.y - 57, w: 230, tam: 6.5, linhas: 2, cor: [0.12, 0.48, 0.30] } });
+    });
+  }
+  if (!caixas.length) return bytes;
+  return carimbarNoServidor({ tipo: 'ponto', usuario, mes }, bytes, caixas);
+}
+
 // O PDF ASSINADO (P5): espelho congelado + Termo Mensal (Anexo I do acordo), com as rubricas e os selos. Guardado no sistema.
 async function ptFechPdf(p){
   try{
     const D = await rpc('tf_ponto_fech_doc', { p_usuario: p.usuario_id, p_mes: PT.fmes });
     const [pm, cfgE] = await Promise.all([ptPdfLib(), rpc('tf_ponto_config_ver', {})]);
-    let rub = {}; try{ rub = await rpc('tf_rh_assinaturas', { p_usuarios: [p.usuario_id].concat(D.empresa_em ? [PT.fech && PT.fech.signatario_uid].filter(Boolean) : []) }); }catch(e){}
     const C = D.calculo || {}, T = C.totais || {}, P0 = C.pessoa || {}, mesR = ptMesRot(PT.fmes);
-    const selo = (quem, em, met) => em ? 'Assinado por ' + quem + ' com ' + (met === 'digital' ? 'a digital' : 'o PIN') + ' em ' + ptDHBR(em) + ' (hora do servidor, de Brasília)' : 'Ainda não assinado';
     const dias = (C.dias || []).filter(d => (d.batidas || []).some(b => b.valida) || d.falta || d.feriado || (d.ausencia || []).length).map(d => [
       ptDia(d.dia) + ' ' + PT_SEM[Number(d.sem)], (d.batidas || []).filter(b => b.valida).map(b => b.h).join('  '), ptHm(d.feitos_min), ptSaldo(d.saldo_min),
       [d.feriado, (d.ausencia || []).map(ptAusRot).join(', '), d.falta ? 'falta' : '', Number(d.extra100_min) ? '100% ' + ptHm(d.extra100_min) : ''].filter(Boolean).join(' · ')]
       .map(t => ({ text: String(t || ''), fontSize: 7 })));
     const int = D.intencao ? PT_INT[D.intencao] + (D.intencao === 'horas' ? ptHm(D.intencao_min) : '') : 'tudo no banco (sem escolha)';
-    const assin = (img, nome, papel, txt) => ({ stack: [img ? { image: img, fit: [160, 40], margin: [0, 0, 0, 2] } : { text: ' ', margin: [0, 0, 0, 30] },
+    // RH24 (S219, R22 · AS1/AS7): a rubrica e o selo entram no servidor (carimbar). Aqui fica a marca invisível do
+    // lugar (texto branco, 1 pt) que o pdf.js acha depois; sem a assinatura, "Ainda não assinado".
+    const assin = (marca, assinado, nome, papel, extra) => ({ stack: [{ text: assinado ? marca : ' ', fontSize: assinado ? 1 : 6, color: '#FFFFFF', margin: [0, 0, 0, assinado ? 34 : 28] },
       { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 230, y2: 0, lineWidth: 0.6 }] }, { text: nome, fontSize: 7.5, margin: [0, 3, 0, 0] },
-      { text: papel, fontSize: 7, color: '#6B7780' }, { text: txt, fontSize: 6.5, color: '#1F7A4D' }] });
+      { text: papel, fontSize: 7, color: '#6B7780' },
+      assinado ? { text: marca + 'S', fontSize: 1, color: '#FFFFFF', margin: [0, 2, 0, 14] } : { text: 'Ainda não assinado', fontSize: 6.5, color: '#1F7A4D' },
+      ...(extra ? [{ text: extra, fontSize: 6.5, color: '#1F7A4D' }] : [])] });
     const content = [
       { text: (cfgE.empresa_nome || 'Engetap') + ' · Espelho de ponto e Termo Mensal · ' + mesR, bold: true, fontSize: 11, color: PT_AZUL },
       { text: (P0.nome_completo || P0.nome || p.nome) + (P0.funcao ? ' · ' + P0.funcao : '') + (P0.matricula ? ' · matrícula ' + P0.matricula : ''), fontSize: 8.5, margin: [0, 2, 0, 8] },
@@ -5539,12 +5575,13 @@ async function ptFechPdf(p){
         fontSize: 8, lineHeight: 1.3 } ]
       .concat((D.contestacoes || []).length ? [{ text: 'DISCORDO', bold: true, fontSize: 8.5, color: '#B42318', margin: [0, 10, 0, 2] }]
         .concat(D.contestacoes.map(c => ({ text: '“' + c.texto + '” (' + dataBR(String(c.em).slice(0, 10)) + ')' + (c.resposta ? '\nResposta' + (c.por ? ' de ' + c.por : '') + ': “' + c.resposta + '”' : '\nSem resposta.'), fontSize: 7.5, margin: [0, 0, 0, 4] }))) : [])
-      .concat([{ columns: [assin(rub[p.usuario_id], P0.nome_completo || p.nome, 'Funcionário', selo(P0.nome_completo || p.nome, D.assinado_em, D.assinado_metodo) + (D.assinado_tarde ? ' · depois do prazo' : '')),
-          assin(D.empresa_em ? rub[Object.keys(rub).find(k => k !== p.usuario_id)] : null, cfgE.empresa_nome || 'Engetap', 'Empresa' + (D.empresa_nome ? ' · ' + D.empresa_nome : ''), selo(D.empresa_nome || 'a empresa', D.empresa_em, D.empresa_metodo))],
+      .concat([{ columns: [assin('TFCARIMBOFUNC', !!D.assinado_em, P0.nome_completo || p.nome, 'Funcionário', D.assinado_em && D.assinado_tarde ? 'depois do prazo' : ''),
+          assin('TFCARIMBOEMP', !!D.empresa_em, cfgE.empresa_nome || 'Engetap', 'Empresa' + (D.empresa_nome ? ' · ' + D.empresa_nome : ''), '')],
           columnGap: 50, margin: [0, 26, 0, 0], unbreakable: true },
         { text: 'Código de conferência do mês congelado (SHA-256): ' + (D.codigo || ''), fontSize: 6, color: '#6B7780', margin: [0, 12, 0, 0] },
         { text: 'Assinatura eletrônica pelo aplicativo (digital ou PIN), aceita no termo de adesão assinado no gov.br (MP 2.200-2/2001, art. 10 §2º).', fontSize: 6, color: '#6B7780' }]);
-    const blob = await new Promise(ok => pm.createPdf({ pageSize: 'A4', pageMargins: [28, 28, 28, 28], content }).getBlob(ok));
+    const blob0 = await new Promise(ok => pm.createPdf({ pageSize: 'A4', pageMargins: [28, 28, 28, 28], content }).getBlob(ok));
+    const blob = new Blob([await ptCarimbarFech(new Uint8Array(await blob0.arrayBuffer()), p.usuario_id, PT.fmes)], { type: 'application/pdf' });
     const hash = await ptSha256(await blob.arrayBuffer());
     const caminho = 'espelhos/' + p.usuario_id + '/' + PT.fmes.slice(0, 7) + '-fechamento-' + hash.slice(0, 12) + '.pdf';
     const r = await Nucleo.storage.enviar('ponto', caminho, new Blob([blob], { type: 'application/pdf' }));

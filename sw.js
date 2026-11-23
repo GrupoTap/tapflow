@@ -35,7 +35,7 @@
  *   O histórico das versões está nos Pull requests.
  * ========================================================================== */
 
-const VERSAO = 'H20-S218';
+const VERSAO = 'H20-S219';
 const CACHE  = 'tapflow-hub';          // um cache só, que passa de uma versão para a outra
 const PRAZO  = 1500;                   // ms de paciência com a internet antes de abrir a cópia
 
