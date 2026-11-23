@@ -11,8 +11,8 @@
  * aqui (fica no módulo e nas funções tf_*). Sem framework, sem build.
  *
  * COMO UM MÓDULO USA (duas linhas no <head> e uma no boot):
- *   <script src="../nucleo/config.js?v=N17"></script>
- *   <script src="../nucleo/nucleo.js?v=N17"></script>
+ *   <script src="../nucleo/config.js?v=N18"></script>
+ *   <script src="../nucleo/nucleo.js?v=N18"></script>
  *   ...
  *   const g = Nucleo.porteiro({ app:'manager', demo:DEMO, url:SUPABASE_URL, anon:SUPABASE_ANON_KEY });
  *   if (g === 'hub') { irParaHub(Nucleo.recado); return; }     // ANTES do iniciar()
@@ -45,7 +45,8 @@
   'use strict';
   if (window.Nucleo && window.Nucleo.versao) return;
 
-  var VERSAO = 'N17';   // N17 (S212): Rodada R15 da auditoria (PIN provisório e digital) — issues 161 e 194 (o PIN provisório numa assinatura pede a troca ali mesmo e volta para assinar; Nucleo.pin.trocar/assinar/msg para as telas que ainda assinam só com o PIN; "Trocar meu PIN" pela troca da trava, que acerta também o PIN guardado no aparelho) e 123 (a entrega e a devolução de EPI pelo confirmarPessoa)
+  var VERSAO = 'N18';   // N18 (S225): Rodada R32 — issue 235 (o pedido de envio que chega com outro envio andando roda logo depois dele, sem esperar os 90 s; a versão gravada de novo no meio do envio não sai da fila junto com a anterior)
+  // var VERSAO = 'N17';   // N17 (S212): Rodada R15 da auditoria (PIN provisório e digital) — issues 161 e 194 (o PIN provisório numa assinatura pede a troca ali mesmo e volta para assinar; Nucleo.pin.trocar/assinar/msg para as telas que ainda assinam só com o PIN; "Trocar meu PIN" pela troca da trava, que acerta também o PIN guardado no aparelho) e 123 (a entrega e a devolução de EPI pelo confirmarPessoa)
   // var VERSAO = 'N16';   // N16 (S211): Rodada R17 da auditoria (TapFlow agenda e listas) — issues 114 e 129 (achar o cliente digitando, um componente só: Nucleo.busca.cliente, na Nova OS do TapFlow e no Novo negócio do TapCRM; Nucleo.busca.digitando serve a outras listas, como o fornecedor da R16)
   // var VERSAO = 'N15';   // N15 (S205): Rodada R12 da auditoria (TapHub) — issues 156 (um "Sair" só, Nucleo.sairDaConta, que encerra o acesso também no servidor e respeita o celular da empresa) e 151 (a janela "fixa", que só fecha pelo botão dela; o aviso "erro" em vermelho)
   // var VERSAO = 'N14';   // N14 (S202): Rodada R10 da auditoria — issues 106, 107 e 177 (a fila envia também os envios antigos do TapField — levantamento, extras, execução e fotos do Drive — pelo tratador que a página registra: recusado fica parado com o motivo, nada some)
@@ -2338,14 +2339,26 @@
 
   var tratadores = {};   // N14: nome → função(entrada, autor) que envia (registrada pela página)
   var enviando = false;
+  /* N18 (S225, issue 235): o pedido de envio que chega com outro envio andando não espera mais os 90 s.
+   * Antes, `filaEnviar()` voltava na hora quando `enviando` estava ligado, e o envio em andamento só passava pela
+   * lista que leu no começo: a entrada nova ficava para o relógio de 90 s (ou para o evento 'online'). Agora o
+   * pedido fica anotado (`pedidoPendente`) e, quando o envio em andamento termina, roda mais uma passada (uma só por
+   * pedido: sem sinal, a passada extra para na primeira falha, como sempre). Se quem segura o envio é OUTRA aba
+   * (navigator.locks), esta aba tenta de novo daqui a FILA_REPETIR_MS, sem empilhar tentativas. */
+  var pedidoPendente = false, repetirTimer = null;
+  var FILA_REPETIR_MS = 3000;
+  function filaRepetirDepois() {
+    if (repetirTimer) return;
+    repetirTimer = setTimeout(function () { repetirTimer = null; filaEnviar().catch(function () {}); }, FILA_REPETIR_MS);
+  }
   var FILA_ERROS_SERVIDOR = 5;   // N12 (issue 154): erros internos seguidos do servidor até a entrada ficar "parada, com o motivo"
   function filaEnviar() {
     var trabalho = function () {
-      if (enviando) return Promise.resolve();
+      if (enviando) { pedidoPendente = true; return Promise.resolve(); }   // N18: roda de novo quando o atual terminar
       // N7: no celular da empresa a fila também anda na troca de pessoa (cada envio vai com a sessão de quem fez)
       if (conf.demo || (!sessao().token && !(empresa() && Object.keys(sessoesEmp()).length))) return Promise.resolve();
       if (navigator.onLine === false) return Promise.resolve();   // sem sinal: nem tenta (volta no evento 'online')
-      enviando = true;
+      enviando = true; pedidoPendente = false;
       var lista = filaLer().filter(function (x) { return x && x.v === 2; }).map(function (x) { return x.assinatura; });
       var bloqueados = {};
       var i = 0;
@@ -2358,7 +2371,11 @@
         if (e.parado) { if (e.grupo) bloqueados[e.grupo] = true; return proxima(); }
         return enviarUma(e).then(function (resp) {
           var fotos = (e.fotos || []).map(function (x) { return x.chave; }).concat(e.guardados || []);
-          filaTrocar(assin, function () { return null; });
+          // N18 (issue 235): se a pessoa gravou de novo o MESMO assunto enquanto esta versão subia, a versão nova
+          // (substituída no mesmo lugar pelo `filaAdicionar`) fica na fila para a passada seguinte; só sai a enviada.
+          var trocada = false;
+          filaTrocar(assin, function (y) { if (y.em !== e.em) { trocada = true; return y; } return null; });
+          if (trocada) { pedidoPendente = true; return proxima(); }   // o aviso de "enviado" vem com a versão nova
           fotos.forEach(function (ch) { if (ch) IDB.del(ch).catch(function () {}); });
           avisar({ assinatura: assin, tipo: e.tipo, situacao: 'enviado', resposta: resp });
           return proxima();
@@ -2416,14 +2433,22 @@
       return garantirAcesso().then(proxima).catch(function () {}).then(function () { enviando = false; limparSoEnvio(); contarFila(); },   // N9 (issue 10): renova antes
                                                   function () { enviando = false; });
     };
+    // N18 (issue 235): terminou a passada e chegou pedido no meio dela → mais uma passada, logo em seguida
+    var depois = function (r) {
+      if (pedidoPendente && !enviando) { pedidoPendente = false; setTimeout(function () { filaEnviar().catch(function () {}); }, 0); }
+      return r;
+    };
     try {
       if (navigator.locks && navigator.locks.request) {
         return navigator.locks.request('tf-fila-envio', { ifAvailable: true }, function (lock) {
-          return lock ? trabalho() : null;
-        });
+          if (lock) return trabalho();
+          // a vez está com outra passada: desta aba (anota o pedido) ou de outra aba (tenta de novo daqui a pouco)
+          if (enviando) pedidoPendente = true; else filaRepetirDepois();
+          return null;
+        }).then(depois);
       }
     } catch (e) {}
-    return trabalho();
+    return trabalho().then(depois);
   }
   /** N7 · A7: no celular da empresa, o envio de outra pessoa vai com a sessão guardada DELA. */
   function autorDoEnvio(e) {
@@ -2449,7 +2474,8 @@
           if (!blob) throw Object.assign(new Error('A foto não está mais no aparelho. Tire de novo.'), { negocio: true });
           return storageEnviar(ft.bucket, ft.caminho, blob, false, autor);
         }).then(function () {
-          filaTrocar(e.assinatura, function (y) { if (y.fotos && y.fotos[idx]) y.fotos[idx].enviada = true; return y; });
+          // N18: só marca a MESMA foto (se a entrada foi trocada no meio, a da versão nova pode ser outra)
+          filaTrocar(e.assinatura, function (y) { if (y.fotos && y.fotos[idx] && y.fotos[idx].chave === ft.chave) y.fotos[idx].enviada = true; return y; });
         });
       });
     });

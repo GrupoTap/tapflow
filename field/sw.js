@@ -28,7 +28,7 @@
  *   Trocou o ?v= nas páginas? Troque aqui também. O histórico está nos Pull requests.
  * ========================================================================== */
 
-const VERSAO = 'S73-T61';
+const VERSAO = 'S73-T62';
 const CACHE  = 'tapflow-field';        // um cache só, que passa de uma versão para a outra
 const PRAZO  = 1500;
 
@@ -42,9 +42,9 @@ const FIXOS = [
   './icons/icon-maskable-512.png',
   './icons/apple-touch-icon.png',
   './icons/favicon-32.png',
-  '../nucleo/nucleo.js?v=N17',
-  '../nucleo/nucleo.css?v=N17',
-  '../nucleo/config.js?v=N17',
+  '../nucleo/nucleo.js?v=N18',
+  '../nucleo/nucleo.css?v=N18',
+  '../nucleo/config.js?v=N18',
   '../nucleo/modulos.js?v=M4',
   './doc/motor-calculo-nr13.js?v=R00.7',   // a prévia do cálculo sem sinal
   './doc/recomendacoes.js?v=RC1',
