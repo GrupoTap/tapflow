@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapField · S72</title>
+<title>TapField · S73</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -538,6 +538,17 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 .mdVal{font:600 15px 'JetBrains Mono',monospace}
 .mdJust{width:100%;margin-top:8px;font-size:15px;padding:9px;border:1px solid var(--warn);border-radius:5px;box-sizing:border-box}
 .mdTirar{align-self:flex-start;background:none;border:1px solid var(--crit);color:var(--crit);border-radius:4px;padding:4px 10px;font-size:12.5px;margin-top:6px}
+.mdLin.orc{background:var(--accent-soft);margin:0 -12px;padding:10px 12px}   /* S73 (R26): o item a orçar, fora do valor */
+.mdLin.orc + .mdLin.orc{border-top:1px solid var(--rule)}
+.orcTipos{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin:4px 0 12px}
+.orcTipos .btn{margin:0}
+.orcSN{display:flex;gap:8px;flex-wrap:wrap}
+.orcSN label{display:flex;align-items:center;gap:6px;border:1px solid var(--rule);border-radius:5px;padding:9px 12px;margin:0;
+  font-size:14.5px;font-weight:400;letter-spacing:normal;text-transform:none;color:var(--ink)}
+.orcSN input{width:20px;height:20px;accent-color:var(--accent)}
+.orcFoto{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.orcFoto .btn{margin:0}
+.orcFoto small{font-size:13px;color:var(--ok);font-weight:600}
 .mdCanvas{width:100%;height:auto;aspect-ratio:600/220;border:1px dashed var(--ink-3);border-radius:5px;background:#fff;touch-action:none;display:block}
 
 /* S43 · ponto */
@@ -695,7 +706,8 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S72';   // S72 (S218): Rodada R21 (issue 115 parte 1) — o canhoto do cartão pergunta "É de uma OS? Sim/Não" (obrigatório; Sim escolhe numa lista curta das OS em que a pessoa está) e vai pela fila com a resposta (banco 530)
+const APP_VERSION = 'S73';   // S73 (S223): Rodada R26 (issue 237 parte 1) — na medição, o "+ Item a orçar" (válvula, manômetro, dreno, DCBI, outro; fora do valor; só grava com os dados do tipo e a foto; a PMTA do cadastro do vaso, o inspetor confere); o boletim com "Itens identificados para orçamento"; o "Lançar extra" saiu (só os extras antigos guardados no aparelho continuam à mão)
+// const APP_VERSION = 'S72';   // S72 (S218): Rodada R21 (issue 115 parte 1) — o canhoto do cartão pergunta "É de uma OS? Sim/Não" (obrigatório; Sim escolhe numa lista curta das OS em que a pessoa está) e vai pela fila com a resposta (banco 530)
 // const APP_VERSION = 'S71';   // S71 (S215): Rodada R24 (issue 231) — as perguntas da abertura ao servidor vão juntas (antes uma esperava a outra); a lista não espera os parâmetros do Drive
 // const APP_VERSION = 'S70';   // S70 (S212): Rodada R15 da auditoria (PIN provisório e digital) — issues 123 (a entrega e a devolução de EPI e uniforme com a digital ou o PIN, pela confirmação do servidor; 628), 194 (o PIN provisório e o vencido pedem a troca ali mesmo e voltam para confirmar; "Trocar meu PIN" pela troca da trava; receita com "Enviando…"; o PDF do ASO, da receita e do certificado no visualizador do app; o vídeo com "Tentar de novo"; as dúvidas que não carregaram) e 161 (a folha e o recibo com o PIN provisório); núcleo N17
 // const APP_VERSION = 'S69';   // S69 (S207): Rodada R13 da auditoria (TapSeg) — issue 195 (a Ficha de EPI do celular mostra a devolução em partes: "2 descarte · 1 não devolvido"; 627)
@@ -2485,7 +2497,9 @@ function pintarOSBase(){
   m.innerHTML = '';
   // S39 · os extras vêm PRIMEIRO na inspeção: é o que o inspetor tem na mão
   // enquanto anda pela planta, e não pode depender de em que etapa a OS está.
-  if (ehInspecao(os)) m.appendChild(painelExtras());
+  // S73 (R26, issue 237, FE3): o "Lançar extra" saiu — o que precisa de orçamento vai na medição ("+ Item a orçar").
+  // O painel só aparece para o que já existia: extras guardados no aparelho, na fila ou já lançados nesta OS.
+  if (ehInspecao(os) && temExtrasAntigos()) m.appendChild(painelExtras());
   // S39 · a medição fechada continua à mão (PDF, assinado que volta, reabrir) depois que a OS anda
   const tMed = (tarefas || []).find(x => x.tarefa_id === 'T06B');
   if (tMed && tMed.status === 'completo' && (!t || t.tarefa_id !== 'T06B')) m.appendChild(painelMedicao(tMed));
@@ -3097,6 +3111,11 @@ const SIT_EXTRA = {
   'pronto para instalar':'okc', 'instalado':'okc', 'não aprovado':'urg', 'retirado':'', 'cancelada':''
 };
 
+function temExtrasAntigos(){
+  const os = atual.os, rasc = LS.get(K_EXTRA + os.os_id, null);
+  return !!((rasc && rasc.itens && rasc.itens.length) || filaDoField().some(e => e.tipo === 'extras' && e.osId === os.os_id)
+            || (atual.extras && atual.extras.length));
+}
 function painelExtras(){
   const { os } = atual;
   const p = document.createElement('div');
@@ -3105,15 +3124,13 @@ function painelExtras(){
   const nRasc = rasc && rasc.itens ? rasc.itens.length : 0;
   const nFila = filaDoField().filter(e => e.tipo === 'extras' && e.osId === os.os_id).length;
   const ex = atual.extras;
-  p.innerHTML = '<div class="et">Extras encontrados</div>'
-    + '<h2 style="font-size:17px">Achou peça a trocar ou serviço a fazer?</h2>'
-    + '<p class="exNota" style="margin-top:0">Lance aqui, vaso por vaso. Vai para o comercial, que faz a '
-    + 'proposta ao cliente. <b>Nada é instalado antes do sim do cliente</b> — nem o que está no carro.</p>'
+  p.innerHTML = '<div class="et">Extras lançados antes</div>'
+    + '<p class="exNota" style="margin-top:0">O que precisa de orçamento agora vai na <b>Medição</b>, em "+ Item a orçar" '
+    + '(com os dados e a foto). Aqui ficam só os extras lançados do jeito antigo.</p>'
     + '<div class="exLista"></div>'
     + (nRasc ? '<p class="exPend">' + nRasc + ' extra(s) guardado(s) no aparelho, ainda não enviado(s).</p>' : '')
     + (nFila ? '<p class="exPend">' + nFila + ' envio(s) de extras na fila — sobem quando o sinal voltar.</p>' : '')
-    + '<button class="btn pri" id="bExtra" style="margin-top:10px">'
-    + (nRasc ? 'Continuar lançando (' + nRasc + ')' : 'Lançar extra') + '</button>';
+    + (nRasc ? '<button class="btn pri" id="bExtra" style="margin-top:10px">Enviar os guardados (' + nRasc + ')</button>' : '');
   const L = p.querySelector('.exLista');
   if (ex === null){
     L.innerHTML = '<p class="exNota">Não deu para ler o que já foi lançado (sem sinal?). '
@@ -3131,7 +3148,8 @@ function painelExtras(){
       L.appendChild(d);
     });
   }
-  p.querySelector('#bExtra').addEventListener('click', abrirExtras);
+  const bx = p.querySelector('#bExtra');
+  if (bx) bx.addEventListener('click', abrirExtras);
   return p;
 }
 
@@ -4123,6 +4141,9 @@ function pintarMedicao(){
   }
   m.appendChild(pa);
 
+  // ── S73 (R26, issue 237, FE3): os itens a orçar — a encomenda, fora do valor ──
+  m.appendChild(medPainelOrcar(v, pode, aberta));
+
   // ── fechar / depois de fechado ──
   const pf = document.createElement('div'); pf.className = 'painel';
   if (aberta){
@@ -4300,6 +4321,222 @@ function medAdicionalForm(item){
   }));
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// S73 (R26, issue 237 parte 1, FE3) · O ITEM A ORÇAR
+// ----------------------------------------------------------------------------
+// A encomenda nasce aqui (o "Lançar extra" saiu): o que precisa de cotação e pedido ao
+// fornecedor (ex.: a válvula que pede dimensionamento) NÃO entra no valor da medição. Só grava
+// com os dados do tipo e a foto (o banco confere de novo, tf__osmed_orcar_falta); a PMTA vem do
+// cadastro do vaso e o inspetor confere. Ao fechar a medição, os itens vão para UM negócio no
+// TapCRM (um por OS). A peça da maleta, instalada na hora, continua no "+ Item a mais".
+// ════════════════════════════════════════════════════════════════════════════
+const ORC_TIPOS = [['valvula', 'Válvula'], ['manometro', 'Manômetro'], ['dreno', 'Dreno'], ['dcbi', 'DCBI'], ['outro', 'Outro']];
+const ORC_ROT = Object.fromEntries(ORC_TIPOS);
+const ORC_UNID = ['kgf/cm²', 'MPa', 'psi'];
+const ORC_DE_MPA = { 'kgf/cm²': 10.1972, 'MPa': 1, 'psi': 145.038 };
+const orcNum = t => { const x = String(t == null ? '' : t).trim().replace(',', '.'); return x === '' || isNaN(Number(x)) ? null : Number(x); };
+const orcTx = t => String(t == null ? '' : t).trim();
+const orcSimNao = v => v === 'sim' ? 'sim' : v === 'nao' ? 'não' : '—';
+/** Uma linha com os dados do item (a mesma leitura no boletim). */
+function orcResumoDados(x){
+  const d = x.dados || {}, u = d.unidade ? ' ' + d.unidade : '';
+  if (x.tipo === 'valvula') return 'Conexão ' + orcTx(d.conexao_tipo) + ' ' + orcTx(d.conexao_bitola) + ' · fluido ' + orcTx(d.fluido)
+    + ' · PMTA ' + orcTx(d.pmta) + u + ' · abertura ' + orcTx(d.pressao_abertura) + u + ' · assentamento ' + orcTx(d.pressao_assentamento) + u;
+  if (x.tipo === 'manometro') return 'Conexão ' + orcTx(d.conexao) + ' · mostrador ' + orcTx(d.mostrador)
+    + ' · escala ' + orcTx(d.escala_min) + ' a ' + orcTx(d.escala_max) + u + ' · PMTA ' + orcTx(d.pmta) + u;
+  if (x.tipo === 'dreno') return 'Conexão ' + orcTx(d.conexao) + ' · eletricidade perto: ' + orcSimNao(d.eletricidade) + ' · espaço para instalar: ' + orcSimNao(d.espaco);
+  if (x.tipo === 'dcbi') return 'Conexão ' + orcTx(d.conexao) + ' · espaço para instalar: ' + orcSimNao(d.espaco)
+    + ' · ' + (d.uso === 'juntos' ? 'manômetro e válvula juntos' : d.uso === 'um_para_cada' ? 'um para cada' : '—');
+  return orcTx(d.descricao);
+}
+const orcTitulo = x => (x.tipo === 'outro' ? (orcTx((x.dados || {}).descricao) || 'Outro') : ORC_ROT[x.tipo] || x.tipo)
+  + (Number(x.quantidade) && Number(x.quantidade) !== 1 ? ' ×' + medQtd(x.quantidade) : '') + (x.tag ? ' · ' + x.tag : '');
+/** O que falta (a mesma regra do banco). */
+function orcFalta(tipo, d, fotos, qtd, vaso){
+  const f = [], papeis = (fotos || []).map(x => x.papel);
+  if (!(qtd > 0)) f.push('a quantidade');
+  if ((tipo === 'valvula' || tipo === 'manometro') && !vaso) f.push('o vaso');
+  if (tipo === 'valvula'){
+    if (!orcTx(d.conexao_tipo)) f.push('o tipo da conexão');
+    if (!orcTx(d.conexao_bitola)) f.push('a bitola da conexão');
+    if (!orcTx(d.fluido)) f.push('o fluido');
+    if (!(orcNum(d.pmta) > 0)) f.push('a PMTA');
+    if (!(orcNum(d.pressao_abertura) > 0)) f.push('a pressão de abertura');
+    if (!(orcNum(d.pressao_assentamento) > 0)) f.push('a pressão de assentamento');
+    if (!papeis.includes('plaqueta')) f.push('a foto da plaqueta');
+    if (!papeis.includes('local')) f.push('a foto do local');
+  } else if (tipo === 'manometro'){
+    if (!orcTx(d.conexao)) f.push('a conexão');
+    if (!orcTx(d.mostrador)) f.push('o tamanho do mostrador');
+    if (orcNum(d.escala_min) === null) f.push('a escala mínima');
+    if (orcNum(d.escala_max) === null || orcNum(d.escala_max) <= (orcNum(d.escala_min) || 0)) f.push('a escala máxima (maior que a mínima)');
+    if (!(orcNum(d.pmta) > 0)) f.push('a PMTA');
+    if (!papeis.length) f.push('a foto');
+  } else if (tipo === 'dreno'){
+    if (!orcTx(d.conexao)) f.push('a conexão');
+    if (!['sim', 'nao'].includes(d.eletricidade)) f.push('se há eletricidade perto');
+    if (!['sim', 'nao'].includes(d.espaco)) f.push('se há espaço para instalar');
+    if (!papeis.length) f.push('a foto');
+  } else if (tipo === 'dcbi'){
+    if (!orcTx(d.conexao)) f.push('a conexão');
+    if (!['sim', 'nao'].includes(d.espaco)) f.push('se há espaço para instalar');
+    if (!['juntos', 'um_para_cada'].includes(d.uso)) f.push('se é para manômetro e válvula juntos ou um para cada');
+    if (!papeis.length) f.push('a foto');
+  } else {
+    if (orcTx(d.descricao).length < 3) f.push('a descrição');
+    if (!papeis.length) f.push('a foto');
+  }
+  return f;
+}
+
+function medPainelOrcar(v, pode, aberta){
+  const po = document.createElement('div'); po.className = 'painel'; po.id = 'mdOrcar';
+  po.innerHTML = '<div class="et">Item a orçar · fora do valor</div>';
+  const lista = (v.orcar || []);
+  const n = document.createElement('p'); n.className = 'ds';
+  n.textContent = lista.length
+    ? (aberta ? 'Não entram no valor desta medição. Ao fechar, vão para o comercial cotar (um negócio para esta OS).'
+              : v.orcar_negocio ? 'Foram para o comercial: negócio ' + v.orcar_negocio.numero + '.'
+                                : 'Vão para o comercial quando o fechamento subir.')
+    : 'Nada a orçar. Peça que precisa de cotação e pedido ao fornecedor (ex.: válvula sob encomenda) entra aqui, com os dados e a foto. A peça da maleta, instalada agora, vai em "Item a mais".';
+  po.appendChild(n);
+  lista.forEach(x => {
+    const d = document.createElement('div'); d.className = 'mdLin orc';
+    d.innerHTML = '<div class="mdDesc"><b></b><small></small><small></small></div>';
+    d.querySelector('b').textContent = orcTitulo(x);
+    const sm = d.querySelectorAll('small');
+    sm[0].textContent = (x.obrigatorio ? 'Obrigatório (NR-13)' : 'Opcional') + ' · ' + (x.fotos || []).length + ' foto(s)';
+    sm[1].textContent = orcResumoDados(x);
+    if (pode){
+      const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'mdTirar'; bt.textContent = 'Tirar';
+      bt.addEventListener('click', () => {
+        if (String(x.id).startsWith('tmp-')){ toast('Este item ainda está no aparelho: espere subir (com sinal) para tirar.', 'err'); return; }
+        medMudar('Tirar item a orçar', 'tf_osmed_orcar_tirar', { p_item: x.id }, y => {
+          y.orcar = (y.orcar || []).filter(z => z.id !== x.id);
+        }).then(ok => { if (ok) pintarMedicao(); });
+      });
+      d.querySelector('.mdDesc').appendChild(bt);
+    }
+    po.appendChild(d);
+  });
+  if (pode){
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.style.marginTop = '10px';
+    b.textContent = '+ Item a orçar';
+    b.addEventListener('click', () => medOrcarTipo());
+    po.appendChild(b);
+  }
+  return po;
+}
+
+function medOrcarTipo(){
+  med.form = 'orcTipo';
+  const m = document.getElementById('main'); m.innerHTML = '';
+  const box = document.createElement('div'); box.className = 'painel';
+  box.innerHTML = '<div class="et">Item a orçar</div><h2 style="font-size:17px">O que precisa ser orçado?</h2>'
+    + '<div class="orcTipos"></div><button class="btn" type="button" id="orVt">Voltar</button>';
+  const g = box.querySelector('.orcTipos');
+  ORC_TIPOS.forEach(([k, r]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = r;
+    b.addEventListener('click', () => medOrcarForm(k));
+    g.appendChild(b);
+  });
+  m.appendChild(box);
+  document.getElementById('orVt').addEventListener('click', pintarMedicao);
+}
+
+function medOrcarForm(tipo){
+  med.form = 'orc';
+  const v = med.v, vasos = (v.vasos && v.vasos.length ? v.vasos : (atual.equipamentos || []));
+  const m = document.getElementById('main'); m.innerHTML = '';
+  const box = document.createElement('div'); box.className = 'painel';
+  const campo = (id, rot, extra) => '<div class="campo"><label for="' + id + '">' + rot + '</label>'
+    + '<input id="' + id + '" type="text" autocomplete="off" ' + (extra || '') + '></div>';
+  const num = (id, rot) => campo(id, rot, 'inputmode="decimal"');
+  const sn = (nome, rot, op) => '<div class="campo"><label>' + rot + '</label><div class="orcSN">'
+    + op.map(([val, r]) => '<label><input type="radio" name="' + nome + '" value="' + val + '"><span>' + r + '</span></label>').join('') + '</div></div>';
+  const foto = (papel, rot) => '<div class="campo orcFoto"><button class="btn" type="button" data-foto="' + papel + '">' + rot + '</button><small data-ok="' + papel + '"></small></div>';
+  const unid = '<div class="campo"><label for="orU">Unidade das pressões</label><select id="orU">' + ORC_UNID.map(u => '<option>' + u + '</option>').join('') + '</select></div>';
+  const precisaVaso = tipo === 'valvula' || tipo === 'manometro';
+  let corpo = '<div class="campo"><label for="orV">Vaso' + (precisaVaso ? '' : ' (opcional)') + '</label><select id="orV"><option value="">—</option>'
+    + vasos.map(e => '<option value="' + esc(e.id) + '">' + esc(e.tag) + '</option>').join('') + '</select></div>';
+  if (tipo === 'valvula') corpo += campo('orCt', 'Conexão: tipo', 'placeholder="rosca NPT, flange…"') + campo('orCb', 'Conexão: bitola', 'placeholder="1/2&quot;, 1&quot;…"')
+    + campo('orFl', 'Fluido') + unid + num('orPm', 'PMTA (do cadastro do vaso: confira)') + num('orPa', 'Pressão de abertura') + num('orPs', 'Pressão de assentamento')
+    + foto('plaqueta', 'Foto da plaqueta') + foto('local', 'Foto do local');
+  else if (tipo === 'manometro') corpo += campo('orCo', 'Conexão', 'placeholder="1/2&quot; NPT…"') + campo('orMo', 'Tamanho do mostrador', 'placeholder="100 mm, 4&quot;…"')
+    + unid + num('orEi', 'Escala mínima') + num('orEx', 'Escala máxima') + num('orPm', 'PMTA (do cadastro do vaso: confira)') + foto('foto', 'Foto');
+  else if (tipo === 'dreno') corpo += campo('orCo', 'Conexão') + sn('orEl', 'Há eletricidade perto? (alguns drenos precisam)', [['sim', 'Sim'], ['nao', 'Não']])
+    + sn('orEs', 'Há espaço para instalar? (alguns são compridos, ex.: tipo boia)', [['sim', 'Sim'], ['nao', 'Não']]) + foto('foto', 'Foto');
+  else if (tipo === 'dcbi') corpo += campo('orCo', 'Conexão') + sn('orEs', 'Há espaço para instalar?', [['sim', 'Sim'], ['nao', 'Não']])
+    + sn('orUs', 'Para manômetro e válvula juntos, ou um para cada?', [['juntos', 'Juntos'], ['um_para_cada', 'Um para cada']]) + foto('foto', 'Foto');
+  else corpo += campo('orDs', 'O que é', 'maxlength="120" placeholder="ex.: visor de nível"') + foto('foto', 'Foto');
+  corpo += num('orQ', 'Quantidade')
+    + sn('orOb', 'Este item é', [['sim', 'Obrigatório (NR-13)'], ['nao', 'Opcional (oportunidade)']]);
+  box.innerHTML = '<div class="et">Item a orçar · fora do valor</div><h2 style="font-size:17px"></h2>'
+    + '<p class="ds">Só grava com tudo preenchido e a foto: é o que o comercial precisa para cotar sem voltar à planta.</p>'
+    + corpo + '<button class="btn pri" type="button" id="orOk">Gravar o item a orçar</button><button class="btn" type="button" id="orVt">Voltar</button>';
+  box.querySelector('h2').textContent = ORC_ROT[tipo];
+  m.appendChild(box);
+  const $ = id => document.getElementById(id);
+  const radio = nome => { const r = box.querySelector('input[name="' + nome + '"]:checked'); return r ? r.value : ''; };
+  $('orQ').value = '1';
+  box.querySelector('input[name="orOb"][value="' + (precisaVaso ? 'sim' : 'nao') + '"]').checked = true;   // NR-13: válvula e manômetro
+  // a PMTA e o fluido do cadastro do vaso (o inspetor confere e corrige)
+  let pmMexida = false;
+  const pmDoVaso = () => {
+    const e = vasos.find(x => String(x.id) === $('orV').value);
+    if ($('orPm') && !pmMexida){
+      const mpa = e && Number(e.pmta_mpa) > 0 ? Number(e.pmta_mpa) : null;
+      $('orPm').value = mpa ? String(Math.round(mpa * ORC_DE_MPA[$('orU').value] * 100) / 100).replace('.', ',') : '';
+    }
+    if ($('orFl') && e && e.fluido && !orcTx($('orFl').value)) $('orFl').value = e.fluido;
+  };
+  if (vasos.length === 1 && precisaVaso){ $('orV').value = vasos[0].id; }
+  $('orV').addEventListener('change', pmDoVaso);
+  if ($('orU')) $('orU').addEventListener('change', pmDoVaso);
+  if ($('orPm')) $('orPm').addEventListener('input', () => { pmMexida = true; });
+  pmDoVaso();
+  const fotos = {};
+  box.querySelectorAll('[data-foto]').forEach(b => b.addEventListener('click', async () => {
+    const f = await tirarFoto(); if (!f) return;
+    fotos[b.dataset.foto] = f;
+    box.querySelector('[data-ok="' + b.dataset.foto + '"]').textContent = '✓ foto pronta';
+  }));
+  $('orVt').addEventListener('click', pintarMedicao);
+  const ok = $('orOk');
+  ok.addEventListener('click', () => _semDuploEnvio_(ok, async () => {
+    const val = id => $(id) ? $(id).value.trim() : '';
+    const d = {};
+    if (tipo === 'valvula') Object.assign(d, { conexao_tipo: val('orCt'), conexao_bitola: val('orCb'), fluido: val('orFl'), unidade: val('orU'),
+                                               pmta: val('orPm'), pressao_abertura: val('orPa'), pressao_assentamento: val('orPs') });
+    else if (tipo === 'manometro') Object.assign(d, { conexao: val('orCo'), mostrador: val('orMo'), unidade: val('orU'),
+                                                      escala_min: val('orEi'), escala_max: val('orEx'), pmta: val('orPm') });
+    else if (tipo === 'dreno') Object.assign(d, { conexao: val('orCo'), eletricidade: radio('orEl'), espaco: radio('orEs') });
+    else if (tipo === 'dcbi') Object.assign(d, { conexao: val('orCo'), espaco: radio('orEs'), uso: radio('orUs') });
+    else d.descricao = val('orDs');
+    const qtd = orcNum(val('orQ')), vaso = $('orV').value || null, obr = radio('orOb');
+    const papeis = Object.keys(fotos).map(papel => ({ papel }));
+    const falta = orcFalta(tipo, d, papeis, qtd, vaso);
+    if (!obr) falta.push('se é obrigatório ou opcional');
+    if (falta.length){ toast('Falta: ' + falta.join(', ') + '.', 'err'); return; }
+    if (!DEMO && !(window.Nucleo && Nucleo.fila)){ toast('Este aparelho não tem a fila de envios: tente de novo com o app atualizado.', 'err'); return; }
+    const u = 'med-orcar-' + uid();
+    const envio = [], gravadas = [];
+    for (const papel of Object.keys(fotos)){
+      const caminho = med.os.os_id + '/orcar-' + u + '-' + papel + '.jpg';
+      gravadas.push({ papel, storage: caminho });
+      if (!DEMO) envio.push({ chave: await Nucleo.fila.guardarFoto(fotos[papel]), bucket: 'medicoes', caminho, tipo: 'image/jpeg' });
+    }
+    const e = vasos.find(x => String(x.id) === vaso);
+    const feito = await medMudar('Item a orçar: ' + ORC_ROT[tipo], 'tf_osmed_orcar',
+      { p_os: med.os.os_id, p_tipo: tipo, p_obrigatorio: obr === 'sim', p_equipamento: vaso, p_quantidade: qtd,
+        p_dados: d, p_fotos: gravadas, p_client_uid: u },
+      x => { (x.orcar = x.orcar || []).push({ id: 'tmp-' + u, tipo, obrigatorio: obr === 'sim', quantidade: qtd, equipamento_id: vaso,
+              tag: e ? e.tag : null, dados: d, fotos: gravadas }); },
+      { sempreFila: true, id: u, fotos: envio });
+    if (feito){ toast('Item a orçar gravado (fora do valor).', 'ok'); pintarMedicao(); }
+  }));
+}
+
 /** Fechar: com algo a mais, o encarregado assina na tela (ou fecha "aguardando", com o motivo). */
 function medFechar(rr){
   med.form = 'fechar';
@@ -4394,6 +4631,7 @@ async function medPdf(){
     { text: medBRL(l.preco) + (Number(l.desconto_pct) ? ' −' + medQtd(l.desconto_pct) + '%' : ''), alignment: 'right', fontSize: 8.5 },
     { text: medBRL(l.total), alignment: 'right' }]));
   const total = v.situacao === 'fechada' ? Number(v.valor) : r.total;
+  const orc = v.orcar || [];
   const blocoAss = v.assinatura === 'assinada'
     ? [ass ? { image: ass, width: 180 } : { text: '(assinado na tela)', italics: true },
        { text: (v.assinante_nome || '') + (v.assinante_cargo ? ' — ' + v.assinante_cargo : ''), margin: [0, 2, 0, 0] }]
@@ -4423,6 +4661,14 @@ async function medPdf(){
           [{ text: 'Total executado', bold: true }, { text: medBRL(total), alignment: 'right', bold: true }],
           ['Diferença', { text: (total - r.total_proposta >= 0 ? '+' : '−') + medBRL(Math.abs(total - r.total_proposta)), alignment: 'right' }]] },
           layout: 'noBorders' }], margin: [0, 10, 0, 18] },
+      // S73 (R26, FE5): o que a equipe achou para orçar — fora do valor desta medição
+      ...(orc.length ? [
+        { text: 'Itens identificados para orçamento', bold: true, color: '#164C77', margin: [0, 0, 0, 2] },
+        { text: 'Fora do valor desta medição: o comercial da Engetap envia a proposta.', fontSize: 8.5, color: '#515252', margin: [0, 0, 0, 4] },
+        { table: { headerRows: 1, widths: ['*', 75], body: [[{ text: 'Item', bold: true }, { text: 'Exigência', bold: true }]]
+            .concat(orc.map(x => [{ text: orcTitulo(x) + '\n' + orcResumoDados(x), fontSize: 8.5 },
+                                  { text: x.obrigatorio ? 'Obrigatório (NR-13)' : 'Opcional', fontSize: 8.5 }])) },
+          layout: 'lightHorizontalLines', margin: [0, 0, 0, 16] }] : []),
       { text: 'Encarregado do cliente', bold: true, margin: [0, 0, 0, 4] },
       ...blocoAss
     ]
@@ -4433,7 +4679,7 @@ async function medPdf(){
   // S67 (207, item 3): guarda no armazenamento só quando o conteúdo mudou (antes cada toque guardava mais um arquivo)
   // e nunca o rascunho
   const marca = JSON.stringify([v.situacao, v.valor, v.assinatura, v.assinante_nome, v.assinante_cargo, v.fechada_em,
-    (v.linhas || []).map(l => [l.id, l.incluido, l.executado, l.total, l.justificativa])]);
+    (v.linhas || []).map(l => [l.id, l.incluido, l.executado, l.total, l.justificativa]), (v.orcar || []).map(x => x.id)]);
   let hash = 0; for (let k = 0; k < marca.length; k++) hash = (hash * 31 + marca.charCodeAt(k)) | 0;
   const jaGuardado = LS.get(K_MED + 'pdf_' + o.os_id, null) === hash;
   // guarda no bucket (pela fila: funciona sem sinal) e registra na medição
@@ -4534,7 +4780,8 @@ function medDemo(osId){
   const L = (id, d, q, p) => ({ id, descricao: d, unidade: 'un', preco: p, desconto_pct: 3, previsto: q, executado: q,
                                  total: medTotal(p, q, 3), adicional: false, incluido: true, justificativa: null });
   const v = { medicao_id: 'demo-med', os_id: osId, situacao: 'rascunho', desconto_pct: 3, pode_editar: true,
-              propostas: [{ rotulo: '26001 Rev. 01' }],
+              propostas: [{ rotulo: '26001 Rev. 01' }], orcar: [],
+              vasos: [{ id: 'dv1', tag: 'VP-01', pmta_mpa: 0.98, fluido: 'ar comprimido' }, { id: 'dv2', tag: 'VP-02', pmta_mpa: 1.2, fluido: 'ar comprimido' }],
               linhas: [L('dl1', 'Inspeção de vaso de pressão', 3, 1080), L('dl2', 'Aferição de válvula de segurança', 6, 180),
                        L('dl3', 'Aferição de manômetro', 6, 150), L('dl4', 'Mobilização', 1, 1790)] };
   v.resumo = { total_proposta: v.linhas.reduce((s, l) => s + l.total, 0) };
