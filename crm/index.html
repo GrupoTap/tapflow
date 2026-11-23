@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapCRM 12 · Comercial</title>
+<title>TapCRM 13 · Comercial</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- o ícone da aba: o "E" da Engetap dentro do arquivo (SVG), aparece em qualquer pasta; o app instalado usa os PNG de field/icons/ -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22104%22 fill=%22%231B6FA9%22/%3E%3Cg transform=%22translate(0,512) scale(1,-1) translate(256,256.5) scale(1.3) translate(-256,-256.5)%22 fill=%22%23fff%22 stroke=%22%23fff%22 stroke-width=%2222%22 stroke-linejoin=%22round%22 stroke-linecap=%22round%22%3E%3Cpath d=%22M117 414 l-1 0 0 -121 0 -120 19 0 19 0 0 -37 0 -38 121 0 121 0 -45 45 -44 45 -69 0 -69 0 0 12 0 11 90 0 89 0 0 1 0 1 -44 44 -45 44 -45 0 -45 0 0 12 0 11 99 0 99 0 0 1 0 0 -45 45 -44 45 -81 0 -80 0 0 -1z m184 -44 l30 -29 0 -1 0 -1 -88 0 -89 0 0 -75 0 -76 -11 0 -12 0 0 105 0 106 1 0 0 1 70 0 69 0 30 -30z m-19 -113 l30 -29 0 -1 0 -1 -67 0 -67 0 0 30 0 30 1 0 0 1 37 0 36 0 30 -30z m47 -114 l30 -29 0 -1 0 0 -95 0 -95 0 0 30 0 30 65 0 66 0 29 -30z%22/%3E%3C/g%3E%3C/svg%3E">
@@ -1122,7 +1122,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'CRM12';   // TapCRM 12 (S223): Rodada R26 (issue 237 parte 1) — o negócio dos itens a orçar que nasce da medição (na cotação, com os itens, os dados e as fotos na aba Proposta); "Próximo: etapa · com · desde" no card; "O cliente exige nota de produto (peças)?" na proposta (vai no texto do .docx e fica gravada); banco 316 e 703
+const APP_VERSION = 'CRM13';   // TapCRM 13 (S226): Rodada R28 (issue 237 parte 2) — o card do negócio dos itens a orçar mostra a etapa da OS de fornecimento que o aceite abre sozinho ("OS · Próximo: etapa · com · desde"); banco 317
+// const APP_VERSION = 'CRM12';   // TapCRM 12 (S223): Rodada R26 (issue 237 parte 1) — o negócio dos itens a orçar que nasce da medição (na cotação, com os itens, os dados e as fotos na aba Proposta); "Próximo: etapa · com · desde" no card; "O cliente exige nota de produto (peças)?" na proposta (vai no texto do .docx e fica gravada); banco 316 e 703
 // const APP_VERSION = 'CRM11';   // TapCRM 11 (S215): Rodada R24 — issue 232 (saiu o estilo sem uso; o estilo comum vem do nucleo/telas.css T1; os nomes antigos nos comentários; nada muda na tela)
 // const APP_VERSION = 'CRM10';   // TapCRM 10 (S211): Rodada R17 da auditoria — issue 129 (Novo negócio: o cliente digitando, pela busca do núcleo N16; o lead com nome de cliente parecido avisa)
 // const APP_VERSION = 'CRM9';   // TapCRM 9 (S205): Rodada R12 da auditoria (TapHub) — issue 156 (o "Sair" do núcleo: encerra o acesso também no servidor; no celular da empresa, guarda a sessão); núcleo N15
@@ -1201,6 +1202,8 @@ function irParaHub(recado){
 
 
 let VA = { porOS:{}, porNeg:{}, porOrigem:{} };
+// CRM13 (R28, 317): a OS de fornecimento de cada negócio (a etapa, com quem, desde quando)
+let FORN_NEG = {};
 
 let PEND = null;
 
@@ -1217,6 +1220,17 @@ async function carregar(){
   if (visao === 'com' && podeVer('comercial')) await pintarComercial();
 }
 
+
+/** CRM13 (R28, issue 237 parte 2, FE10): a etapa da OS de fornecimento que o aceite abriu, por negócio. */
+async function carregarFornecimento(){
+  if (DEMO) return;
+  try{
+    const r = await rpc('tf_forn_etapas', {});
+    const m = {};
+    (r || []).forEach(x => { if (x.negocio_id) m[x.negocio_id] = x; });
+    FORN_NEG = m;
+  }catch(e){ /* banco sem a 317: o card fica com o próximo passo da vista */ }
+}
 
 async function carregarVendasAdicionais(){
   if (DEMO) return;
@@ -1387,6 +1401,7 @@ async function pintarComercial(){
         get('colunas_comercial?select=*&order=ordem'),
         get('v_negocios_kanban?select=*&order=coluna_ordem,dias_parado.desc'),
         carregarVendasAdicionais(),
+        carregarFornecimento(),
         carregarComplementoNeg()
       ]);
       COLS_COM = c; negocios = n;
@@ -1915,7 +1930,7 @@ function cardNegocio(n, comContador){
   if (n.concluido_fora_em) chips.push('<span class="mini">executado fora do TapHub</span>');
   // CRM12 (R26, FE10): o negócio dos itens a orçar diz o próximo passo, com quem e desde quando
   if (n.orcar_os_id){
-    if (n.prox_etapa) chips.push('<span class="mini prox">' + esc(textoProxFE(n)) + '</span>');
+    if (n.prox_etapa || FORN_NEG[n.id]) chips.push('<span class="mini prox">' + esc(textoProxFE(n)) + '</span>');
     chips.unshift('<span class="mini va">itens a orçar' + (n.orcar_os_numero ? ' · ' + esc(n.orcar_os_numero) : '') + '</span>');
   }
   // S39 · a venda adicional: de qual inspeção, e se o achado tira o vaso de operação
@@ -1953,6 +1968,10 @@ function cardNegocio(n, comContador){
 
 /** CRM12 (R26, FE10): "Próximo: <etapa> · com: <perfil> · desde: <N dias>" (a v_negocios_kanban calcula). */
 function textoProxFE(n){
+  const dias = d => d === 0 ? 'hoje' : d === 1 ? '1 dia' : d + ' dias';
+  const f = FORN_NEG[n.id];   // CRM13 (R28): depois do aceite, a etapa da OS de fornecimento
+  if (f && f.etapa) return f.etapa === 'Encerrada' ? f.os_numero + ' encerrada'
+    : f.os_numero + ' · Próximo: ' + f.etapa + ' · com: ' + (f.com || '—') + ' · desde: ' + dias(Number(f.dias) || 0);
   const d = Number(n.prox_dias) || 0;
   return 'Próximo: ' + n.prox_etapa + ' · com: ' + n.prox_com + ' · desde: ' + (d === 0 ? 'hoje' : d === 1 ? '1 dia' : d + ' dias');
 }
@@ -2049,7 +2068,7 @@ async function negLog(n, b){
   // passo aparece também aqui, no alto do Histórico.
   const passo = colunaComContador(n.coluna) ? proximoPasso(n) : '';
   b.innerHTML = avisoPosVenda(n)
-    + (n.orcar_os_id && n.prox_etapa ? '<p class="nota proxPasso"><b>' + esc(textoProxFE(n)) + '</b> · itens a orçar da '
+    + (n.orcar_os_id && (n.prox_etapa || FORN_NEG[n.id]) ? '<p class="nota proxPasso"><b>' + esc(textoProxFE(n)) + '</b> · itens a orçar da '
         + esc(n.orcar_os_numero || 'OS') + ' (dados e fotos na aba Proposta)</p>' : '')
     + (passo ? '<p class="nota proxPasso" title="' + esc(DSI_CONTA) + '"><b>Próximo passo:</b> ' + esc(passo) + '</p>' : '')
     + '<div class="novaNota">'
