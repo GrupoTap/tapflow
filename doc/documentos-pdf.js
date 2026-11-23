@@ -18,7 +18,8 @@
  */
 (function (raiz) {
 'use strict';
-const VERSAO = 'D10-S210-2026-11-21';   // D10 (S210 · issues 215, 216 e 227, Rodada R19): a boroscopia feita conta como exame interno ("Inspeção … Interna e Externa"); a frase do teste hidrostático desaconselhado sem a "evidência de teste anterior"; a ART sem a OS; "executou-se" sem quebrar no hífen; o nº de série da válvula no Resumo; a lombada com o QR code da imagem do TapWeb
+const VERSAO = 'D11-S228-2026-11-23';   // D11 (S228 · issues 242 parte 3 e 237 FE16, Rodada R30): o Registro de Segurança da aferição avulsa (d.so_afericao, blocos.registro_afericao) e a anotação da troca de acessório (d.troca, blocos.registro_troca), só a folha da anotação, com a mesma moldura e o mesmo rodapé
+// const VERSAO = 'D10-S210-2026-11-21';   // D10 (S210 · issues 215, 216 e 227, Rodada R19): a boroscopia feita conta como exame interno ("Inspeção … Interna e Externa"); a frase do teste hidrostático desaconselhado sem a "evidência de teste anterior"; a ART sem a OS; "executou-se" sem quebrar no hífen; o nº de série da válvula no Resumo; a lombada com o QR code da imagem do TapWeb
 // const VERSAO = 'D9-S208-2026-11-21';   // D9 (S208 · issue 218): a capa da pasta sai em toda inspeção — com a caixa "O cliente já tem o Registro de Segurança (livro)" marcada, o fichário é só a capa (fichario(d, { soCapa: true })); desmarcada, o kit completo
 // const VERSAO = 'D8-S186-2026-11-17';   // D8 (S186 · issue 74): o volume do Resumo e do Registro é o da categoria; o Resumo sem o quadro do acessório ausente ou retirado (sem aferição) e mais compacto com 3 ou mais acessórios; a data do teste é a de quando a aferição terminou
 // const VERSAO = 'D7-S183-2026-11-17';   // D7 (S183 · issue 69): a válvula aprovada em campo que abre acima da PMTA adotada conta como recomendação (rec_regra.valvula_pmta) e sai "não conforme" no Registro (a fotografia já a traz "reprovado")
@@ -284,6 +285,8 @@ function fatosRegistro(d) {
  */
 function registro(d, opc) {
   opc = opc || {};
+  if (d && d.troca) return registroTroca(d, opc);            // D11 · issue 237 (FE16): a anotação da troca de acessório
+  if (d && d.so_afericao) return registroAfericao(d, opc);   // D11 · issue 242 (P6): o vaso só aferido
   const M = (d.modelo && d.modelo.blocos) || {}, X = opc.textos || M.registro;
   if (!X || typeof X !== 'object') return null;
   const livro = opc.variante !== 'anotacao';
@@ -374,8 +377,13 @@ function registro(d, opc) {
     { text: plh ? plh.nome : 'Profissional Legalmente Habilitado', style: 'assin' }, { text: plh && plh.registro ? plh.registro : '', style: 'assinReg' }],
     alignment: 'center', margin: [0, 10, 0, 0], unbreakable: true });
 
+  return moldura(d, opc, C, 'Registro de Segurança ' + (numero || '') + ' · ' + (V.tag || ''), rodTxt, livro, plh, CAR);
+}
+/** D11: a página do Registro (moldura, rodapé com o logo, a identificação, o carimbo ou o nome do PLH e a folha no livro). */
+function moldura(d, opc, C, titulo, rodTxt, livro, plh, CAR) {
+  const M = (d.modelo && d.modelo.blocos) || {}, V = d.vaso || {};
+  const logoEng = opc.logoEngetap || (raiz.LaudoPDF && raiz.LaudoPDF.logoEngetap) || null;
   const W = 595.28, H = 841.89, B = 42;
-  const titulo = 'Registro de Segurança ' + (numero || '') + ' · ' + (V.tag || '');
   return {
     pageSize: 'A4', pageMargins: [B + 36, B + 36, B + 36, 122],
     info: { title: titulo, author: (M.empresa_emissora || {}).nome || 'Engetap', creator: 'TapFlow · TapDoc', producer: 'TapFlow · TapDoc (pdfmake)', subject: 'NR-13 · Registro de Segurança · ' + (V.tag || '') },
@@ -398,6 +406,93 @@ function registro(d, opc) {
     },
     defaultStyle: { font: 'Roboto', fontSize: 10.5, color: '#000000' }
   };
+}
+/** D11: a assinatura à mão na via impressa (o oficial é o PDF assinado com o token). */
+function assinaturaMao(C, plh) {
+  C.push({ stack: [{ text: ' ', margin: [0, 44, 0, 0] },
+    { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 230, y2: 0, lineWidth: 0.6, lineColor: '#1F2A33' }], alignment: 'center' },
+    { text: plh ? plh.nome : 'Profissional Legalmente Habilitado', style: 'assin' }, { text: plh && plh.registro ? plh.registro : '', style: 'assinReg' }],
+    alignment: 'center', margin: [0, 10, 0, 0], unbreakable: true });
+}
+const carimboOk = opc => opc.carimbo && /^data:image\/(png|jpe?g);base64,/i.test(opc.carimbo.imagem || '') && opc.carimbo.texto ? opc.carimbo : null;
+const plhTexto = plh => plh ? [plh.nome, plh.registro].filter(x => !vazio(x)).join(' – ') : 'que assina este documento';
+/** A data da próxima aferição: a data em que terminou + a validade em meses (P4). */
+function proximaAfericao(f) {
+  const ini = f && (f.realizada_em || f.created_at); if (!ini || !f.validade_meses) return null;
+  const dt = new Date(ini); if (isNaN(dt)) return null;
+  const m = dt.getUTCMonth() + Number(f.validade_meses), ult = new Date(Date.UTC(dt.getUTCFullYear(), m + 1, 0)).getUTCDate();   // 31/01 + 1 mês = 28 ou 29/02
+  const p = new Date(Date.UTC(dt.getUTCFullYear(), m, Math.min(dt.getUTCDate(), ult), 12));
+  return dataBR(p.toISOString().slice(0, 10));
+}
+/**
+ * D11 · issue 242 (P6): a anotação do Registro de Segurança do vaso só aferido (sem inspeção do vaso): uma linha por
+ * certificado (válvula ou manômetro), com o resultado e a próxima aferição. Os textos: blocos.registro_afericao (proposta
+ * s228a, aprovada pelo PLH); opc.textos troca o bloco (a minuta). Sem os textos, devolve null (o Registro não sai).
+ */
+function registroAfericao(d, opc) {
+  const M = (d.modelo && d.modelo.blocos) || {}, X = opc.textos || M.registro_afericao;
+  if (!X || typeof X !== 'object') return null;
+  const V = d.vaso || {}, I = d.inspecao || {}, plh = opc.plh || d.plh || null, CAR = carimboOk(opc);
+  const afs = (d.acessorios || []).filter(a => a.afericao && (a.afericao.resultado === 'aprovado' || a.afericao.resultado === 'reprovado'));
+  const C = [];
+  const par = t => { if (!vazio(t)) C.push({ text: presos(t), style: 'par' }); };
+  C.push({ text: maiusPal(String(X.titulo || '')).replace(/\s+/g, ' ').trim(), style: 'tituloReg', margin: [0, 0, 0, 14] });
+  const fim = afs.map(a => a.afericao.realizada_em).filter(Boolean).sort().pop();
+  par(txt(X.abertura, { data: dataBR(fim || I.termino || I.inicio) || '—', plh: plhTexto(plh) }));
+  const linhas = afs.map(a => {
+    const f = a.afericao, val = f.tipo === 'valvula' || ehValvula(a.tipo) || a.tipo === 'quebra_vacuo';
+    let t = txt(val ? X.linha_valvula : X.linha_manometro, { tag: a.tag || [a.marca, a.numero_serie ? 'nº de série ' + a.numero_serie : null].filter(Boolean).join(', ') || '',
+      numero: f.codigo || 'a numerar', resultado: f.resultado === 'reprovado' ? (X.nao_conforme || 'não conforme') : (X.conforme || 'conforme'),
+      proxima: proximaAfericao(f) || '—' }).replace(/\s+:/g, ':').replace(/\s{2,}/g, ' ');
+    if (a.tipo === 'manovacuometro') t = t.replace(/manômetro/g, 'manovacuômetro');
+    if (a.tipo === 'valvula_alivio') t = t.replace(/válvula de segurança/g, 'válvula de alívio');
+    if (a.tipo === 'quebra_vacuo') t = t.replace(/válvula de segurança/g, 'válvula quebra-vácuo');
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  });
+  if (linhas.length) C.push({ ul: linhas.map(t => ({ text: presos(t), margin: [0, 0, 0, 4] })), style: 'par' });
+  par(X.fecho);
+  par(X.pagina);
+  const art = d.art || {};
+  if (art.numero) C.push({ text: [{ text: 'ART: ', bold: true }, { text: art.numero }], style: 'par' });
+  assinaturaMao(C, plh);
+  const rodTxt = [V.tag, V.numero_tap ? 'Nº TAP ' + V.numero_tap : null, 'Registro de Segurança'].filter(Boolean).join(' · ');
+  return moldura(d, opc, C, 'Registro de Segurança · aferição · ' + (V.tag || ''), rodTxt, false, plh, CAR);
+}
+const TIPO_AC = { valvula_seguranca: 'válvula de segurança', valvula_alivio: 'válvula de alívio', quebra_vacuo: 'válvula quebra-vácuo',
+  manometro: 'manômetro', manovacuometro: 'manovacuômetro' };
+const PMTA_TXT = mpa => mpa == null || !isFinite(Number(mpa)) ? null : barMPa(mpa) + ' (' + fmt(mpa, 2) + ' MPa)';
+/** "válvula de segurança TAG PSV-1, marca X, modelo Y, nº de série Z" (sem artigo: o texto do PLH diz "saiu …; entrou …") */
+function descAcessorio(a) {
+  if (!a) return '';
+  return [TIPO_AC[a.tipo] || 'dispositivo', a.tag ? 'TAG ' + a.tag : null].filter(Boolean).join(' ')
+    + [a.marca ? 'marca ' + a.marca : null, a.modelo ? 'modelo ' + a.modelo : null, a.numero_serie ? 'nº de série ' + a.numero_serie : null].filter(Boolean).map(x => ', ' + x).join('');
+}
+/**
+ * D11 · issue 237 (FE16 item 3): a anotação da troca de acessório no Registro de Segurança (o que saiu, o que entrou, o
+ * ajuste ou a escala e o certificado). Os textos: blocos.registro_troca (proposta s228t); opc.textos troca o bloco (a minuta).
+ * A pressão de ajuste só se diz "igual ou inferior à PMTA" quando o vaso tem a PMTA no cadastro (o banco recusa acima dela).
+ */
+function registroTroca(d, opc) {
+  const M = (d.modelo && d.modelo.blocos) || {}, X = opc.textos || M.registro_troca;
+  if (!X || typeof X !== 'object') return null;
+  const V = d.vaso || {}, T = d.troca || {}, plh = opc.plh || d.plh || null, CAR = carimboOk(opc);
+  const C = [];
+  const par = t => { if (!vazio(t)) C.push({ text: presos(t), style: 'par' }); };
+  C.push({ text: maiusPal(String(X.titulo || '')).replace(/\s+/g, ' ').trim(), style: 'tituloReg', margin: [0, 0, 0, 14] });
+  const val = T.tipo !== 'manometro' && T.tipo !== 'manovacuometro';
+  par(txt(T.antigo ? X.texto : X.texto_sem_antigo, { data: dataBR(T.instalado_em) || '—', os: T.os || '—', novo: descAcessorio(T), antigo: descAcessorio(T.antigo) }));
+  const pmta = (T.vaso || {}).pmta_mpa != null ? T.vaso.pmta_mpa : V.pmta_plaqueta_mpa;   // a PMTA que o banco conferiu (vigente, senão a da placa)
+  if (val) {
+    const un = T.unidade || 'kgf/cm2', aj = T.pressao_ajuste_mpa != null && isFinite(Number(T.pressao_ajuste_mpa))
+      ? fmt(Number(T.pressao_ajuste_mpa) / ({ MPa: 1, bar: 0.1, 'kgf/cm2': 0.0980665, psi: 0.00689476, kPa: 0.001 }[un] || 1), 2) + ' ' + un.replace('cm2', 'cm²') + ' (' + fmt(T.pressao_ajuste_mpa, 3) + ' MPa)' : '—';
+    par(txt(pmta != null ? X.ajuste_valvula : X.ajuste_valvula_sem_pmta, { pressao: aj, pmta: PMTA_TXT(pmta) || '—' }));
+  } else par(txt(X.escala_manometro, { escala: T.escala || '—' }));
+  par(txt(T.cert_origem === 'fabricante' ? X.cert_fabricante : X.cert_engetap, { numero: T.cert_numero || '—' }));
+  par(txt(X.fecho, { plh: plhTexto(plh) }));
+  par(X.pagina);
+  assinaturaMao(C, plh);
+  const rodTxt = [V.tag, V.numero_tap ? 'Nº TAP ' + V.numero_tap : null, 'Registro de Segurança'].filter(Boolean).join(' · ');
+  return moldura(d, opc, C, 'Registro de Segurança · troca de acessório · ' + (V.tag || ''), rodTxt, false, plh, CAR);
 }
 /** A proposta de textos ainda não aprovada vira o bloco do Registro ou do Prontuário (para a minuta): [{ chave:'registro.x', depois }] → { x: … }. */
 function textosDaProposta(mudancas, bloco) {
@@ -599,7 +694,7 @@ function lombadas(itens, opc) {
     content: C, defaultStyle: { font: 'Roboto', fontSize: 10, color: '#1F2A33' } };
 }
 
-const DocumentosPDF = { resumo, registro, fatosRegistro, textosDaProposta, dataExtenso, nome, limpo, tagNome, osRot, ROTULO,
+const DocumentosPDF = { resumo, registro, registroAfericao, registroTroca, proximaAfericao, fatosRegistro, textosDaProposta, dataExtenso, nome, limpo, tagNome, osRot, ROTULO,
   kit, divisorias, fichario, lombadaDe, lombadas, avisosLombada, logoSvg, DIVISORIAS, LARGURAS, examesDe, qrDeTexto, versao: VERSAO };
 if (typeof module !== 'undefined' && module.exports) module.exports = DocumentosPDF; else raiz.DocumentosPDF = DocumentosPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
