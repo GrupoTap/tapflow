@@ -371,6 +371,10 @@ function documentosAfericao(d, opc) {
       // S176 · issue 69: aprovada no teste e, depois, acima da PMTA que o PLH adotou na inspeção
       if (f.acima_adotada && mx != null) C.push({ text: 'A maior abertura (' + fmt(mx, 2) + ' ' + un + ') ficou acima da PMTA adotada pelo PLH nesta inspeção ('
         + fmt(Number(f.pmta_adotada_mpa) * 10 / (EM_BAR[String(f.unidade || 'bar').toLowerCase()] || 1), 2) + ' ' + un + '): a válvula não atende à alínea "a" do item 13.5.1.2 da NR-13 neste vaso.', style: 'par' });
+      // S179 · issue 242 (P5, texto confirmado pelos dois PLH em 23/11): na aferição avulsa, o vaso sem PMTA cadastrada não teve a
+      // abertura comparada com ela (o cálculo avisa "Sem a PMTA vigente"): o certificado diz isso em destaque
+      if (d.so_afericao && [].concat(cal.avisos || []).some(x => /^Sem a PMTA vigente/.test(String(x || ''))))
+        C.push({ text: 'Sem comparação com a PMTA do vaso: PMTA não informada.', style: 'destaque', color: VERM });
       if (L.motivo_acima) C.push({ text: 'Sem ajuste possível: ' + L.motivo_acima, style: 'par' });
       if (L.motivo_abaixo) C.push({ text: 'Observação: ' + L.motivo_abaixo, style: 'par' });
     }
@@ -1335,6 +1339,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, prazoReduzido, prazosNorma, prazoRotulo, prazosRedTxt, pressaoAbaixo, tipoRec, semFrase, pressaoVars, dataAfericao, versao: 'R06a-S178-2026-11-21' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, prazoReduzido, prazosNorma, prazoRotulo, prazosRedTxt, pressaoAbaixo, tipoRec, semFrase, pressaoVars, dataAfericao, versao: 'R06a-S179-2026-11-23' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -194,7 +194,8 @@ input.t.suspeita{border-color:var(--crit);background:var(--crit-soft);color:var(
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 34';   // S220 · issue 240: o assentamento maior que a abertura vira falta ("confira a digitação"), não reprova mais a válvula (motor R00.7, 451)
+const VERSAO = 'TapDoc 35';   // S224 · issues 242 (parte 2) e 243: o vaso "só aferição" (o selo, o cartão sem a posição, só Acessórios e o envio; 454 e 455) e a bancada perguntada em cada aferição, com a última usada no mesmo tipo
+// const VERSAO = 'TapDoc 34';   // S220 · issue 240: o assentamento maior que a abertura vira falta ("confira a digitação"), não reprova mais a válvula (motor R00.7, 451)
 // const VERSAO = 'TapDoc 33';   // S210 · issue 216 (Rodada R19 da auditoria): o número de série da válvula (opcional), que vai para a revisão, o laudo e o certificado; "Trazer os da inspeção anterior" traz o número junto (450)
 // const VERSAO = 'TapDoc 32';   // S208 · issues 220 e 221 (Rodada R18 da auditoria): "Girar" (↻) em cada foto, de 90 em 90 graus, pela fila (vale no laudo e nos documentos; 449); o Fechamento avisa em amarelo quando falta o comprimento do costado ou a altura de um tampo (com um link para cada campo; o envio continua liberado) e o cartão "Medidas do vaso" mostra "faltam N medidas"
 // const VERSAO = 'TapDoc 31';   // S175 · issues 48, 49, 50, 51 e 53 (Revisão TapDoc · Rodada 4b): tocar no que já está marcado não apaga a resposta e trocar com texto escrito pergunta (visual, boroscopia, teste); a pressão volta como foi digitada (sem 10,0004) e "1.013" pergunta; mensagens da conta em português simples, avisos na unidade do inspetor, "pelo PLH"; acessórios: "Trazer os da anterior" fica e a pressão não redesenha a tela; ajustes pequenos (laudo sem páginas, janela, código "Outro", GPS, ordem das fotos, CSV); sem SQL
@@ -522,7 +523,8 @@ function mesclar(p, t0, auto){
   Object.values(velhos).forEach(v => {
     if (!vasos.some(x => x.id === v.id) && manter(v)) vasos.push(v);
   });
-  E = { os:p.os, vasos, fabricantes:p.fabricantes || [], materiais:p.materiais || [], medidores:p.medidores || [], padroes:p.padroes || [], bancadas:p.bancadas || [], baixado_em:p.gerado_em || new Date().toISOString() };
+  E = { os:p.os, vasos, fabricantes:p.fabricantes || [], materiais:p.materiais || [], medidores:p.medidores || [], padroes:p.padroes || [], bancadas:p.bancadas || [], baixado_em:p.gerado_em || new Date().toISOString(),
+        so_afer:(E && E.so_afer) || [] };   // TapDoc 35 · issue 242: os vasos só de aferição (pedido à parte, lerSoAfer)
   salvar();
 }
 /** S171 · issue 36: no vaso que fica com a versão do aparelho, entra o que só o escritório muda (não é editado em campo). */
@@ -765,6 +767,7 @@ async function baixar(silencioso){
     const p = await N.api.rpc('tf_insp_pacote_os', { p_os_id: OS });
     FORA_T06 = false; ESCALA_T06 = null;
     mesclar(p, t0, !!silencioso);
+    await lerSoAfer();   // TapDoc 35 · issue 242
     await baixarProntos();   // S146 · item 79
     await baixarGiro();   // TapDoc 32 · issue 220
     if (!silencioso) U.toast('Pacote da OS atualizado.');
@@ -780,6 +783,16 @@ async function baixar(silencioso){
     else if (!silencioso) U.toast(e.message || 'Não consegui atualizar.', 'err');
   }finally{ baixando = false; }
 }
+
+// ── TapDoc 35 · issue 242 (desenho processos/afericao-avulsa-desenho.md, P2): o vaso "só aferição" ──
+// O escritório marca na preparação; o celular pergunta à parte (os pacotes de sempre não mudaram, regra 69 do TapDoc) e guarda
+// a resposta no aparelho (funciona sem sinal). Banco sem a 454/455: nenhum vaso é só de aferição.
+async function lerSoAfer(){
+  const ids = ((E && E.vasos) || []).filter(v => v.inspecao && v.inspecao.id).map(v => v.inspecao.id);
+  if (!ids.length) return;
+  try{ const r = await N.api.rpc('tf_insp_so_afericao_ver', { p_ids: ids }); E.so_afer = Array.isArray(r) ? r : []; salvar(); }catch(e){}
+}
+const soAferV = v => !!(v && v.inspecao && E && (E.so_afer || []).indexOf(v.inspecao.id) >= 0);
 
 // S142 · item 40 (418, decisão B do Bruno): quem não está na T06 vê quem está, em vez da tela vazia
 var FORA_T06 = false, ESCALA_T06 = null;
@@ -945,9 +958,11 @@ function telaLista(){
   const linha = v => {
     const pend = pendDoVaso(v);
     const chips = [];
+    if (soAferV(v)) chips.push('<span class="chip prov" data-selo="afer">Aferição</span>');   // TapDoc 35 · issue 242 (P2)
     if (v.inspecao){
       const sit = v.inspecao.situacao;
-      chips.push(sit === 'em_campo' ? '<span class="chip ' + (secoesOk(v) === N_SECOES ? 'ok' : 'inc') + '">' + secoesOk(v) + ' de ' + N_SECOES + ' seções</span>'
+      chips.push(sit === 'em_campo' && soAferV(v) ? '<span class="chip ' + (faltasEnvio(v).length ? 'inc' : 'ok') + '">' + (faltasEnvio(v).length ? 'acessórios a completar' : 'pronta para enviar') + '</span>'
+        : sit === 'em_campo' ? '<span class="chip ' + (secoesOk(v) === N_SECOES ? 'ok' : 'inc') + '">' + secoesOk(v) + ' de ' + N_SECOES + ' seções</span>'
         : v.inspecao.nao_inspecionado_motivo ? '<span class="chip inc">não inspecionado</span>'
         : sit === 'enviada' ? '<span class="chip ok">enviada</span>'
         : sit === 'em_preparo' ? '<span class="chip ok">preparado pelo escritório</span>'
@@ -968,7 +983,9 @@ function telaLista(){
   h += '<p class="rodape">' + VERSAO + ' · pacote de ' + (E.baixado_em ? new Date(E.baixado_em).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—') +
        (DEMO ? '' : ' · <a href="#" id="atual">atualizar</a>') + '</p>';
   $('tela').innerHTML = h;
-  $('tela').querySelectorAll('[data-v]').forEach(b => b.addEventListener('click', () => ir({ nome:'vaso', vaso:b.dataset.v })));
+  // TapDoc 35 · issue 242 (P2): o vaso só de aferição já começado abre direto em Acessórios
+  $('tela').querySelectorAll('[data-v]').forEach(b => b.addEventListener('click', () => { const v = vaso(b.dataset.v);
+    ir(soAferV(v) && v.inspecao.situacao === 'em_campo' && ed(v) ? { nome:'acessorios', vaso:v.id } : { nome:'vaso', vaso:b.dataset.v }); }));
   $('novoVaso').addEventListener('click', novoVaso);
   const bu = $('busca'); if (bu) bu.addEventListener('input', () => { filtro = bu.value; const p = bu.selectionStart; telaLista(); const n = $('busca'); n.focus(); n.setSelectionRange(p, p); });
   const at = $('atual'); if (at) at.addEventListener('click', ev => { ev.preventDefault(); baixar(); });
@@ -1016,6 +1033,16 @@ function telaCartao(v){
          la.data_laudo && la.data_laudo.split('-').reverse().join('/')].filter(Boolean).join(' · ')) + (la.pmta_mpa != null ? '<br>PMTA vigente: ' + fmt(la.pmta_mpa, 3) + ' MPa' : '') + '</p></div>';
   else if (la && la.situacao === 'pendente_cliente')
     h += '<div class="alerta"><b>Laudo anterior: pegar no cliente</b>Fotografe o laudo impresso na seção "Laudo anterior".</div>';
+  // TapDoc 35 · issue 242 (AF1, P2): só aferição — sem exames nem laudo; começa direto, sem a posição do vaso
+  if (soAferV(v)){
+    h += '<div class="alerta" style="background:var(--accent-soft);color:var(--accent-ink)" id="cAfer"><b>Só aferição</b>Neste vaso a equipe só afere as válvulas e os manômetros: '
+      + 'não há exame visual, ultrassom, teste nem laudo. Liste os acessórios, afira (ou diga por que não) e tire as fotos da aferição.</div>';
+    h += '<button class="btn pri" id="comecar">Começar a aferição deste vaso</button>';
+    h += '<p class="muted" style="text-align:center;margin-top:8px">Funciona sem sinal. Tudo vai para o servidor quando houver conexão.</p>';
+    $('tela').innerHTML = h;
+    $('comecar').addEventListener('click', () => { comecar(v); ir({ nome:'acessorios', vaso:v.id }, true); });
+    return;
+  }
   // S112 · C10: a posição vem antes de a lista de componentes nascer (os nomes dos tampos dependem dela)
   h += '<div class="card"><b>Posição do vaso</b><div class="seg" id="cPos">' + ['vertical','horizontal'].map(p => '<button data-p="' + p + '" class="' + (v.posicao === p ? 'on' : '') + '">' + p + '</button>').join('') +
        '</div><p class="muted" style="margin:6px 0 0">Define os nomes dos tampos e do costado (vertical: superior e inferior · horizontal: esquerdo e direito).</p></div>';
@@ -1101,6 +1128,7 @@ function comecar(v){
   salvar();
   enfileirar(v, 'abrir-' + iid, 'abrir a inspeção', { funcao:'tf_insp_abrir',
     payload:{ p_os_id:E.os.id, p_equip:v.id, p_tipo:'periodica', p_os_item_id:null, p_id:iid, p_motivo_extraordinaria:null } }, null, true);
+  if (soAferV(v)){ salvar(); return; }   // TapDoc 35 · issue 242: só aferição — sem câmara, componentes e regiões novos (não há exames)
   if (!ativas(v).length){
     const c = { id:uid(), tipo:'unica', nome:'Única', ordem:1, ativo:true, volume_desconhecido:false, pressao_externa:false };
     v.camaras.push(c); gravarCamara(v, c);
@@ -1133,6 +1161,17 @@ function telaPainel(v){
   if (al.length && ed) h += '<div class="alerta"><b>Atenção</b><ul>' + al.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
   const sec = (k, nome, sub, e) => '<button class="card secao" data-s="' + k + '"' + (ed ? '' : ' disabled') + '><span class="sn">' + nome +
     (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span><span class="est ' + e + '">' + EST_ROT[e] + '</span></button>';
+  if (soAferV(v)){   // TapDoc 35 · issue 242 (P2): só aferição — Acessórios e o envio
+    const acs0 = acessDe(v);
+    h += '<div class="alerta" style="background:var(--accent-soft);color:var(--accent-ink)"><b>Só aferição</b>Sem exames e sem laudo: só os acessórios e o envio.</div>';
+    h += sec('acessorios', 'Acessórios', acs0.length ? acs0.length + ' na lista' : 'Válvulas e manômetros, com lacre e foto', estAcess(v));
+    h += sec('fechamento', 'Fechamento e envio', 'Observações e enviar', faltasEnvio(v).length ? 'inc' : 'ok');
+    $('tela').innerHTML = h;
+    $('tela').querySelectorAll('[data-s]').forEach(b => b.addEventListener('click', () => ir({ nome:b.dataset.s, vaso:v.id })));
+    ligarRecusa(v);
+    if (!ed && v.inspecao.situacao === 'enviada') ligarReabrir(v);
+    return;
+  }
   const cs = ativas(v);
   h += sec('plaqueta', 'Plaqueta', 'Foto, fabricante, série, ano, código, PMTA e PTH', estPlaqueta(v));
   h += sec('operacao', 'Operação e câmaras', cs.length + (cs.length === 1 ? ' câmara' : ' câmaras') + ': fluido, classe, pressão, volume', estOperacao(v));
@@ -2252,6 +2291,7 @@ function estFech(v){
 }
 /** O que impede o envio: a mesma lista do servidor (tf__insp_faltas_envio). */
 function faltasEnvio(v){
+  if (soAferV(v)) return faltasEnvioAfer(v);   // TapDoc 35 · issue 242 (P2)
   const f = [], i = v.inspecao || {};
   // S140 · item 49 (416): cada lugar de foto tem a foto ou o motivo; primeiro as placas
   const lugs = lugaresDe(v), faltaLugar = l => f.push('Foto "' + l.rotulo + '": tire a foto ou diga por que não.');
@@ -2287,6 +2327,24 @@ function faltasEnvio(v){
   if (!fotosDe(v, 'capa').length) f.push('Falta a foto de capa.');
   return f;
 }
+/** TapDoc 35 · issue 242 (P2): o que falta para enviar o vaso só de aferição — a mesma lista, ordem e texto da
+ *  tf__insp_faltas_afericao do servidor (454): a lista dos acessórios, a situação, a aferição (ou o motivo) e as 3 fotos dela. */
+function faltasEnvioAfer(v){
+  const f = [], i = v.inspecao || {};
+  if (!i.acessorios_conferidos) f.push('Acessórios: confirme a lista (mesmo que o vaso não tenha nenhum).');
+  acessDe(v).filter(a => !a.situacao).forEach(a => f.push('Acessório "' + (a.tag || a.marca || a.tipo) + '" sem a situação.'));
+  if (i.acessorios_conferidos && !acessDe(v).some(a => AFERIVEIS.includes(a.tipo) && a.situacao !== 'ausente' && a.situacao !== 'retirado'))
+    f.push('Só aferição: o vaso não tem manômetro nem válvula para aferir. Fale com o escritório.');
+  faltasAfericao(v).forEach(x => f.push(x));
+  acessDe(v).forEach(a => {
+    const af = afDe(v, a); if (!af || ['aprovado','reprovado'].indexOf(resultadoAf(v, a, af).resultado) < 0) return;
+    if (fotosDe(v, 'acessorios', 'afer:' + a.id).length) return;
+    const e1 = af.leituras && af.leituras.etapa1 && af.leituras.etapa1.ok === false;
+    lugaresAfer(a).filter(l => !e1 || /:instrumento$/.test(l.item)).filter(l => !lugarOk(v, l))
+      .forEach(l => f.push('Acessório "' + (a.tag || a.marca || 'sem TAG') + '": foto da aferição (' + ({ bancada:'bancada montada', padrao:'manômetro padrão', instrumento:'instrumento em teste' })[l.item.split(':')[2]] + ') ou o motivo de não ter.'));
+  });
+  return f;
+}
 // S162 · issue 15: cada falta do envio leva até a tela e a parte com problema (o texto continua o mesmo do servidor)
 const ROT_TELA = { plaqueta:'Plaqueta', operacao:'Operação e câmaras', componentes:'Componentes', localizacao:'Localização', visual:'Exame visual', acessorios:'Acessórios',
                    ultrassom:'Ultrassom', boroscopia:'Inspeção interna (boroscopia)', teste:'Teste de pressão', fechamento:'Fechamento e envio', laudo:'Laudo anterior' };
@@ -2297,7 +2355,7 @@ function alvoFalta(v, t){
     return l ? { tela:{ plaqueta:'plaqueta', geral:'visual', componentes:'ultrassom' }[l.secao] || 'fechamento', sel:'[data-lugar="' + l.lugar + '"]' } : { tela:'plaqueta' }; }
   if (/^Exame visual/.test(t)){ m = t.match(/"(.+?)"/); const k = m ? (v.inspecao.visual || []).findIndex(x => x.item === m[1]) : -1;
     return { tela:'visual', sel:k >= 0 ? '[data-vis="' + k + '"]' : null }; }
-  if (/^Acessórios:/.test(t)) return { tela:'acessorios', sel:'#acConf' };
+  if (/^Acessórios:/.test(t) || /^Só aferição/.test(t)) return { tela:'acessorios', sel:'#acConf' };
   m = t.match(/^Acessório "(.+?)" sem a situação/);
   if (m){ const a = acPor(m[1], a => a.tag || a.marca || TIPOS_ACESS[a.tipo] || a.tipo); return { tela:'acessorios', sel:a ? '[data-ac="' + a.id + '"] .seg.sit' : null }; }
   m = t.match(/^Acessório "(.+?)": (afira|aferição incompleta)/);
@@ -2654,20 +2712,24 @@ function ligarBlocoAfericao(v, l, mudou){
         mudou(a, 'afericao_motivo', m); pintar(); } }]);
   }));
 }
-const ultimoPad = () => LS.get('tfdoc_af_pad', null), ultimaBan = () => LS.get('tfdoc_af_ban', null);
+const ultimoPad = () => LS.get('tfdoc_af_pad', null);
+// TapDoc 35 · issue 243 (opção A do Bruno, 23/11): a bancada usada em cada aferição (3 bancadas: 2 de manômetro e 1 de válvula);
+// já vem marcada a última usada NO MESMO TIPO (válvula ou manômetro), se ela ainda está na lista do pacote (ativa).
+const chaveBan = tipo => 'tfdoc_af_ban_' + (tipo === 'valvula' ? 'valvula' : 'manometro');
+const ultimaBan = tipo => { const id = LS.get(chaveBan(tipo), null); return (E.bancadas || []).some(b => b.id === id) ? id : null; };
 function novaAfericao(v, a){
   if (afDe(v, a)) return afDe(v, a);
   const vv = tipoAf(a) === 'valvula', un = a.unidade_campo || unidadeDe(v);
   const pad = (E.padroes || []).find(p => p.id === ultimoPad()) || (E.padroes || [])[0];
   const af = { id:uid(), tipo:vv ? 'valvula' : 'manometro', acessorio_id:a.id, unidade:UN_AF.includes(un) ? un : 'bar',
-    padrao_id:pad ? pad.id : null, lacre_retirado:null, lacre_colocado:null,
+    padrao_id:pad ? pad.id : null, bancada_id:ultimaBan(vv ? 'valvula' : 'manometro'), lacre_retirado:null, lacre_colocado:null,
     realizada_em:new Date().toISOString(),
     ajuste:vv && a.pressao_ajuste_mpa != null ? Number(fmt(window.MotorNR13.deMPa(a.pressao_ajuste_mpa, UN_AF.includes(un) ? un : 'bar'), 3).replace(',', '.')) : null,
     leituras:vv ? { aberturas:[null, null, null], assentamentos:[null, null, null] } : { pontos:[] } };
   v.inspecao.afericoes = ((v.inspecao.afericoes) || []).concat([af]); salvar(); gravarAfericao(v, af);
   return af;
 }
-const AF_OK = ['tipo','acessorio_id','padrao_id','unidade','faixa_ini','faixa_fim','resolucao','ajuste','leituras','lacre_retirado','lacre_colocado','realizada_em'];   // S140 · item 56: sem validade_meses
+const AF_OK = ['tipo','acessorio_id','padrao_id','bancada_id','unidade','faixa_ini','faixa_fim','resolucao','ajuste','leituras','lacre_retirado','lacre_colocado','realizada_em'];   // S140 · item 56: sem validade_meses
 function gravarAfericao(v, af){
   const d = pegar(af, AF_OK); d.inspecao_id = v.inspecao.id;
   enfileirar(v, 'afer-' + af.id, (af.tipo === 'valvula' ? 'teste de válvula' : 'aferição de manômetro'), { funcao:'tf_insp_afericao_gravar', payload:{ p_id:af.id, p_dados:d } });
@@ -2771,6 +2833,11 @@ function telaAfericao(v){
   h += '<div class="card"><label class="f">Manômetro padrão<select class="t" id="afPad"><option value="">—</option>' + (E.padroes || []).map(p => '<option value="' + esc(p.id) + '"' + (p.id === af.padrao_id ? ' selected' : '') + '>'
       + esc((p.descricao || 'Padrão') + (p.numero_serie ? ' · ' + p.numero_serie : '') + (p.validade ? ' · até ' + String(p.validade).slice(5, 7) + '/' + String(p.validade).slice(0, 4) : '')) + '</option>').join('') + '</select></label>'
     + ((E.padroes || []).length ? '' : '<p class="alerta">Nenhum padrão com certificado válido no pacote. O escritório cadastra em TapDoc › Instrumentos.</p>')
+    // TapDoc 35 · issue 243: qual bancada foi usada (sai no certificado e no laudo pela marca e pelo modelo)
+    + '<label class="f">Bancada usada<select class="t" id="afBan"><option value="">—</option>' + (E.bancadas || []).map(b => '<option value="' + esc(b.id) + '"' + (b.id === af.bancada_id ? ' selected' : '') + '>'
+      + esc((b.descricao || 'Bancada') + (b.numero_serie ? ' · ' + b.numero_serie : '')) + '</option>').join('') + '</select></label>'
+    + ((E.bancadas || []).length ? (af.bancada_id ? '' : '<p class="muted" id="afBanAviso" style="margin:2px 0 0">Escolha a bancada: o certificado cita a marca e o modelo dela.</p>')
+      : '<p class="alerta">Nenhuma bancada no pacote. O escritório cadastra em TapDoc › Instrumentos (tipo "Bancada").</p>')
     + '<label class="f">Unidade<select class="t" id="afUn">' + UN_AF.map(u => '<option value="' + u + '"' + (u === un ? ' selected' : '') + '>' + UN_AF_ROT[u] + '</option>').join('') + '</select></label></div>';
   if (vv){
     const L = af.leituras || (af.leituras = { aberturas:[null, null, null], assentamentos:[null, null, null] });
@@ -2848,6 +2915,7 @@ function telaAfericao(v){
   aoDigitar('afE1Obs', el => { af.leituras.etapa1.obs = el.value; mudou(false); });
   if (e1n) return;
   ligar('afPad', el => { af.padrao_id = el.value || null; LS.set('tfdoc_af_pad', af.padrao_id); mudou(true); });
+  ligar('afBan', el => { af.bancada_id = el.value || null; if (af.bancada_id) LS.set(chaveBan(af.tipo), af.bancada_id); mudou(true); });   // TapDoc 35 · issue 243
   ligar('afUn', el => { af.unidade = el.value; mudou(true); });
   aoDigitar('afLc', el => { af.lacre_colocado = el.value.trim() || null; mudou(false); });   // item 59: o resultado vê o lacre na hora
   if (vv){
@@ -2964,7 +3032,10 @@ function telaAcessorios(v){
   if (pode) h += '<button class="btn sec" id="acMais">+ acessório</button>';
   h += '<div class="card"><div class="chk" style="margin-top:0"><input type="checkbox" id="acConf"' + (i.acessorios_conferidos ? ' checked' : '') + (pode ? '' : ' disabled') +
     '><label for="acConf">Conferi: a lista está completa' + (l.length ? '' : ' (o vaso não tem acessório)') + '</label></div></div>';
+  // TapDoc 35 · issue 242 (P2): o vaso só de aferição abre aqui; o envio fica logo abaixo
+  if (soAferV(v)) h += '<button class="btn ' + (faltasEnvio(v).length ? 'sec' : 'pri') + '" id="acEnvio" style="margin-top:10px">Fechamento e envio ›</button>';
   $('tela').innerHTML = h;
+  ligar('acEnvio', () => ir({ nome:'fechamento', vaso:v.id }), 'click');
   l.forEach(a => ligarFotos(v, 'acessorios', () => TIPOS_ACESS[a.tipo] + (a.lacre_num ? ' · lacre ' + a.lacre_num : ''), a.id));
   l.forEach(a => ligarFotos(v, 'acessorios', () => 'Aferição · ' + TIPOS_ACESS[a.tipo], 'afer:' + a.id));   // S144 · item 69 (as de antes)
   ligarLugares(v, [].concat(...l.filter(a => afDe(v, a)).map(lugaresAfer)));   // S149 · item 83
@@ -3302,35 +3373,35 @@ function telaFechamento(v){
     if (i.situacao === 'enviada') ligarReabrir(v);
     return;
   }
-  const f = faltasEnvio(v), a = avisosEnvio(v);
+  const f = faltasEnvio(v), a = avisosEnvio(v), so = soAferV(v);   // TapDoc 35 · issue 242: só aferição (sem capa, prazo, recomendações e medidas)
   let h = alertaRecusa(v);   // S171 · issue 37
   h += f.length ? '<div class="alerta crit" id="fFaltas"><b>Falta para enviar</b><ul>' + f.map((x, k) => '<li>' + esc(x) + ' <button class="ir" data-falta="' + k + '">ir para ' + esc(ROT_TELA[alvoFalta(v, x).tela] || 'a tela') + ' ›</button></li>').join('') + '</ul></div>'
                : '<div class="alerta" style="background:var(--ok-soft);color:var(--ok)"><b>Pronto para enviar</b>Tudo o que é obrigatório foi preenchido.</div>';
   if (a.length) h += '<div class="alerta"><b>Avisos</b><ul>' + a.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
   // TapDoc 32 · issue 221: as medidas do vaso que faltam (o envio continua liberado), com um link para cada campo
-  const mf = medidasFaltando(v);
+  const mf = so ? [] : medidasFaltando(v);
   if (mf.length) h += '<div class="alerta" id="fMedidas"><b>Medidas do vaso</b>Sem elas, o laudo sai com o desenho 2D dos pontos. Dá para enviar assim.<ul>'
     + mf.map((x, k) => '<li>Falta ' + esc(x.rot) + ' <button class="ir" data-mvir="' + k + '">ir para Componentes ›</button></li>').join('') + '</ul></div>';
   h += '<div class="card"><label class="f">Observações do vaso<small>O que o escritório precisa saber e não coube nas seções.</small><textarea class="t" id="fObs">' + esc(i.observacao || '') + '</textarea></label></div>';
-  h += '<div class="card" id="fCapa"><b>Foto de capa</b><p class="muted" style="margin:2px 0 0">O vaso inteiro, de frente: vai na capa do laudo.</p>' + gradeFotos(v, 'capa', 1) + '</div>';
-  h += cartaoPrazo(v);   // S144 · item 70
+  if (!so) h += '<div class="card" id="fCapa"><b>Foto de capa</b><p class="muted" style="margin:2px 0 0">O vaso inteiro, de frente: vai na capa do laudo.</p>' + gradeFotos(v, 'capa', 1) + '</div>';
+  if (!so) h += cartaoPrazo(v);   // S144 · item 70
   const PR7 = PRONTOS(), rc = i.rec_casos || [];   // S146 · item 79 (T7): recomendações que o inspetor marca
   const RKS = PR7 ? Object.keys(PR7).filter(k => /^R\d+$/.test(k) && PR7[k] && PR7[k].grupo === 'recomendacao').sort((a, b) => Number(a.slice(1)) - Number(b.slice(1))) : [];   // S149 · item 88
   // S163 · issue 12: todas as recomendações do laudo (a mesma lista da revisão e do laudo); as das respostas dá para desmarcar
-  const RL = recListaCampo(v).filter(x => x.origem === 'fixa' || x.origem === 'regra');
-  if (RL.length || RKS.length) h += '<div class="card" id="fRecs"><b>Recomendações do laudo</b><p class="muted" style="margin:2px 0 0">As da norma saem sempre. As que vieram das suas respostas já vêm marcadas: desmarque se não valem para este vaso. O escritório confere e pode mudar o texto.</p>'
+  const RL = so ? [] : recListaCampo(v).filter(x => x.origem === 'fixa' || x.origem === 'regra');
+  if (!so && (RL.length || RKS.length)) h += '<div class="card" id="fRecs"><b>Recomendações do laudo</b><p class="muted" style="margin:2px 0 0">As da norma saem sempre. As que vieram das suas respostas já vêm marcadas: desmarque se não valem para este vaso. O escritório confere e pode mudar o texto.</p>'
     + RL.map((x, k) => '<div class="chk"><input type="checkbox" id="frf_' + k + '" data-frfora="' + esc(x.chave) + '"' + (x.marcada ? ' checked' : '') + (x.fixa ? ' disabled' : '') + '><label for="frf_' + k + '">'
         + esc(x.texto) + ' <span class="muted">(' + (x.fixa ? 'da norma' : 'da sua resposta') + ')</span></label></div>').join('')
     + (RKS.length ? '<p style="margin:12px 0 0;font-weight:600">A mais</p><p class="muted" style="margin:0">Marcou, entra na seção 11 do laudo.</p>'
       + RKS.map(k => '<div class="chk"><input type="checkbox" id="frc_' + k + '" data-frc="' + k + '"' + (rc.indexOf(k) >= 0 ? ' checked' : '') + '><label for="frc_' + k + '">' + esc(PR7[k].rotulo) + '</label></div>').join('') : '') + '</div>';
-  h += '<button class="btn pri' + (f.length ? ' bloq' : '') + '" id="fEnviar">Enviar a inspeção deste vaso</button>';   // S162 · issue 15: com falta, o toque leva até a lista
+  h += '<button class="btn pri' + (f.length ? ' bloq' : '') + '" id="fEnviar">' + (so ? 'Enviar a aferição deste vaso' : 'Enviar a inspeção deste vaso') + '</button>';   // S162 · issue 15: com falta, o toque leva até a lista
   h += '<p class="muted" style="text-align:center;margin-top:6px">Depois de enviar, você ainda pode reabrir para corrigir, até o escritório começar a revisão. Sem sinal, vai quando o sinal voltar.</p>'
      + '<p class="muted" style="text-align:center;margin-top:2px">Depois do envio, cada um da equipe confirma a participação no próprio celular, com a digital (aba Eu): o laudo traz o nome de quem participou.</p>';
   h += '<button class="btn perigo" id="fNao">Não foi possível inspecionar este vaso</button>';
   $('tela').innerHTML = h;
-  ligarFotos(v, 'capa', () => 'Capa');
+  if (!so) ligarFotos(v, 'capa', () => 'Capa');
   ligar('fObs', el => { i.observacao = el.value.trim() || null; salvar(); adiar2('fech:' + v.id, 'fech', v); }, 'input');
-  ligarPrazo(v);
+  if (!so) ligarPrazo(v);
   $('tela').querySelectorAll('[data-frfora]').forEach(el => el.addEventListener('change', () => {   // S163 · issue 12
     const k = el.dataset.frfora, a = i.rec_ajustes || {}, fora = (a.fora || []).filter(y => y !== k).concat(el.checked ? [] : [k]);
     i.rec_ajustes = { fora, textos:a.textos || {} }; salvar();
@@ -3359,7 +3430,7 @@ function telaFechamento(v){
     const fx = faltasEnvio(v);
     if (fx.length){ const cx = $('fFaltas'); if (cx){ cx.classList.add('problema'); cx.scrollIntoView({ behavior:'smooth', block:'center' }); }
       U.toast('Falta para enviar: ' + fx.length + ' item(ns). Toque em "ir para…" para chegar ao que falta.', 'err'); return; }
-    const ap = avisoPrazo(v); if (ap){ const cp = $('przOn'); if (cp){ const c = cp.closest('.card') || cp; c.classList.add('problema'); c.scrollIntoView({ behavior:'smooth', block:'center' }); } U.toast(ap + ' (Fechamento › Prazo)', 'err'); return; }
+    const ap = so ? null : avisoPrazo(v); if (ap){ const cp = $('przOn'); if (cp){ const c = cp.closest('.card') || cp; c.classList.add('problema'); c.scrollIntoView({ behavior:'smooth', block:'center' }); } U.toast(ap + ' (Fechamento › Prazo)', 'err'); return; }
     N.janela.confirmar('Enviar a inspeção do ' + v.tag + '?', '<p>Depois de enviar, você ainda pode reabrir para corrigir, até o escritório começar a revisão.</p>', 'Enviar').then(s => {
       if (!s) return;
       despejar(); v._recusaEnvio = null;   // S171 · issue 37
