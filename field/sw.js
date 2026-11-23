@@ -28,7 +28,7 @@
  *   Trocou o ?v= nas páginas? Troque aqui também. O histórico está nos Pull requests.
  * ========================================================================== */
 
-const VERSAO = 'S72-T59';
+const VERSAO = 'S72-T60';
 const CACHE  = 'tapflow-field';        // um cache só, que passa de uma versão para a outra
 const PRAZO  = 1500;
 
@@ -46,7 +46,7 @@ const FIXOS = [
   '../nucleo/nucleo.css?v=N17',
   '../nucleo/config.js?v=N17',
   '../nucleo/modulos.js?v=M4',
-  './doc/motor-calculo-nr13.js?v=R00.6',   // a prévia do cálculo sem sinal
+  './doc/motor-calculo-nr13.js?v=R00.7',   // a prévia do cálculo sem sinal
   './doc/recomendacoes.js?v=RC1',
   // a medição gera o PDF no campo, sem sinal: o pdfmake do TapDoc (mesmo endereço do <script> que a tela carrega)
   '../doc/vendor/pdfmake.min.js',

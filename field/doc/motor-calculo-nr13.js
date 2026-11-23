@@ -1,5 +1,6 @@
 /**
  * Motor de cálculo NR-13 — TapFlow · módulo de inspeção
+ * Versão R00.7 · 22/11/2026 (o assentamento maior que a abertura vira falta: confira a digitação, S220 · issue 240)
  * Versão R00.6 · 11/11/2026 (manômetro pela ASME B40.100 Grau D; teste da válvula pelas regras V1–V5; a etapa 1, S150 · item 81)
  * Versão R00.4 · 30/10/2026 (R00.3 + o teste de válvula com 3 ciclos: abertura e assentamento de cada um, S113)
  * Versão R00.3 · 24/10/2026 (R00.2 de 23/10 + a aferição de manômetro e o teste de válvula, R04a)
@@ -358,8 +359,10 @@ function testeValvula(v) {
     if (faltas.length) return { aprovada: false, completo: false, grave: false, faltas, avisos };
     const maxM = paraMPa(Math.max(...abv), un), minM = paraMPa(Math.min(...abv), un);
     const r = { completo: true, faltas, avisos, media: media(abv), abertMax: Math.max(...abv), encontrada: v.reajustada ? enc : abv[0], reajustada: !!v.reajustada };
+    // R00.7 · issue 240: o assentamento maior que a abertura é fisicamente impossível (Bruno, 22/11): erro de digitação.
+    // Não reprova mais: vira falta (não deixa enviar) com o ciclo, igual ao banco (tf__afericao_calcular, 451).
     r.assentamentoOk = abv.every((x, k) => asv[k] <= x + 1e-9);
-    if (!r.assentamentoOk) avisos.push('Assentamento acima da abertura.');
+    abv.forEach((x, k) => { if (asv[k] > x + 1e-9) faltas.push('O assentamento do ciclo ' + (k + 1) + ' está maior que a abertura: confira a digitação.'); });
     r.assentamentoMedio = media(asv);
     const pm = num(v.pmtaMPa), op = num(v.operMPa);
     r.acimaPMTA = pm !== null && maxM > pm + 1e-9;
@@ -375,7 +378,7 @@ function testeValvula(v) {
     if (pm === null) avisos.push('Sem a PMTA vigente: a abertura não foi conferida contra ela.');
     r.completo = !faltas.length;
     r.grave = r.acimaPMTA;
-    r.aprovada = r.completo && r.assentamentoOk && !r.acimaPMTA;
+    r.aprovada = r.completo && !r.acimaPMTA;
     return r;
 }
     return { UNIDADES_MPA, paraMPa, deMPa, toleranciaManometro, CLASSE_MANOMETRO, afericaoManometro, toleranciaValvulaMPa, testeValvula };
@@ -387,7 +390,7 @@ const MotorNR13 = {
     // R00.3 · R04a
     UNIDADES_MPA: R04.UNIDADES_MPA, paraMPa: R04.paraMPa, deMPa: R04.deMPa, toleranciaManometro: R04.toleranciaManometro, CLASSE_MANOMETRO: R04.CLASSE_MANOMETRO,
     afericaoManometro: R04.afericaoManometro, toleranciaValvulaMPa: R04.toleranciaValvulaMPa, testeValvula: R04.testeValvula,
-    versao: 'R00.6-2026-11-11',
+    versao: 'R00.7-2026-11-22',
 };
 
 if (typeof module !== 'undefined' && module.exports) module.exports = MotorNR13;

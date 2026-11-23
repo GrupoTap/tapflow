@@ -10,7 +10,7 @@
 <script src="../nucleo/config.js?v=N17"></script>
 <script src="../nucleo/nucleo.js?v=N17"></script>
 <script src="../nucleo/modulos.js?v=M4"></script>
-<script src="motor-calculo-nr13.js?v=R00.6"></script>
+<script src="motor-calculo-nr13.js?v=R00.7"></script>
 <script src="recomendacoes.js?v=RC1"></script>
 <!--
   TapDoc (escritório) · R02b1 — preparar a inspeção
@@ -52,6 +52,7 @@ main{flex:1;overflow-y:auto;padding:16px 16px 48px}
 .wrap{max-width:1180px;margin:0 auto}
 .abas{display:flex;gap:6px;background:var(--surface);border:1px solid var(--rule);border-radius:7px;padding:4px;margin-bottom:14px}
 .abas{flex-wrap:wrap}
+.abas{position:sticky;top:-16px;z-index:30;box-shadow:0 6px 10px -8px rgba(15,23,25,.25)}   /* E56 · issue 240: as abas ficam presas ao rolar (o main tem 16px de respiro no alto) */
 .abas button{flex:1 1 auto;border:0;background:none;padding:9px 6px;border-radius:5px;font-weight:600;color:var(--ink-2)}
 .abas button.on{background:var(--accent);color:#fff}
 .abas .bolha{display:inline-block;min-width:20px;padding:0 6px;border-radius:10px;background:var(--crit);color:#fff;font-size:12px;margin-left:4px}
@@ -145,6 +146,11 @@ table.conf td{padding:6px 8px} .cf{display:inline-flex;width:20px;height:20px;bo
 .txlado{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}
 .txlado>div{border:1px solid var(--rule);border-radius:6px;padding:8px 10px;line-height:1.5;white-space:pre-wrap}
 .txlado ins{background:#DFF0E6;color:#14532D;text-decoration:underline}
+.txdec{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0 0}
+.txdec button{border:1px solid var(--rule);background:var(--surface);border-radius:5px;padding:4px 10px;font-weight:600;font-size:13px}
+.txdec button.ap.on{background:var(--ok);border-color:var(--ok);color:#fff}
+.txdec button.rc.on{background:var(--crit);border-color:var(--crit);color:#fff}
+.txexp{white-space:pre-line;margin:6px 0}
 .txlado del{background:#F8E5E0;color:#7A1E10}
 .txmud{margin-top:10px}
 @media (max-width:760px){.txlado{grid-template-columns:1fr}}
@@ -200,7 +206,8 @@ tr[data-espver]{cursor:pointer} tr[data-espver]:hover{background:var(--surface-2
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E55';   // E55 (S215 · issue 231, Rodada R24): as perguntas da abertura (as listas e os contadores das abas) vão juntas
+const VERSAO = 'TapDoc E56';   // E56 (S220 · issue 240): as abas presas ao rolar; "Textos do laudo" texto por texto (Aprovar/Recusar em cada texto, o PIN para aprovar), com o nome de cada texto em português e o antes e depois aberto; as explicações das propostas em tópicos (451)
+// const VERSAO = 'TapDoc E55';   // E55 (S215 · issue 231, Rodada R24): as perguntas da abertura (as listas e os contadores das abas) vão juntas
 // const VERSAO = 'TapDoc E54';   // E54 (S210 · issues 215, 216, 217, 223, 224, 225, 226, 227 e 228, Rodada R19 da auditoria): o laudo (laudo-pdf.js S178: Quadro 1, 7.3 com a conclusão, 9.1 do laudo antigo, as fórmulas em fração e os tampos iguais numa conta, os anexos só do medidor e da ART, o relatório de aferição com carga e descarga e a bancada, a portaria da NR-13 pelo texto) e o certificado do medidor juntado ao PDF; os documentos (documentos-pdf.js D10: a boroscopia conta como exame interno no Registro, a frase do teste, a ART sem a OS); na revisão, o Número TAP sem motivo, o E e a geometria para quem revisa, o nº de série da válvula e o ajuste da conclusão do 7.3; o QR code da placa e da lombada pela imagem do TapWeb (placa-pdf.js P2); 450
 // const VERSAO = 'TapDoc E53';   // E53 (S208 · issues 218, 219, 220, 221 e 222, Rodada R18 da auditoria): na revisão, todo quadro se recolhe pelo título e tem "conferido" (a etapa só conclui com todos marcados); a caixa "O cliente já tem o Registro de Segurança (livro)" (a capa e a lombada saem sempre: documentos-pdf.js D9); clicar no componente das Espessuras do medidor mostra todas as leituras; o visor abre com a foto da capa; a boroscopia em miniatura, com a legenda pronta; "Girar" a foto (vale no laudo e nos documentos); as medidas do mapa gravam ao sair do campo; os pontos de trás nas outras vistas do mapa (mapa-3d.js M3); a revisão não pula mais depois de abrir (o mapa e o visor guardam o lugar); 449
 // const VERSAO = 'TapDoc E52';   // E52 (S186 · issues 74 e 75, Revisão TapDoc · Rodada 11): ajustes do que o laudo e os documentos escrevem (o volume da categoria, a data de quando a aferição terminou, "+N" no 7.3, o Resumo sem o quadro do acessório ausente — laudo-pdf.js S177, documentos-pdf.js D8) e das telas (os avisos do cálculo na tela do laudo e na revisão; campo entre chaves desconhecido na proposta de texto; ART protegida; recomendação sem "Que…"; o link do QR atualiza os documentos; os avisos da placa ao baixar; a foto da capa tentada de novo; o envio lento sem "travou" e o "Tentar de novo" esperando o anterior; busca e "ver mais" na aba Laudos; "faltam N documentos por assinar"; a placa a conferir depois de reabrir; a memória dos rascunhos liberada)
@@ -542,14 +549,32 @@ function textosPlanos(B){
     if (Array.isArray(o)) o.forEach((x, n) => anda(x, cam.concat(String(n)))); else if (o && typeof o === 'object') Object.keys(o).forEach(k => anda(o[k], cam.concat(k))); };
   anda(B, []); return L.filter(([ch, t]) => !/^empresa_emissora|^prontos\.[A-Z0-9]+\.(grupo|secao|res)$/.test(ch) && !/\.campos\./.test(ch) && t.length > 2);
 }
+// E56 · issue 240: o nome de cada texto em português e onde ele aparece no laudo (o PLH não lê a chave técnica)
+const TX_NOMES = {
+  nr13_portaria:'Portaria da NR-13 (objetivo e referências)', objetivo:'1 · Objetivo', vaso_fonte_sem_doc:'Quadro 1 · vaso sem laudo anterior',
+  ultrassom_conclusao_ok:'7.3 · conclusão do ultrassom (conforme)', ultrassom_conclusao_nc:'7.3 · conclusão do ultrassom (não conforme)',
+  codigo_prontuario:'9.1 · código de construção (com prontuário)', codigo_estimado:'9.1 · código de construção (estimado)',
+  codigo_conhecido:'9.1 · código de construção conhecido', proximas_sem_codigo:'13 · próximas inspeções (vaso sem código)',
+  proximas_abaixo_zero:'13 · próximas inspeções (abaixo de 0 °C)', valvula_feita:'7.6 · válvula aferida e aprovada',
+  valvula_reprovada:'7.6 · válvula reprovada', valvula_motivo_pmta:'7.6 · motivo: abre acima da PMTA', valvula_motivo_tolerancia:'7.6 · motivo (antigo): assentamento',
+  valvula_lacre:'7.6 · lacre da válvula', valvula_nao:'7.6 · válvula não aferida', parecer_pressao:'12 · parecer (PMTA abaixo da operação)',
+  registro_condicao_pressao:'Registro de Segurança · condição (PMTA abaixo da operação)', rec_conservacao_gerais:'11 · recomendações gerais de conservação',
+  boro_nao:'Boroscopia não feita', boro_ok:'Boroscopia sem anomalia'
+};
+const TX_SUB = { rec_regra:'11 · recomendação pronta', prazo_just:'13 · justificativa do prazo', referencias:'2 · referência', conc:'12 · conclusão', titulos:'Título' };
+const TX_ACESS = { manometro:'manômetro', manovacuometro:'manovacuômetro', valvula_seguranca:'válvula de segurança', valvula_alivio:'válvula de alívio',
+  quebra_vacuo:'quebra-vácuo', valvula_pmta:'válvula acima da PMTA' };
+function legivel(t){ t = String(t || '').replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1); }
 function rotTexto(ch, B){
   const p = ch.split('.');
-  if (p[0] === 'prontos'){ const c = (B.prontos || {})[p[1]] || {}; return p[1] + ' · ' + (c.rotulo || '') + ({ texto:'', conc:' · frase da conclusão (12)', rotulo:' · nome na lista' }[p[2]] != null ? { texto:'', conc:' · frase da conclusão (12)', rotulo:' · nome na lista' }[p[2]] : ' · ' + p.slice(2).join('.')); }
-  if (p[0] === 'conc') return 'Conclusão (12) · ' + p.slice(1).join('.');
-  if (p[0] === 'titulos') return 'Título · ' + p.slice(1).join('.');
-  if (p[0] === 'registro') return 'Registro de Segurança · ' + p.slice(1).join('.');
-  if (p[0] === 'prontuario') return 'Prontuário (Reconstituído) · ' + p.slice(1).join('.');   // E37
-  return ch;
+  if (p[0] === 'prontos'){ const c = (B.prontos || {})[p[1]] || {}; return 'Texto pronto ' + p[1] + (c.rotulo ? ' · ' + c.rotulo : '') + ({ conc:' · frase da conclusão (12)', rotulo:' · nome na lista' }[p[2]] || ''); }
+  if (TX_NOMES[ch]) return TX_NOMES[ch];
+  if (p[0] === 'registro') return 'Registro de Segurança · ' + legivel(p.slice(1).join(' ')).toLowerCase();
+  if (p[0] === 'prontuario') return 'Prontuário (Reconstituído) · ' + legivel(p.slice(1).join(' ')).toLowerCase();   // E37
+  if (p[0] === 'referencias') return '2 · referência ' + (Number(p[1]) + 1);
+  if (p[0] === 'rec_regra') return '11 · recomendação pronta · ' + (TX_ACESS[p[1]] || legivel(p[1]).toLowerCase());
+  if (TX_SUB[p[0]]) return TX_SUB[p[0]] + ' · ' + p.slice(1).join(' ').replace(/_/g, ' ');
+  return legivel(ch.replace(/\./g, ' · '));
 }
 /** antes e depois, palavra por palavra: o que sai riscado em vermelho, o que entra sublinhado em verde */
 function difPalavras(a, b){
@@ -567,25 +592,64 @@ function difPalavras(a, b){
   while (j < m){ hb += /^\s+$/.test(B[j]) ? esc(B[j]) : '<ins>' + esc(B[j]) + '</ins>'; j++; }
   return [ha, hb];
 }
+// E56 · issue 240: texto por texto — cada texto da proposta com "Aprovar" / "Recusar"; a escolha fica em TX_ESC até "Salvar";
+// o texto já decidido mostra a decisão. A proposta "inteira" (o documento precisa de todos) só se decide inteira.
+let TX_ESC = {};
 function propostaHtml(p, B){
-  const ms = p.mudancas || [];
+  const ms = p.mudancas || [], esc0 = TX_ESC[p.id] || {}, plh = !!TXT.eu_plh, esperam = ms.filter(m => !m.decisao);
+  const decTxt = m => m.decisao === 'aprovada' ? '<span class="chip s-pronto">aprovado · versão ' + esc(m.versao || '') + '</span>'
+    : '<span class="chip s-grave">recusado</span> <span class="muted">' + esc(m.motivo_recusa || '') + '</span>';
+  const botoes = m => m.decisao ? '<div class="txdec">' + decTxt(m) + '</div>'
+    : (plh && !p.inteira ? '<div class="txdec"><button class="ap' + (esc0[m.chave] === 'ap' ? ' on' : '') + '" data-txi="' + esc(p.id) + '" data-ch="' + esc(m.chave) + '" data-op="ap">Aprovar</button>'
+       + '<button class="rc' + (esc0[m.chave] === 'rc' ? ' on' : '') + '" data-txi="' + esc(p.id) + '" data-ch="' + esc(m.chave) + '" data-op="rc">Recusar</button></div>' : '');
   const corpo = ms.map(m => {
     if (m.antes == null && m.depois && typeof m.depois === 'object'){
       const c = m.depois;
-      return '<div class="txmud"><b>' + esc(m.chave.replace(/^prontos\./, '') + ' · ' + (c.rotulo || '')) + '</b> <span class="chip s-pronto">novo</span> <span class="muted">seção ' + esc(c.secao || '') + '</span>'
+      return '<div class="txmud"><b>' + esc(rotTexto(m.chave, Object.assign({}, B, { prontos:{ [m.chave.split('.')[1]]:c } }))) + '</b> <span class="chip s-pronto">novo</span>' + (c.secao ? ' <span class="muted">seção ' + esc(c.secao) + '</span>' : '') + botoes(m)
         + '<div class="txlado"><div><span class="muted">Antes</span>\n<i class="muted">(não existe)</i></div><div><span class="muted">Depois</span>\n<ins>' + esc(c.texto || '') + '</ins>'
         + (c.conc ? '\n\n<span class="muted">Conclusão (12): </span><ins>' + esc(c.conc) + '</ins>' : '') + '</div></div></div>';
     }
     const [a, d] = difPalavras(typeof m.antes === 'string' ? m.antes : '', typeof m.depois === 'string' ? m.depois : JSON.stringify(m.depois));
-    return '<div class="txmud"><b>' + esc(rotTexto(m.chave, B)) + '</b><div class="txlado"><div><span class="muted">Antes · em uso</span>\n' + a + '</div><div><span class="muted">Depois · proposta</span>\n' + d + '</div></div></div>';
+    return '<div class="txmud"><b>' + esc(rotTexto(m.chave, B)) + '</b>' + botoes(m) + '<div class="txlado"><div><span class="muted">Antes · em uso</span>\n' + a + '</div><div><span class="muted">Depois · proposta</span>\n' + d + '</div></div></div>';
   }).join('');
+  const nEsc = esperam.filter(m => esc0[m.chave]).length;
+  let pe = '';
+  if (plh && esperam.length){
+    pe = p.inteira
+      ? '<p class="muted" style="margin:8px 0 0">Esta proposta se aprova ou se recusa inteira: o documento precisa de todos os textos dela.</p><div class="linha" style="margin-top:6px">'
+        + '<button class="btn pri" data-txtodos="' + esc(p.id) + '" data-op="ap">Aprovar tudo · PIN</button><button class="btn perigo" data-txtodos="' + esc(p.id) + '" data-op="rc">Recusar tudo…</button></div>'
+      : '<div class="linha" style="margin-top:8px;justify-content:space-between"><span class="muted" data-txconta="' + esc(p.id) + '">' + nEsc + ' de ' + esperam.length + ' escolhido(s)</span><span class="linha">'
+        + '<button class="btn mini" data-txmarca="' + esc(p.id) + '">Aprovar todos</button>'
+        + '<button class="btn pri" data-txsalva="' + esc(p.id) + '"' + (nEsc ? '' : ' disabled') + '>Salvar as decisões</button></span></div>';
+  } else if (!plh) pe = '<p class="muted" style="margin:6px 0 0">Só o PLH aprova textos do laudo.</p>';
   return '<div style="border:1px solid var(--rule);border-radius:8px;padding:10px 12px;margin-top:8px" data-txp="' + esc(p.id) + '"><div class="linha" style="justify-content:space-between"><b>' + esc(p.titulo) + '</b>'
-    + '<span class="muted">' + esc(p.proposto_por || '') + ' · ' + quandoBR(p.proposto_em) + ' · ' + ms.length + (ms.length === 1 ? ' texto' : ' textos') + '</span></div>'
-    + (p.motivo ? '<p style="margin:6px 0">' + esc(p.motivo) + '</p>' : '')
-    + '<details' + (ms.length <= 3 ? ' open' : '') + '><summary style="cursor:pointer;color:var(--accent);font-weight:600">Ver antes e depois</summary>' + corpo + '</details>'
-    + '<p class="muted" style="margin:6px 0 0">Enquanto espera, nenhum laudo usa esta proposta. Ao aprovar, vira uma versão nova; os laudos já emitidos não mudam.</p>'
-    + (TXT.eu_plh ? '<div class="linha" style="margin-top:8px"><button class="btn pri" data-txapr="' + esc(p.id) + '">Aprovar · digital</button><button class="btn perigo" data-txrec="' + esc(p.id) + '">Recusar…</button></div>'
-       : '<p class="muted" style="margin:6px 0 0">Só o PLH aprova textos do laudo.</p>') + '</div>';
+    + '<span class="muted">' + esc(p.proposto_por || '') + ' · ' + quandoBR(p.proposto_em) + ' · ' + ms.length + (ms.length === 1 ? ' texto' : ' textos') + (esperam.length < ms.length ? ' · ' + esperam.length + ' esperando' : '') + '</span></div>'
+    + (p.motivo ? '<p class="txexp">' + esc(p.motivo) + '</p>' : '')
+    + '<details open><summary style="cursor:pointer;color:var(--accent);font-weight:600">Ver antes e depois</summary>' + corpo + '</details>'
+    + '<p class="muted" style="margin:6px 0 0">O texto aprovado vira uma versão nova e vale para os laudos emitidos dali em diante; os já emitidos não mudam.</p>' + pe + '</div>';
+}
+/** E56 · issue 240: grava as decisões de uma proposta. Recusa pede o motivo (na janela); aprovação pede o PIN (ou a digital). */
+async function decidirTextos(h, pid, ap, rc){
+  const seguir = async motivo => {
+    let conf = null;
+    if (ap.length){
+      const c = await N.confirmarPessoa({ modo:'servidor', finalidade:'laudo_texto', referencia:'proposta ' + pid, titulo:'Aprovar os textos do laudo', sub:ap.length + (ap.length === 1 ? ' texto' : ' textos') + ' · com o seu PIN' });
+      if (!c || !c.ok){ if (c && c.semSinal) U.toast('Sem sinal: a aprovação precisa de internet.', 'err'); return; }
+      conf = c.confirmacao;
+    }
+    try{ const r = await rpc('tf_laudo_texto_decidir_itens', { p_id:pid, p_aprovar:ap, p_recusar:rc, p_motivo:motivo, p_confirmacao:conf });
+      delete TX_ESC[pid];
+      U.toast((r.aprovados ? r.aprovados + ' aprovado(s): versão ' + r.versao + ' em uso. ' : '') + (r.recusados ? r.recusados + ' recusado(s). ' : '') + (r.faltam ? 'Faltam ' + r.faltam + '.' : ''), 'ok');
+      abaTextos(h); }
+    catch(e){ erro(e); }
+  };
+  if (!rc.length) return seguir(null);
+  janela(rc.length === 1 ? 'Recusar um texto' : 'Recusar ' + rc.length + ' textos', '<label class="f">Por quê<textarea class="t" id="txRec" rows="3" placeholder="volta para quem propôs"></textarea></label>'
+    + (ap.length ? '<p class="muted" style="margin:4px 0 0">Depois o sistema pede o PIN para aprovar os outros ' + ap.length + '.</p>' : ''),
+    [{ rotulo:'Cancelar' }, { rotulo:ap.length ? 'Continuar' : 'Recusar', classe:'pri', acao:() => {
+      const m = ($('txRec').value || '').trim(); if (m.length < 5){ U.toast('Diga por que recusar.', 'err'); return false; }
+      setTimeout(() => seguir(m), 0); return true;   // a janela fecha antes da tela do PIN (regra 54: uma janela só)
+    } }]);
 }
 async function abaTextos(h){
   const vez = TELA_VEZ;   // E48 · issue 65, item 11
@@ -597,13 +661,13 @@ async function abaTextos(h){
 function pintarTextos(h){
   const M = TXT.modelo || {}, B = M.blocos || {}, todas = TXT.propostas || [], pend = todas.filter(p => p.situacao === 'pendente'), dec = todas.filter(p => p.situacao !== 'pendente');
   let x = h + '<div class="card"><div class="linha" style="justify-content:space-between"><h3 style="margin:0">Textos do laudo</h3><span class="muted">Versão em uso: <b id="txVersao">' + esc(M.versao || '—') + '</b>'
-    + (M.criado_em ? ' · desde ' + quandoBR(M.criado_em) : '') + '</span></div><p class="muted" style="margin:6px 0 0">Qualquer pessoa com o TapDoc propõe uma mudança; ela só vale depois que o PLH aprova, com a digital, e vira uma versão nova. O laudo já emitido continua com os textos com que saiu.</p></div>';
+    + (M.criado_em ? ' · desde ' + quandoBR(M.criado_em) : '') + '</span></div><p class="muted" style="margin:6px 0 0">Qualquer pessoa com o TapDoc propõe uma mudança; ela só vale depois que o PLH aprova, texto por texto, com o PIN, e vira uma versão nova. O laudo já emitido continua com os textos com que saiu.</p></div>';
   x += '<div class="card" id="txPend"><h3>Esperando o PLH (' + pend.length + ')</h3>' + (pend.length ? pend.map(p => propostaHtml(p, B)).join('') : '<p class="vazio">Nenhuma proposta esperando.</p>') + '</div>';
   const f = TXT_FILTRO.toLowerCase(), L = textosPlanos(B);
   const vis = L.filter(([ch, t]) => !f || ch.toLowerCase().indexOf(f) >= 0 || t.toLowerCase().indexOf(f) >= 0 || rotTexto(ch, B).toLowerCase().indexOf(f) >= 0);
   x += '<div class="card"><h3>Os textos da versão ' + esc(M.versao || '') + '</h3><input class="t" id="txFiltro" placeholder="Procurar (ex.: V9, boroscopia, 13.5.1.2)" value="' + esc(TXT_FILTRO) + '">'
     + '<table style="margin-top:8px"><tr><th style="width:240px">Texto</th><th>Como está</th><th></th></tr>'
-    + vis.slice(0, 100).map(([ch, t]) => '<tr><td><b>' + esc(rotTexto(ch, B)) + '</b><div class="muted" style="font-size:11px">' + esc(ch) + '</div></td><td style="white-space:pre-wrap">' + esc(t) + '</td><td><button class="btn mini" data-txprop="' + esc(ch) + '">Propor mudança</button></td></tr>').join('')
+    + vis.slice(0, 100).map(([ch, t]) => '<tr><td><b>' + esc(rotTexto(ch, B)) + '</b></td><td style="white-space:pre-wrap">' + esc(t) + '</td><td><button class="btn mini" data-txprop="' + esc(ch) + '">Propor mudança</button></td></tr>').join('')
     + '</table>' + (vis.length > 100 ? '<p class="muted">E mais ' + (vis.length - 100) + ': use a busca.</p>' : '') + '</div>';
   x += '<div class="card"><h3>Versões</h3><table><tr><th>Versão</th><th>Quando</th><th>Observação</th></tr>' + (TXT.versoes || []).map(v => '<tr><td><b>' + esc(v.versao) + '</b>' + (v.ativo ? ' <span class="chip s-pronto">em uso</span>' : '') + '</td><td>'
       + quandoBR(v.criado_em) + (v.por ? '<div class="muted">' + esc(v.por) + '</div>' : '') + '</td><td>' + esc(v.observacao || '') + '</td></tr>').join('') + '</table>'
@@ -635,20 +699,27 @@ function pintarTextos(h){
         catch(e){ erro(e); return false; }
       } }]);
   }));
-  $('tela').querySelectorAll('[data-txapr]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
-    const c = await N.confirmarPessoa({ modo:'servidor', finalidade:'laudo_texto', referencia:'proposta ' + b.dataset.txapr, titulo:'Aprovar o texto do laudo', sub:'com a sua digital' });
-    if (!c || !c.ok){ if (c && c.semSinal) U.toast('Sem sinal: a aprovação precisa de internet.', 'err'); return; }
-    if (c.metodo !== 'digital'){ U.toast('A aprovação dos textos do laudo é só com a digital (o PIN não vale).', 'err'); return; }
-    try{ const r = await rpc('tf_laudo_texto_decidir', { p_id:b.dataset.txapr, p_aprovar:true, p_motivo:null, p_confirmacao:c.confirmacao });
-      U.toast('Aprovado: versão ' + r.versao + ' em uso.', 'ok'); abaTextos(h); }catch(e){ erro(e); }
+  // E56 · issue 240: texto por texto
+  const pTx = id => (TXT.propostas || []).find(p => p.id === id) || {};
+  const pendDe = id => (pTx(id).mudancas || []).filter(m => !m.decisao);
+  $('tela').querySelectorAll('[data-txi]').forEach(b => b.addEventListener('click', () => {
+    const e = TX_ESC[b.dataset.txi] = TX_ESC[b.dataset.txi] || {};
+    e[b.dataset.ch] = e[b.dataset.ch] === b.dataset.op ? undefined : b.dataset.op;
+    const box = b.closest('.txdec'); box.querySelectorAll('button').forEach(x => x.classList.toggle('on', e[b.dataset.ch] === x.dataset.op));
+    const n = pendDe(b.dataset.txi).filter(m => e[m.chave]).length, cont = $('tela').querySelector('[data-txconta="' + b.dataset.txi + '"]'), sv = $('tela').querySelector('[data-txsalva="' + b.dataset.txi + '"]');
+    if (cont) cont.textContent = n + ' de ' + pendDe(b.dataset.txi).length + ' escolhido(s)'; if (sv) sv.disabled = !n;
+  }));
+  $('tela').querySelectorAll('[data-txmarca]').forEach(b => b.addEventListener('click', () => {
+    const e = TX_ESC[b.dataset.txmarca] = {}; pendDe(b.dataset.txmarca).forEach(m => { e[m.chave] = 'ap'; }); pintarTextos(h);
+  }));
+  $('tela').querySelectorAll('[data-txsalva]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
+    const e = TX_ESC[b.dataset.txsalva] || {}, L = pendDe(b.dataset.txsalva);
+    return decidirTextos(h, b.dataset.txsalva, L.filter(m => e[m.chave] === 'ap').map(m => m.chave), L.filter(m => e[m.chave] === 'rc').map(m => m.chave));
   })));
-  $('tela').querySelectorAll('[data-txrec]').forEach(b => b.addEventListener('click', () => janela('Recusar a proposta',
-    '<label class="f">Por quê<textarea class="t" id="txRec" rows="3" placeholder="volta para quem propôs"></textarea></label>',
-    [{ rotulo:'Cancelar' }, { rotulo:'Recusar', classe:'pri', acao:async () => {
-      const m = ($('txRec').value || '').trim(); if (m.length < 5){ U.toast('Diga por que recusar.', 'err'); return false; }
-      try{ await rpc('tf_laudo_texto_decidir', { p_id:b.dataset.txrec, p_aprovar:false, p_motivo:m, p_confirmacao:null }); U.toast('Proposta recusada.', 'ok'); abaTextos(h); }
-      catch(e){ erro(e); return false; }
-    } }])));
+  $('tela').querySelectorAll('[data-txtodos]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
+    const L = pendDe(b.dataset.txtodos).map(m => m.chave);
+    return b.dataset.op === 'ap' ? decidirTextos(h, b.dataset.txtodos, L, []) : decidirTextos(h, b.dataset.txtodos, [], L);
+  })));
   function debTextos(){ clearTimeout(debTextos.t); debTextos.t = setTimeout(() => { TXT_FILTRO = fl.value; pintarTextos(h); const n = $('txFiltro'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 300); }
 }
 
