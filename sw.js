@@ -35,7 +35,7 @@
  *   O histórico das versões está nos Pull requests.
  * ========================================================================== */
 
-const VERSAO = 'H21-S227';
+const VERSAO = 'H21-S228';
 const CACHE  = 'tapflow-hub';          // um cache só, que passa de uma versão para a outra
 const PRAZO  = 1500;                   // ms de paciência com a internet antes de abrir a cópia
 
@@ -57,7 +57,7 @@ const FIXOS = [
 const PAGINAS = ['./manager/', './fin/', './doc/', './acessos/', './seg/', './rh/', './crm/', './gestao/', './cadastros/'];
 // Arquivos que a página carrega depois de abrir (não estão no <script>/<link> dela) e que precisam funcionar sem sinal.
 const JUNTO = {
-  './doc/': ['./doc/documentos-pdf.js?v=D10']   // a revisão do TapDoc sem sinal: o Resumo, o Registro e os nomes dos arquivos
+  './doc/': ['./doc/documentos-pdf.js?v=D11']   // a revisão do TapDoc sem sinal: o Resumo, o Registro e os nomes dos arquivos
 };
 
 const abs = u => new URL(u, self.location).href;

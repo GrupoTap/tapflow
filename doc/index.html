@@ -206,7 +206,8 @@ tr[data-espver]{cursor:pointer} tr[data-espver]:hover{background:var(--surface-2
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E59';   // E59 (S224 · issues 242 parte 2, 243, 244 e 212, R27): a aferição avulsa nas telas ("Só aferição" na preparação, a conferência única "Conferir e liberar", os certificados preparados pelo PLH sem laudo, com o aviso sem PMTA, no mesmo pacote "Para assinar" e na lista de documentos); a bancada sem certificado nem validade em Instrumentos; a janela que fecha depois de gravar não fecha a janela aberta depois dela (o "Novo modelo" do mapa 3D); laudo-pdf.js S179; 454 e 455
+const VERSAO = 'TapDoc E60';   // E60 (S228 · issues 242 parte 3 e 237 FE16, R30): o Registro de Segurança da aferição avulsa sai com os certificados (a anotação); a aba "Trocas" (a troca do acessório instalado pela OS de fornecimento no cadastro do vaso, o certificado e a anotação da troca no Registro, que o PLH prepara e assina); as trocas nos documentos do vaso; documentos-pdf.js D11; 456 e 319
+// const VERSAO = 'TapDoc E59';   // E59 (S224 · issues 242 parte 2, 243, 244 e 212, R27): a aferição avulsa nas telas ("Só aferição" na preparação, a conferência única "Conferir e liberar", os certificados preparados pelo PLH sem laudo, com o aviso sem PMTA, no mesmo pacote "Para assinar" e na lista de documentos); a bancada sem certificado nem validade em Instrumentos; a janela que fecha depois de gravar não fecha a janela aberta depois dela (o "Novo modelo" do mapa 3D); laudo-pdf.js S179; 454 e 455
 // const VERSAO = 'TapDoc E58';   // E58 (S222 · issue 239, parte 1): a placa baixada fica gravada (a T15 da OS nova de inspeção conclui sozinha quando a placa de todos os vasos foi gerada); 453
 // const VERSAO = 'TapDoc E57';   // E57 (S221 · issue 239, parte 2): "Preparar para assinar" sem a digital (a validação do PLH é a assinatura do PDF, token ou gov.br); o desenho da assinatura vale com o primeiro laudo assinado; os PDFs não assinados só no pacote do PLH (fora das listas e do "Baixar tudo"); a minuta com o número tirado na Revisão 2; reaberta antes de assinar, o mesmo número; a numeração R, P, M e V automática; os números cancelados; o gov.br sem "reserva do token" (assinatura-pdf.js S221); 452
 // const VERSAO = 'TapDoc E56';   // E56 (S220 · issue 240): as abas presas ao rolar; "Textos do laudo" texto por texto (Aprovar/Recusar em cada texto, o PIN para aprovar), com o nome de cada texto em português e o antes e depois aberto; as explicações das propostas em tópicos (451)
@@ -490,17 +491,20 @@ async function telaListas(aba){
   const pLaudo = rpc('tf_laudo_lista').then(r => r.filter(x => x.situacao === 'liberada' && !(x.laudo && x.laudo.situacao !== 'substituido')).length).catch(() => 0);   // E9: liberadas sem laudo
   const pCampo = rpc('tf_insp_em_campo_lista').catch(() => []);   // S141 · item 41 (417)
   const pTex = rpc('tf_laudo_textos_ver').then(r => (r.propostas || []).filter(x => x.situacao === 'pendente').length).catch(() => 0);   // S146 · item 79
+  // E60 · issue 237 (FE16): as trocas a registrar (e, para o PLH, as anotações a preparar)
+  const pTroca = rpc('tf_insp_trocas_ver').then(r => (r.pendentes || []).length + (PLH ? (r.registradas || []).filter(t => t.situacao === 'registrada' && ['a_preparar','emitindo'].indexOf(t.reg_situacao) >= 0).length : 0)).catch(() => 0);
   LISTAS = await rpc('tf_insp_preparacao_lista');
   const L = LISTAS, nPlh = (L.plh || []).filter(x => !x.decisao).length;
-  const [nRev, nLaudo, CAMPO, nTex] = await Promise.all([pRev, pLaudo, pCampo, pTex]);
+  const [nRev, nLaudo, CAMPO, nTex, nTroca] = await Promise.all([pRev, pLaudo, pCampo, pTex, pTroca]);
   if (!vigente(vez)) return;   // E48 · issue 65, item 11: outra tela foi aberta enquanto as listas vinham
   const abas = [['os','A preparar', (L.os || []).length], ['campo','Em campo', CAMPO.length], ['conf','Laudos a conferir', (L.a_conferir || []).length], ['plh','Para o PLH', nPlh], ['rev','A revisar', nRev],
-                ['laudos','Laudos', nLaudo], ['textos','Textos do laudo', nTex], ['inst','Instrumentos', 0], ['mat','Materiais', 0]];   // S146 · item 79   // E2 (S80) · E9 (Laudos)
+                ['laudos','Laudos', nLaudo], ['textos','Textos do laudo', nTex], ['trocas','Trocas', nTroca], ['inst','Instrumentos', 0], ['mat','Materiais', 0]];   // E60: Trocas   // S146 · item 79   // E2 (S80) · E9 (Laudos)
   let h = '<div class="abas">' + abas.map(([k, r, n]) => '<button data-a="' + k + '" class="' + (aba === k ? 'on' : '') + '">' + r
     + (n ? '<span class="bolha">' + n + '</span>' : '') + '</button>').join('') + '</div>';
   if (aba === 'rev') return abaRevisao(h);   // E8 · R05a
   if (aba === 'laudos') return abaLaudos(h);   // E9 · R06a
   if (aba === 'textos') return abaTextos(h);   // S146 · item 79
+  if (aba === 'trocas') return abaTrocas(h);   // E60 · issue 237 (FE16)
   if (aba === 'inst' || aba === 'mat'){ $('tela').innerHTML = h + '<p class="muted">Carregando…</p>'; ligarAbas(); return aba === 'inst' ? telaInstrumentos() : telaMateriais(); }
   if (aba === 'campo'){
     // S141 · item 41: as OS com a T06 "Executar a inspeção" aberta, vaso por vaso; tocar abre a preparação (marcar ou tirar vaso)
@@ -567,7 +571,17 @@ const TX_NOMES = {
   valvula_reprovada:'7.6 · válvula reprovada', valvula_motivo_pmta:'7.6 · motivo: abre acima da PMTA', valvula_motivo_tolerancia:'7.6 · motivo (antigo): assentamento',
   valvula_lacre:'7.6 · lacre da válvula', valvula_nao:'7.6 · válvula não aferida', parecer_pressao:'12 · parecer (PMTA abaixo da operação)',
   registro_condicao_pressao:'Registro de Segurança · condição (PMTA abaixo da operação)', rec_conservacao_gerais:'11 · recomendações gerais de conservação',
-  boro_nao:'Boroscopia não feita', boro_ok:'Boroscopia sem anomalia'
+  boro_nao:'Boroscopia não feita', boro_ok:'Boroscopia sem anomalia',
+  // E60 · issue 242 (P6) e 237 (FE16): o Registro da aferição avulsa e o da troca de acessório
+  'registro_afericao.titulo':'Registro (aferição) · título', 'registro_afericao.abertura':'Registro (aferição) · abertura',
+  'registro_afericao.linha_valvula':'Registro (aferição) · linha da válvula', 'registro_afericao.linha_manometro':'Registro (aferição) · linha do manômetro',
+  'registro_afericao.conforme':'Registro (aferição) · resultado conforme', 'registro_afericao.nao_conforme':'Registro (aferição) · resultado não conforme',
+  'registro_afericao.fecho':'Registro (aferição) · fecho', 'registro_afericao.pagina':'Registro (aferição) · página do livro',
+  'registro_troca.titulo':'Registro (troca de acessório) · título', 'registro_troca.texto':'Registro (troca de acessório) · o que saiu e o que entrou',
+  'registro_troca.texto_sem_antigo':'Registro (troca de acessório) · sem dispositivo anterior', 'registro_troca.ajuste_valvula':'Registro (troca de acessório) · ajuste da válvula',
+  'registro_troca.ajuste_valvula_sem_pmta':'Registro (troca de acessório) · ajuste sem a PMTA', 'registro_troca.escala_manometro':'Registro (troca de acessório) · escala do manômetro',
+  'registro_troca.cert_fabricante':'Registro (troca de acessório) · certificado do fabricante', 'registro_troca.cert_engetap':'Registro (troca de acessório) · certificado da Engetap',
+  'registro_troca.fecho':'Registro (troca de acessório) · fecho', 'registro_troca.pagina':'Registro (troca de acessório) · página do livro'
 };
 const TX_SUB = { rec_regra:'11 · recomendação pronta', prazo_just:'13 · justificativa do prazo', referencias:'2 · referência', conc:'12 · conclusão', titulos:'Título' };
 const TX_ACESS = { manometro:'manômetro', manovacuometro:'manovacuômetro', valvula_seguranca:'válvula de segurança', valvula_alivio:'válvula de alívio',
@@ -665,6 +679,137 @@ async function abaTextos(h){
   try{ TXT = await rpc('tf_laudo_textos_ver'); if (!vigente(vez)) return; }
   catch(e){ if (!vigente(vez)) return; $('tela').innerHTML = h + '<div class="card vazio"></div>'; $('tela').querySelector('.vazio').textContent = e.message || 'Não deu para carregar.'; ligarAbas(); return; }
   pintarTextos(h);
+}
+// ── E60 · issue 237 (FE16 item 3): a aba Trocas — a troca do acessório instalado pela OS de fornecimento ──
+// O escritório registra a troca no cadastro do vaso (tf_insp_troca_registrar, 319): o acessório que saiu, o novo e o certificado;
+// o PLH prepara a anotação no Registro de Segurança (tf_insp_troca_preparar → carimbo → PDF → tf_insp_troca_doc_gravar, 456)
+// e assina no pacote de sempre (aba Laudos › Para assinar). Nada é gravado nos acessórios da inspeção: a troca não sugere item a orçar.
+let TROCAS = null;
+async function abaTrocas(h){
+  const vez = TELA_VEZ;
+  $('tela').innerHTML = h + '<p class="muted">Carregando…</p>'; ligarAbas();
+  try{ TROCAS = await rpc('tf_insp_trocas_ver'); if (!vigente(vez)) return; }
+  catch(e){ if (!vigente(vez)) return; $('tela').innerHTML = h + '<div class="card vazio"></div>'; $('tela').querySelector('.vazio').textContent = e.message || 'Não deu para carregar.'; ligarAbas(); return; }
+  pintarTrocas(h);
+}
+const ROT_REG = { a_preparar:['a preparar (PLH)','s-em_conferencia'], emitindo:['preparando (PLH)','s-em_conferencia'], emitido:['com o PLH para assinar','s-pegar_cliente'],
+  assinado:['assinada','s-pronto'], sem_registro:['anotar à mão (vaso sem inspeção no TapDoc)','s-grave'] };
+const UN_TROCA = [['kgf/cm2','kgf/cm²'], ['bar','bar'], ['MPa','MPa'], ['psi','psi'], ['kPa','kPa']];
+const unTroca = u => { u = String(u || '').replace('²', '2'); return UN_TROCA.some(x => x[0] === u) ? u : 'kgf/cm2'; };
+function ajusteTxt(t){
+  if (t.pressao_ajuste_mpa == null) return '';
+  const f = { MPa:1, bar:0.1, 'kgf/cm2':0.0980665, psi:0.00689476, kPa:0.001 }[t.unidade || 'kgf/cm2'] || 1;
+  return 'ajuste ' + fmt(Number(t.pressao_ajuste_mpa) / f, 2) + ' ' + (UN_TROCA.find(x => x[0] === t.unidade) || ['', t.unidade || ''])[1];
+}
+function pintarTrocas(h){
+  const T = TROCAS || {}, P = T.pendentes || [], R = T.registradas || [], plh = !!(T.eu && T.eu.plh);
+  let x = h + '<div class="card"><h3>Instalados pela OS de fornecimento: registrar a troca no cadastro do vaso</h3>'
+    + '<p class="muted">Quando a tarefa "Instalar e fechar a medição" da OS de fornecimento conclui, cada válvula ou manômetro instalado num vaso aparece aqui. '
+    + 'Diga o acessório que saiu, o novo (nº de série, ajuste ou escala) e o certificado. O próximo pacote do celular já traz o acessório novo no lugar do antigo; '
+    + 'o PLH prepara a anotação da troca no Registro de Segurança e assina no pacote de sempre.</p>'
+    + (P.length ? '<table class="cartoes" id="trPend"><tr><th>Vaso</th><th>Cliente</th><th>Item</th><th>OS que instalou</th><th></th></tr>'
+      + P.map((p, k) => '<tr><td><b>' + esc(p.vaso.tag || '') + '</b>' + (p.vaso.numero_tap ? '<div class="muted">Nº TAP ' + esc(p.vaso.numero_tap) + '</div>' : '') + '</td><td data-r="Cliente">' + esc(p.vaso.cliente || '')
+        + '</td><td data-r="Item">' + (p.tipo === 'valvula' ? 'Válvula' : 'Manômetro') + (p.origem === 'afericao' ? ' <span class="chip s-em_conferencia">sugestão do TapDoc</span>' : '')
+        + '</td><td data-r="OS">' + esc(p.os || '') + (p.instalado_em ? '<div class="muted">instalado em ' + dataBR(p.instalado_em) + '</div>' : '') + '</td>'
+        + '<td class="acoes" style="text-align:right"><button class="btn mini pri" data-trreg="' + k + '">Registrar a troca</button> <button class="btn mini sec" data-trsem="' + k + '">Não houve troca</button></td></tr>').join('') + '</table>'
+      : '<p class="vazio">Nada a registrar.</p>') + '</div>';
+  x += '<div class="card"><h3>Trocas registradas</h3>' + (R.length ? '<table class="cartoes" id="trReg"><tr><th>Vaso</th><th>Saiu</th><th>Entrou</th><th>Certificado</th><th>Registro de Segurança</th><th></th></tr>'
+    + R.map(t => { const sem = t.situacao === 'sem_troca', rg = ROT_REG[t.reg_situacao] || [t.reg_situacao, ''];
+      const pode = !sem && plh && ['a_preparar','emitindo','emitido'].indexOf(t.reg_situacao) >= 0;
+      return '<tr data-trid="' + esc(t.id) + '"><td><b>' + esc((t.vaso || {}).tag || '') + '</b><div class="muted">' + esc((t.vaso || {}).cliente || '') + '</div><div class="muted">OS ' + esc(t.os || '—')
+        + (t.instalado_em ? ' · ' + dataBR(t.instalado_em) : '') + '</div></td>'
+        + (sem ? '<td data-r="Saiu" colspan="3"><span class="muted">não houve troca: ' + esc(t.motivo || '') + '</span></td><td data-r="Registro">—</td>'
+          : '<td data-r="Saiu">' + esc(descAc(t.antigo) || '— (o vaso não tinha)') + '</td><td data-r="Entrou">' + esc(descAc(t)) + '<div class="muted">' + esc(ajusteTxt(t) || (t.escala ? 'escala ' + t.escala : ''))
+            + (t.lacre_num ? ' · lacre ' + esc(t.lacre_num) : '') + '</div></td><td data-r="Certificado">' + esc((t.cert_origem === 'fabricante' ? 'do fabricante' : 'da Engetap') + ' nº ' + (t.cert_numero || '—'))
+            + (t.cert_anexo && t.cert_anexo.url ? ' <a class="btn mini sec" target="_blank" rel="noopener" href="' + esc(t.cert_anexo.url) + '">abrir</a>' : '')
+            + '</td><td data-r="Registro"><span class="chip ' + rg[1] + '">' + esc(rg[0]) + '</span>' + (t.reg_emitido_por && t.reg_situacao !== 'a_preparar' ? '<div class="muted">' + esc(t.reg_emitido_por) + '</div>' : '') + '</td>')
+        + '<td class="acoes" style="text-align:right">' + (pode ? '<button class="btn mini sec" data-trrasc="' + esc(t.id) + '">Rascunho</button> <button class="btn mini pri" data-trprep="' + esc(t.id) + '">'
+            + (t.reg_situacao === 'emitido' ? 'Preparar de novo' : 'Preparar a anotação para assinar') + '</button> ' : '')
+          + (t.reg_situacao !== 'assinado' ? '<button class="btn mini sec" data-trdesf="' + esc(t.id) + '">Desfazer</button>' : '') + '</td></tr>'; }).join('') + '</table>'
+      + (plh ? '<p class="muted" style="margin-top:6px">Depois de preparar, assine com o token na aba Laudos › "Para assinar com o token" (a anotação vai no mesmo pacote dos laudos).</p>' : '')
+    : '<p class="vazio">Nenhuma troca registrada.</p>') + '</div><span class="muted" id="trAviso"></span><div id="ldVisor"></div>';
+  $('tela').innerHTML = x;
+  ligarAbas();
+  const aviso = t => { const a = $('trAviso'); if (a) a.textContent = t || ''; };
+  $('tela').querySelectorAll('[data-trreg]').forEach(b => b.addEventListener('click', () => janelaTroca(P[Number(b.dataset.trreg)])));
+  $('tela').querySelectorAll('[data-trsem]').forEach(b => b.addEventListener('click', () => {
+    const p = P[Number(b.dataset.trsem)];
+    janela('Não houve troca · ' + (p.vaso.tag || ''), '<p class="muted">O item a orçar foi para a OS ' + esc(p.os || '') + ', mas não foi instalado neste vaso. Diga o porquê: o item sai da lista e o cadastro do vaso não muda.</p>'
+      + '<label class="f">Motivo<textarea class="t" id="trSemMot" rows="3"></textarea></label>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:async () => { const mot = $('trSemMot').value;
+        try{ await rpc('tf_insp_troca_registrar', { p_orcar: p.orcar_id, p_dados: { sem_troca: true, motivo: mot } }); U.toast('Gravado: não houve troca.', 'ok'); pintar(); }
+        catch(e){ erro(e); return false; } } }]);
+  }));
+  $('tela').querySelectorAll('[data-trdesf]').forEach(b => b.addEventListener('click', () => {
+    janela('Desfazer a troca', '<p class="muted">A troca sai do cadastro do vaso e o item volta para "registrar". A anotação ainda não assinada é descartada.</p>'
+      + '<label class="f">Motivo<textarea class="t" id="trDesfMot" rows="3"></textarea></label>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Desfazer', classe:'pri', acao:async () => { const mot = $('trDesfMot').value;
+        try{ await rpc('tf_insp_troca_cancelar', { p_id: b.dataset.trdesf, p_motivo: mot }); U.toast('Troca desfeita.', 'ok'); pintar(); }
+        catch(e){ erro(e); return false; } } }]);
+  }));
+  $('tela').querySelectorAll('[data-trrasc]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
+    const t = R.find(y => y.id === b.dataset.trrasc); if (!t) return;
+    try{ aviso('Montando o rascunho…'); await libsLaudo();
+      const TX = await rpc('tf_laudo_textos_ver'), B = (TX && TX.modelo && TX.modelo.blocos) || {};
+      const prop = B.registro_troca ? null : ((TX && TX.propostas) || []).find(q => q.origem === 's228t' && q.situacao === 'pendente');
+      const def = DocumentosPDF.registro({ troca: t, vaso: t.vaso || {}, modelo: { blocos: B } }, { textos: prop ? DocumentosPDF.textosDaProposta(prop.mudancas, 'registro_troca') : null, marca: 'RASCUNHO' });
+      if (!def){ aviso(''); U.toast('Os textos da anotação da troca ainda não foram propostos ao PLH.', 'err'); return; }
+      mostrarPdf(await pdfBytes(def), 'Registro de Segurança - troca - ' + ((t.vaso || {}).tag || '') + ' (rascunho).pdf'); aviso('');
+    }catch(e){ aviso(''); erro(e); }
+  })));
+  $('tela').querySelectorAll('[data-trprep]').forEach(b => b.addEventListener('click', () => U.semDuploEnvio(b, async () => {
+    const id = b.dataset.trprep;
+    if (!await N.janela.confirmar('Preparar a anotação para assinar', '<p>Gera a anotação da troca no Registro de Segurança do vaso, com o desenho da sua assinatura e "Aprovado eletronicamente por …". '
+        + 'O PDF fica só no seu pacote "Para assinar" até você assinar com o token ou o gov.br.</p><p class="muted">Preparar de novo descarta o PDF ainda não assinado.</p>', 'Preparar')) return;
+    try{
+      aviso('Preparando…');
+      const r = await rpc('tf_insp_troca_preparar', { p_id: id });
+      const carimbo = await rpc('tf_insp_troca_carimbo', { p_id: id });
+      await libsLaudo();
+      const def = DocumentosPDF.registro(r.dados, { carimbo, plh: r.dados.plh });
+      if (!def) throw new Error('Os textos da anotação da troca ainda esperam a aprovação do PLH (Textos do laudo).');
+      const bytes = await pdfBytes(def), sha = hexDe(await crypto.subtle.digest('SHA-256', bytes)), pags = (await PDFLib.PDFDocument.load(bytes)).getPageCount();
+      const cam = r.dados.troca.inspecao_id + '/registro-troca-' + uid().slice(0, 8) + '.pdf';
+      aviso('Enviando…');
+      await enviarArq(cam, new Blob([bytes], { type:'application/pdf' }), 'A anotação');
+      await rpc('tf_insp_troca_doc_gravar', { p_id: id, p_doc: { path: cam, sha, paginas: pags } });
+      aviso('');
+      U.toast('Anotação preparada. Assine com o token ou o gov.br (aba Laudos › Para assinar).' + (carimbo && carimbo.desenho_novo ? ' O desenho da sua assinatura é novo: confira no PDF antes de assinar.' : ''), 'ok');
+      await abaTrocas(h);
+      mostrarPdf(bytes, 'Registro de Segurança - troca - ' + ((r.dados.vaso || {}).tag || '') + ' (para assinar).pdf');
+    }catch(e){ aviso(''); erro(e); }
+  })));
+}
+/** E60: a janela do registro da troca (o acessório que saiu já vem marcado quando o item veio da sugestão do TapDoc). */
+function janelaTroca(p){
+  const val = p.tipo === 'valvula', A = p.acessorios || [], d = p.dados || {};
+  const ant0 = A.find(a => a.id === p.insp_acessorio_id) || (A.length === 1 ? A[0] : null);
+  const tipos = val ? [['valvula_seguranca','Válvula de segurança'], ['valvula_alivio','Válvula de alívio'], ['quebra_vacuo','Quebra-vácuo']] : [['manometro','Manômetro'], ['manovacuometro','Manovacuômetro']];
+  const tipo0 = ant0 && tipos.some(t => t[0] === ant0.tipo) ? ant0.tipo : tipos[0][0];
+  const anx = p.anexos || [], fab0 = p.cert_fabricante && anx.length;
+  const sel = (id, ops, v) => '<select class="t" id="' + id + '">' + ops.map(o => '<option value="' + esc(o[0]) + '"' + (o[0] === v ? ' selected' : '') + '>' + esc(o[1]) + '</option>').join('') + '</select>';
+  const esc0 = d.escala_min != null && d.escala_max != null ? String(d.escala_min) + ' a ' + String(d.escala_max) + ' ' + (d.unidade || 'kgf/cm²') : '';
+  const html = '<p class="muted">Vaso <b>' + esc(p.vaso.tag || '') + '</b> · OS ' + esc(p.os || '') + (p.vaso.pmta_mpa != null ? ' · PMTA do cadastro ' + fmt(Number(p.vaso.pmta_mpa), 3) + ' MPa' : ' · sem PMTA no cadastro') + '</p>'
+    + '<label class="f">O que saiu' + sel('trAnt', A.map(a => [a.id, descAc(a) || a.tipo]).concat([['', 'Nenhum (o vaso não tinha)']]), ant0 ? ant0.id : '') + '</label>'
+    + '<div class="g3"><label class="f">Tipo do novo' + sel('trTipo', tipos, tipo0) + '</label><label class="f">TAG<input class="t" id="trTag" value="' + esc(ant0 && ant0.tag || '') + '"></label>'
+    + '<label class="f">Nº de série<input class="t" id="trSerie" maxlength="60"></label></div>'
+    + '<div class="g3"><label class="f">Marca<input class="t" id="trMarca"></label><label class="f">Modelo<input class="t" id="trModelo"></label><label class="f">Lacre nº<input class="t" id="trLacre"></label></div>'
+    + (val ? '<div class="g3"><label class="f">Pressão de ajuste (abertura)<input class="t" id="trAj" inputmode="decimal" value="' + esc(d.pressao_abertura || '') + '"></label><label class="f">Unidade'
+        + sel('trUn', UN_TROCA, unTroca(d.unidade)) + '</label><span></span></div>'
+      : '<label class="f">Escala do manômetro novo<input class="t" id="trEsc" value="' + esc(esc0) + '" placeholder="ex.: 0 a 10 kgf/cm²"></label>')
+    + '<div class="g3"><label class="f">Certificado' + sel('trCertOr', [['fabricante','do fabricante (anexado na OS)'], ['engetap','da Engetap (calibrado aqui)']], fab0 ? 'fabricante' : 'engetap') + '</label>'
+    + '<label class="f">Nº do certificado<input class="t" id="trCertNum" value="' + esc(fab0 ? '' : ((p.certificados_engetap || [])[0] || '')) + '"></label>'
+    + '<label class="f">PDF anexado na OS' + sel('trCertAnx', [['', anx.length ? 'nenhum' : 'nenhum anexado']].concat(anx.map(a => [a.id, a.nome || 'certificado'])), fab0 ? anx[0].id : '') + '</label></div>'
+    + '<div class="g3"><label class="f">Data da instalação<input class="t" type="date" id="trData" value="' + esc(p.instalado_em || '') + '"></label><label class="f" style="grid-column:span 2">Observação<input class="t" id="trObs"></label></div>'
+    + '<p class="muted">O certificado do fabricante precisa estar anexado na OS de fornecimento (tipo "Certificado"); o da Engetap, só o número. A pressão de ajuste acima da PMTA do vaso é recusada (NR-13, item 13.5.1.2, alínea "a").</p>';
+  janela('Registrar a troca · ' + (val ? 'válvula' : 'manômetro'), html, [{ rotulo:'Cancelar' }, { rotulo:'Registrar', classe:'pri', acao:async () => {
+    const dados = { antigo_id: $('trAnt').value || null, tipo: $('trTipo').value, tag: $('trTag').value, numero_serie: $('trSerie').value, marca: $('trMarca').value,
+      modelo: $('trModelo').value, lacre_num: $('trLacre').value, cert_origem: $('trCertOr').value, cert_numero: $('trCertNum').value, cert_anexo_id: $('trCertAnx').value || null,
+      instalado_em: $('trData').value || null, observacao: $('trObs').value };
+    if (val){ dados.pressao_ajuste = $('trAj').value; dados.unidade = $('trUn').value; } else dados.escala = $('trEsc').value;
+    try{ await rpc('tf_insp_troca_registrar', { p_orcar: p.orcar_id, p_dados: dados }); U.toast('Troca registrada no cadastro do vaso.', 'ok'); pintar(); }
+    catch(e){ erro(e); return false; }
+  } }]);
 }
 function pintarTextos(h){
   const M = TXT.modelo || {}, B = M.blocos || {}, todas = TXT.propostas || [], pend = todas.filter(p => p.situacao === 'pendente'), dec = todas.filter(p => p.situacao !== 'pendente');
@@ -1591,7 +1736,9 @@ async function quadroDocumentos(os){
       const fa2 = arquivosAfericao(D, v, true).filter(x => x.situacao !== 'assinado'), M = v.afericao;
       return '<tr data-docv="' + esc(v.inspecao_id) + '"><td><b>' + esc(v.tag) + '</b> ' + CHIP_AFER + (v.numero_tap ? '<div class="muted">Nº TAP ' + esc(v.numero_tap) + '</div>' : '')
         + (A.length && fa2.length ? '<div><span class="chip s-grave" data-faltaass="' + fa2.length + '">' + (fa2.length === 1 ? 'falta assinar 1' : 'faltam ' + fa2.length + ' por assinar') + '</span></div>' : '') + '</td>'
-        + (A.length ? '<td data-r="Relatório" colspan="3"><span class="muted">só aferição: sem laudo, Resumo e Registro</span></td><td data-r="Cert. manômetro">' + cel(so('cert_manometro'))
+        + (A.length ? '<td data-r="Relatório" colspan="2"><span class="muted">só aferição: sem laudo e Resumo</span></td><td data-r="Registro de Segurança">'
+            + (so('registro').length ? '<div class="muted">só a anotação</div>' + cel(so('registro')) : '<span class="muted">não saiu (os textos esperavam o PLH)</span>')   // E60 · P6
+            + '</td><td data-r="Cert. manômetro">' + cel(so('cert_manometro'))
             + '</td><td data-r="Cert. válvula">' + cel(so('cert_valvula')) + '</td><td data-r="Prontuário"><span class="muted">—</span></td><td data-r="Fichário"><span class="muted">—</span></td>'
             + '<td class="acoes" style="text-align:right"><button class="btn mini" data-zipv="' + esc(v.inspecao_id) + '" style="white-space:nowrap">Baixar tudo do vaso</button></td>'
           : '<td colspan="8" class="muted">' + (M ? 'certificados da aferição com o PLH para assinar: os PDFs aparecem aqui depois de assinados' : 'só aferição: certificados ainda não preparados (aba Laudos)') + '</td>') + '</tr>';
@@ -1616,7 +1763,7 @@ async function quadroDocumentos(os){
     + '<div class="card" style="margin:0"><b>Instrumentos usados nesta OS</b><div style="margin-top:4px">' + (ins.length ? ins.map(z => '<div>' + esc(z.rot) + ' <span class="muted">cert. ' + esc(z.numero) + '</span> ' + btDl(z) + '</div>').join('')
       + '<div class="muted">O PDF do laboratório como veio (com a assinatura dele).</div>' : '<span class="muted">nenhum certificado anexado</span>') + '</div></div>'
     + '<div class="muted" style="align-self:center">' + chipDoc('assinado') + ' o PDF assinado pelo PLH (o oficial)<br>' + chipDoc('aprovado') + ' aprovado e numerado (é o que vai para o token)<br>Fichário e lombadas: só para cliente com "Imprime a pasta" = sim; gerados na hora, sem assinatura</div></div>'
-    + '<span class="muted" id="docsAviso"></span>' + cartaoPacote(P);
+    + '<span class="muted" id="docsAviso"></span>' + trocasDocsHtml(D, D.vasos || []) + cartaoPacote(P);
   cx.innerHTML = h;
   ligarDownloads(cx, D, t => { const a = $('docsAviso'); if (a) a.textContent = t || ''; });
   ligarPacote(P);
@@ -1642,7 +1789,22 @@ function cartaoDocsVaso(D){
     + '<button class="btn pri" data-zipv="' + esc(v.inspecao_id) + '">Baixar tudo do vaso (.zip)</button></div>'
     + '<table class="cartoes"><tr><th>Documento</th><th>Número</th><th>Nome do arquivo</th><th>Situação</th><th></th></tr>' + linhas.map(x => '<tr><td>' + esc(x.rot) + '</td><td data-r="Número">' + esc(x.numero || '—')
       + '</td><td data-r="Arquivo" class="muted">' + esc(x.nome) + '</td><td data-r="Situação">' + (x.tipo === 'art' ? '<span class="muted">arquivo do CREA</span>' : x.tipo === 'instrumento' ? '<span class="muted">do laboratório</span>' : chipDoc(x.situacao))
-      + '</td><td>' + btDl(x) + '</td></tr>').join('') + linhasFichario(D, v) + '</table></div>';
+      + '</td><td>' + btDl(x) + '</td></tr>').join('') + linhasFichario(D, v) + '</table>' + trocasDocsHtml(D, [v]) + '</div>';
+}
+/** E60 · issue 237 (FE16 item 3): as trocas de acessório do vaso (o que entrou, o certificado e a anotação no Registro). */
+const ROT_AC = { valvula_seguranca:'válvula de segurança', valvula_alivio:'válvula de alívio', quebra_vacuo:'quebra-vácuo', manometro:'manômetro', manovacuometro:'manovacuômetro' };
+const descAc = a => !a ? '' : [ROT_AC[a.tipo] || a.tipo, a.tag, a.marca, a.numero_serie ? 'nº de série ' + a.numero_serie : null].filter(Boolean).join(' · ');
+function trocasDocsHtml(D, vs){
+  const L = []; (vs || []).forEach(v => (v.trocas || []).forEach(t => L.push({ v, t })));
+  if (!L.length) return '';
+  return '<div class="card" id="cxTrocasDocs" style="margin-top:10px"><b>Trocas de acessório (cadastro do vaso)</b><table class="cartoes" style="margin-top:6px"><tr><th>Vaso</th><th>Saiu</th><th>Entrou</th><th>Certificado</th><th>Registro de Segurança</th></tr>'
+    + L.map(({ v, t }) => { const d = t.doc, ok = d && d.situacao === 'assinado';
+      return '<tr><td><b>' + esc(v.tag) + '</b><div class="muted">OS ' + esc(t.os || '—') + (t.instalado_em ? ' · ' + dataBR(t.instalado_em) : '') + '</div></td><td data-r="Saiu">' + esc(descAc(t.antigo) || '—')
+        + '</td><td data-r="Entrou">' + esc(descAc(t)) + '</td><td data-r="Certificado">' + esc((t.cert_origem === 'fabricante' ? 'do fabricante' : 'da Engetap') + ' nº ' + (t.cert_numero || '—'))
+        + (t.cert_anexo && t.cert_anexo.url ? ' <a class="btn mini sec" target="_blank" rel="noopener" href="' + esc(t.cert_anexo.url) + '">abrir</a>' : '')
+        + '</td><td data-r="Registro">' + (ok ? chipDoc('assinado') + ' ' + btDl({ path:d.assinado_path, nome:'Registro de Segurança - troca - ' + (v.tag || '') + '.pdf' })
+          : '<span class="muted">' + (d ? 'com o PLH para assinar' : t.reg_situacao === 'sem_registro' ? 'anotar à mão no Registro do cliente' : 'a preparar (PLH, aba Trocas)') + '</span>') + '</td></tr>'; }).join('')
+    + '</table></div>';
 }
 
 // ── 2d · E36 (S165 · issue 30, Parte 2): a caixa "O cliente já tem a pasta (DataBook) deste vaso" (DP8) ──
@@ -1800,6 +1962,12 @@ async function textosPressaoMinuta(d){
     const o = {}; (x.mudancas || []).forEach(m => { o[m.chave] = m.depois; }); return o; }catch(e){ return null; }
 }
 /** A minuta do Registro antes de o PLH aprovar os textos: usa a proposta "s165" que espera (só para ver; a emissão não usa). */
+/** E60: a proposta que espera o PLH vira o bloco da minuta (o Registro da aferição, s228a, e o da troca, s228t). */
+async function textosMinutaDe(d, bloco, origem){
+  if (d.modelo && d.modelo.blocos && d.modelo.blocos[bloco]) return null;
+  try{ const T = await rpc('tf_laudo_textos_ver'); const x = ((T && T.propostas) || []).find(p => p.origem === origem && p.situacao === 'pendente');
+    return x && window.DocumentosPDF ? DocumentosPDF.textosDaProposta(x.mudancas, bloco) : null; }catch(e){ return null; }
+}
 async function textosRegistroMinuta(d){
   if (d.modelo && d.modelo.blocos && d.modelo.blocos.registro) return null;
   try{ const T = await rpc('tf_laudo_textos_ver'); const x = ((T && T.propostas) || []).find(p => p.origem === 's165' && p.situacao === 'pendente');
@@ -4337,7 +4505,7 @@ function libsLaudo(){
     if (!window.pdfMake.vfs || !Object.keys(window.pdfMake.vfs).length) await carregarScript('vendor/vfs_fonts.js?v=0.2.20');
     if (!window.PDFLib) await carregarScript('vendor/pdf-lib.min.js?v=1.17.1');
     if (!window.LaudoPDF) await carregarScript('laudo-pdf.js?v=S179');
-    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D10');   // E35 · issue 30: o Resumo e os nomes dos arquivos
+    if (!window.DocumentosPDF) await carregarScript('documentos-pdf.js?v=D11');   // E35 · issue 30: o Resumo e os nomes dos arquivos
     if (!window.AssinaturaPDF) await carregarScript('assinatura-pdf.js?v=S221');
     return true;
   })().catch(e => { LIBS = null; throw e; });
@@ -4698,7 +4866,7 @@ function cartaoCancelados(C){
 }
 // A4/A5: o pacote para o token (Assinador SERPRO, em lote) e a devolução dos assinados
 // E35 · issue 30 (DP4): o pacote leva todos os documentos técnicos (o relatório, o Resumo e os certificados), cada um num PDF
-function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D10').then(() => true, () => false); }
+function libDocs(){ return window.DocumentosPDF ? Promise.resolve(true) : carregarScript('documentos-pdf.js?v=D11').then(() => true, () => false); }
 /** O que falta assinar: os relatórios (tf_laudo_para_assinar) e os outros documentos (tf_insp_docs_para_assinar). insps: só dessas inspeções. */
 async function pacoteParaAssinar(insps){
   // E51 · issue 70: R = os laudos de inspeção reaberta e aprovada de novo, que esperam a revisão (não se assinam)
@@ -4753,7 +4921,7 @@ async function devolverDoc(x, b, aviso){
   if (c.erro) throw new Error(c.erro);
   let pags; try{ pags = (await PDFLib.PDFDocument.load(b, { ignoreEncryption:true, updateMetadata:false })).getPageCount(); }catch(e){ throw new Error('Não consegui ler o PDF assinado.'); }
   aviso('Enviando…');
-  const caminho = x.inspecao_id + '/' + x.tipo + '-' + (x.so_afericao ? 'afericao' : String(x.laudo_numero || '').replace(/[^\w-]+/g, '-')) + (x.revisao ? '-rev' + x.revisao : '') + '-' + x.ordem + '-assinado-' + uid().slice(0, 8) + '.pdf';   // E59 · issue 242
+  const caminho = x.inspecao_id + '/' + x.tipo + '-' + (x.so_afericao ? 'afericao' : x.troca_id ? 'troca' : String(x.laudo_numero || '').replace(/[^\w-]+/g, '-')) + (x.revisao ? '-rev' + x.revisao : '') + '-' + x.ordem + '-assinado-' + uid().slice(0, 8) + '.pdf';   // E59 · issue 242
   await enviarArq(caminho, new Blob([b], { type:'application/pdf' }), 'O documento assinado');
   delete c.original_fim;
   await rpc('tf_insp_doc_assinado', { p_doc: x.id, p_path: caminho, p_paginas: pags, p_conferencia: c });
@@ -4772,7 +4940,7 @@ async function devolverVarios(P, fs, aviso){
       if (!x) throw new Error('não é nenhum dos laudos do pacote nem dos documentos dele (ou foi mudado antes de assinar).');
       const c = x.laudo ? await devolverAssinado(x.laudo, b) : await devolverDoc(x.doc, b);
       // E51 · issue 73: o que foi conferido — de quem é o certificado, quem emitiu, até quando vale e o tipo da assinatura
-      ok++; res.push('<li>✅ ' + esc(f.name) + ': ' + esc(rotDoc(x) + (x.doc && x.doc.so_afericao ? ' da aferição' : ' do ' + x.laudo_numero) + (x.revisao ? ' Rev. ' + x.revisao : '')) + ' assinado e conferido.'
+      ok++; res.push('<li>✅ ' + esc(f.name) + ': ' + esc(rotDoc(x) + (x.doc && x.doc.so_afericao ? ' da aferição' : x.doc && x.doc.troca_id ? ' da troca de acessório' : ' do ' + x.laudo_numero) + (x.revisao ? ' Rev. ' + x.revisao : '')) + ' assinado e conferido.'
         + '<div class="muted" data-cert="' + esc(c.tipo || '') + '">' + esc(AssinaturaPDF.resumo(c)) + '</div>'
         + (c.tipo === 'nao_identificada' ? '<div style="color:var(--crit)">Atenção: o certificado não é da ICP-Brasil nem do gov.br. A assinatura ficou gravada como "tipo não identificado": confira com quem vai receber o laudo se ela é aceita.</div>' : '') + '</li>');
     }catch(e){ res.push('<li style="color:var(--crit)">✗ ' + esc(f.name) + ': ' + esc(e.message || String(e)) + '</li>'); }
@@ -4912,6 +5080,12 @@ async function gerarCertificadosAfer(d, opc){
     out.push({ tipo:t, ordem:vez[t], total:total[t], numero:dc.codigo, acessorio_id:(comAf[k] || {}).id || null, bytes,
       sha: hexDe(await crypto.subtle.digest('SHA-256', bytes)), paginas: (await PDFLib.PDFDocument.load(bytes)).getPageCount() });
   }
+  // E60 · issue 242 (P6): o Registro de Segurança do vaso (a anotação das aferições), com os textos aprovados pelo PLH
+  // (blocos.registro_afericao da fotografia); a minuta usa a proposta que espera (opc.textosRegistro). Sem eles, não sai.
+  const reg = DocumentosPDF.registro(dd, Object.assign({}, opc, { textos: opc.textosRegistro || null }));
+  if (reg){ const bytes = await pdfBytes(reg);
+    out.push({ tipo:'registro', ordem:1, total:1, numero:null, acessorio_id:null, variante:'anotacao', bytes,
+      sha: hexDe(await crypto.subtle.digest('SHA-256', bytes)), paginas: (await PDFLib.PDFDocument.load(bytes)).getPageCount() }); }
   return out;
 }
 const semPmtaD = d => (d.acessorios || []).some(a => a.afericao && a.afericao.tipo === 'valvula' && ['aprovado','reprovado'].indexOf(a.afericao.resultado) >= 0
@@ -4947,14 +5121,16 @@ function ligarLaudoAfericao(){
   const vezTela = TELA_VEZ, recarregar = async () => { if (!vigente(vezTela)) return; const m = rolador(), y = m.scrollTop; await telaLaudo(LD.id); m.scrollTop = y; };
   const br = $('ldAfRascunho'); if (br) br.addEventListener('click', () => U.semDuploEnvio(br, async () => {
     try{ aviso('Montando os certificados…');
-      const docs = await gerarCertificadosAfer(d, { plh: d.plh });
-      aviso('Rascunho pronto (' + docs.length + ' certificado(s), sem a assinatura).');
+      const docs = await gerarCertificadosAfer(d, { plh: d.plh, textosRegistro: await textosMinutaDe(d, 'registro_afericao', 's228a') });   // E60
+      const nReg = docs.filter(x => x.tipo === 'registro').length;
+      aviso('Rascunho pronto (' + (docs.length - nReg) + ' certificado(s)' + (nReg ? ' e o Registro de Segurança' : '') + ', sem a assinatura).');
       if (docs.length){ mostrarPdf(docs[0].bytes, nomeArq(docs[0].tipo, { tag:d.vaso.tag, tap:d.vaso.numero_tap, cliente:clienteCurto(d), ordem:docs[0].ordem, total:docs[0].total }).replace(/\.pdf$/, ' (rascunho).pdf'));
         mostrarDocs(docs.slice(1), d, { extra:'rascunho' }); }
     }catch(e){ aviso(''); erro(e); }
   }));
   const bp = $('ldAfPreparar'); if (bp) bp.addEventListener('click', () => U.semDuploEnvio(bp, async () => {
-    if (!await N.janela.confirmar('Preparar os certificados para assinar', '<p>Gera um certificado por aferição terminada, com o número M ou V de cada uma. '
+    if (!await N.janela.confirmar('Preparar os certificados para assinar', '<p>Gera um certificado por aferição terminada, com o número M ou V de cada uma'
+        + ((d.modelo && d.modelo.blocos && d.modelo.blocos.registro_afericao) ? ', e a anotação no Registro de Segurança do vaso. ' : '. (O Registro de Segurança da aferição sai depois que o PLH aprovar os textos dele em "Textos do laudo".) ')
         + 'Cada página sai com o desenho da sua assinatura e "Aprovado eletronicamente por …". Os PDFs ficam só no seu pacote "Para assinar" até você assinar com o token ou o gov.br.</p>'
         + '<p class="muted">Preparar de novo descarta os PDFs ainda não assinados. Depois de assinados, para corrigir, só reabrindo a aferição (sai uma revisão).</p>', 'Preparar')) return;
     try{
@@ -4972,7 +5148,7 @@ function ligarLaudoAfericao(){
       }
       await rpc('tf_insp_afericao_docs_gravar', { p_emissao: r.id, p_docs: lista });
       aviso('');
-      U.toast(docs.length + ' certificado(s) preparado(s). Assine com o token ou o gov.br (aba Laudos › Para assinar).' + (carimbo && carimbo.desenho_novo ? ' O desenho da sua assinatura é novo: confira no PDF antes de assinar.' : ''), 'ok');
+      U.toast(docs.length + ' documento(s) preparado(s)' + (docs.some(x => x.tipo === 'registro') ? ' (com o Registro de Segurança)' : '') + '. Assine com o token ou o gov.br (aba Laudos › Para assinar).' + (carimbo && carimbo.desenho_novo ? ' O desenho da sua assinatura é novo: confira no PDF antes de assinar.' : ''), 'ok');
       await recarregar();
       if (docs.length) mostrarPdf(docs[0].bytes, nomeArq(docs[0].tipo, { tag:d.vaso.tag, tap:d.vaso.numero_tap, cliente:clienteCurto(d), ordem:docs[0].ordem, total:docs[0].total, paraAssinar:true }));
     }catch(e){ aviso(''); erro(e); recarregar(); }
