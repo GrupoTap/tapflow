@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFlow · S226</title>
+<title>TapFlow · S229</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- ── favicon ────────────────────────────────────────────────────────────────────────
      O "E" da Engetap DENTRO do arquivo, como data-URI. Por que embutido e não
@@ -1372,6 +1372,14 @@ th.num .tfThFixo{text-align:right}
 .toTab tr.toLin:hover,.toTab tr.toLin:focus{background:var(--rule-2)}
 .toSit-concluida{background:#e6f4ea;color:#1e6b34}
 .toSit-cancelada{background:#f3e8e8;color:#8a2a2a}
+/* S229 (issue 237 parte 4): Fornecimento em andamento */
+.fandGrupo{margin:18px 0 6px;font-size:14px;display:flex;gap:8px;align-items:baseline}
+.fandGrupo small{color:var(--ink-3);font-weight:400}
+.fandTab tr.fandLin{cursor:pointer}
+.fandTab tr.fandLin:hover,.fandTab tr.fandLin:focus{background:var(--rule-2)}
+.fandTab tr.fandParado td:first-child{box-shadow:inset 3px 0 0 var(--crit,#b3261e)}
+.fandParado .fandPrazo{color:var(--crit,#b3261e);font-weight:600}
+.fandPrz input{width:70px}
 #drawer.soLeitura .tkDes{display:none}
 .chip.apoio{background:var(--accent-soft);color:var(--accent-ink);border-color:transparent}
 /* S53 · ausências: uma cor por tipo, a mesma na Agenda e na tela de Ausências */
@@ -1669,7 +1677,8 @@ const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   //
 // ordenação, listras/faixas, grupos por mês e menu "⋯"; Editar no Contas a
 // Receber e depois da baixa no Contas a Pagar; Relatórios com o mesmo
 // componente de período — precisa do 103_ajustes_s48.sql no banco.
-const APP_VERSION = 'S226';   // S226: Rodada R28 — issue 237 parte 2 (o fornecimento enxuto: o aceite do negócio dos itens a orçar abre a OS; o pedido "em nome da Engetap/da Proper" com a confirmação anexada; "Material chegou" (manômetro calibra, válvula pergunta o certificado do fabricante); a nota da Proper; trocar a forma de faturar com motivo; "Próximo · com · desde", o negócio e a inspeção de origem no card; banco 317)
+const APP_VERSION = 'S229';   // S229: Rodada R31 — issue 237 parte 4 (o painel "Fornecimento em andamento", só para o escritório: as encomendas da medição à nota pela etapa, as paradas em vermelho, "Próximo · com · desde"; a aba "Prazos dos avisos" muda o prazo de cada etapa; os avisos pelo menu e pelo celular; banco 320)
+// const APP_VERSION = 'S226';   // S226: Rodada R28 — issue 237 parte 2 (o fornecimento enxuto: o aceite do negócio dos itens a orçar abre a OS; o pedido "em nome da Engetap/da Proper" com a confirmação anexada; "Material chegou" (manômetro calibra, válvula pergunta o certificado do fabricante); a nota da Proper; trocar a forma de faturar com motivo; "Próximo · com · desde", o negócio e a inspeção de origem no card; banco 317)
 // const APP_VERSION = 'S222';   // S222: issue 239 parte 1 — na OS de inspeção nova, as tarefas que concluem sozinhas pelo TapDoc (T06, T07, T09, T10, T12 e T15) mostram "Abrir no TapDoc" e, só para o admin, "Concluir à mão" com o motivo (banco 453)
 // const APP_VERSION = 'S218';   // S218: Rodada R21 — issue 115 parte 1 (a aba Custos só de leitura com o real: peças, contas do TapFin com a OS, diárias sem nomes e o deslocamento por dia de campo com o veículo; o fornecedor da aba Itens do cadastro, com "+ Novo fornecedor"; o Relatório Financeiro pelo custo real; banco 530 e 315)
 // const APP_VERSION = 'S217';   // S217: Rodada R25 — issue 236 (a D01 "O cliente adota pedido / ordem de compra?" com Sim/Não e a T01 "Inserir pedido de compra (Cliente)"; só texto, banco 314)
@@ -8936,6 +8945,8 @@ const NAV = [
     { v:'age', rot:'Agenda',     ico:'agenda', cont:'nAge' },
     // S211 (issue 113): todas as OS, com as concluídas e as canceladas (a concluída sai dos quadros e não tinha onde ser achada)
     { v:'todas', rot:'Todas as OS', ico:'lupa', mod:'os' },
+    // S229 (issue 237 parte 4, FE11): só o escritório e o admin (sem indicador de funcionário em tela comum)
+    { v:'fand', rot:'Fornecimento em andamento', ico:'forn', esc:true },
     { v:'cpr', rot:'Compras',    ico:'caixa', cont:'nCpr', mod:'compras' },
     { v:'ctr', rot:'Contratos',  ico:'pasta' },
     { v:'doc', rot:'Documentos', ico:'doc',                mod:'documentos' },
@@ -8985,7 +8996,7 @@ function podeVer(mod){
 /** Só os itens que esta pessoa abre, e só os grupos que sobraram com algo. */
 function navVisivel(){
   return NAV.map(g => Object.assign({}, g, { itens: g.itens.filter(i => podeVer(i.mod) && (!i.estrito || podeVerEstrito(i.mod))
-             && (!i.cc || CC_AUT) && (!i.rh || RH_AUT) && (!i.fin || FIN_AUT)) }))
+             && (!i.cc || CC_AUT) && (!i.rh || RH_AUT) && (!i.fin || FIN_AUT) && (!i.esc || podeEscritorio())) }))
             .filter(g => g.itens.length);
 }
 
@@ -9059,7 +9070,7 @@ function montarNav(){
 
 const ROTULO = { campo:'Equipes de Inspeção', adm:'Equipe Administrativa',
   com:'Equipe Comercial', tec:'Equipe Técnico Administrativa', forn:'Fornecimento de Produtos',
-  cpr:'Compras', age:'Agenda', ctr:'Contratos', doc:'Documentos', rel:'Relatórios', todas:'Todas as OS',
+  cpr:'Compras', age:'Agenda', ctr:'Contratos', doc:'Documentos', rel:'Relatórios', todas:'Todas as OS', fand:'Fornecimento em andamento',
   cad:'Clientes', dup:'Duplicados', cat:'Catálogo', cfg:'Configurações',
   eu:'Meu perfil', ccp:'Conta corrente Proper',
   finp:'Painel Financeiro', fincr:'Projeções futuras', finre:'Contas a Receber', finpg:'Contas a Pagar', finrec:'Contas Recorrentes', finprz:'Prazos de Recebimento', fincar:'Cartões',
@@ -9167,7 +9178,8 @@ function irPara(v){
   // Estado guardado de outro login, ou endereço colado: cai na primeira tela
   // que a pessoa realmente abre, em vez de numa tela sem menu correspondente.
   const item = NAV.reduce((a,g) => a.concat(g.itens), []).find(i => i.v === v);
-  if (item && (!podeVer(item.mod) || (item.estrito && !podeVerEstrito(item.mod)) || (item.cc && !CC_AUT) || (item.rh && !RH_AUT))){
+  if (item && (!podeVer(item.mod) || (item.estrito && !podeVerEstrito(item.mod)) || (item.cc && !CC_AUT) || (item.rh && !RH_AUT)
+               || (item.esc && !podeEscritorio()))){
     const primeira = (navVisivel()[0] || { itens:[] }).itens[0];
     if (primeira && primeira.v !== v){ irPara(primeira.v); return; }
   }
@@ -9206,6 +9218,7 @@ function irPara(v){
   if (eQuadroOS(v)){ quadro = v; REPINTA[v] = pintar; return pintar(); }
   if (v === 'age') return pintarAgenda();
   if (v === 'todas') return pintarTodasOS();   // S211 (113)
+  if (v === 'fand') return pintarFornAndamento();   // S229 (237 parte 4)
   if (v === 'cpr') return pintarCompras();
   if (v === 'ctr') return pintarContratos();
   if (v === 'doc') return pintarDocumentos();
@@ -10753,6 +10766,7 @@ const PLACEHOLDER_BUSCA = {
   cat:'Buscar item, código, marca…',
   age:'Buscar pessoa, OS, cliente, tarefa…',
   todas:'Buscar número, cliente ou descrição…',
+  fand:'Buscar OS, negócio, cliente ou item…',
   rhf:'Buscar funcionário, função…',
   rhdia:'Buscar funcionário…', rhaus:'Buscar funcionário, tipo…', rhp:'Buscar funcionário…', rhdp:'Buscar funcionário ou recibo…',
   ffor:'Buscar fornecedor, CNPJ ou CPF…',
@@ -10994,6 +11008,172 @@ async function todasAbrir(o){
   _abrirSoLeitura = o.situacao !== 'aberta';
   await abrirOSPorId(o.os_id);
   _abrirSoLeitura = false;
+}
+// ════════════════════════════════════════════════════════════════════════════
+// S229 · FORNECIMENTO EM ANDAMENTO (issue 237 parte 4; desenho FE11 e FE17, banco 320)
+// ----------------------------------------------------------------------------
+// As encomendas de peças, da medição à nota, agrupadas pela etapa, com as paradas em vermelho e o
+// "Próximo · com · desde". Só o escritório e o admin (a tf_forn_andamento recusa os outros): "com" é o
+// perfil, nunca o nome de alguém (LGPD art. 6º III). A aba "Prazos dos avisos" muda o prazo de cada etapa
+// (tf_forn_prazo_gravar), sem programação; vazio volta ao padrão (no aceite, ao do TapCRM). Os avisos em si
+// saem pelo número do menu e pelo celular (a Edge Function `avisar`), no banco.
+// ════════════════════════════════════════════════════════════════════════════
+const FAND = { aba:'lista', so:false, dados:null, erro:null, seq:0 };
+const FAND_ETAPAS = [['registrar','1 · Registrar (na medição)'], ['cotar','2 · Dimensionar e cotar'], ['aceite','3 · Proposta e aceite'],
+  ['pedido','4 · Pedido ao fornecedor'], ['chegada','5 · Material chegou'], ['calibrar','5b · Calibrar e lacrar'],
+  ['instalar','6 · Agendar e instalar'], ['cobrar','7 · Cobrar (a nota)']];
+async function pintarFornAndamento(){
+  visao = 'fand';
+  REPINTA.fand = () => fandPintar();
+  const board = document.getElementById('board');
+  if (!podeEscritorio()){
+    board.innerHTML = '<div class="painel"><h3>Fornecimento em andamento</h3><p class="nota">Este painel é do escritório.</p></div>';
+    return;
+  }
+  board.innerHTML = '<div class="tela"><div class="telaCab"><h2>Fornecimento em andamento</h2>'
+    + '<p>As encomendas de peças, da medição à nota, pela etapa. Em vermelho, as paradas além do prazo da etapa: o aviso vai '
+    + 'a quem está em “com” e, quando o atraso dobra o prazo, também ao admin.</p>'
+    + '<div class="toFiltros"><div class="chips" id="fandAbas">'
+    + '<button type="button" class="fchip" data-aba="lista">Em andamento</button>'
+    + '<button type="button" class="fchip" data-aba="prazos">Prazos dos avisos</button></div>'
+    + '<label class="toPer" id="fandSoL"><input type="checkbox" id="fandSo"' + (FAND.so ? ' checked' : '') + '> só as paradas</label></div></div>'
+    + '<div id="fandCorpo"><p class="nota">Carregando…</p></div></div>';
+  board.querySelectorAll('#fandAbas [data-aba]').forEach(b => b.addEventListener('click', () => { FAND.aba = b.dataset.aba; fandPintar(); }));
+  document.getElementById('fandSo').addEventListener('change', ev => { FAND.so = ev.target.checked; fandPintar(); });
+  fandPintar();
+  await fandCarregar();
+}
+async function fandCarregar(){
+  const meu = ++FAND.seq;
+  let d = null, erro = null;
+  try{ d = DEMO ? demoFornAndamento() : await rpc('tf_forn_andamento', {}); }
+  catch(e){ erro = e.message; }
+  if (meu !== FAND.seq || visao !== 'fand') return;   // N13: só a abertura mais nova pinta
+  FAND.dados = d; FAND.erro = erro;
+  fandPintar();
+}
+function fandPrazoTxt(l){
+  if (l.prazo == null) return '—';
+  let t = l.etapa === 'chegada'
+    ? 'entrega prevista ' + dataBR(l.entrega) + ' · aviso ' + l.prazo + ' dia(s) depois'
+    : l.prazo + ' dia(s)' + (l.uteis ? ' úteis' : '');
+  if (l.vence_em) t += ' · vence ' + dataBR(l.vence_em);
+  if (l.dobrou) t = '⚠ passou do dobro (avisado o admin) · ' + t;
+  else if (l.parado) t = '⚠ parada · ' + t;
+  return t;
+}
+function fandPintar(){
+  const cx = document.getElementById('fandCorpo');
+  if (!cx) return;
+  document.querySelectorAll('#fandAbas [data-aba]').forEach(b => b.classList.toggle('on', b.dataset.aba === FAND.aba));
+  const soL = document.getElementById('fandSoL'); if (soL) soL.hidden = FAND.aba !== 'lista';
+  if (FAND.erro){
+    cx.innerHTML = '<div class="aviso">Não deu para ler o fornecimento (pode faltar uma atualização do sistema: avise o administrador): '
+      + esc(FAND.erro) + '</div>';
+    return;
+  }
+  if (!FAND.dados){ cx.innerHTML = '<p class="nota">Carregando…</p>'; return; }
+  if (FAND.aba === 'prazos') return fandPintarPrazos(cx);
+  const q = semAcentoFand(BUSCA.fand || '');
+  let L = (FAND.dados.linhas || []).filter(l => !FAND.so || l.parado);
+  if (q) L = L.filter(l => semAcentoFand([l.os_numero, l.negocio_numero, l.origem_numero, l.cliente, l.itens, l.proximo].join(' ')).includes(q));
+  if (!L.length){
+    cx.innerHTML = '<div class="vazio2"><b>' + (q || FAND.so ? 'Nada com esse filtro' : 'Nenhuma encomenda em andamento') + '</b>'
+      + '<p>A encomenda nasce na medição (“+ Item a orçar” no TapField) e sai daqui quando a nota é registrada.</p></div>';
+    return;
+  }
+  const n = L.filter(l => l.parado).length;
+  let h = '<p class="nota toConta">' + L.length + ' encomenda(s)' + (n ? ' · <b style="color:var(--crit,#b3261e)">' + n + ' parada(s)</b>' : ' · nenhuma parada') + '</p>';
+  FAND_ETAPAS.forEach(([et, rot]) => {
+    const G = L.filter(l => l.etapa === et);
+    if (!G.length) return;
+    const p = G.filter(l => l.parado).length;
+    h += '<h3 class="fandGrupo">' + esc(rot) + ' <small>' + G.length + (p ? ' · ' + p + ' parada(s)' : '') + '</small></h3>'
+      + '<div style="overflow-x:auto"><table class="tbl fandTab"><thead><tr><th>OS / negócio</th><th>Cliente</th><th>Itens</th>'
+      + '<th>Próximo · com · desde</th><th>Prazo do aviso</th></tr></thead><tbody>'
+      + G.map(l => '<tr class="fandLin' + (l.parado ? ' fandParado' : '') + '" tabindex="0" role="button" data-ref="' + esc(l.ref) + '" title="'
+          + (l.os_id ? 'Abrir a OS' : l.negocio_id ? 'Abrir o negócio no TapCRM' : 'Abrir a OS de inspeção') + '">'
+          + '<td class="mono forte">' + esc(l.os_numero ? l.os_numero : l.negocio_numero ? 'Negócio ' + l.negocio_numero : (l.origem_numero || ''))
+          +   (l.os_numero && l.negocio_numero ? '<br><small>negócio ' + esc(l.negocio_numero) + '</small>' : '')
+          +   (l.origem_numero && (l.os_numero || l.negocio_numero) ? '<br><small>de ' + esc(l.origem_numero) + '</small>' : '') + '</td>'
+          + '<td>' + esc(l.cliente || '') + (l.quem === 'Proper' ? '<br><small>nota pela Proper</small>' : '') + '</td>'
+          + '<td>' + esc(l.itens || '—') + '</td>'
+          + '<td>' + esc((l.proximo || '') + ' · com: ' + (l.com || '—') + ' · desde: ' + (l.desde ? dataBR(l.desde) : '—')
+                       + (l.dias != null ? ' (' + l.dias + ' dia' + (l.dias === 1 ? '' : 's') + ')' : '')) + '</td>'
+          + '<td class="fandPrazo">' + esc(fandPrazoTxt(l)) + '</td></tr>').join('')
+      + '</tbody></table></div>';
+  });
+  cx.innerHTML = h;
+  const abrir = tr => {
+    const l = (FAND.dados.linhas || []).find(x => x.ref === tr.dataset.ref);
+    if (!l) return;
+    if (DEMO) return toast('Modo demonstração: a OS não abre daqui.', 'err');
+    if (l.os_id) return abrirOSPorId(l.os_id);
+    if (l.negocio_id){ if (!irParaCRM('neg=' + encodeURIComponent(l.negocio_id))) toast('O negócio fica no TapCRM.', 'err'); return; }
+    if (l.origem_os_id) return abrirOSPorId(l.origem_os_id);
+  };
+  cx.querySelectorAll('tr.fandLin').forEach(tr => {
+    tr.addEventListener('click', () => abrir(tr));
+    tr.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); abrir(tr); } });
+  });
+}
+function semAcentoFand(t){ return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim(); }
+function fandPintarPrazos(cx){
+  const P = FAND.dados.prazos || [];
+  cx.innerHTML = '<div class="painel"><h3 style="margin-top:0">Prazos dos avisos</h3>'
+    + '<p class="nota">Quando uma encomenda passa do prazo da etapa, o aviso vai a quem a etapa diz (no número do menu e no celular, '
+    + 'nos dias úteis das 8h às 18h). Quando o atraso dobra o prazo, o aviso sobe também para o admin. Os dias úteis seguem o Turno '
+    + 'e os Feriados do TapHub. Deixe vazio para voltar ao padrão.</p>'
+    + '<div style="overflow-x:auto"><table class="tbl fandPrz"><thead><tr><th>Etapa</th><th>Aviso quando</th><th>Recebe</th>'
+    + '<th>Prazo</th><th></th></tr></thead><tbody></tbody></table></div></div>';
+  const tb = cx.querySelector('tbody');
+  P.forEach(p => {
+    const tr = document.createElement('tr');
+    const padrao = p.etapa === 'aceite'
+      ? 'vazio = o do TapCRM (' + (p.crm_dias || 7) + ' dias, em Configurações › Alertas do menu › Proposta sem resposta)'
+      : 'padrão: ' + p.padrao + ' dia(s)' + (p.uteis ? ' úteis' : '') + (p.etapa === 'chegada' ? ' depois da entrega prevista' : '');
+    tr.innerHTML = '<td><b></b></td><td></td><td></td>'
+      + '<td><input type="number" min="1" max="60" inputmode="numeric" aria-label="Prazo em dias"> ' + (p.uteis ? 'dias úteis' : 'dias')
+      + '<div class="nota" style="margin:2px 0 0"></div></td>'
+      + '<td><button class="btn mini" type="button">Gravar</button></td>';
+    const td = tr.querySelectorAll('td');
+    td[0].querySelector('b').textContent = p.rotulo;
+    td[1].textContent = p.quando;
+    td[2].textContent = p.recebe;
+    td[3].querySelector('.nota').textContent = padrao;
+    const inp = td[3].querySelector('input');
+    inp.value = p.gravado != null ? p.gravado : '';
+    inp.placeholder = String(p.prazo != null ? p.prazo : '');
+    tr.querySelector('button').addEventListener('click', function(){
+      const bruto = inp.value.trim();
+      const v = bruto === '' ? null : Nucleo.util.lerValor(bruto);
+      if (v !== null && (!Number.isInteger(v) || v < 1 || v > 60)){ toast('O prazo vai de 1 a 60 dias (número inteiro).', 'err'); return; }
+      _semDuploEnvio_(this, async () => {
+        try{
+          if (DEMO){ toast('Modo demonstração: nada foi gravado.', 'ok'); return; }
+          FAND.dados.prazos = await rpc('tf_forn_prazo_gravar', { p_etapa: p.etapa, p_prazo: v });
+          toast('Prazo de "' + p.rotulo + '" gravado' + (v === null ? ' (o padrão).' : '.'), 'ok');
+          fandPintar();
+          fandCarregar();
+          try{ atualizarPendencias(); }catch(x){}
+        }catch(e){ toast(e.message, 'err'); }
+      });
+    });
+    tb.appendChild(tr);
+  });
+}
+function demoFornAndamento(){
+  const h = isoHoje();
+  return { hoje: h, linhas: [
+    { ref:'neg:demo1', etapa:'cotar', ordem:2, rotulo:'Cotar', negocio_id:'demo1', negocio_numero:'N-0001', origem_numero:'OS-0101',
+      cliente:'Cliente de exemplo', itens:'Válvula, Dreno', proximo:'Dimensionar e cotar', com:'Comercial', desde:h, dias:0,
+      prazo:3, uteis:true, vence_em:h, parado:false, dobrou:false },
+    { ref:'os:demo2', etapa:'chegada', ordem:5, rotulo:'Chegada', os_id:'demo2', os_numero:'OS-0102', origem_numero:'OS-0100',
+      cliente:'Cliente de exemplo', itens:'Válvula de segurança', proximo:'Material chegou', com:'Compras', desde:h, dias:5,
+      entrega:h, prazo:1, uteis:false, vence_em:h, parado:true, dobrou:false, quem:'Engetap' }],
+    prazos: [
+      { etapa:'cotar', rotulo:'Cotar', quando:'Negócio dos itens a orçar sem proposta enviada', recebe:'Comercial', uteis:true, prazo:3, padrao:3, gravado:null },
+      { etapa:'aceite', rotulo:'Aceite', quando:'Proposta enviada sem resposta do cliente', recebe:'Comercial', uteis:false, prazo:7, padrao:null, gravado:null, segue_crm:true, crm_dias:7 }] };
 }
 function demoTodasOS(){
   const h = isoHoje();
