@@ -194,7 +194,8 @@ input.t.suspeita{border-color:var(--crit);background:var(--crit-soft);color:var(
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 35';   // S224 · issues 242 (parte 2) e 243: o vaso "só aferição" (o selo, o cartão sem a posição, só Acessórios e o envio; 454 e 455) e a bancada perguntada em cada aferição, com a última usada no mesmo tipo
+const VERSAO = 'TapDoc 36';   // S234 · issue 255: no vaso "só aferição", o que o escritório deixou fora do escopo (válvula ou manômetro) não é cobrado no envio e aparece como "fora do escopo desta visita" (457)
+// const VERSAO = 'TapDoc 35';   // S224 · issues 242 (parte 2) e 243: o vaso "só aferição" (o selo, o cartão sem a posição, só Acessórios e o envio; 454 e 455) e a bancada perguntada em cada aferição, com a última usada no mesmo tipo
 // const VERSAO = 'TapDoc 34';   // S220 · issue 240: o assentamento maior que a abertura vira falta ("confira a digitação"), não reprova mais a válvula (motor R00.7, 451)
 // const VERSAO = 'TapDoc 33';   // S210 · issue 216 (Rodada R19 da auditoria): o número de série da válvula (opcional), que vai para a revisão, o laudo e o certificado; "Trazer os da inspeção anterior" traz o número junto (450)
 // const VERSAO = 'TapDoc 32';   // S208 · issues 220 e 221 (Rodada R18 da auditoria): "Girar" (↻) em cada foto, de 90 em 90 graus, pela fila (vale no laudo e nos documentos; 449); o Fechamento avisa em amarelo quando falta o comprimento do costado ou a altura de um tampo (com um link para cada campo; o envio continua liberado) e o cartão "Medidas do vaso" mostra "faltam N medidas"
@@ -524,7 +525,7 @@ function mesclar(p, t0, auto){
     if (!vasos.some(x => x.id === v.id) && manter(v)) vasos.push(v);
   });
   E = { os:p.os, vasos, fabricantes:p.fabricantes || [], materiais:p.materiais || [], medidores:p.medidores || [], padroes:p.padroes || [], bancadas:p.bancadas || [], baixado_em:p.gerado_em || new Date().toISOString(),
-        so_afer:(E && E.so_afer) || [] };   // TapDoc 35 · issue 242: os vasos só de aferição (pedido à parte, lerSoAfer)
+        so_afer:(E && E.so_afer) || [], afer_esc:(E && E.afer_esc) || {} };   // TapDoc 35 · issue 242: os vasos só de aferição (pedido à parte, lerSoAfer)
   salvar();
 }
 /** S171 · issue 36: no vaso que fica com a versão do aparelho, entra o que só o escritório muda (não é editado em campo). */
@@ -791,8 +792,13 @@ async function lerSoAfer(){
   const ids = ((E && E.vasos) || []).filter(v => v.inspecao && v.inspecao.id).map(v => v.inspecao.id);
   if (!ids.length) return;
   try{ const r = await N.api.rpc('tf_insp_so_afericao_ver', { p_ids: ids }); E.so_afer = Array.isArray(r) ? r : []; salvar(); }catch(e){}
+  // TapDoc 36 · issue 255 (457): o que aferir em cada vaso só de aferição (banco sem a 457: os dois, como antes)
+  try{ const r = await N.api.rpc('tf_insp_afericao_escopo_ver', { p_ids: ids }); const m = {}; (Array.isArray(r) ? r : []).forEach(x => { m[x.id] = { valvula: x.valvula !== false, manometro: x.manometro !== false }; }); E.afer_esc = m; salvar(); }catch(e){}
 }
 const soAferV = v => !!(v && v.inspecao && E && (E.so_afer || []).indexOf(v.inspecao.id) >= 0);
+// TapDoc 36 · issue 255: o acessório fora do escopo da visita (o escritório desmarcou "Válvula" ou "Manômetro" na preparação). É a mesma conta da tf__insp_afer_no_escopo (457).
+const escopoAfer = v => { const x = soAferV(v) && E.afer_esc && E.afer_esc[v.inspecao.id]; return { valvula: !x || x.valvula !== false, manometro: !x || x.manometro !== false }; };
+const foraEscopo = (v, a) => !!(a && soAferV(v) && AFERIVEIS.includes(a.tipo) && !escopoAfer(v)[/^mano/.test(a.tipo) ? 'manometro' : 'valvula']);
 
 // S142 · item 40 (418, decisão B do Bruno): quem não está na T06 vê quem está, em vez da tela vazia
 var FORA_T06 = false, ESCALA_T06 = null;
@@ -2333,7 +2339,7 @@ function faltasEnvioAfer(v){
   const f = [], i = v.inspecao || {};
   if (!i.acessorios_conferidos) f.push('Acessórios: confirme a lista (mesmo que o vaso não tenha nenhum).');
   acessDe(v).filter(a => !a.situacao).forEach(a => f.push('Acessório "' + (a.tag || a.marca || a.tipo) + '" sem a situação.'));
-  if (i.acessorios_conferidos && !acessDe(v).some(a => AFERIVEIS.includes(a.tipo) && a.situacao !== 'ausente' && a.situacao !== 'retirado'))
+  if (i.acessorios_conferidos && !acessDe(v).some(a => AFERIVEIS.includes(a.tipo) && !foraEscopo(v, a) && a.situacao !== 'ausente' && a.situacao !== 'retirado'))
     f.push('Só aferição: o vaso não tem manômetro nem válvula para aferir. Fale com o escritório.');
   faltasAfericao(v).forEach(x => f.push(x));
   acessDe(v).forEach(a => {
@@ -2560,7 +2566,7 @@ const nomeAc = a => a.tag || a.marca || TIPOS_ACESS[a.tipo] || a.tipo;
 /** O envio pede, para manômetro e válvula presentes, a aferição completa ou o motivo (o mesmo texto do servidor). */
 function faltasAfericao(v){
   const f = [];
-  acessDe(v).filter(a => AFERIVEIS.includes(a.tipo) && a.situacao !== 'ausente' && a.situacao !== 'retirado' && !(a.afericao_motivo || '').trim())
+  acessDe(v).filter(a => AFERIVEIS.includes(a.tipo) && !foraEscopo(v, a) && a.situacao !== 'ausente' && a.situacao !== 'retirado' && !(a.afericao_motivo || '').trim())   // TapDoc 36 · issue 255: fora do escopo não é cobrado
     .sort((x, y) => (x.ordem || 0) - (y.ordem || 0)).forEach(a => {
       const af = afDe(v, a), r = af ? resultadoAf(v, a, af) : null;
       if (!af) f.push('Acessório "' + nomeAc(a) + '": afira ou diga por que não.');
@@ -2672,6 +2678,10 @@ function blocoAfericao(v, a, pode){
     h += '<b>Não ' + (vv ? 'aferida' : 'aferido') + (cP ? ' · ' + esc(cP.rotulo) : '') + '</b><p class="muted" style="margin:4px 0 0">' + esc(a.afericao_motivo) + '</p>'
       + (pode && cP ? '<button class="btn sec" data-afnao="' + esc(a.id) + '" style="margin-top:6px;margin-right:6px">Trocar o caso</button>' : '')
       + (pode ? '<button class="btn sec" data-afdesf="' + esc(a.id) + '" style="margin-top:6px">' + 'Aferir mesmo assim</button>' : '');
+  } else if (foraEscopo(v, a)){   // TapDoc 36 · issue 255: não contratado nesta visita — o envio não pede
+    h += '<b data-forade="' + esc(a.id) + '">Fora do escopo desta visita</b><p class="muted" style="margin:4px 0 0">' + (vv ? 'A válvula não foi contratada' : 'O manômetro não foi contratado')
+      + ' nesta visita: o envio não pede a aferição. Se o cliente pedir, fale com o escritório.</p>'
+      + (pode ? '<button class="btn sec" data-afnovo="' + esc(a.id) + '" style="margin-top:6px">Aferir mesmo assim</button>' : '');
   } else {
     h += '<b>' + (vv ? 'Aferição da válvula' : 'Aferição do manômetro') + '</b><p class="muted" style="margin:4px 0 0">O envio pede a aferição ou o motivo.</p>'
       + (pode ? '<div style="display:flex;gap:8px;margin-top:6px"><button class="btn pri" data-afnovo="' + esc(a.id) + '">Aferir</button>'
@@ -3033,6 +3043,8 @@ function telaAcessorios(v){
   h += '<div class="card"><div class="chk" style="margin-top:0"><input type="checkbox" id="acConf"' + (i.acessorios_conferidos ? ' checked' : '') + (pode ? '' : ' disabled') +
     '><label for="acConf">Conferi: a lista está completa' + (l.length ? '' : ' (o vaso não tem acessório)') + '</label></div></div>';
   // TapDoc 35 · issue 242 (P2): o vaso só de aferição abre aqui; o envio fica logo abaixo
+  if (soAferV(v) && !(escopoAfer(v).valvula && escopoAfer(v).manometro))   // TapDoc 36 · issue 255
+    h += '<div class="alerta" id="acEscopo" style="margin-top:10px"><b>Nesta visita: só ' + (escopoAfer(v).valvula ? 'a válvula' : 'o manômetro') + '.</b> ' + (escopoAfer(v).valvula ? 'O manômetro' : 'A válvula') + ' fica fora do escopo e não é pedido no envio.</div>';
   if (soAferV(v)) h += '<button class="btn ' + (faltasEnvio(v).length ? 'sec' : 'pri') + '" id="acEnvio" style="margin-top:10px">Fechamento e envio ›</button>';
   $('tela').innerHTML = h;
   ligar('acEnvio', () => ir({ nome:'fechamento', vaso:v.id }), 'click');
