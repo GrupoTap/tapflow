@@ -206,7 +206,8 @@ tr[data-espver]{cursor:pointer} tr[data-espver]:hover{background:var(--surface-2
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E60';   // E60 (S228 · issues 242 parte 3 e 237 FE16, R30): o Registro de Segurança da aferição avulsa sai com os certificados (a anotação); a aba "Trocas" (a troca do acessório instalado pela OS de fornecimento no cadastro do vaso, o certificado e a anotação da troca no Registro, que o PLH prepara e assina); as trocas nos documentos do vaso; documentos-pdf.js D11; 456 e 319
+const VERSAO = 'TapDoc E61';   // E61 (S234 · issues 255 e 256): na preparação, o vaso "só aferição" ganha as caixas "Válvula" e "Manômetro" (o que ficar desmarcado o celular não cobra; tf_insp_afericao_escopo, 457) e a conferência mostra o escopo; na OS de contrato, a linha "Visita" mostra os dias de campo e a ART vem do contrato (tf_insp_os_contrato); saiu o texto do tempo do piloto (a T05 "pelo TapFlow")
+// const VERSAO = 'TapDoc E60';   // E60 (S228 · issues 242 parte 3 e 237 FE16, R30): o Registro de Segurança da aferição avulsa sai com os certificados (a anotação); a aba "Trocas" (a troca do acessório instalado pela OS de fornecimento no cadastro do vaso, o certificado e a anotação da troca no Registro, que o PLH prepara e assina); as trocas nos documentos do vaso; documentos-pdf.js D11; 456 e 319
 // const VERSAO = 'TapDoc E59';   // E59 (S224 · issues 242 parte 2, 243, 244 e 212, R27): a aferição avulsa nas telas ("Só aferição" na preparação, a conferência única "Conferir e liberar", os certificados preparados pelo PLH sem laudo, com o aviso sem PMTA, no mesmo pacote "Para assinar" e na lista de documentos); a bancada sem certificado nem validade em Instrumentos; a janela que fecha depois de gravar não fecha a janela aberta depois dela (o "Novo modelo" do mapa 3D); laudo-pdf.js S179; 454 e 455
 // const VERSAO = 'TapDoc E58';   // E58 (S222 · issue 239, parte 1): a placa baixada fica gravada (a T15 da OS nova de inspeção conclui sozinha quando a placa de todos os vasos foi gerada); 453
 // const VERSAO = 'TapDoc E57';   // E57 (S221 · issue 239, parte 2): "Preparar para assinar" sem a digital (a validação do PLH é a assinatura do PDF, token ou gov.br); o desenho da assinatura vale com o primeiro laudo assinado; os PDFs não assinados só no pacote do PLH (fora das listas e do "Baixar tudo"); a minuta com o número tirado na Revisão 2; reaberta antes de assinar, o mesmo número; a numeração R, P, M e V automática; os números cancelados; o gov.br sem "reserva do token" (assinatura-pdf.js S221); 452
@@ -1242,30 +1243,39 @@ async function telaOS(os){
   if (!vigente(vez)) return;
   titulo(P.os.numero + ' · preparar a inspeção', P.os.cliente || '');
   const marc = P.vasos.filter(v => v.inspecao), fora = P.vasos.filter(v => !v.inspecao);
-  await lerSoAfericao(marc.map(v => v.inspecao.id));   // E59 · issue 242: quais vasos são "só aferição" (454)
+  // E59 · issue 242: quais vasos são "só aferição" (454). E61 · issue 256: na OS de contrato, o contrato, a ART dele e os dias de campo (457; null na OS comum)
+  const [, CTR] = await Promise.all([lerSoAfericao(marc.map(v => v.inspecao.id)), rpc('tf_insp_os_contrato', { p_os: os }).catch(() => null)]);
   if (!vigente(vez)) return;
   const t05 = P.t05 || {}, vis = P.visita || {};
+  // E61 · issue 256: na visita de contrato o dia não fica na T06 (a visita é o mês): são os dias de campo marcados
+  const TIPO_DIA = { reuniao:'reunião', treinamento:'treinamento', aguardando:'aguardando liberação' };
+  const diasCampo = CTR ? (CTR.dias || []).map(d => dataBR(d.dia) + (d.hora ? ' às ' + esc(String(d.hora).slice(0,5)) : '') + (TIPO_DIA[d.tipo] ? ' (' + TIPO_DIA[d.tipo] + ')' : '')) : null;
   // 404 (23/10): TapDoc em paralelo. Sem a trava, o TapDoc NÃO conclui a T05: ela conclui no Manager, como sempre.
   const aberta = t05.status && t05.status !== 'completo' && t05.status !== 'dispensado' && t05.trava;
   let h = '<div class="card"><div class="linha" style="justify-content:space-between"><div><b>Visita:</b> '
-    + (vis.dia ? dataBR(vis.dia) + (vis.hora ? ' às ' + esc(String(vis.hora).slice(0,5)) : '') : '<span class="muted">sem dia marcado</span>')
+    + (diasCampo ? '<span id="visDias">' + (diasCampo.length ? (diasCampo.length > 1 ? 'dias de campo ' : 'dia de campo ') + diasCampo.join(' · ') : '<span class="muted">sem dia de campo marcado</span>')
+          + '</span> <span class="muted">· contrato ' + esc(CTR.contrato.numero || '') + '</span>'
+        : vis.dia ? dataBR(vis.dia) + (vis.hora ? ' às ' + esc(String(vis.hora).slice(0,5)) : '') : '<span class="muted">sem dia marcado</span>')
     + (vis.inspetor ? ' · ' + esc(vis.inspetor) : '') + '<div class="muted">T05 "' + esc(t05.nome || 'Preparar a inspeção') + '": ' + esc(t05.status || '—')
-    + (t05.trava ? '' : ' · TapDoc em teste: a T05 conclui no TapFlow, como sempre') + '</div></div>'
+    + (t05.trava ? '' : ' · nesta OS a T05 conclui no TapFlow' + (CTR ? ' (visita de contrato)' : '')) + '</div></div>'
     + (aberta ? '<button class="btn pri" id="concluir"' + ((P.falta || []).length ? ' disabled' : '') + '>Concluir a preparação</button>'
-       : t05.status === 'completo' ? '<span class="chip s-pronto">T05 concluída</span>' : '<span class="chip">em teste</span>')
+       : t05.status === 'completo' ? '<span class="chip s-pronto">T05 concluída</span>' : '<span class="chip" id="t05Fora">T05 pelo TapFlow</span>')
     + '</div></div>';
   // E9 (R06a): a ART da OS (o número e o PDF), antes de o inspetor sair
   const art = P.art || null;
   h += '<div class="card" id="cxArt"><div class="linha" style="justify-content:space-between"><div><b>ART da OS</b>'
     + (art ? ' nº <b>' + esc(art.numero) + '</b>' + (art.arquivo_path ? ' · <a href="#" id="artVer">ver o PDF</a>' : ' · <span style="color:var(--crit)">falta o PDF</span>')
-        + '<div class="muted">' + esc(art.por || '') + (art.gravado_em ? ' · ' + quandoBR(art.gravado_em) : '') + '</div>'
-      : ' <span style="color:var(--crit)">não informada</span><div class="muted">O número e o PDF da ART vão no laudo (cabeçalho e anexo).</div>')
+        + '<div class="muted" id="artDe">' + (CTR && CTR.art_do_contrato ? 'A ART do contrato ' + esc(CTR.contrato.numero || '') + ' (veio sozinha; pode trocar)' : esc(art.por || '')) + (art.gravado_em ? ' · ' + quandoBR(art.gravado_em) : '') + '</div>'
+      : ' <span style="color:var(--crit)">não informada</span><div class="muted" id="artDe">'
+        + (CTR ? (CTR.contrato.art_numero ? 'A ART do contrato (nº ' + esc(CTR.contrato.art_numero) + ') entra sozinha quando o primeiro vaso entrar nesta OS.'
+                                          : 'O contrato ' + esc(CTR.contrato.numero || '') + ' está sem ART: preencha em TapFlow › Contratos › "Editar dados" (vale para as próximas visitas) ou grave aqui.')
+               : 'O número e o PDF da ART vão no laudo (cabeçalho e anexo).') + '</div>')
     + '</div><div class="linha"><input class="t" id="artNum" style="width:190px;margin:0" placeholder="Nº da ART" value="' + esc(art ? art.numero : '') + '">'
     + '<button class="btn" id="artGravar">Gravar o número</button><button class="btn sec" id="artPdf">' + (art && art.arquivo_path ? 'Trocar o PDF' : 'Anexar o PDF') + '</button></div></div>'
     + '<input type="file" id="artArq" accept="application/pdf" hidden><div id="artVisor"></div></div>';
   if ((P.falta || []).length) h += '<div class="alerta falta"><b>Falta para concluir:</b><ul>' + P.falta.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul></div>';
   else if (aberta) h += '<div class="alerta ok"><b>Preparação completa.</b> Pode concluir a T05.</div>';
-  else if (!t05.trava && (P.vasos || []).length) h += '<div class="alerta ok"><b>Preparação completa.</b> A T05 continua no TapFlow (TapDoc em teste).</div>';
+  else if (!t05.trava && (P.vasos || []).length) h += '<div class="alerta ok"><b>Preparação completa.</b> A T05 conclui no TapFlow.</div>';
   h += '<h2>Vasos desta OS (' + marc.length + ')</h2><div class="card" style="padding:6px 8px">';
   h += marc.length ? tabelaVasos(marc, true) : '<p class="vazio">Nenhum vaso marcado. Marque abaixo os vasos que serão inspecionados.</p>';
   h += '</div><h2>Outros vasos do cliente (' + fora.length + ')</h2><div class="card" style="padding:6px 8px">';
@@ -1324,6 +1334,15 @@ async function telaOS(os){
       U.toast(c.checked ? 'Só aferição: o celular mostra só os acessórios; o escritório confere e o PLH prepara os certificados, sem laudo.' : 'Volta a ser inspeção do vaso (com laudo).', 'ok'); pintar(); }
     catch(e){ erro(e); c.checked = !c.checked; c.disabled = false; }
   }));
+  // E61 · issue 255: o que aferir no vaso só de aferição (pelo menos um; o banco só aceita com o vaso em preparo)
+  $('tela').querySelectorAll('[data-escopo]').forEach(cx => cx.querySelectorAll('[data-esc]').forEach(c => c.addEventListener('change', async () => {
+    const val = k => cx.querySelector('[data-esc="' + k + '"]').checked, v = val('valvula'), m = val('manometro');
+    if (!v && !m){ c.checked = true; U.toast('Marque pelo menos um: válvula ou manômetro.', 'err'); return; }
+    cx.querySelectorAll('[data-esc]').forEach(x => { x.disabled = true; });
+    try{ await rpc('tf_insp_afericao_escopo', { p_id: cx.dataset.escopo, p_valvula: v, p_manometro: m });
+      U.toast(v && m ? 'O celular pede a aferição da válvula e do manômetro.' : 'O celular pede só ' + (v ? 'a válvula' : 'o manômetro') + '; ' + (v ? 'o manômetro' : 'a válvula') + ' fica fora do escopo desta visita.', 'ok'); pintar(); }
+    catch(e){ erro(e); c.checked = !c.checked; cx.querySelectorAll('[data-esc]').forEach(x => { x.disabled = false; }); }
+  })));
   $('tela').querySelectorAll('[data-instr]').forEach(t => t.addEventListener('change', async () => {
     try{ await rpc('tf_insp_preparar', { p_os_id: os, p_equip: t.dataset.instr, p_marcar: true, p_instrucoes: t.value }); U.toast('Instruções gravadas.', 'ok'); }
     catch(e){ erro(e); }
@@ -1380,11 +1399,16 @@ function ligarArt(os, P){
 // ── E59 · issue 242 (454): o vaso "só aferição" (válvula e manômetro, sem inspeção do vaso; desenho processos/afericao-avulsa-desenho.md) ──
 // Os pacotes de sempre não mudaram (regra 69): a tela pergunta à parte quais inspeções são só de aferição. Banco sem a 454: nenhuma.
 const SO_AFER = new Set(), SO_AFER_EQ = new Set();   // as inspeções e (na tela da OS) os vasos
+const AFER_ESC = new Map();   // E61 · issue 255 (457): o que aferir em cada vaso só de aferição ({ valvula, manometro }); banco sem a 457: os dois
 async function lerSoAfericao(ids){
   ids = (ids || []).filter(Boolean); if (!ids.length) return SO_AFER;
-  try{ const r = await rpc('tf_insp_so_afericao_ver', { p_ids: ids }); ids.forEach(i => SO_AFER.delete(i)); (r || []).forEach(i => SO_AFER.add(i)); }catch(e){}
+  await Promise.all([
+    rpc('tf_insp_so_afericao_ver', { p_ids: ids }).then(r => { ids.forEach(i => SO_AFER.delete(i)); (r || []).forEach(i => SO_AFER.add(i)); }).catch(() => {}),
+    rpc('tf_insp_afericao_escopo_ver', { p_ids: ids }).then(r => { ids.forEach(i => AFER_ESC.delete(i)); (r || []).forEach(x => AFER_ESC.set(x.id, x)); }).catch(() => {})]);
   return SO_AFER;
 }
+const aferEsc = id => { const x = AFER_ESC.get(id); return { valvula: !x || x.valvula !== false, manometro: !x || x.manometro !== false }; };
+const aferEscTexto = id => { const e = aferEsc(id); return e.valvula && e.manometro ? 'válvula e manômetro' : e.valvula ? 'só a válvula (manômetro fora do escopo)' : 'só o manômetro (válvula fora do escopo)'; };
 const soAfer = id => !!id && SO_AFER.has(id);
 const CHIP_AFER = '<span class="chip s-provisorio" data-chipafer="1" title="Só aferição de válvula e manômetro, sem inspeção do vaso">Aferição</span>';
 function tabelaVasos(lista, marcados){
@@ -1403,7 +1427,13 @@ function tabelaVasos(lista, marcados){
             + '</select> <small>(o inspetor confirma)</small></label>'
             // E59 · issue 242 (AF1, P9): o vaso só de aferição; troca enquanto ele está "em preparo" (depois da coleta, não)
             + '<label class="muted" style="display:flex;gap:6px;align-items:flex-start;margin-top:4px"><input type="checkbox" data-soafer="' + esc(ins.id) + '"' + (soAfer(ins.id) ? ' checked' : '')
-            + (emCampo ? ' disabled title="Já foi a campo: só se troca antes da coleta"' : '') + '> <span>Só aferição <small>(válvula e manômetro, sem inspeção do vaso e sem laudo; no celular, só Acessórios)</small></span></label></td>' : '')
+            + (emCampo ? ' disabled title="Já foi a campo: só se troca antes da coleta"' : '') + '> <span>Só aferição <small>(válvula e manômetro, sem inspeção do vaso e sem laudo; no celular, só Acessórios)</small></span></label>'
+            // E61 · issue 255: o que aferir neste vaso (o que ficar desmarcado o celular não cobra); só "em preparo", como o "só aferição"
+            + (soAfer(ins.id) ? '<div class="muted" data-escopo="' + esc(ins.id) + '" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:4px 0 0 22px">Aferir:'
+                + [['valvula', 'Válvula'], ['manometro', 'Manômetro']].map(([k, r]) => '<label style="display:flex;gap:5px;align-items:center"><input type="checkbox" data-esc="' + k + '"' + (aferEsc(ins.id)[k] ? ' checked' : '')
+                    + (emCampo ? ' disabled title="Já foi a campo: só se escolhe antes da coleta"' : '') + '> ' + r + '</label>').join('')
+                + '<small>(o que ficar desmarcado não é cobrado no celular)</small></div>' : '')
+            + '</td>' : '')
         + '<td class="acoes" style="text-align:right;white-space:nowrap">' + (v.provisorio ? '<button class="btn mini sec" data-conf="' + esc(v.id) + '">Confirmar cadastro</button> ' : '')
         + (marcados && ins && ins.situacao === 'em_campo' ? '<button class="btn mini sec" data-tirar="' + esc(v.id) + '" data-tag="' + esc(v.tag) + '">Tirar da OS</button> ' : '')
         + (marcados ? '<button class="btn mini" data-abre="' + esc(v.id) + '">Laudo anterior ›</button>' : '') + '</td></tr>';
@@ -2716,13 +2746,16 @@ function pintarAfericaoConf(){
   const SITS = { ok:'em ordem', substituir:'substituir', ausente:'ausente', retirado:'retirado' };
   const acs = R.acessorios || v.inspecao.acessorios || [], fotos = (R.fotos || []).filter(f => /^afer:/.test(f.item_ref || '')), semAc = I.fotos_sem_acesso || {};
   let h = '<div class="card"><div class="linha" style="justify-content:space-between"><div><b style="font-size:17px">' + esc(v.tag || '') + '</b> ' + CHIP_AFER
-    + '<div class="muted">Só aferição de válvula e manômetro, sem inspeção do vaso e sem laudo. Uma conferência só (sem Revisão 1 e 2): confira as leituras e as fotos e libere; depois o PLH prepara os certificados (aba Laudos) e assina com o token ou o gov.br.</div></div>'
+    + '<div class="muted">Só aferição de válvula e manômetro, sem inspeção do vaso e sem laudo. Uma conferência só (sem Revisão 1 e 2): confira as leituras e as fotos e libere; depois o PLH prepara os certificados (aba Laudos) e assina com o token ou o gov.br.</div>'
+    + '<div id="afcEscopo" style="margin-top:4px"><b>Escopo desta visita:</b> ' + esc(aferEscTexto(id)) + '.</div></div>'
     + '<span class="chip ' + (conf ? 's-em_conferencia' : 's-pronto') + '" id="afcSit">' + esc(({ enviada:'enviada', em_revisao:'em conferência', liberada:'conferida e liberada', assinada:'certificados assinados', em_campo:'em campo' })[sit] || sit) + '</span></div></div>';
   if (semPmtaAf(REV.afs)) h += '<div class="alerta falta" id="afcSemPmta"><b>' + SEM_PMTA_AF + '.</b> O vaso não tem PMTA cadastrada: a abertura da válvula não foi comparada com ela. '
     + 'O certificado sai com essa frase em destaque. Se a PMTA existir, cadastre no vaso e peça à equipe para gravar a aferição de novo (reabrindo para o campo).</div>';
   h += '<div class="card"><h3 style="margin-top:0">Acessórios</h3>' + (acs.length ? '<table><tr><th>Acessório</th><th>Situação</th><th>Aferição</th></tr>' + acs.map(a => '<tr><td>' + esc(NOMES[a.tipo] || a.tipo)
       + (a.tag || a.marca ? '<div class="muted">' + esc([a.tag, a.marca].filter(Boolean).join(' · ')) + '</div>' : '') + '</td><td>' + esc(SITS[a.situacao] || a.situacao || '—') + '</td><td>'
-      + ((a.afericao_motivo || '').trim() ? '<span class="muted">não aferido: ' + esc(a.afericao_motivo) + '</span>' : NOMES[a.tipo] ? '<span class="muted">no quadro abaixo</span>' : '—') + '</td></tr>').join('') + '</table>'
+      + ((a.afericao_motivo || '').trim() ? '<span class="muted">não aferido: ' + esc(a.afericao_motivo) + '</span>'
+          : NOMES[a.tipo] && !aferEsc(id)[/^mano/.test(a.tipo) ? 'manometro' : 'valvula'] ? '<span class="muted">fora do escopo desta visita (não contratado)</span>'   // E61 · issue 255
+          : NOMES[a.tipo] ? '<span class="muted">no quadro abaixo</span>' : '—') + '</td></tr>').join('') + '</table>'
     : '<p class="muted">Nenhum acessório.</p>') + '</div>';
   h += '<div class="card" id="cxAfer"><p class="muted">Carregando as aferições…</p></div>';
   h += '<div class="card"><h3 style="margin-top:0">Fotos das aferições</h3>' + (fotos.length ? '<div class="linha" style="flex-wrap:wrap;gap:8px">' + fotos.map(f => '<div style="width:150px"><div class="mini" data-afmini="' + esc(f.storage_path) + '" style="height:110px;display:flex;align-items:center;justify-content:center;background:#F2F4F5;border-radius:6px;overflow:hidden"><span class="muted">…</span></div>'
