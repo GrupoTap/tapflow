@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapRH 25 · Recursos Humanos</title>
+<title>TapRH 26 · Recursos Humanos</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- o ícone da aba: o "E" da Engetap dentro do arquivo (SVG), aparece em qualquer pasta; o app instalado usa os PNG de field/icons/ -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22104%22 fill=%22%231B6FA9%22/%3E%3Cg transform=%22translate(0,512) scale(1,-1) translate(256,256.5) scale(1.3) translate(-256,-256.5)%22 fill=%22%23fff%22 stroke=%22%23fff%22 stroke-width=%2222%22 stroke-linejoin=%22round%22 stroke-linecap=%22round%22%3E%3Cpath d=%22M117 414 l-1 0 0 -121 0 -120 19 0 19 0 0 -37 0 -38 121 0 121 0 -45 45 -44 45 -69 0 -69 0 0 12 0 11 90 0 89 0 0 1 0 1 -44 44 -45 44 -45 0 -45 0 0 12 0 11 99 0 99 0 0 1 0 0 -45 45 -44 45 -81 0 -80 0 0 -1z m184 -44 l30 -29 0 -1 0 -1 -88 0 -89 0 0 -75 0 -76 -11 0 -12 0 0 105 0 106 1 0 0 1 70 0 69 0 30 -30z m-19 -113 l30 -29 0 -1 0 -1 -67 0 -67 0 0 30 0 30 1 0 0 1 37 0 36 0 30 -30z m47 -114 l30 -29 0 -1 0 0 -95 0 -95 0 0 30 0 30 65 0 66 0 29 -30z%22/%3E%3C/g%3E%3C/svg%3E">
@@ -1159,7 +1159,8 @@ const _CFG = window.TF_CONFIG || {};
 const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
-const APP_VERSION = 'RH25';   // TapRH 25 (S225): Rodada R32 — issue 88 (Ponto › Fechamento: "Mensagem para a contabilidade", o texto do mês no formato do WhatsApp, com "Copiar"); núcleo N18 (issue 235)
+const APP_VERSION = 'RH26';   // TapRH 26 (S231): issue 249 — o espelho dos meses do EzPoint (até outubro/2026) pronto para assinar na Folha de Ponto: "folga (banco de horas)" no lugar de falta, o banco do EzPoint no PDF, Nome/Matrícula/Período e as linhas "Como Funcionário"/"Como Empregador"
+// const APP_VERSION = 'RH25';   // TapRH 25 (S225): Rodada R32 — issue 88 (Ponto › Fechamento: "Mensagem para a contabilidade", o texto do mês no formato do WhatsApp, com "Copiar"); núcleo N18 (issue 235)
 // const APP_VERSION = 'RH24';   // TapRH 24 (S219): Rodada R22 — issue 209 (a rubrica da folha, do recibo e do espelho assinado colada no servidor pela carimbar; o selo "Assinado eletronicamente por …")
 // const APP_VERSION = 'RH23';   // TapRH 23 (S215): Rodada R24 — issue 232 (saiu o estilo sem uso; o estilo comum vem do nucleo/telas.css T1; nada muda na tela) e 231 (as perguntas da abertura vão juntas)
 // const APP_VERSION = 'RH22';   // TapRH 22 (S212): Rodada R15 da auditoria — issue 161 ("Assinar como empresa" com o PIN provisório pede a troca do PIN ali mesmo e volta para assinar; só diz "assinada(s)" com a resposta de sucesso, sem "undefined"; o aviso de quem não tem PIN pelo caminho de hoje); núcleo N17
@@ -3551,7 +3552,7 @@ function docLerPonto(L){
   const n = achar(/Nome\s*:\s*(.+?)(?:\s{2,}|$)/i);
   const m = achar(/Matr[ií]cula\s*:\s*(\d{1,7})/i);
   const p = achar(/Per[ií]odo\s*:\s*(\d{2}\/\d{2}\/\d{4})\s*(?:a|até|-)\s*(\d{2}\/\d{2}\/\d{4})/i);
-  return { nome: n ? n[1].trim() : '', matricula: m ? String(Number(m[1])) : '', periodo: p ? p[1] + ' a ' + p[2] : '' };
+  return { nome: n ? n[1].replace(/\u00a0/g, ' ').trim() : '', matricula: m ? String(Number(m[1])) : '', periodo: p ? p[1] + ' a ' + p[2] : '' };
 }
 
 function docLerRecibo(L){
@@ -3838,7 +3839,7 @@ function docAcharPos(tipo, L){
   const sublinhado = (l) => { const it = l && l.itens.find(i => /_{6,}/.test(i.s) && i.x > 300);
     return it ? { x0: it.x + (it.s.indexOf('_') > 0 ? it.w * it.s.indexOf('_') / it.s.length : 0), x1: it.x + it.w } : null; };
   if (tipo === 'ponto'){
-    const f = linhaDe(/Como Funcion/i), e = linhaDe(/Como Empregador/i);
+    const f = linhaDe(/Como\s+Funcion/i), e = linhaDe(/Como\s+Empregador/i);   // RH26: o PDF do TapRH separa as palavras (o texto da linha junta com 2 espaços)
     const pos = JSON.parse(JSON.stringify(DOC_POS_PONTO));
     if (f){ pos.func.y = f.y; const s = sublinhado(f); if (s){ pos.func.x0 = s.x0; pos.func.x1 = s.x1; } }
     if (e){ pos.emp.y = e.y;  const s = sublinhado(e); if (s){ pos.emp.x0 = s.x0; pos.emp.x1 = s.x1; } }
@@ -4701,11 +4702,26 @@ const PT_ORIGEM = {
 /** RH18 (issue 143): o parâmetro "Batida repetida: até (min)" (1 a 15), lido uma vez ao abrir o Ponto (10 se não veio). */
 const ptDupMin = () => { const v = Number(PT.dupMin); return v >= 1 && v <= 15 ? v : 10; };
 
+/** RH26 (S231, issue 249): o mês é do EzPoint (antes do início do cálculo do ponto próprio)? Aí não há banco por lote nem
+ *  fechamento: o espelho em PDF é o que a Folha de Ponto (meses até outubro/2026) leva para assinar. */
+const ptMesEz = E => !!E && String(E.mes || '').slice(0, 10) < String(((E.parametros || {}).calculo_inicio) || '2026-11-01').slice(0, 10);
+/** RH26 (issue 249): no EzPoint não havia "folga": o dia de folga pelo banco ficava sem batida e com o dia inteiro tirado do
+ *  banco. Num mês do EzPoint, dia útil sem batida que conta, marcado falta, com um débito de banco do EzPoint (tipo 3, mov 2)
+ *  de pelo menos a carga do dia → devolve os minutos tirados (é folga pelo banco, não falta); senão 0. Só rótulo: a conta não muda. */
+function ptFolgaEz(E, d){
+  if (!ptMesEz(E) || !d || !d.falta || d.futuro) return 0;
+  if ((d.batidas || []).some(b => b.valida !== false && !/(desconsiderada|repetida)$/.test(b.origem))) return 0;
+  const carga = Number(d.carga_min) || 0; if (carga <= 0) return 0;
+  const tirou = (d.ez || []).filter(x => Number(x.tipo) === 3 && Number(x.mov) === 2).reduce((a, x) => a + (Number(x.minutos) || 0), 0);
+  return tirou >= carga ? tirou : 0;
+}
+
 function ptEspelhoDesenhar(){
   const area = document.getElementById('ptEsp'); const E = PT.esp; if (!area || !E) return;
   const T = E.totais || {}, dif = T.saldo_min !== undefined ? Number(T.saldo_min) || 0 : (Number(T.feitos_min) || 0) - (Number(T.carga_min) || 0), B = T.banco;
   const cartao = (rot, val, cls) => '<div class="ptCard' + (cls ? ' ' + cls : '') + '"><span>' + rot + '</span><b>' + val + '</b></div>';
   const PED = PT.espPed || [], pend = PED.filter(x => x.status === 'pendente');
+  const nFolgasEz = (E.dias || []).filter(d => ptFolgaEz(E, d)).length, nFaltas = Math.max(0, (Number(T.faltas) || 0) - nFolgasEz);   // RH26 (issue 249)
   const pdfs = (PT.espPdf || []).filter(x => String(x.competencia).slice(0, 7) === String(PT.mes).slice(0, 7));
   let h = '<div class="rhBarra ptEspBar"><button class="btn" type="button" id="ptPdf">PDF do espelho</button>'
     + (pend.length ? '<button class="btn pri" type="button" id="ptAprTodos">Aprovar todos os pedidos do mês (' + pend.length + ')</button>' : '')
@@ -4723,7 +4739,8 @@ function ptEspelhoDesenhar(){
     + (Number(T.extra100_min) ? cartao('Domingo e feriado (100%)', ptHm(T.extra100_min), 'aviso') : '')
     + (Number(T.noturno_min) ? cartao('Noturno (relógio / reduzido)', ptHm(T.noturno_min) + ' / ' + ptHm(T.noturno_reduzido_min)) : '')
     + (Number(T.almoco_pagar_min) ? cartao('Almoço a pagar (50%)', ptHm(T.almoco_pagar_min), 'aviso') : '')
-    + (Number(T.faltas) ? cartao('Faltas', String(T.faltas), 'aviso') : '')
+    + (nFaltas ? cartao('Faltas', String(nFaltas), 'aviso') : '')
+    + (nFolgasEz ? cartao('Folgas pelo banco (EzPoint)', String(nFolgasEz)) : '')
     // RH9 · item #6 da lista: os cartões do EzPoint só nos meses até a data-base (depois dela o banco é o do TapRH)
     + ((Number(T.ez_banco_min) || Number(T.ez_banco_ate_min)) && String(PT.mes).slice(0, 7) <= String((E.parametros || {}).ez_data_base || '9999').slice(0, 7)
       ? cartao('Banco no EzPoint (mês)', ptSaldo(T.ez_banco_min)) + cartao('Banco no EzPoint (acumulado)', ptSaldo(T.ez_banco_ate_min)) : '')
@@ -4748,7 +4765,9 @@ function ptEspelhoDesenhar(){
     if (Number(d.extra100_min)) obs.push('100%: ' + ptHm(d.extra100_min));
     if (Number(d.almoco_pagar_min)) obs.push('almoço de ' + ptHm(d.almoco_min) + ': ' + ptHm(d.almoco_pagar_min) + ' a pagar');
     if (Number(d.noturno_min)) obs.push('noturno ' + ptHm(d.noturno_min));
-    (d.alertas || []).filter(a => PT_ALERTA[a]).forEach(a => obs.push(PT_ALERTA[a]));
+    const folgaEz = ptFolgaEz(E, d);   // RH26 (issue 249): folga pelo banco no EzPoint, não falta
+    if (folgaEz) obs.push('folga (banco de horas) −' + ptHm(folgaEz));
+    (d.alertas || []).filter(a => PT_ALERTA[a] && !(folgaEz && a === 'falta')).forEach(a => obs.push(PT_ALERTA[a]));
     if (d.saldo_bruto_min !== null && d.saldo_bruto_min !== undefined && Number(d.saldo_bruto_min) !== Number(d.saldo_min) && d.saldo_min !== null)
       obs.push('na tolerância (' + ptSaldo(d.saldo_bruto_min) + ')');
     else if (d.hoje) obs.push('hoje (em andamento)');
@@ -4756,7 +4775,7 @@ function ptEspelhoDesenhar(){
     (d.ausencia || []).forEach(a => obs.push(ptAusRot(a)));
     if (d.impar && !(d.alertas || []).includes('batida_faltando')) obs.push('batida faltando');
     (d.ez || []).filter(x => Number(x.tipo) === 2).forEach(() => obs.push('falta (EzPoint)'));
-    (d.ez || []).filter(x => Number(x.tipo) === 3).forEach(x => obs.push('banco EzPoint ' + (Number(x.mov) === 1 ? '+' : '-') + ptHm(x.minutos)));
+    if (!folgaEz) (d.ez || []).filter(x => Number(x.tipo) === 3).forEach(x => obs.push('banco EzPoint ' + (Number(x.mov) === 1 ? '+' : '-') + ptHm(x.minutos)));
     const saldo = d.saldo_min, peds = PED.filter(x => x.dia === d.dia), temPend = peds.some(x => x.status === 'pendente' || x.status === 'aguardando_funcionario');
     const ST = { pendente: 'aguardando', aguardando_funcionario: 'esperando o funcionário confirmar', aprovado: 'aprovado', recusado: 'recusado' };
     const pedHtml = peds.map(x => '<div class="ptPedL"><span><b>' + esc(PT_PTIPO[x.tipo] || x.tipo) + (x.tipo === 'esqueci' ? ' · ' + esc(x.tipo_batida_rot) + ' ' + esc(x.hora) : '')
@@ -4810,6 +4829,7 @@ const PT_ALERTA = { mais_10h: 'mais de 10h', mais_2h_extra: 'mais de 2h a mais (
 function ptBancoDia(d){
   if (d.banco_min === null || d.banco_min === undefined){
     if (d.futuro || d.hoje || d.saldo_min === null || d.saldo_min === undefined) return '';
+    if (d.banco === null || d.banco === undefined) return '';   // RH26 (issue 249): mês do EzPoint, sem banco por lote (o banco é o do EzPoint)
     return d.banco === 'banco' ? '' : '<small class="ptSemAc">sem acordo</small>';
   }
   const v = Number(d.banco_min);
@@ -4926,6 +4946,10 @@ async function ptEspelhoPdf(){
     const cnpj = (cfgE.empresa_cnpj || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
     const dif = T.saldo_min !== undefined ? Number(T.saldo_min) || 0 : (Number(T.feitos_min) || 0) - (Number(T.carga_min) || 0);   // RH5: com a tolerância
     const BK = T.banco || null;
+    // RH26 (S231, issue 249): mês do EzPoint (até outubro/2026) = a folha que vai à Folha de Ponto para assinar
+    const ez = ptMesEz(E);
+    const nFolgasEz = (E.dias || []).filter(d => ptFolgaEz(E, d)).length;
+    const mesIni = String(E.mes).slice(0, 10), mesFim = mesIni.slice(0, 8) + String(new Date(Number(mesIni.slice(0, 4)), Number(mesIni.slice(5, 7)), 0).getDate()).padStart(2, '0');
     const nAjuste = (E.dias || []).reduce((n, d) => n + (d.batidas || []).filter(b => b.origem === 'tf_ajuste' || b.origem === 'ez_incluida').length, 0);
     const esc0 = P.escala || null;
     const hTxt = m => { m = Number(m) || 0; return Math.floor(m / 60) + 'h' + (m % 60 ? String(m % 60).padStart(2, '0') : ''); };
@@ -4949,9 +4973,12 @@ async function ptEspelhoPdf(){
       if (d.feriado) ob.push('feriado · ' + d.feriado);
       (d.ausencia || []).forEach(a => ob.push(ptAusRot(a)));
       if (d.impar) ob.push('batida faltando');
+      const folgaEz = ptFolgaEz(E, d);   // RH26 (issue 249)
+      if (folgaEz) ob.push('folga (banco de horas) −' + ptHm(folgaEz));
+      else if (ez && d.falta) ob.push('falta');
       if (Number(d.banco_vencido_min)) ob.push('venceu ' + ptHm(d.banco_vencido_min) + ' do banco, vai pago com 50%');
       if (Number(d.banco_pago_min)) ob.push('pago na folha −' + ptHm(d.banco_pago_min));
-      const bk = d.banco_min === null || d.banco_min === undefined ? (d.futuro || d.hoje || d.banco === 'banco' || d.saldo_min === null || d.saldo_min === undefined ? '' : 'sem acordo') : ptSaldo(d.banco_min);
+      const bk = d.banco_min === null || d.banco_min === undefined ? (d.futuro || d.hoje || d.banco === 'banco' || d.banco === null || d.banco === undefined || d.saldo_min === null || d.saldo_min === undefined ? '' : 'sem acordo') : ptSaldo(d.banco_min);
       PED.filter(x => x.dia === d.dia && x.status !== 'aprovado').forEach(x => ob.push((PT_PTIPO[x.tipo] || x.tipo).toLowerCase() + ' (' + x.status.replace('_', ' ') + ')'));
       const fds = !d.util && !bats.length;
       const fill = fds || d.feriado ? cinza : null;
@@ -4968,26 +4995,47 @@ async function ptEspelhoPdf(){
       corpo.push(linha.map(c => typeof c === 'string' ? { text: c, fillColor: fill || undefined } : c));
     });
     const ajustes = PED.filter(x => x.status === 'aprovado' || x.status === 'pendente' || x.status === 'aguardando_funcionario' || x.status === 'recusado');
-    const doc = { pageSize: 'A4', pageMargins: [28, 26, 28, 34], defaultStyle: { fontSize: 8, color: '#14181B' },
-      info: { title: P.arquivo || 'Espelho de ponto', author: cfgE.empresa_nome || 'Engetap', creator: 'TapRH' },
+    // RH26 (issue 249): no mês do EzPoint as linhas "Como Funcionário"/"Como Empregador" ficam no pé da 1ª página, no lugar que a
+    // Folha de Ponto lê (o sublinhado depois de x = 300 pt); a rubrica e o selo entram pela carimbar ao assinar.
+    const H_A4 = 841.89, empNome = cfgE.empresa_nome || 'Engetap';
+    const linhaAss = (yBase, quem, rotulo) => [
+      { text: quem, fontSize: 7.5, absolutePosition: { x: 28, y: H_A4 - yBase - 7 } },
+      { text: rotulo, fontSize: 8, bold: true, absolutePosition: { x: 330, y: H_A4 - yBase - 7 } },
+      { text: '_'.repeat(35), fontSize: 8, absolutePosition: { x: 410, y: H_A4 - yBase - 7 } } ];
+    const doc = { pageSize: 'A4', pageMargins: ez ? [28, 26, 28, 132] : [28, 26, 28, 34], defaultStyle: { fontSize: 8, color: '#14181B' },
+      info: { title: P.arquivo || 'Espelho de ponto', author: empNome, creator: 'TapRH' },
+      background: ez ? (pg => pg === 1 ? linhaAss(103, P.nome_completo || P.nome || '', 'Como Funcionário:')
+                                          .concat(linhaAss(68, empNome + (cnpj ? ' · CNPJ ' + cnpj : ''), 'Como Empregador:')) : null) : undefined,
       footer: (pg, n) => ({ columns: [
-          { text: 'Espelho para conferência. O banco de horas (tolerância, lotes) e a assinatura pelo app entram no fechamento do mês.', fontSize: 6.5, color: '#6B7780' },
+          { text: ez ? 'Espelho de ponto do mês, para assinatura do funcionário e da empresa. Banco de horas: o registrado no sistema anterior (EzPoint) até ' + dataBR(mesFim) + '.'
+                     : 'Espelho para conferência. O banco de horas (tolerância, lotes) e a assinatura pelo app entram no fechamento do mês.', fontSize: 6.5, color: '#6B7780' },
           { text: 'Página ' + pg + ' de ' + n + ' · TapRH · ' + new Date().toLocaleString('pt-BR'), fontSize: 6.5, color: '#6B7780', alignment: 'right', width: 170 } ],
-        margin: [28, 10, 28, 0] }),
+        margin: ez ? [28, 86, 28, 0] : [28, 10, 28, 0] }),
       content: [
         { columns: [
             { image: LOGO_ENGETAP, width: 150 },
             { stack: [{ text: 'ESPELHO DE PONTO', fontSize: 15, bold: true, color: PT_AZUL, alignment: 'right' },
-                      { text: ptMesRot(E.mes).replace(/^./, c => c.toUpperCase()), fontSize: 11, alignment: 'right', margin: [0, 2, 0, 0] }] } ] },
+                      { text: ptMesRot(E.mes).replace(/^./, c => c.toUpperCase()), fontSize: 11, alignment: 'right', margin: [0, 2, 0, 0] }]
+                        .concat(ez ? [{ text: 'Período: ' + dataBR(mesIni) + ' a ' + dataBR(mesFim), fontSize: 8, alignment: 'right', margin: [0, 2, 0, 0] }] : []) } ] },
         { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 539, y2: 0, lineWidth: 1.5, lineColor: PT_AZUL }], margin: [0, 8, 0, 8] },
         { columns: [
             caixa('EMPRESA', [{ text: cfgE.empresa_nome || '', bold: true, margin: [0, 2, 0, 0] }, { text: cnpj ? 'CNPJ ' + cnpj : '' },
                               { text: cfgE.empresa_endereco || '', fontSize: 7.5, color: '#3D4852' }]),
-            caixa('FUNCIONÁRIO', [{ text: P.nome_completo || P.nome || '', bold: true, margin: [0, 2, 0, 0] },
-                                  { text: [P.funcao, P.cpf ? 'CPF ' + P.cpf : '', P.matricula ? 'matrícula ' + P.matricula : ''].filter(Boolean).join(' · ') },
+            // RH26: no mês do EzPoint o nome vai com espaços que não quebram (uma palavra só no PDF), para a Folha de Ponto ler o nome inteiro
+            caixa('FUNCIONÁRIO', [{ text: ez ? 'Nome: ' + String(P.nome_completo || P.nome || '').replace(/ /g, '\u00a0') : (P.nome_completo || P.nome || ''), bold: true, margin: [0, 2, 0, 0] },
+                                  // RH26 (issue 249): "Matrícula: N" é o que a Folha de Ponto lê para achar a pessoa
+                                  { text: ez ? [P.matricula ? 'Matrícula: ' + P.matricula : '', P.funcao, P.cpf ? 'CPF ' + P.cpf : ''].filter(Boolean).join('   ')
+                                             : [P.funcao, P.cpf ? 'CPF ' + P.cpf : '', P.matricula ? 'matrícula ' + P.matricula : ''].filter(Boolean).join(' · ') },
                                   { text: (P.admissao ? 'admissão ' + dataBR(P.admissao) + ' · ' : '') + 'escala: ' + escTxt, fontSize: 7.5, color: '#3D4852' }]) ],
           columnGap: 8 },
-        { table: { widths: ['*', '*', '*', '*', '*', '*'], body: [[
+        { table: { widths: ez ? ['*', '*', '*', '*', '*', '*', '*'] : ['*', '*', '*', '*', '*', '*'], body: [ez ? [
+            // RH26 (issue 249): mês do EzPoint — o banco é o do EzPoint (o do mês e o acumulado até o fim do mês)
+            cartao('TRABALHADAS', ptHm(T.feitos_min)), cartao('CARGA DO MÊS', ptHm(T.carga_min)),
+            cartao('SALDO DO MÊS', ptSaldo(dif), dif > 0 ? verde : dif < 0 ? verm : null),
+            cartao('BANCO NO MÊS', ptSaldo(Number(T.ez_banco_min) || 0), Number(T.ez_banco_min) > 0 ? verde : Number(T.ez_banco_min) < 0 ? verm : null),
+            cartao('BANCO ACUMULADO', ptSaldo(Number(T.ez_banco_ate_min) || 0), Number(T.ez_banco_ate_min) > 0 ? verde : Number(T.ez_banco_ate_min) < 0 ? verm : null),
+            cartao('FOLGAS PELO BANCO', String(nFolgasEz)),
+            cartao('DOMINGO/FERIADO 100%', ptHm(T.extra100_min || 0)) ] : [
             cartao('TRABALHADAS', ptHm(T.feitos_min)), cartao('CARGA DO MÊS', ptHm(T.carga_min)),
             cartao('SALDO DO MÊS', ptSaldo(dif), dif > 0 ? verde : dif < 0 ? verm : null),
             cartao(BK && BK.acordo ? 'BANCO NO FIM DO MÊS' : 'BANCO', BK ? (BK.acordo ? ptSaldo(BK.fim_min) : 'sem acordo') : '—'),
@@ -4997,7 +5045,8 @@ async function ptEspelhoPdf(){
         { table: { headerRows: 1, widths: [40, 32, 36, 32, 32, 30, 30, 32, 36, '*'], body: corpo },
           layout: { hLineColor: () => '#E1E5EA', vLineColor: () => '#FFFFFF', hLineWidth: () => 0.5, vLineWidth: () => 0,
                     paddingTop: () => 2.2, paddingBottom: () => 2.2 } },
-        { text: '* incluída por ajuste   ° batida sem internet, subiu depois   (banco) folga: as horas saem do banco de horas   Banco: acumulado até o fim do dia, do acordo em diante',
+        { text: ez ? '* incluída à mão   ° batida sem internet, subiu depois   folga (banco de horas): dia de folga combinada, descontado do banco de horas'
+                   : '* incluída por ajuste   ° batida sem internet, subiu depois   (banco) folga: as horas saem do banco de horas   Banco: acumulado até o fim do dia, do acordo em diante',
           fontSize: 6.5, color: '#6B7780', margin: [0, 4, 0, 0] }
       ].concat(ajustes.length ? [
         { text: 'AJUSTES E JUSTIFICATIVAS DO MÊS', bold: true, fontSize: 8.5, color: PT_AZUL, margin: [0, 12, 0, 4] },
@@ -5010,7 +5059,7 @@ async function ptEspelhoPdf(){
               { text: ({ aprovado: 'aprovado', recusado: 'recusado', pendente: 'aguardando', aguardando_funcionario: 'esperando o funcionário' }[x.status] || x.status)
                   + (x.decidido_por_nome ? ' · ' + x.decidido_por_nome : '') + (x.decidido_em ? ' · ' + ptDia(String(x.decidido_em).slice(0, 10)) : ''), fontSize: 7 } ])) },
           layout: 'lightHorizontalLines' } ] : [])
-      .concat([
+      .concat(ez ? [] : [   // RH26 (issue 249): no mês do EzPoint as linhas de assinatura vão no pé da 1ª página (background)
         { columns: [
             { stack: [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 230, y2: 0, lineWidth: 0.6 }] },
                       { text: P.nome_completo || P.nome || '', fontSize: 7.5, margin: [0, 3, 0, 0] }, { text: 'Funcionário', fontSize: 7, color: '#6B7780' }] },
@@ -5018,13 +5067,18 @@ async function ptEspelhoPdf(){
                       { text: cfgE.empresa_nome || 'Engetap', fontSize: 7.5, margin: [0, 3, 0, 0] }, { text: 'Empresa', fontSize: 7, color: '#6B7780' }] } ],
           columnGap: 60, margin: [0, 34, 0, 0], unbreakable: true } ]) };
     const blob = await new Promise(ok => pm.createPdf(doc).getBlob(ok));
+    // RH26 (issue 249): a Folha de Ponto separa o PDF por página (uma página = um documento): a folha do mês do EzPoint tem de caber em uma
+    let nPag = 1;
+    if (ez){ try{ const lib = await carregarPdfLib(); nPag = (await lib.PDFDocument.load(await blob.arrayBuffer())).getPageCount(); }catch(e){} }
     const hash = await ptSha256(await blob.arrayBuffer());
     const caminho = 'espelhos/' + PT.sel + '/' + String(E.mes).slice(0, 7) + '-' + hash.slice(0, 12) + '.pdf';
     const r = await Nucleo.storage.enviar('ponto', caminho, new Blob([blob], { type: 'application/pdf' }));
     if (r !== 'ok' && r !== 'ja_existia') throw new Error('o armazenamento recusou');
     const g = await rpc('tf_ponto_espelho_gravar', { p_usuario: PT.sel, p_mes: E.mes, p_pdf_path: caminho, p_hash: hash,
       p_resumo: { feitos_min: T.feitos_min, carga_min: T.carga_min, pedidos: PED.length } });
-    toast('Espelho salvo (versão ' + g.versao + ').');
+    if (nPag > 1) toast('Espelho salvo (versão ' + g.versao + '), mas com ' + nPag + ' páginas: a Folha de Ponto separa cada página como um documento. '
+      + 'Suba só a 1ª página (a das assinaturas) ou resolva os pedidos do mês antes.', 'err', { fixo: true });
+    else toast('Espelho salvo (versão ' + g.versao + ').' + (ez ? ' Para assinar: TapRH › Folha de Ponto › ' + ptMesRot(E.mes) + ' › subir este PDF.' : ''));
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = ptNomeArq(P.arquivo, E.mes, P.nome);
     document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
     ptEspelhoCarregar();
