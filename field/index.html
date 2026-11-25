@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1B6FA9">
-<title>TapField · S74</title>
+<title>TapField · S75</title>
 
 <!-- ── app instalável (PWA) ──────────────────────────────────────────────────
      Instalado, o app abre sem a barra do navegador, sobrevive a fechar a aba e
@@ -708,7 +708,8 @@ main{padding-bottom:28px}   /* S36: sem o botão flutuante */
 const SUPABASE_URL      = 'https://ewthwgkgwzgutvxkwqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_W987XKBK3Oo2aQ7FJyq9_w_qWrSg_E4';   // a "Publishable key" (sb_publishable_...)
 
-const APP_VERSION = 'S74';   // S74 (S227): Rodada R29 (issue 237 parte 3, FE4) — a sugestão do TapDoc na medição: a válvula ou o manômetro que vai para "substituir" (aferição reprovada) aparece em "Item a orçar" com o selo "Sugestão do TapDoc", o que falta e "Completar"/"Conferir" (tf_osmed_orcar_completar, pela fila); a foto do acessório vem do TapDoc
+const APP_VERSION = 'S75';   // S75 (S235 · issue 257): a visita de contrato abre o TapDoc — o cartão "Dia de campo" do Hoje e a T06 "Executar a inspeção" da OS de contrato ganham "Abrir a inspeção (TapDoc)" (antes só a OS de inspeção comum tinha o botão)
+// const APP_VERSION = 'S74';   // S74 (S227): Rodada R29 (issue 237 parte 3, FE4) — a sugestão do TapDoc na medição: a válvula ou o manômetro que vai para "substituir" (aferição reprovada) aparece em "Item a orçar" com o selo "Sugestão do TapDoc", o que falta e "Completar"/"Conferir" (tf_osmed_orcar_completar, pela fila); a foto do acessório vem do TapDoc
 // const APP_VERSION = 'S73';   // S73 (S223): Rodada R26 (issue 237 parte 1) — na medição, o "+ Item a orçar" (válvula, manômetro, dreno, DCBI, outro; fora do valor; só grava com os dados do tipo e a foto; a PMTA do cadastro do vaso, o inspetor confere); o boletim com "Itens identificados para orçamento"; o "Lançar extra" saiu (só os extras antigos guardados no aparelho continuam à mão)
 // const APP_VERSION = 'S72';   // S72 (S218): Rodada R21 (issue 115 parte 1) — o canhoto do cartão pergunta "É de uma OS? Sim/Não" (obrigatório; Sim escolhe numa lista curta das OS em que a pessoa está) e vai pela fila com a resposta (banco 530)
 // const APP_VERSION = 'S71';   // S71 (S215): Rodada R24 (issue 231) — as perguntas da abertura ao servidor vão juntas (antes uma esperava a outra); a lista não espera os parâmetros do Drive
@@ -1912,7 +1913,17 @@ function pintarMeuDia(m){
     // S36 · N1d2: tarefa de tipo com tela própria (auto:inspecao → TapDoc)
     // abre direto a tela do módulo, pelo registro do núcleo
     const destT = (t.origem === 'os' && window.Nucleo && Nucleo.tarefas) ? Nucleo.tarefas.destino(t.tarefa_tipo) : null;
-    if (destT) b.addEventListener('click', () => {
+    // S75 · issue 257: o dia de campo da visita de contrato abre a coleta no TapDoc (a OS fica no quadro do escritório
+    // enquanto a T05 não conclui, então não está na lista do campo; o TapDoc decide quem entra: quem está na T06)
+    const diaCampo = t.origem === 'dia_campo' && t.os_id && !DEMO;
+    if (diaCampo){
+      b.addEventListener('click', () => { location.href = 'doc/#os=' + encodeURIComponent(t.os_id) + '&t=T06'; });
+      const av = document.createElement('div');
+      av.className = 'semAbrir'; av.dataset.diacampo = '1';
+      av.textContent = 'Toque para abrir a inspeção (TapDoc) desta visita.';
+      b.appendChild(av);
+    }
+    else if (destT) b.addEventListener('click', () => {
       location.href = destT + '#os=' + encodeURIComponent(t.os_id) + '&t=' + encodeURIComponent(t.tarefa_id); });
     else if (os) b.addEventListener('click', () => abrirOS(os));
     else if (t.origem === 'os' && (t.status === 'pendente' || t.status === 'em_andamento')
@@ -2644,15 +2655,15 @@ function pintarOSBase(){
   // de campo vê o aviso com quem está, em vez de abrir uma tela vazia.
   const naT06 = t.usuario_designado && String(t.usuario_designado) === String(meuId())
              || (t.apoios || []).some(a => String(a) === String(meuId()));
-  if (t.tarefa_id === 'T06' && ehInspecao(os) && (sessao.admin || naT06)){
+  if (t.tarefa_id === 'T06' && ehInspecaoTapDoc(os) && (sessao.admin || naT06)){
     const b = document.createElement('button');
     b.className = 'btn';
-    b.textContent = 'Abrir a inspeção (TapDoc · piloto)';
+    b.textContent = 'Abrir a inspeção (TapDoc)';
     b.addEventListener('click', () => {
       location.href = 'doc/#os=' + encodeURIComponent(os.os_id) + '&t=' + encodeURIComponent(t.id || t.tarefa_id);
     });
     p.appendChild(b);
-  } else if (t.tarefa_id === 'T06' && ehInspecao(os) && (sessao.executa_em === 'campo' || ['inspetor','auxiliar'].includes(sessao.perfil))){
+  } else if (t.tarefa_id === 'T06' && ehInspecaoTapDoc(os) && (sessao.executa_em === 'campo' || ['inspetor','auxiliar'].includes(sessao.perfil))){
     const quem = [t.usuario_designado ? nomeDe(t.usuario_designado) : ''].concat((t.apoios || []).map(nomeDe)).filter(Boolean);
     const av = document.createElement('p');
     av.className = 'semAbrir'; av.id = 'semT06';
@@ -3108,6 +3119,8 @@ const TIPOS = [
 // penúltimo vaso — o comercial começa enquanto o inspetor ainda está lá.
 // ════════════════════════════════════════════════════════════════════════════
 const ehInspecao = o => !!o && o.template_id === 'INSPECAO_NR13';
+// S75 · issue 257: a coleta do TapDoc vale também para a visita de contrato (o molde dela é outro); só para o botão da T06
+const ehInspecaoTapDoc = o => !!o && (o.template_id === 'INSPECAO_NR13' || o.template_id === 'INSPECAO_NR13_CONTRATO');
 
 const SIT_EXTRA = {
   'com o comercial':'', 'proposta enviada':'alt', 'aprovado':'eu', 'peça a caminho':'eu',
