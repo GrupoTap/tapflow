@@ -194,7 +194,8 @@ input.t.suspeita{border-color:var(--crit);background:var(--crit-soft);color:var(
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc 36';   // S234 · issue 255: no vaso "só aferição", o que o escritório deixou fora do escopo (válvula ou manômetro) não é cobrado no envio e aparece como "fora do escopo desta visita" (457)
+const VERSAO = 'TapDoc 37';   // S235: o aviso do escopo com o gênero certo ("A válvula … não é pedida"); o envio do vaso só de aferição sem os avisos da inspeção (placa, PMTA, GPS, costado); issue 258: as 3 fotos da aferição opcionais no vaso só de aferição (458)
+// const VERSAO = 'TapDoc 36';   // S234 · issue 255: no vaso "só aferição", o que o escritório deixou fora do escopo (válvula ou manômetro) não é cobrado no envio e aparece como "fora do escopo desta visita" (457)
 // const VERSAO = 'TapDoc 35';   // S224 · issues 242 (parte 2) e 243: o vaso "só aferição" (o selo, o cartão sem a posição, só Acessórios e o envio; 454 e 455) e a bancada perguntada em cada aferição, com a última usada no mesmo tipo
 // const VERSAO = 'TapDoc 34';   // S220 · issue 240: o assentamento maior que a abertura vira falta ("confira a digitação"), não reprova mais a válvula (motor R00.7, 451)
 // const VERSAO = 'TapDoc 33';   // S210 · issue 216 (Rodada R19 da auditoria): o número de série da válvula (opcional), que vai para a revisão, o laudo e o certificado; "Trazer os da inspeção anterior" traz o número junto (450)
@@ -881,7 +882,7 @@ const MESMA_FOTO = 'Mesma foto da placa de TAG (as duas placas aparecem nela).';
 const itemDoLugar = l => l.item || 'lugar:' + l.lugar;
 function blocoLugar(v, l){
   const mot = String(semAcessoDe(v)[l.lugar] || '').trim(), item = itemDoLugar(l), tem = fotosDe(v, l.secao, item).length;
-  let h = '<div class="lugar" data-lugar="' + esc(l.lugar) + '"><div class="lt"><b>' + esc(l.rotulo) + '</b>' + (lugarOk(v, l) ? '<span class="chip ok">ok</span>' : '<span class="chip inc">falta</span>') + '</div>';
+  let h = '<div class="lugar" data-lugar="' + esc(l.lugar) + '"><div class="lt"><b>' + esc(l.rotulo) + '</b>' + (lugarOk(v, l) ? '<span class="chip ok">ok</span>' : soAferV(v) && /^afer:/.test(l.lugar) ? '<span class="chip">opcional</span>' : '<span class="chip inc">falta</span>') + '</div>';   // TapDoc 37 · issue 258
   if (mot === MESMA_FOTO) h += '<p class="muted" style="margin:4px 0 0">Na mesma foto da placa de TAG.</p><button class="btn peq" data-lsdesf="' + l.lugar + '">Tirar uma foto só desta placa</button>';
   else if (mot) h += '<p class="muted" style="margin:4px 0 0">Sem foto: ' + esc(mot) + '</p><button class="btn peq" data-lsdesf="' + l.lugar + '">Tirar a foto em vez disso</button>';
   else h += gradeFotos(v, l.secao, 1, null, item) + (tem ? '' : '<button class="btn peq" data-lsem="' + l.lugar + '">' + (l.lugar === 'medicao_espessura' ? 'Sem foto (dizer o motivo)' : 'Sem acesso / não há') + '</button>'
@@ -2342,13 +2343,7 @@ function faltasEnvioAfer(v){
   if (i.acessorios_conferidos && !acessDe(v).some(a => AFERIVEIS.includes(a.tipo) && !foraEscopo(v, a) && a.situacao !== 'ausente' && a.situacao !== 'retirado'))
     f.push('Só aferição: o vaso não tem manômetro nem válvula para aferir. Fale com o escritório.');
   faltasAfericao(v).forEach(x => f.push(x));
-  acessDe(v).forEach(a => {
-    const af = afDe(v, a); if (!af || ['aprovado','reprovado'].indexOf(resultadoAf(v, a, af).resultado) < 0) return;
-    if (fotosDe(v, 'acessorios', 'afer:' + a.id).length) return;
-    const e1 = af.leituras && af.leituras.etapa1 && af.leituras.etapa1.ok === false;
-    lugaresAfer(a).filter(l => !e1 || /:instrumento$/.test(l.item)).filter(l => !lugarOk(v, l))
-      .forEach(l => f.push('Acessório "' + (a.tag || a.marca || 'sem TAG') + '": foto da aferição (' + ({ bancada:'bancada montada', padrao:'manômetro padrão', instrumento:'instrumento em teste' })[l.item.split(':')[2]] + ') ou o motivo de não ter.'));
-  });
+  // TapDoc 37 · issue 258 (458): as 3 fotos da aferição são opcionais no vaso só de aferição (só saem no laudo, que ele não tem)
   return f;
 }
 // S162 · issue 15: cada falta do envio leva até a tela e a parte com problema (o texto continua o mesmo do servidor)
@@ -2670,7 +2665,7 @@ function blocoAfericao(v, a, pode){
       + (pode ? '<button class="btn sec" data-afcanc="' + esc(a.id) + '" style="margin-top:6px;margin-left:6px">Cancelar esta aferição</button>' : '')   // S173 · issue 44
       // S144 · item 69: a foto da aferição na bancada (sai como figura no 7.5/7.6 do laudo)
       // S149 · item 83: 3 fotos com nome (vão no laudo: a bancada em cima, o padrão e o instrumento embaixo)
-      + '<p style="margin:10px 0 0;font-size:13px;font-weight:600;color:var(--ink-2)">Fotos da aferição <small class="muted" style="font-weight:400">(vão no laudo)</small></p>'
+      + '<p style="margin:10px 0 0;font-size:13px;font-weight:600;color:var(--ink-2)">Fotos da aferição <small class="muted" style="font-weight:400">' + (soAferV(v) ? '(opcionais: não vão nos certificados)' : '(vão no laudo)') + '</small></p>'   // TapDoc 37 · issue 258
       + lugaresAfer(a).filter(l => !e1Reprovada(af) || /:instrumento$/.test(l.item)).map(l => blocoLugar(v, l)).join('')
       + (fotosDe(v, 'acessorios', 'afer:' + a.id).length ? '<p class="muted" style="margin:6px 0 0">Fotos de antes:</p>' + gradeFotos(v, 'acessorios', fotosDe(v, 'acessorios', 'afer:' + a.id).length, null, 'afer:' + a.id) : '');
   } else if ((a.afericao_motivo || '').trim()){
@@ -3044,7 +3039,7 @@ function telaAcessorios(v){
     '><label for="acConf">Conferi: a lista está completa' + (l.length ? '' : ' (o vaso não tem acessório)') + '</label></div></div>';
   // TapDoc 35 · issue 242 (P2): o vaso só de aferição abre aqui; o envio fica logo abaixo
   if (soAferV(v) && !(escopoAfer(v).valvula && escopoAfer(v).manometro))   // TapDoc 36 · issue 255
-    h += '<div class="alerta" id="acEscopo" style="margin-top:10px"><b>Nesta visita: só ' + (escopoAfer(v).valvula ? 'a válvula' : 'o manômetro') + '.</b> ' + (escopoAfer(v).valvula ? 'O manômetro' : 'A válvula') + ' fica fora do escopo e não é pedido no envio.</div>';
+    h += '<div class="alerta" id="acEscopo" style="margin-top:10px"><b>Nesta visita: só ' + (escopoAfer(v).valvula ? 'a válvula' : 'o manômetro') + '.</b> ' + (escopoAfer(v).valvula ? 'O manômetro fica fora do escopo e não é pedido' : 'A válvula fica fora do escopo e não é pedida') + ' no envio.</div>';
   if (soAferV(v)) h += '<button class="btn ' + (faltasEnvio(v).length ? 'sec' : 'pri') + '" id="acEnvio" style="margin-top:10px">Fechamento e envio ›</button>';
   $('tela').innerHTML = h;
   ligar('acEnvio', () => ir({ nome:'fechamento', vaso:v.id }), 'click');
@@ -3385,7 +3380,7 @@ function telaFechamento(v){
     if (i.situacao === 'enviada') ligarReabrir(v);
     return;
   }
-  const f = faltasEnvio(v), a = avisosEnvio(v), so = soAferV(v);   // TapDoc 35 · issue 242: só aferição (sem capa, prazo, recomendações e medidas)
+  const so = soAferV(v), f = faltasEnvio(v), a = so ? [] : avisosEnvio(v);   // TapDoc 37 (S235): no vaso só de aferição, sem os avisos da inspeção (placa, PMTA, GPS, costado)   // TapDoc 35 · issue 242: só aferição (sem capa, prazo, recomendações e medidas)
   let h = alertaRecusa(v);   // S171 · issue 37
   h += f.length ? '<div class="alerta crit" id="fFaltas"><b>Falta para enviar</b><ul>' + f.map((x, k) => '<li>' + esc(x) + ' <button class="ir" data-falta="' + k + '">ir para ' + esc(ROT_TELA[alvoFalta(v, x).tela] || 'a tela') + ' ›</button></li>').join('') + '</ul></div>'
                : '<div class="alerta" style="background:var(--ok-soft);color:var(--ok)"><b>Pronto para enviar</b>Tudo o que é obrigatório foi preenchido.</div>';
