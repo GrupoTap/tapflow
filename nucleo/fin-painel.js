@@ -129,6 +129,14 @@ function fpmLigar(el, i){
     l.addEventListener('click', abre);
     l.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); abre(); } });
   });
+  // FP5 (issue 261): o título do "Precisa de ação" abre e fecha a lista (sem redesenhar a página) e o aparelho lembra
+  const bp = el.querySelector('#fpmPendBtn'), lp = el.querySelector('#fpmPendLista');
+  if (bp && lp) bp.addEventListener('click', () => {
+    const abre = lp.hidden; lp.hidden = !abre;
+    bp.setAttribute('aria-expanded', abre ? 'true' : 'false');
+    const seta = bp.querySelector('.fpmPendSeta'); if (seta) seta.textContent = abre ? '▾' : '▸';
+    fpmPendGuarda(abre);
+  });
   osmedLigarPainel(el);   // F14
   const vp = document.getElementById('fpmVerProj');                                                       // S66
   if (vp) vp.addEventListener('click', () => { FINPM.verProj = !FINPM.verProj; fpmRedesenhar(); });
@@ -175,22 +183,33 @@ function fpmAbrirTitulo(tipo, id){
   irPara(tipo === 'p' ? 'finpg' : 'finre');
 }
 
+// FP5 (S236, issue 261): o "Precisa de ação" se recolhe. Os contadores ("N vencidos", "N vencendo") e os avisos do quadro
+// ficam sempre à vista; só a lista das contas abre e fecha. Começa recolhido e o aparelho lembra como a pessoa deixou.
+const FPM_PEND_CHAVE = 'tf_fpm_pend_aberto';
+function fpmPendAberto(){ try{ return localStorage.getItem(FPM_PEND_CHAVE) === '1'; }catch(e){ return false; } }
+function fpmPendGuarda(v){ try{ localStorage.setItem(FPM_PEND_CHAVE, v ? '1' : '0'); }catch(e){ /* sem armazenamento: vale só nesta abertura */ } }
+
 function fpmPendencias(d){
   const pend = d.pendencias || [];
   const vencidos = pend.filter(p => p.vencido).length, vencendo = pend.length - vencidos;
+  const aberto = fpmPendAberto();
   return '<div class="painel" style="margin-bottom:14px;padding:14px">'
-    + '<h3 style="margin-top:0">Precisa de ação'
+    + '<h3 style="margin-top:0">'
+    +   (pend.length
+        ? '<button type="button" class="fpmPendBtn" id="fpmPendBtn" aria-expanded="' + (aberto ? 'true' : 'false') + '" aria-controls="fpmPendLista"'
+          + ' title="Mostrar ou esconder a lista das contas"><span class="fpmPendSeta" aria-hidden="true">' + (aberto ? '▾' : '▸') + '</span> Precisa de ação</button>'
+        : 'Precisa de ação')
     +   (vencidos ? ' <span class="chip" style="background:var(--crit-soft);color:var(--crit)">' + vencidos + ' vencido' + (vencidos > 1 ? 's' : '') + '</span>' : '')
     +   (vencendo ? ' <span class="chip" style="background:var(--warn-soft);color:var(--warn)">' + vencendo + ' vencendo</span>' : '')
     + '</h3>'
     + medAvisosPainel()   // F13
     + (!pend.length ? '<p class="nota" style="margin:0">Nada vencido ou vencendo nos próximos 7 dias.</p>'
-        : pend.map(p => '<div class="ccLin fpmPend" role="button" tabindex="0" data-fptit="' + esc(p.id) + '" data-fptipo="' + esc(p.tipo) + '"'
+        : '<div id="fpmPendLista"' + (aberto ? '' : ' hidden') + '>' + pend.map(p => '<div class="ccLin fpmPend" role="button" tabindex="0" data-fptit="' + esc(p.id) + '" data-fptipo="' + esc(p.tipo) + '"'
             + ' title="Abrir esta conta em ' + (p.tipo === 'p' ? 'Contas a Pagar' : 'Contas a Receber') + '" style="border-left:3px solid ' + (p.vencido ? 'var(--crit)' : 'var(--warn)') + ';padding-left:8px">'
             + '<span class="ccData">' + esc(dataBR(p.vencimento)) + (p.vencido ? ' <small style="color:var(--crit)">vencido</small>' : '') + '</span>'
             + '<span class="ccNome">' + esc(p.quem || '—') + '</span>'
             + '<span class="ccDesc">' + esc(p.descricao) + ' <small style="color:var(--ink-3)">· ' + (p.tipo === 'p' ? 'a pagar' : 'a receber') + '</small></span>'
-            + '<span class="n v">' + esc(BRL(p.saldo)) + '</span></div>').join('')) + '</div>';
+            + '<span class="n v">' + esc(BRL(p.saldo)) + '</span></div>').join('') + '</div>') + '</div>';
 }
 
 function fpmBarra(nome, v, max, cor, n, med, cls){
