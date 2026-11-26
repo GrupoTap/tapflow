@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 37 · Financeiro</title>
+<title>TapFin 38 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- o ícone da aba: o "E" da Engetap dentro do arquivo (SVG), aparece em qualquer pasta; o app instalado usa os PNG de field/icons/ -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22104%22 fill=%22%231B6FA9%22/%3E%3Cg transform=%22translate(0,512) scale(1,-1) translate(256,256.5) scale(1.3) translate(-256,-256.5)%22 fill=%22%23fff%22 stroke=%22%23fff%22 stroke-width=%2222%22 stroke-linejoin=%22round%22 stroke-linecap=%22round%22%3E%3Cpath d=%22M117 414 l-1 0 0 -121 0 -120 19 0 19 0 0 -37 0 -38 121 0 121 0 -45 45 -44 45 -69 0 -69 0 0 12 0 11 90 0 89 0 0 1 0 1 -44 44 -45 44 -45 0 -45 0 0 12 0 11 99 0 99 0 0 1 0 0 -45 45 -44 45 -81 0 -80 0 0 -1z m184 -44 l30 -29 0 -1 0 -1 -88 0 -89 0 0 -75 0 -76 -11 0 -12 0 0 105 0 106 1 0 0 1 70 0 69 0 30 -30z m-19 -113 l30 -29 0 -1 0 -1 -67 0 -67 0 0 30 0 30 1 0 0 1 37 0 36 0 30 -30z m47 -114 l30 -29 0 -1 0 0 -95 0 -95 0 0 30 0 30 65 0 66 0 29 -30z%22/%3E%3C/g%3E%3C/svg%3E">
@@ -1145,7 +1145,8 @@ const SUPABASE_URL      = _CFG.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // const APP_VERSION = 'F36';
-const APP_VERSION = 'F37';   // TapFin 37 (S236): issues 261 e 262 — Painel «Precisa de ação» recolhível (FP5) e aviso ao criar recorrência de fornecedor que já tem uma ativa; sem banco novo
+// const APP_VERSION = 'F37';
+const APP_VERSION = 'F38';   // TapFin 38 (S237): issue 265 — o leitor do CSV do Nubank entende \"- 479,96\" e \"13.113,09\" (eram pulados); sem banco novo
 // const APP_VERSION = 'F35';   // TapFin 35 (S218): Rodada R21 — issue 115 parte 1 ("É de uma OS? Sim/Não" na conta a pagar, com a busca da OS; a lista "Contas de custo sem OS no mês"; a marca "Peças / material: só informa na OS" nas categorias; a tela Deslocamento: veículos, R$/km do mês e cidades; banco 530)
 // const APP_VERSION = 'F34';   // TapFin 34 (S217): Rodada R25 — issue 238 (a condição de pagamento na janela da nota, no Editar e na conta nova; 15/30/45/60 e 0/15/30 nos botões; o chip da condição em toda conta A faturar; banco 529)
 // const APP_VERSION = 'F33';   // TapFin 33 (S215): Rodada R24 — issue 232 (saiu o estilo sem uso; o estilo comum às quatro páginas vem do nucleo/telas.css T1; nada muda na tela) e 231 (as perguntas da abertura vão juntas)
@@ -6766,7 +6767,8 @@ function carLerCsv(txt){
     L.slice(cabNu + 1).forEach(l => {
       const data = /^\d{4}-\d{2}-\d{2}/.test(String(l[iD]).trim()) ? String(l[iD]).trim().slice(0, 10) : carDataBR(l[iD]);
       if (!data){ if (String(l[iV] || '').trim()) out.pulos.push('linha ' + l._n + ': data "' + String(l[iD] || '').trim() + '" não lida'); return; }
-      const v = Number(String(l[iV]).replace(',', '.')); if (!isFinite(v)){ out.pulos.push('linha ' + l._n + ': valor "' + l[iV] + '" não lido'); return; }
+      const v = carNum(l[iV]);   // S237 (issue 265): "- 479,96" (espaço depois do sinal) e "13.113,09" (milhar) eram pulados
+      if (!isFinite(v)){ out.pulos.push('linha ' + l._n + ': valor "' + l[iV] + '" não lido'); return; }
       const estab = String(l[iT] || '').trim(); const t = tipoDe(estab, '', v);
       out.linhas.push({ data, estabelecimento: estab.replace(/\s*-\s*parcela\s*\d+\/\d+\s*$/i, ''), cidade: '', categoria: '', final: '',
         tipo: t.tipo, parcela_k: t.k || null, parcela_n: t.n || null, valor: Math.round(v * 100) / 100 });
@@ -6978,7 +6980,7 @@ function carFaturaDesenhar(){
       + (F.situacao === 'paga' ? '<b>Paga</b><span>' + esc(BRL(F.total)) + ' em ' + esc(dataBR(F.paga_em)) + ' — no extrato aparece uma linha só.</span>'
         : F.situacao === 'fechada' ? '<b>R$ 0,00</b><span>Conferida e fechada. Falta pagar ' + esc(BRL(F.total)) + '.</span>'
         : F.total == null ? '<b>Falta o total</b><span>Digite o total impresso na fatura para conferir.</span>'
-        : F.pode_fechar ? '<b>R$ 0,00</b><span>Tudo conferido — pode fechar a fatura.</span>'
+        : F.pode_fechar ? '<b>R$ 0,00</b><span>Tudo conferido — pode fechar a fatura.' + (Number(F.arredondamento) ? ' Diferença de ' + esc(BRL(Math.abs(Number(F.arredondamento)))) + ' é arredondamento do banco: entra na maior conta ao pagar.' : '') + '</span>'   // F38 · 265
         : '<b>Faltam ' + esc(BRL(F.faltando)) + '</b><span>' + finPlural(F.pendentes, 'linha sem conta', 'linhas sem conta') + ' · fatura de ' + esc(BRL(F.total)) + '</span>')
       + '<div class="carCont">' + [['✅', res.filter(l => ['conciliada', 'lancada'].indexOf(l.situacao) >= 0).length, 'resolvidas'],
           ['🧾', achou.length, 'achou o canhoto'], ['≈', quase.length, 'quase bateu'], ['⚠', sem.length, 'sem canhoto'],
