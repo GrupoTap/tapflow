@@ -97,6 +97,7 @@ textarea.t{min-height:60px;resize:vertical}
 .visor{position:sticky;top:0}
 .visor iframe{width:100%;height:72vh;border:1px solid var(--rule);border-radius:6px;background:#fff}
 .visor img{max-width:100%;border:1px solid var(--rule);border-radius:6px;display:block;margin-bottom:8px}
+.pdfcel{padding:12px 0} .pdfbtn{display:block;text-align:center;padding:16px 14px;font-size:16px;text-decoration:none}   /* E62 · issue 266 */
 .arqs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
 .arqs button{border:1px solid var(--rule);background:#fff;border-radius:4px;padding:4px 9px;font-size:12.5px}
 .arqs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -206,7 +207,8 @@ tr[data-espver]{cursor:pointer} tr[data-espver]:hover{background:var(--surface-2
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E61';   // E61 (S234 · issues 255 e 256): na preparação, o vaso "só aferição" ganha as caixas "Válvula" e "Manômetro" (o que ficar desmarcado o celular não cobra; tf_insp_afericao_escopo, 457) e a conferência mostra o escopo; na OS de contrato, a linha "Visita" mostra os dias de campo e a ART vem do contrato (tf_insp_os_contrato); saiu o texto do tempo do piloto (a T05 "pelo TapFlow")
+const VERSAO = 'TapDoc E62';   // E62 (S238 · issues 266 e 267): no celular o PDF do laudo anterior, do certificado, da ART e da minuta abre num botão "Abrir o PDF" (o Chrome do celular não mostra PDF em quadro); o vaso já enviado ganha "Revisar" na aba Em campo e a marca "OS ainda em campo" em A revisar (a revisão já era vaso a vaso)
+// const VERSAO = 'TapDoc E61';   // E61 (S234 · issues 255 e 256): na preparação, o vaso "só aferição" ganha as caixas "Válvula" e "Manômetro" (o que ficar desmarcado o celular não cobra; tf_insp_afericao_escopo, 457) e a conferência mostra o escopo; na OS de contrato, a linha "Visita" mostra os dias de campo e a ART vem do contrato (tf_insp_os_contrato); saiu o texto do tempo do piloto (a T05 "pelo TapFlow")
 // const VERSAO = 'TapDoc E60';   // E60 (S228 · issues 242 parte 3 e 237 FE16, R30): o Registro de Segurança da aferição avulsa sai com os certificados (a anotação); a aba "Trocas" (a troca do acessório instalado pela OS de fornecimento no cadastro do vaso, o certificado e a anotação da troca no Registro, que o PLH prepara e assina); as trocas nos documentos do vaso; documentos-pdf.js D11; 456 e 319
 // const VERSAO = 'TapDoc E59';   // E59 (S224 · issues 242 parte 2, 243, 244 e 212, R27): a aferição avulsa nas telas ("Só aferição" na preparação, a conferência única "Conferir e liberar", os certificados preparados pelo PLH sem laudo, com o aviso sem PMTA, no mesmo pacote "Para assinar" e na lista de documentos); a bancada sem certificado nem validade em Instrumentos; a janela que fecha depois de gravar não fecha a janela aberta depois dela (o "Novo modelo" do mapa 3D); laudo-pdf.js S179; 454 e 455
 // const VERSAO = 'TapDoc E58';   // E58 (S222 · issue 239, parte 1): a placa baixada fica gravada (a T15 da OS nova de inspeção conclui sozinha quando a placa de todos os vasos foi gerada); 453
@@ -483,12 +485,14 @@ async function pintar(){
 
 // ── 1 · as listas (entrada pelo hub) ───────────────────────────────────────
 let LISTAS = null;
+let REV_LISTA = [];   // E62 · issue 267: a lista da revisão (a aba "Em campo" liga o vaso enviado à revisão dele)
+let OS_EM_CAMPO = {};   // E62 · issue 267: as OS com a T06 aberta, pelo número (a aba "A revisar" marca o vaso delas)
 async function telaListas(aba){
   const vez = TELA_VEZ;   // E48 · issue 65, item 11
   titulo('TapDoc', 'Preparação da inspeção · escritório');
   $('tela').innerHTML = '<p class="muted">Carregando…</p>';
   // E55 (S215, issue 231): as cinco perguntas vão juntas (antes uma esperava a outra); cada contador trata o próprio erro
-  const pRev = rpc('tf_insp_revisao_lista').then(r => r.filter(x => x.pode).length).catch(() => 0);   // E8: as revisões que são suas
+  const pRev = rpc('tf_insp_revisao_lista').then(r => { REV_LISTA = r || []; return r.filter(x => x.pode).length; }).catch(() => { REV_LISTA = []; return 0; });   // E8: as revisões que são suas
   const pLaudo = rpc('tf_laudo_lista').then(r => r.filter(x => x.situacao === 'liberada' && !(x.laudo && x.laudo.situacao !== 'substituido')).length).catch(() => 0);   // E9: liberadas sem laudo
   const pCampo = rpc('tf_insp_em_campo_lista').catch(() => []);   // S141 · item 41 (417)
   const pTex = rpc('tf_laudo_textos_ver').then(r => (r.propostas || []).filter(x => x.situacao === 'pendente').length).catch(() => 0);   // S146 · item 79
@@ -498,6 +502,7 @@ async function telaListas(aba){
   const L = LISTAS, nPlh = (L.plh || []).filter(x => !x.decisao).length;
   const [nRev, nLaudo, CAMPO, nTex, nTroca] = await Promise.all([pRev, pLaudo, pCampo, pTex, pTroca]);
   if (!vigente(vez)) return;   // E48 · issue 65, item 11: outra tela foi aberta enquanto as listas vinham
+  OS_EM_CAMPO = {}; CAMPO.forEach(o => { OS_EM_CAMPO[o.numero] = true; });   // E62 · issue 267
   const abas = [['os','A preparar', (L.os || []).length], ['campo','Em campo', CAMPO.length], ['conf','Laudos a conferir', (L.a_conferir || []).length], ['plh','Para o PLH', nPlh], ['rev','A revisar', nRev],
                 ['laudos','Laudos', nLaudo], ['textos','Textos do laudo', nTex], ['trocas','Trocas', nTroca], ['inst','Instrumentos', 0], ['mat','Materiais', 0]];   // E60: Trocas   // S146 · item 79   // E2 (S80) · E9 (Laudos)
   let h = '<div class="abas">' + abas.map(([k, r, n]) => '<button data-a="' + k + '" class="' + (aba === k ? 'on' : '') + '">' + r
@@ -511,13 +516,15 @@ async function telaListas(aba){
     // S141 · item 41: as OS com a T06 "Executar a inspeção" aberta, vaso por vaso; tocar abre a preparação (marcar ou tirar vaso)
     const SIT_CAMPO = { em_preparo:['preparado','s-pronto'], em_campo:['começado em campo','s-em_conferencia'], enviada:['enviado','s-pronto'], em_revisao:['em revisão','s-pronto'],
       liberada:['liberado','s-pronto'], assinada:['assinado','s-pronto'] };
-    h += '<div class="card"><h3>OS em campo (T06 "Executar a inspeção" aberta)</h3><p class="muted">O que o celular da equipe deve mostrar. Toque na OS para marcar ou tirar um vaso.</p>'
+    h += '<div class="card"><h3>OS em campo (T06 "Executar a inspeção" aberta)</h3><p class="muted">O que o celular da equipe deve mostrar. Toque na OS para marcar ou tirar um vaso. O vaso já enviado pode ser revisado agora, sem esperar a OS terminar.</p>'
       + (CAMPO.length ? '<table><tr><th>OS</th><th>Cliente</th><th>Visita</th><th>Na T06</th><th>Vasos</th></tr>'
         + CAMPO.map(o => '<tr class="lin" data-os="' + esc(o.id) + '"><td><b>' + esc(o.numero) + '</b></td><td>' + esc(o.cliente || '') + '</td><td>'
           + (o.visita ? dataBR(o.visita) + (o.hora ? ' ' + esc(String(o.hora).slice(0, 5)) : '') : '<span class="muted">sem dia</span>') + '</td><td>'
           + esc([o.designado].concat(o.equipe || []).filter((x, k, a) => x && a.indexOf(x) === k).join(', ') || '—') + '</td><td>'
           + (o.vasos || []).map(x => { const st = x.nao_inspecionado ? ['não inspecionado', 's-grave'] : (SIT_CAMPO[x.situacao] || [x.situacao, '']);
-              return '<div><b>' + esc(x.tag) + '</b> <span class="chip ' + st[1] + '">' + esc(st[0]) + '</span></div>'; }).join('') + '</td></tr>').join('') + '</table>'
+              const rv = ['enviada', 'em_revisao'].indexOf(x.situacao) >= 0 ? REV_LISTA.find(z => z.os === o.numero && z.tag === x.tag) : null;   // E62 · issue 267: o vaso já enviado se revisa sem esperar a OS
+              return '<div><b>' + esc(x.tag) + '</b> <span class="chip ' + st[1] + '">' + esc(st[0]) + '</span>'
+                + (rv ? ' <button class="btn mini" data-revir="' + esc(rv.id) + '">Revisar</button>' : '') + '</div>'; }).join('') + '</td></tr>').join('') + '</table>'
         : '<p class="vazio">Nenhuma OS em campo agora.</p>') + '</div>';
   } else if (aba === 'conf'){
     h += '<div class="card"><h3>Laudos pegos em campo, a conferir</h3><p class="muted">A equipe que esteve no cliente digita e confere o laudo a partir das fotos.</p>'
@@ -547,6 +554,7 @@ async function telaListas(aba){
   }
   $('tela').innerHTML = h;
   ligarAbas();
+  $('tela').querySelectorAll('[data-revir]').forEach(b => b.addEventListener('click', ev => { ev.stopPropagation(); location.hash = 'rev=' + b.dataset.revir; }));   // E62 · issue 267
   $('tela').querySelectorAll('tr.lin').forEach(t => t.addEventListener('click', () => {
     if (t.dataset.v){ if (!t.dataset.os){ U.toast('Laudo sem OS ligada.', 'err'); return; } ir({ os:t.dataset.os, v:t.dataset.v }); }
     else ir({ os:t.dataset.os });
@@ -937,7 +945,7 @@ async function telaInstrumentos(){
   // E9: o PDF do certificado abre numa janela
   $('tela').querySelectorAll('[data-cert]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault();
     janela('Certificado', '<div id="certVis" class="visorrev" style="min-height:420px"></div>', [{ rotulo:'Fechar' }]);
-    setTimeout(() => mostrarArquivoEm($('certVis'), { storage_path: a.dataset.cert }), 0); }));
+    setTimeout(() => mostrarArquivoEm($('certVis'), { storage_path: a.dataset.cert, nome:'certificado.pdf' }), 0); }));
 }
 function editarInstrumento(x){
   x = x || { tipo:'medidor_espessura' };
@@ -952,7 +960,7 @@ function editarInstrumento(x){
   setTimeout(() => {
     document.querySelectorAll('[data-certant]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault();
       janela('Certificado anterior', '<div id="certVis" class="visorrev" style="min-height:420px"></div>', [{ rotulo:'Fechar' }]);
-      setTimeout(() => mostrarArquivoEm($('certVis'), { storage_path: a.dataset.certant }), 0); }));
+      setTimeout(() => mostrarArquivoEm($('certVis'), { storage_path: a.dataset.certant, nome:'certificado anterior.pdf' }), 0); }));
     document.querySelectorAll('[data-calpdf]').forEach(b => b.addEventListener('click', () => anexarPdfCalibracao(x, b.dataset.calpdf)));
     // E59 · issue 243: a bancada não tem certificado nem validade: esses campos somem quando o tipo é "Bancada"
     const ajustarTipo = () => { const banc = (x.id ? x.tipo : ($('in_tipo') || {}).value) === 'bancada';
@@ -1394,7 +1402,7 @@ function ligarArt(os, P){
       await rpc('tf_insp_art_gravar', { p_os: os, p_numero: $('artNum').value, p_path: caminho }); U.toast('ART anexada.', 'ok'); pintar(); }
     catch(e){ erro(e); }
   });
-  const v = $('artVer'); if (v) v.addEventListener('click', ev => { ev.preventDefault(); $('artVisor').className = 'visorrev'; mostrarArquivoEm($('artVisor'), { storage_path: art.arquivo_path }); });
+  const v = $('artVer'); if (v) v.addEventListener('click', ev => { ev.preventDefault(); $('artVisor').className = 'visorrev'; mostrarArquivoEm($('artVisor'), { storage_path: art.arquivo_path, nome:'ART.pdf' }); });
 }
 // ── E59 · issue 242 (454): o vaso "só aferição" (válvula e manômetro, sem inspeção do vaso; desenho processos/afericao-avulsa-desenho.md) ──
 // Os pacotes de sempre não mudaram (regra 69): a tela pergunta à parte quais inspeções são só de aferição. Banco sem a 454: nenhuma.
@@ -2197,18 +2205,37 @@ async function repintarVaso(){
   restaurarVaso(f);
 }
 const blobs = {};
+// E62 · issue 266: o Chrome do celular não mostra PDF dentro de um quadro (só um cartão escuro com "Abrir" que não abre nada).
+// No celular o quadro dá lugar a um botão grande que abre o PDF no leitor do aparelho; no computador nada muda.
+function celularSemQuadroPdf(){
+  try{ return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') || (matchMedia('(pointer:coarse)').matches && innerWidth <= 900); }catch(e){ return false; }
+}
+function pdfComBotao(vis, url, nome){
+  vis.innerHTML = '<div class="pdfcel"><p class="muted">O celular não mostra o PDF aqui dentro. Toque no botão para abrir no leitor do aparelho.</p><a class="btn pri pdfbtn" target="_blank" rel="noopener">Abrir o PDF</a></div>';
+  const a = vis.querySelector('a.pdfbtn'); a.href = url; a.download = nome || 'documento.pdf';
+}
+/** O PDF do armazém como endereço de blob com o tipo certo (application/pdf; sem ele o leitor do celular não abre). */
+async function urlPdf(path){
+  const chave = path + '#pdf';
+  if (blobs[chave]) return blobs[chave];
+  const r = await lerArmazem(path);
+  if (!r.ok) throw new Error('O arquivo não abriu (HTTP ' + r.status + ').');
+  blobs[chave] = URL.createObjectURL(new Blob([await r.blob()], { type:'application/pdf' }));
+  return blobs[chave];
+}
 async function mostrarArquivo(a){
   const vis = $('visor'); if (!a) return;
   vis.innerHTML = '<p class="muted">Abrindo…</p>';
   if (DEMO){ vis.innerHTML = '<p class="muted">Demonstração: sem o arquivo.</p>'; return; }
   try{
-    if (!blobs[a.storage_path]){
-      const r = await lerArmazem(a.storage_path);   // S148 · item 80
-      if (!r.ok) throw new Error('O arquivo não abriu (HTTP ' + r.status + ').');
-      blobs[a.storage_path] = URL.createObjectURL(await r.blob());
+    if (/\.pdf$/i.test(a.storage_path)){   // E62 · issue 266: no celular, o botão no lugar do quadro
+      const u = await urlPdf(a.storage_path);
+      if (celularSemQuadroPdf()){ pdfComBotao(vis, u, a.nome || 'laudo anterior.pdf'); return; }
+      vis.innerHTML = '<iframe title="Laudo"></iframe>'; vis.firstChild.src = u; return;
     }
-    vis.innerHTML = /\.pdf$/i.test(a.storage_path) ? '<iframe title="Laudo"></iframe>' : '<img alt="">';
-    vis.firstChild.src = blobs[a.storage_path];
+    const u = await urlFoto(a.storage_path, 0);   // S148 · item 80: a leitura do armazém é uma só (urlFoto e urlPdf)
+    vis.innerHTML = '<img alt="">';
+    vis.firstChild.src = u;
   }catch(e){ vis.innerHTML = '<p class="alerta crit"></p>'; vis.firstChild.textContent = e.message; }
 }
 $('arqPdf').addEventListener('change', async () => {
@@ -2678,6 +2705,7 @@ async function abaRevisao(h){
   h += '<div class="revcols">' + [1, 2, 3].map(e => '<div class="card"><h3>' + REV_ETAPA[e] + ' <span class="muted">(' + col(e).length + ')</span></h3>'
     + (col(e).length ? col(e).map(x => '<div class="revitem' + (x.pode ? ' minha' : '') + '" data-rev="' + esc(x.id) + '"><b>' + esc(x.tag) + '</b> · ' + esc(x.cliente || '')
         + '<div class="muted">OS ' + esc(x.os || '—') + ' · há ' + diasDesde(x.desde) + ' dia(s) · equipe: ' + esc((x.equipe || []).join(', ') || '—') + '</div>'
+        + (OS_EM_CAMPO[x.os] ? '<span class="chip s-em_conferencia">OS ainda em campo</span> ' : '')   // E62 · issue 267
         + (soAfer(x.id) ? CHIP_AFER + ' <span class="chip s-pronto">conferência única (o escritório)</span>'
           : (x.vermelhos ? '<span class="chip s-precisa_laudo">' + x.vermelhos + ' pendência(s)</span> ' : '<span class="chip s-pronto">sem pendência</span> ')
           + (x.pode ? '<span class="chip s-provisorio">é sua</span>' : ''))
@@ -4715,6 +4743,10 @@ function mostrarPdf(bytes, nome){
   const cx = $('ldVisor'); if (!cx) return;
   liberarVisor();
   const url = urlVisor(new Blob([bytes], { type:'application/pdf' }));
+  if (celularSemQuadroPdf()){   // E62 · issue 266: no celular, o botão no lugar do quadro
+    cx.innerHTML = '<div class="linha" style="margin-bottom:6px"><a class="btn pri pdfbtn" id="ldBaixar" target="_blank" rel="noopener">Abrir o PDF · ' + esc(nome) + '</a></div><p class="muted">O celular não mostra o PDF aqui dentro: o botão abre no leitor do aparelho.</p>';
+    $('ldBaixar').href = url; $('ldBaixar').download = nome; return;
+  }
   cx.innerHTML = '<div class="linha" style="margin-bottom:6px"><a class="btn sec" id="ldBaixar">Baixar ' + esc(nome) + '</a></div><iframe title="Laudo" style="width:100%;height:78vh;border:1px solid var(--rule);border-radius:6px;background:#fff"></iframe>';
   $('ldBaixar').href = url; $('ldBaixar').download = nome; cx.querySelector('iframe').src = url;
 }
@@ -5490,9 +5522,14 @@ async function mostrarArquivoEm(vis, a){
   vis.innerHTML = '<p class="muted">Abrindo…</p>';
   if (DEMO){ vis.innerHTML = '<p class="muted">Demonstração: sem o arquivo.</p>'; return; }
   try{
+    if (/\.pdf$/i.test(a.storage_path)){   // E62 · issue 266: PDF com o tipo certo; no celular, o botão no lugar do quadro
+      const u = await urlPdf(a.storage_path);
+      if (celularSemQuadroPdf()){ pdfComBotao(vis, u, a.nome || 'documento.pdf'); return; }
+      vis.innerHTML = '<iframe title="Arquivo"></iframe>'; vis.firstChild.src = u; return;
+    }
     // E53 · issue 220: a foto girada aparece girada (a do PDF não gira)
-    const g = /\.pdf$/i.test(a.storage_path) ? 0 : (a.girar || 0), u = await urlFoto(a.storage_path, g);
-    vis.innerHTML = /\.pdf$/i.test(a.storage_path) ? '<iframe title="Arquivo"></iframe>' : '<img alt="">';
+    const u = await urlFoto(a.storage_path, a.girar || 0);
+    vis.innerHTML = '<img alt="">';
     vis.firstChild.src = u;
   }catch(e){ vis.innerHTML = '<p class="alerta crit"></p>'; vis.firstChild.textContent = e.message; }
 }
