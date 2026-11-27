@@ -207,7 +207,7 @@ tr[data-espver]{cursor:pointer} tr[data-espver]:hover{background:var(--surface-2
 
 <script>
 'use strict';
-const VERSAO = 'TapDoc E65';   // E65 (S241): o lacre colocado aparece em cada aferição da conferência. E64 (S240 · issue 270): na conferência da aferição (e no quadro Aferições da revisão), "Ver medidas" mostra a tabela do que foi medido em campo antes de liberar.
+const VERSAO = 'TapDoc E66';   // E66 (S242 · issue 272): o número da planilha digitado pelo escritório (M e V no quadro Aferições e na revisão; R e P no cartão "Número do laudo" da revisão). E65 (S241): o lacre colocado aparece em cada aferição da conferência. E64 (S240 · issue 270): na conferência da aferição (e no quadro Aferições da revisão), "Ver medidas" mostra a tabela do que foi medido em campo antes de liberar.
 // const VERSAO = 'TapDoc E63';   // E63 (S239): o certificado de aferição não traz mais a nota "Verificação por comparação com padrão rastreável; não é calibração acreditada…" (laudo-pdf R06a-S180).
 // const VERSAO = 'TapDoc E62';   // E62 (S238 · issues 266 e 267): no celular o PDF do laudo anterior, do certificado, da ART e da minuta abre num botão "Abrir o PDF" (o Chrome do celular não mostra PDF em quadro); o vaso já enviado ganha "Revisar" na aba Em campo e a marca "OS ainda em campo" em A revisar (a revisão já era vaso a vaso)
 // const VERSAO = 'TapDoc E61';   // E61 (S234 · issues 255 e 256): na preparação, o vaso "só aferição" ganha as caixas "Válvula" e "Manômetro" (o que ficar desmarcado o celular não cobra; tf_insp_afericao_escopo, 457) e a conferência mostra o escopo; na OS de contrato, a linha "Visita" mostra os dias de campo e a ART vem do contrato (tf_insp_os_contrato); saiu o texto do tempo do piloto (a T05 "pelo TapFlow")
@@ -1158,6 +1158,40 @@ function afMedidasHtml(x){
         + td((p.erro_medio > 0 ? '+' : '') + esc(fmt(p.erro_medio, 2))) + td('±' + esc(fmt(p.tol, 2))) + td(esc(fmt(p.U, 2)))
         + td(p.ok ? 'Sim' : '<b>NÃO</b>', p.ok ? '' : ';color:#B42318') + '</tr>').join('') + '</table>';
 }
+// E66 · issue 272 (459): enquanto a numeração é da planilha, o escritório digita o número de cada documento. Em branco volta ao automático.
+// Depois de preparado para assinar, o banco recusa (tf__insp_numero_travado).
+function afNumPode(x){ return !!x && !x.cancelada_em && x.resultado !== 'incompleto'; }
+function afNumeroJanela(x, depois){
+  if (!afNumPode(x)) return;
+  const L = x.tipo === 'valvula' ? 'V' : 'M';
+  janela('Número da planilha · ' + (x.tipo === 'valvula' ? 'válvula' : 'manômetro'), '<label class="f">Número<input class="t" id="afNumTxt" autocomplete="off" value="' + esc(x.numero_manual ? (x.codigo || '') : '') + '" placeholder="Ex.: ' + L + '538/26"></label>'
+    + '<p class="muted">O número da planilha (ex.: ' + L + '538/26, ou só 538). É ele que sai no certificado. Hoje: <b>' + esc(x.codigo || 'sem número') + '</b>' + (x.numero_manual ? ' (da planilha)' : ' (automático)') + '. Em branco, volta ao número automático. Depois de preparado para assinar, o número não muda mais.</p>',
+    [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => { const t = $('afNumTxt').value;
+      return rpc('tf_insp_afericao_numero_manual', { p_id:x.id, p_numero:t })
+        .then(o => { U.toast('Número ' + (o.codigo || '') + (o.manual ? ' gravado.' : ' (automático).') + (o.outro ? ' O ' + o.outro + ' tinha este número do automático e recebeu o próximo.' : ''), 'ok'); N.janela.fechar(); depois(); return false; },
+              e => { erro(e); return false; }); } }]);
+}
+// E66 · issue 272: o R (e o P) digitado da planilha, na revisão do vaso, a partir da Revisão 2
+async function cartaoNumLaudo(id){
+  const cx = $('cxNumLaudo'); if (!cx) return;
+  let r; try{ r = await rpc('tf_insp_numeros_ver', { p_insp:id }); }catch(e){ cx.innerHTML = '<p class="alerta falta">' + esc(e.message) + '</p>'; return; }
+  if (!$('cxNumLaudo') || REV.id !== id) return;
+  const linha = (tp, rot, num, man, quando) => '<tr><td><b>' + rot + '</b></td><td>' + (num ? '<b>' + esc(num) + '</b> <span class="muted">' + (man ? 'da planilha' : 'automático') + '</span>' : '<span class="muted">' + quando + '</span>')
+    + '</td><td>' + (r.travado ? '' : '<button class="btn mini" data-numlaudo="' + tp + '">Número da planilha</button>') + '</td></tr>';
+  cx.innerHTML = '<h3 style="margin-top:0">Número do laudo</h3><p class="muted">Enquanto a numeração é feita na planilha, digite aqui o número dela. Em branco, vale o automático.</p>'
+    + '<table>' + linha('R', 'Relatório (R)', r.r, r.r_manual, 'sai quando a Revisão 2 fecha')
+    + (r.p_pede ? linha('P', 'Prontuário reconstituído (P)', r.p, r.p_manual, 'sai quando o PLH prepara') : '') + '</table>'
+    + (r.travado ? '<p class="muted">' + esc(r.travado) + '</p>' : '');
+  cx.querySelectorAll('[data-numlaudo]').forEach(b => b.addEventListener('click', () => {
+    const tp = b.dataset.numlaudo, atual = tp === 'R' ? (r.r_manual ? r.r : '') : (r.p_manual ? r.p : '');
+    janela('Número da planilha · ' + (tp === 'R' ? 'relatório' : 'prontuário'), '<label class="f">Número<input class="t" id="numLaudoTxt" autocomplete="off" value="' + esc(atual || '') + '" placeholder="Ex.: ' + tp + '1126-008"></label>'
+      + '<p class="muted">O número da planilha, com o mês e o ano (ex.: ' + tp + '1126-008). Em branco, volta ao número automático. Depois de preparado para assinar, o número não muda mais.</p>',
+      [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => { const t = $('numLaudoTxt').value;
+        return rpc('tf_insp_laudo_numero_manual', { p_insp:id, p_tipo:tp, p_numero:t })
+          .then(o => { U.toast(o.numero ? 'Número ' + o.numero + (o.manual ? ' gravado.' : ' (automático).') + (o.outro ? ' O ' + o.outro + ' tinha este número do automático e recebeu o próximo.' : '') : 'Volta ao número automático.', 'ok'); N.janela.fechar(); cartaoNumLaudo(id); return false; },
+                e => { erro(e); return false; }); } }]);
+  }));
+}
 async function cartaoAfericoes(ins){
   const cx = $('cxAfer'); if (!cx || !ins) return;
   let L; try{ L = await rpc('tf_insp_afericoes_lista', { p_inspecao: ins.id }); }catch(e){ cx.innerHTML = '<p class="alerta falta">' + esc(e.message) + '</p>'; return; }
@@ -1165,7 +1199,8 @@ async function cartaoAfericoes(ins){
   const res = x => x.cancelada_em ? '<span class="chip">cancelada</span>' : x.resultado === 'aprovado' ? '<span class="chip s-pronto">aprovado</span>'
     : x.resultado === 'reprovado' ? '<span class="chip s-grave">reprovado</span>' : '<span class="chip s-em_conferencia">incompleta</span>';
   cx.innerHTML = '<h3 style="margin-top:0">Aferições</h3><table><tr><th>Número</th><th>Instrumento</th><th>Resultado</th><th>Padrão</th><th>Lembrete interno</th></tr>'
-    + L.map(x => '<tr' + (x.grave ? ' style="background:#FDECEA"' : '') + '><td><b>' + esc(x.codigo || 'sem número') + '</b>' + (x.codigo ? '' : '<div class="muted">aguardando a sequência</div>') + '</td><td>'
+    + L.map(x => '<tr' + (x.grave ? ' style="background:#FDECEA"' : '') + '><td><b>' + esc(x.codigo || 'sem número') + '</b>' + (x.codigo ? '' : '<div class="muted">aguardando a sequência</div>')
+      + (x.numero_manual ? '<div class="muted">da planilha</div>' : '') + (afNumPode(x) ? '<div><button class="btn mini" data-afnum="' + esc(x.id) + '">Número da planilha</button></div>' : '') + '</td><td>'
       + (x.tipo === 'valvula' ? 'Válvula' : 'Manômetro') + ' · ' + esc(x.acessorio || '') + '<div class="muted">' + esc(x.por || '') + '</div>'
       + '<div class="afLacre">Lacre colocado: <b>' + esc(x.lacre_colocado || 'não informado') + '</b>' + '</div></td><td>' + res(x)
       + (x.grave ? ' <span class="chip s-grave">grave</span>' : '') + ((x.avisos || []).length ? '<div class="muted" style="color:#B42318">' + x.avisos.map(esc).join('<br>') + '</div>' : '')
@@ -1174,6 +1209,8 @@ async function cartaoAfericoes(ins){
       + (x.tipo === 'manometro' ? (x.validade_meses || 24) + ' meses<div class="muted">não sai no relatório</div>' + (x.validade_anterior ? '<div class="muted">antes: ' + x.validade_anterior + '</div>' : '')
         + (x.cancelada_em || !PLH ? '' : ' <button class="btn mini" data-afval="' + esc(x.id) + '">Mudar</button>') : '—') + '</td></tr>'
       + (x.leituras && !x.cancelada_em ? '<tr id="afmed-' + esc(x.id) + '" hidden><td colspan="5">' + afMedidasHtml(x) + '</td></tr>' : '')).join('') + '</table>';
+  // E66 · issue 272: o número da planilha (M ou V) digitado pelo escritório
+  cx.querySelectorAll('[data-afnum]').forEach(b => b.addEventListener('click', () => afNumeroJanela(L.find(y => y.id === b.dataset.afnum), () => cartaoAfericoes(ins))));
   // E64 · issue 270: "Ver medidas" abre e fecha a tabela do que foi medido em campo (a mesma do certificado), antes de liberar
   cx.querySelectorAll('[data-afmed]').forEach(b => b.addEventListener('click', () => {
     const tr = $('afmed-' + b.dataset.afmed); if (!tr) return;
@@ -3114,7 +3151,8 @@ function pintarRevisao(){
         + (VALV_SERIE.indexOf(a.tipo) >= 0 ? '<div class="muted" data-acnserie="' + esc(a.id) + '">' + (a.numero_serie ? 'nº de série ' + esc(a.numero_serie) : 'sem nº de série') + '</div>'
             + (eu.pode ? '<button class="btn mini" data-acserie="' + esc(a.id) + '" style="margin-top:2px">' + (a.numero_serie ? 'Mudar o nº de série' : 'Pôr o nº de série') + '</button>' : '') : '')   // E54 · issue 216
         + '</td><td>' + esc((a.afericao && a.afericao.lacre) || a.lacre_num || '—') + (a.afericao && a.afericao.lacre ? '<div class="muted">na aferição</div>' : '') + '</td><td>' + (a.pressao_ajuste_mpa != null ? pr(a.pressao_ajuste_mpa) : '—') + '</td><td>'
-        + (a.afericao ? '<span' + (ct || pe ? ' class="problema"' : '') + '>' + esc(a.afericao.codigo || 'sem número') + ' · ' + (a.afericao.resultado === 'aprovado' ? 'aprovado' : '<b style="color:var(--crit)">' + esc(a.afericao.resultado || '') + '</b>') + '</span>' + (a.afericao.grave ? ' <span class="chip s-grave">grave</span>' : '') : '<span class="muted">—</span>')
+        + (a.afericao ? '<span' + (ct || pe ? ' class="problema"' : '') + '>' + esc(a.afericao.codigo || 'sem número') + ' · ' + (a.afericao.resultado === 'aprovado' ? 'aprovado' : '<b style="color:var(--crit)">' + esc(a.afericao.resultado || '') + '</b>') + '</span>' + (a.afericao.grave ? ' <span class="chip s-grave">grave</span>' : '')
+            + (a.afericao.codigo ? '<div><button class="btn mini" data-acnum="' + esc(a.id) + '">Número da planilha</button></div>' : '') : '<span class="muted">—</span>')   // E66 · issue 272
         + (pe ? '<div class="muted" style="color:var(--crit)">leituras espalhadas: confira</div>' : '')
         + '</td><td>' + (eu.pode ? '<button class="btn mini" data-cora="' + esc(a.id) + '">Corrigir</button>' : '') + '</td></tr>'
         + (ct ? '<tr><td colspan="6"><p class="alerta crit" style="margin:0">' + esc(ct) + '</p></td></tr>' : ''); }).join('') + '</table>' : '<p class="vazio">Nenhum acessório.</p>')
@@ -3213,6 +3251,7 @@ function pintarRevisao(){
           + '<div id="boroVisor"></div>'; })() + '</div>';
   h += cartaoPasta(REV.pasta, 'Rev', REV.pront);   // E36 · issue 30, Parte 2 (DP8) · E37 · Parte 3 (DP10)
   h += cartaoQR(REV.qr);   // E39 · issue 34
+  if (e >= 2 || I.situacao === 'liberada') h += '<div class="card" id="cxNumLaudo"><p class="muted">Carregando o número do laudo…</p></div>';   // E66 · issue 272
   // ações
   h += '<div class="card linha acoesrev">';
   if (eu.pode && (e === 1 || e === 2)) h += '<button class="btn pri" id="revConcluir">Concluir a ' + (e === 1 ? 'Revisão 1' : 'Revisão 2') + '</button>';
@@ -3230,6 +3269,7 @@ function pintarRevisao(){
   const repintarQR = async () => { REV.qr = await qrVer(REV.id); const c = $('qrRevCard'); if (c){ c.outerHTML = cartaoQR(REV.qr); ligarQR(repintarQR); } };   // E39 · issue 34: só o quadro se refaz
   ligarQR(repintarQR);
   ligarMapa().catch(e => console.warn('mapa', e));   // S151 · issue 7 (não trava a revisão)
+  cartaoNumLaudo(REV.id);   // E66 · issue 272
 }
 // E9 (410): as próximas inspeções na aprovação. O PLH só ENCURTA (o banco confere);
 // abaixo de 0 °C o interno é a critério dele, então as datas são obrigatórias.
@@ -4099,6 +4139,13 @@ function ligarRevisao(){
         .then(() => { U.toast('Nº de série gravado.', 'ok'); N.janela.fechar(); recarregar(); return false; }, e => { erro(e); return false; }) }]);
   }));
   T.querySelectorAll('[data-corv]').forEach(b => b.addEventListener('click', () => { corrigir('vaso', null, REV_CAMPOS_VASO.filter(x => x[0] !== 'numero_tap'), k => k === 'circunferencia_mm' ? REV.v.circunferencia_mm : R.vaso[k]); $('rcCampo').value = b.dataset.corv; $('rcCampo').dispatchEvent(new Event('change')); }));
+  // E66 · issue 272: o número da planilha da aferição deste acessório (o id vem da lista das aferições)
+  T.querySelectorAll('[data-acnum]').forEach(b => b.addEventListener('click', async () => {
+    let L; try{ L = await rpc('tf_insp_afericoes_lista', { p_inspecao:id }); }catch(e){ erro(e); return; }
+    const x = (L || []).find(y => y.acessorio_id === b.dataset.acnum && afNumPode(y));
+    if (!x){ U.toast('A aferição deste acessório não tem número ainda.', 'err'); return; }
+    afNumeroJanela(x, recarregar);
+  }));
   T.querySelectorAll('[data-cora]').forEach(b => b.addEventListener('click', () => { const a = R.acessorios.find(x => x.id === b.dataset.cora); corrigir('acessorio', a.id, REV_CAMPOS_AC, k => a[k]); }));
   // S141 · itens 31, 45 e 47 (417): corrigir o dado da câmara; pressão na unidade da revisão, volume em m³ ou litros; o cálculo se refaz
   T.querySelectorAll('[data-corc]').forEach(b => b.addEventListener('click', () => {
