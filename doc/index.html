@@ -1172,9 +1172,12 @@ function afNumeroJanela(x, depois){
               e => { erro(e); return false; }); } }]);
 }
 // E66 · issue 272: o R (e o P) digitado da planilha, na revisão do vaso, a partir da Revisão 2
-async function cartaoNumLaudo(id){
+// lido uma vez ao abrir a revisão (gravar na revisão relê só as 4 de sempre: teste_s181, issue 67); relido ao gravar o próprio número
+let NUM_LAUDO = { id:null, r:null };
+async function cartaoNumLaudo(id, reler){
   const cx = $('cxNumLaudo'); if (!cx) return;
-  let r; try{ r = await rpc('tf_insp_numeros_ver', { p_insp:id }); }catch(e){ cx.innerHTML = '<p class="alerta falta">' + esc(e.message) + '</p>'; return; }
+  let r = !reler && NUM_LAUDO.id === id ? NUM_LAUDO.r : null;
+  if (!r){ try{ r = await rpc('tf_insp_numeros_ver', { p_insp:id }); NUM_LAUDO = { id, r }; }catch(e){ cx.innerHTML = '<p class="alerta falta">' + esc(e.message) + '</p>'; return; } }
   if (!$('cxNumLaudo') || REV.id !== id) return;
   const linha = (tp, rot, num, man, quando) => '<tr><td><b>' + rot + '</b></td><td>' + (num ? '<b>' + esc(num) + '</b> <span class="muted">' + (man ? 'da planilha' : 'automático') + '</span>' : '<span class="muted">' + quando + '</span>')
     + '</td><td>' + (r.travado ? '' : '<button class="btn mini" data-numlaudo="' + tp + '">Número da planilha</button>') + '</td></tr>';
@@ -1188,7 +1191,7 @@ async function cartaoNumLaudo(id){
       + '<p class="muted">O número da planilha, com o mês e o ano (ex.: ' + tp + '1126-008). Em branco, volta ao número automático. Depois de preparado para assinar, o número não muda mais.</p>',
       [{ rotulo:'Cancelar' }, { rotulo:'Gravar', classe:'pri', acao:() => { const t = $('numLaudoTxt').value;
         return rpc('tf_insp_laudo_numero_manual', { p_insp:id, p_tipo:tp, p_numero:t })
-          .then(o => { U.toast(o.numero ? 'Número ' + o.numero + (o.manual ? ' gravado.' : ' (automático).') + (o.outro ? ' O ' + o.outro + ' tinha este número do automático e recebeu o próximo.' : '') : 'Volta ao número automático.', 'ok'); N.janela.fechar(); cartaoNumLaudo(id); return false; },
+          .then(o => { U.toast(o.numero ? 'Número ' + o.numero + (o.manual ? ' gravado.' : ' (automático).') + (o.outro ? ' O ' + o.outro + ' tinha este número do automático e recebeu o próximo.' : '') : 'Volta ao número automático.', 'ok'); N.janela.fechar(); cartaoNumLaudo(id, true); return false; },
                 e => { erro(e); return false; }); } }]);
   }));
 }
@@ -2798,6 +2801,7 @@ async function abaRevisao(h){
 let REV = null;
 let REV_VEZ = 0;   // E48 · issue 67: a última leitura pedida é a que pinta (duas gravações seguidas: a resposta mais velha não pinta por cima)
 async function telaRevisao(id, manter){
+  if (!manter) NUM_LAUDO = { id:null, r:null };   // E66 · issue 272: abrir a revisão de novo relê o número do laudo
   // S148 · item 89: ao gravar (manter), a tela fica como está até os dados novos chegarem
   if (!manter){ titulo('Revisão', 'carregando…'); $('tela').innerHTML = '<p class="muted">Carregando…</p>'; }
   const vez = TELA_VEZ, vezR = ++REV_VEZ;
