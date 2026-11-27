@@ -382,7 +382,6 @@ function documentosAfericao(d, opc) {
     C.push({ text: [{ text: 'Resultado: ' }, { text: ok ? 'CONFORME' : 'NÃO CONFORME', bold: true, color: ok ? VERDE : VERM }, { text: e1 ? ' (reprovado na etapa 1).' : '.' }], style: 'destaque' });
     if (!ok && f.acima_adotada) C.push({ text: 'Recomendação: reajustar a válvula para abrir em pressão igual ou inferior à PMTA adotada e testá-la de novo, ou substituí-la por outra ajustada e testada (NR-13, item 13.5.1.2, alínea "a").', style: 'par' });
     else if (!ok) C.push({ text: 'Recomendação: substituir ' + (vv ? 'a válvula por outra em condições e testada' : 'o manômetro por outro em condições e aferido') + ' (NR-13, item 13.3.6).', style: 'par' });
-    C.push({ text: 'Verificação por comparação com padrão rastreável; não é calibração acreditada. O padrão tem certificado de calibração de laboratório acreditado (RBC), citado acima.', style: 'nota', margin: [0, 8, 0, 0] });
     C.push({ margin: [0, 26, 0, 0], unbreakable: true, stack: (CAR ? [{ image: CAR.imagem, fit: [170, 60] }] : [{ text: ' ' }]).concat([
       { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 220, y2: 0, lineWidth: 0.5, lineColor: CZ }] },
       { text: plh ? plh.nome + (plh.registro ? ' · ' + plh.registro : '') : 'Profissional Legalmente Habilitado', style: 'td' },
@@ -1339,6 +1338,6 @@ function montar(d, opc) {
   };
 }
 
-const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, prazoReduzido, prazosNorma, prazoRotulo, prazosRedTxt, pressaoAbaixo, tipoRec, semFrase, pressaoVars, dataAfericao, versao: 'R06a-S179-2026-11-23' };
+const LaudoPDF = { montar, fotosDoLaudo, anexosDoLaudo, documentosAfericao, espessuras, memoria, geoDe, fmt, dimsImg, grade1mais2, indicadoMedio, logoEngetap: LOGO_ENGETAP, cidadeLaudo, prazoReduzido, prazosNorma, prazoRotulo, prazosRedTxt, pressaoAbaixo, tipoRec, semFrase, pressaoVars, dataAfericao, versao: 'R06a-S180-2026-11-27' };
 if (typeof module !== 'undefined' && module.exports) module.exports = LaudoPDF; else raiz.LaudoPDF = LaudoPDF;
 })(typeof window !== 'undefined' ? window : globalThis);
