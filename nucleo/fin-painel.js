@@ -1,4 +1,4 @@
-/* nucleo/fin-painel.js · FP4 (S213, Rodada R16: os avisos sem número de SQL, issue 97) · FP3 (S209, Rodada R14: a reserva = a soma das caixinhas, issue 93; os botões que voltavam ao Painel e o "Precisa de ação" com clique, issue 188) · FP2 (S189: a linha da meta de recebimento no "Entrou × saiu", só quando FINPM.metaEntrou existe) · FP1 (S188) — os quadros do Painel Financeiro e das Projeções do TapFin.
+/* nucleo/fin-painel.js · FP6 (S245, issue 263: o "A faturar" no "Vai faltar dinheiro?" — toda OS aberta e a conta sem nota faturadas até o fim do mês ou até o dia limite da nota do cliente e recebidas pelo prazo dele; o cartão da meta) · FP5 (S236) · FP4 (S213, Rodada R16: os avisos sem número de SQL, issue 97) · FP3 (S209, Rodada R14: a reserva = a soma das caixinhas, issue 93; os botões que voltavam ao Painel e o "Precisa de ação" com clique, issue 188) · FP2 (S189: a linha da meta de recebimento no "Entrou × saiu", só quando FINPM.metaEntrou existe) · FP1 (S188) — os quadros do Painel Financeiro e das Projeções do TapFin.
  * Movido do fin/index.html (F21) sem mudar o código, para o TapGestão (aba Reunião) usar os MESMOS gráficos
  * (decisão RE9 do Bruno, 17/11/2026, processos/tapgestao-reuniao-desenho.md). Mudou um gráfico? Muda aqui, e vale
  * nos dois lugares. A página que carrega este arquivo precisa ter: esc, BRL, dataBR, rpc, irPara, visao, finPlural,
@@ -28,7 +28,7 @@ async function finpCarregar(){
   // S70 · + o ciclo pelo saldo real do dia 1º e o plano das provisões (SQL 503)
   let desp, ciclo, med, osmed;
   try{ [d, pm, proj, desp, ciclo, med, osmed] = await Promise.all([rpc('tf_fin_painel', {}), rpc('tf_fin_painel_mensal', {}),
-                                          rpc('tf_fin_projecao_os', {}).catch(e => ({ erro: e.message })),
+                                          rpc('tf_fin_projecao_faturar', {}).catch(() => rpc('tf_fin_projecao_os', {})).catch(e => ({ erro: e.message })),   // FP6 · 534; sem ela, a de antes
                                           rpc('tf_fin_projecao_despesas', {}).catch(e => ({ erro: e.message })),
                                           rpc('tf_fin_ciclo', {}).catch(e => ({ erro: e.message })),
                                           rpc('tf_fin_medicoes_sem_titulo', {}).catch(() => null),   // F13 · sem a 509: sem aviso
@@ -226,11 +226,28 @@ const FPM_PROJ_COR = '#6FB08A';
 const fpmProjLista = () => (FINPM.proj && Array.isArray(FINPM.proj.os) ? FINPM.proj.os : [])
   .map(o => ({ ...o, v: Number(o.projecao) || 0, m: o.recebe_em ? String(o.recebe_em).slice(0, 7) : null }));
 
-const fpmProjMes = m => fpmProjLista().filter(o => o.m === m);
+// FP6 (S245, issue 263) · a projeção nova (534): "A receber" = só o que tem nota; "A faturar" = as OS abertas e as contas
+// ainda sem nota, faturadas até o fim do mês (ou até o dia limite da nota do cliente) e recebidas pelo prazo do cliente.
+// Sem a 534 (ou na ata de um mês fechado antes dela) tudo fica como antes: "OS em execução" pelo prazo da OS.
+const fpjNova = () => !!(FINPM.proj && FINPM.proj.regra === 'a_faturar');
+const fpjFirme = a => a.t === 'r' && !(fpjNova() && a.etapa === 'a_faturar');
+const FPJ_ROT = () => fpjNova() ? { rec: 'A receber', fat: 'A faturar', fatMin: 'a faturar', fatCurto: '+ Faturar', com: 'Com o A faturar', sem: 'Só o firme (se nada mais for faturado)', semCurto: 'Só o firme' }
+                                : { rec: 'A receber lançado', fat: 'OS em execução', fatMin: 'OS em execução', fatCurto: '+ OS', com: 'Com as OS em execução', sem: 'Sem as OS (se nada for faturado)', semCurto: 'Sem as OS' };
+const fpjContasFat = () => fpjNova() && Array.isArray(FINPM.proj.contas_a_faturar) ? FINPM.proj.contas_a_faturar.map(c => ({ ...c, v: Number(c.saldo) || 0, numero: c.os_numero || 'conta', conta: true })) : [];
+// uma linha por parte a receber (a condição 30/60 dá duas): é o que entra em cada mês
+const fpjParcelas = () => {
+  if (!fpjNova()) return fpmProjLista().filter(o => o.m);
+  const L = [];
+  [...fpmProjLista().filter(o => !o.parada), ...fpjContasFat()].forEach(o => (o.parcelas || []).forEach((p, i) =>
+    L.push({ ...o, v: Number(p.valor) || 0, recebe_em: p.recebe_em, m: String(p.recebe_em).slice(0, 7), parte: (o.parcelas.length > 1 ? (i + 1) + '/' + o.parcelas.length : '') })));
+  return L;
+};
+
+const fpmProjMes = m => fpjParcelas().filter(o => o.m === m);
 
 const fpmProjComData = () => fpmProjLista().filter(o => o.m);
 
-const fpmProjSemData = () => fpmProjLista().filter(o => !o.m);
+const fpmProjSemData = () => fpmProjLista().filter(o => !o.m);   // FP6: na regra nova, só as paradas
 
 // FP3 (S209, issue 93): a reserva é a SOMA DAS CAIXINHAS (pm.reserva, da 527): a conta de reserva nunca recebe a "Reserva
 // mensal" e mostrava R$ 0. Sem a 527 (ou na ata de um mês fechado antes dela), como antes: as contas que não são operacionais.
@@ -262,6 +279,7 @@ function fpmProjAvisos(){
 }
 
 function fpmProjTabela(compacta){
+  if (fpjNova() && !compacta) return fpjFatSecao().replace(/^<div class="painel fpmCard" id="fpjFatSecao"><h3>.*?<\/h3>/, '<div>');   // FP6: na Reunião, a mesma tabela do A faturar
   const C = fpmProjComData(), S = fpmProjSemData();
   if (!C.length && !S.length) return '<p class="nota" style="margin:6px 0 0">Nenhuma OS aberta com proposta aprovada e ainda não lançada no Contas a Receber.</p>';
   const dias = d => d ? fpmDias(String(d).slice(0, 10)) * -1 : null;
@@ -297,7 +315,7 @@ function fpmProjTabela(compacta){
 function fpmLinkProj(k){
   if (k !== FINPM.pm.mes_atual || !fpjTemDesp()) return '';
   const x = fpjSerie()[0], nm = FPM_NOMES[+k.slice(5, 7) - 1];
-  const partes = [['recorrentes sem título', x.rec], ['outras despesas pela média', x.out], ['provisões do dia 30', x.prov], ['OS em execução', x.os]]
+  const partes = [['recorrentes sem título', x.rec], ['outras despesas pela média', x.out], ['provisões do dia 30', x.prov], [FPJ_ROT().fatMin, x.os]]
     .filter(p => p[1] > 0.009).map(p => p[0] + ' ' + esc(fpmK(p[1])));
   return '<div class="fpmChamada"><div><b>Projeções:</b> ' + (partes.length ? 'somando o que ainda não foi lançado (' + partes.join(', ') + '), ' : 'sem nada a projetar além do lançado, ') + esc(nm) + ' termina com <b class="' + (x.fim < 0 ? 'fpmNeg' : 'fpmPos') + '">' + esc(fpmBRL(x.fim)) + '</b> nas contas.</div>'
     + '<button type="button" class="btn" data-ir="fincr">Abrir Projeções →</button></div>';
@@ -338,7 +356,7 @@ function fpjProvisao(m){
 function fpjMes(m, inicio){
   const ab = FINPM.pm.abertos || [], atual = m === FINPM.pm.mes_atual, fim = fpmFimMes(m);
   const noMes = a => atual ? a.d <= fim : a.d.slice(0, 7) === m;
-  const rL = ab.filter(a => a.t === 'r' && noMes(a)).reduce((s, a) => s + (Number(a.v) || 0), 0);
+  const rL = ab.filter(a => fpjFirme(a) && noMes(a)).reduce((s, a) => s + (Number(a.v) || 0), 0);
   const pL = ab.filter(a => a.t === 'p' && !a.provisao && noMes(a)).reduce((s, a) => s + (Number(a.v) || 0), 0);
   const os = fpmTot(fpmProjMes(m)), D = fpjDespesas(m), prov = fpjProvisao(m);
   return { m, inicio, rL, os, pL, rec: D.tRec, out: D.tOut, prov, D, fim: inicio + rL + os - pL - D.tRec - D.tOut - prov };
@@ -380,17 +398,18 @@ function fcrDesenhar(){
   const falta = [];
   // FP4 (issue 97): sem número de SQL na tela; o motivo do servidor, se houver, fica entre parênteses
   if (!fpjTemDesp()) falta.push('as despesas recorrentes' + (FINPM.desp && FINPM.desp.erro ? ' (' + FINPM.desp.erro + ')' : ''));
-  if (FINPM.proj && FINPM.proj.erro) falta.push('as OS em execução');
+  if (FINPM.proj && FINPM.proj.erro) falta.push('o A faturar (as OS abertas)');
   if (!fpjTemCiclo()) falta.push('o saldo do dia 1º e as provisões');
   const chips = '<div class="fpjChips" role="group" aria-label="Escolher o mês do detalhe">Mês em detalhe: ' + M.map(m => '<button type="button" class="btn sm' + (m === FINPM.pjMes ? ' pri' : '') + '" data-pjm="' + m + '" aria-pressed="' + (m === FINPM.pjMes) + '">' + esc(fpmMesCurto(m)) + (m === FINPM.pm.mes_atual ? ' (resto)' : '') + '</button>').join('') + '</div>';
   el.innerHTML = (falta.length ? '<p class="fpmAviso">Não carregou ' + esc(falta.join(' e ')) + '. O resto da tela funciona sem elas. Se continuar assim, falta uma atualização do sistema: avise o administrador.</p>' : '')
     // 1 · os quatro números
     + fpjTiles()
+    + fpjMetaCard()   // FP6 · issue 263 (5–7)
     // 2 · o saldo em linha + entradas × saídas
     + '<div class="fpmG2 fpjG2">'
-    +   '<div class="painel fpmCard"><h3>Vai faltar dinheiro?</h3><p class="fpmPq">O saldo nas contas no fim de cada mês, somando o lançado e o projetado. Em tracejado, o mesmo saldo se nenhuma OS em execução for faturada. Clique num mês para detalhar.</p><div id="fpjGSaldo"></div>'
+    +   '<div class="painel fpmCard"><h3>Vai faltar dinheiro?</h3><p class="fpmPq">' + (fpjNova() ? 'O saldo nas contas no fim de cada mês: o A receber (com nota) e o A faturar (as OS abertas e as contas sem nota, se forem faturadas até o fim deste mês ou até o dia limite da nota do cliente), menos as saídas. Em tracejado, só o firme: se nada mais for faturado.' : 'O saldo nas contas no fim de cada mês, somando o lançado e o projetado. Em tracejado, o mesmo saldo se nenhuma OS em execução for faturada.') + ' Clique num mês para detalhar.</p><div id="fpjGSaldo"></div>'
     +     '<details class="fpjDet"><summary>Ver a conta mês a mês</summary>' + fpjSaldoTabela() + '</details></div>'
-    +   '<div class="painel fpmCard"><h3>Entra × sai, mês a mês</h3><p class="fpmPq">Cheio é o que já está lançado; hachurado é estimativa (OS, recorrências sem título, média do não recorrente, provisões).</p><div id="fpjGMeses"></div></div>'
+    +   '<div class="painel fpmCard"><h3>Entra × sai, mês a mês</h3><p class="fpmPq">Cheio é o que já está lançado' + (fpjNova() ? ' (a receber com nota)' : '') + '; hachurado é estimativa (' + (fpjNova() ? 'o A faturar' : 'OS') + ', recorrências sem título, média do não recorrente, provisões).</p><div id="fpjGMeses"></div></div>'
     + '</div>'
     // 3 · os sinais
     + fpjSinaisCard()
@@ -402,9 +421,10 @@ function fcrDesenhar(){
     + '</div>'
     + '<div class="fpmG2 fpjG2">' + fpjDespCard(FINPM.pjMes) + fpjRecCard(FINPM.pjMes) + '</div>'
     // 5 · as OS
-    + '<div class="painel fpmCard"><h3>OS em execução</h3>'
+    + (fpjNova() ? fpjFatSecao()
+    : '<div class="painel fpmCard"><h3>OS em execução</h3>'
     + '<p class="fpmPq">OS abertas com proposta aprovada, ainda não faturadas. Projeção = aprovado − o que já está no Contas a Receber ligado à OS (pelo campo OS, pelo número da proposta na descrição ou, sem número, pelo valor até 5% do mesmo cliente). O mês é o prazo da OS (ou a tarefa marcada + 15 dias para o laudo e a nota, ou a meta do tipo) + o prazo de recebimento do cliente.</p>'
-    + fpmProjTabela() + fpmProjAvisos() + '</div>'
+    + fpmProjTabela() + fpmProjAvisos() + '</div>')
     // 6 · o ciclo
     + '<h3 class="fpjSecao">Ciclo do dinheiro</h3>'
     + '<p class="fpmPq" style="margin:-4px 0 10px">O que entra num mês vai para o CDB e paga as contas do mês seguinte: no dia 1º o escritório retira do CDB o que vai pagar. O ciclo fecha quando o <b>saldo do dia 1º</b> cobre as contas do mês; quando não cobre, a diferença sai do dinheiro que entra no próprio mês.</p>'
@@ -430,11 +450,11 @@ function fpjSaldoTabela(){
   const S = fpjSerie(), res = fpmReservas();
   const v = (x, cls) => '<td class="' + (cls || '') + (x < 0 ? ' fpmNeg' : '') + '">' + esc(fpmBRL(x)) + '</td>';
   const lin = (rot, f, est, sinal) => '<tr' + (est ? ' class="fpjEst"' : '') + '><th scope="row">' + rot + '</th>' + S.map(x => { const n = f(x); return '<td>' + (n ? (sinal || '') + esc(BRL(n)) : '—') + '</td>'; }).join('') + '</tr>';
-  return '<p class="fpmPq" style="margin:8px 0 4px">Começa com o saldo de hoje nas contas (' + esc(fpjNomesOp()) + (res.length ? '; a reserva ' + res.map(c => '<span data-tip="' + esc(fpmResTip(c)) + '">' + esc(fpmResNome(c)) + ' ' + ((Number(c.saldo) || 0) ? esc(fpmK(Number(c.saldo))) : '(sem saldo lançado)') + '</span>').join(', ') + ' não entra' : '') + '). Linhas <span class="fpjEstTxt">em itálico</span> são estimativa. Faturamento que ainda não existe não entra: por isso os meses mais longe sempre parecem piores.</p>'
+  return '<p class="fpmPq" style="margin:8px 0 4px">Começa com o saldo de hoje nas contas (' + esc(fpjNomesOp()) + (res.length ? '; a reserva ' + res.map(c => '<span data-tip="' + esc(fpmResTip(c)) + '">' + esc(fpmResNome(c)) + ' ' + ((Number(c.saldo) || 0) ? esc(fpmK(Number(c.saldo))) : '(sem saldo lançado)') + '</span>').join(', ') + ' não entra' : '') + '). Linhas <span class="fpjEstTxt">em itálico</span> são estimativa. ' + (fpjNova() ? 'O A faturar é o que já está aberto (OS e contas sem nota); venda nova ainda não entra: por isso os meses mais longe sempre parecem piores.' : 'Faturamento que ainda não existe não entra: por isso os meses mais longe sempre parecem piores.') + '</p>'
     + '<div class="fpmRolar"><table class="fpmTabela fpjTab"><tr><th></th>' + S.map(x => '<th>' + esc(fpmMesCurto(x.m)) + (x.m === FINPM.pm.mes_atual ? '<small>até o fim</small>' : '') + '</th>').join('') + '</tr>'
     + '<tr><th scope="row">Começa com</th>' + S.map(x => v(x.inicio)).join('') + '</tr>'
-    + lin('+ A receber lançado', x => x.rL, false, '+')
-    + lin('+ OS em execução', x => x.os, true, '+')
+    + lin('+ ' + FPJ_ROT().rec, x => x.rL, false, '+')
+    + lin('+ ' + FPJ_ROT().fat, x => x.os, true, '+')
     + lin('− A pagar lançado', x => x.pL, false, '−')
     + lin('− Recorrentes sem título', x => x.rec, true, '−')
     + lin('− Outras (média de 3 meses)', x => x.out, true, '−')
@@ -478,16 +498,16 @@ function fpjProvLinha(m){
 
 function fpjRecCard(m){
   const ab = FINPM.pm.abertos || [], atual = m === FINPM.pm.mes_atual, fim = fpmFimMes(m), nm = FPM_NOMES[+m.slice(5, 7) - 1];
-  const R = ab.filter(a => a.t === 'r' && (atual ? a.d <= fim : a.d.slice(0, 7) === m)).map(a => ({ ...a, v: Number(a.v) || 0 })).sort((a, b) => a.d.localeCompare(b.d));
+  const R = ab.filter(a => fpjFirme(a) && (atual ? a.d <= fim : a.d.slice(0, 7) === m)).map(a => ({ ...a, v: Number(a.v) || 0 })).sort((a, b) => a.d.localeCompare(b.d));
   const O = fpmProjMes(m), C = fpjRecClientes(m);
   return '<div class="painel fpmCard"><h3>Receitas de ' + esc(nm) + ' <small class="fpmHoje">· ' + esc(fpmK(C.tot)) + '</small></h3>'
-    + '<p class="fpmPq">Por cliente: o lançado para receber e as OS em execução com previsão para ' + esc(nm) + '.' + (C.n > 1 && C.top3 >= 0.6 ? ' <b>Os 3 maiores são ' + esc(fpmPct(C.top3)) + ' do mês.</b>' : '') + '</p>'
+    + '<p class="fpmPq">Por cliente: ' + (fpjNova() ? 'o a receber com nota e o a faturar que cai em ' : 'o lançado para receber e as OS em execução com previsão para ') + esc(nm) + '.' + (C.n > 1 && C.top3 >= 0.6 ? ' <b>Os 3 maiores são ' + esc(fpmPct(C.top3)) + ' do mês.</b>' : '') + '</p>'
     + (C.n ? C.html : '<p class="nota">Nada lançado nem projetado para ' + esc(nm) + '.</p>')
     + '<details class="fpjDet"><summary>Ver título por título (' + R.length + ') e as OS (' + O.length + ')</summary>'
-    + '<div class="fpjGrupo"><b>A receber lançado</b><span>' + esc(BRL(fpmTot(R))) + '</span></div>'
+    + '<div class="fpjGrupo"><b>' + esc(FPJ_ROT().rec) + '</b><span>' + esc(BRL(fpmTot(R))) + '</span></div>'
     + (R.length ? R.map(a => '<div class="fpjItem"><span>' + esc(dataBR(a.d).slice(0, 5)) + ' · ' + esc(a.q) + (a.etapa === 'a_faturar' ? ' <small>a faturar</small>' : '') + (fpmDias(a.d) < 0 ? ' <span class="chip" style="background:var(--crit-soft);color:var(--crit)">vencido</span>' : '') + '</span><span>' + esc(BRL(a.v)) + '</span></div>').join('') : '<p class="nota" style="margin:2px 0">Nada lançado.</p>')
-    + '<div class="fpjGrupo" style="margin-top:10px"><b>OS em execução (projeção)</b><span>' + esc(BRL(fpmTot(O))) + '</span></div>'
-    + (O.length ? O.map(o => '<div class="fpjItem fpjEst"><span>' + esc(o.numero) + ' · ' + esc(o.cliente || '') + ' <small>' + esc(dataBR(String(o.recebe_em).slice(0, 10)).slice(0, 5)) + '</small></span><span>' + esc(BRL(o.v)) + '</span></div>').join('') : '<p class="nota" style="margin:2px 0">Nenhuma OS com previsão para ' + esc(nm) + '.</p>')
+    + '<div class="fpjGrupo" style="margin-top:10px"><b>' + esc(FPJ_ROT().fat) + ' (projeção)</b><span>' + esc(BRL(fpmTot(O))) + '</span></div>'
+    + (O.length ? O.map(o => '<div class="fpjItem fpjEst"><span>' + esc(o.conta ? (o.os_numero ? o.os_numero + ' · conta sem nota' : 'conta sem nota') : o.numero) + (o.parte ? ' (' + esc(o.parte) + ')' : '') + ' · ' + esc(o.cliente || '') + ' <small>' + esc(dataBR(String(o.recebe_em).slice(0, 10)).slice(0, 5)) + '</small></span><span>' + esc(BRL(o.v)) + '</span></div>').join('') : '<p class="nota" style="margin:2px 0">' + (fpjNova() ? 'Nada a faturar que caia em ' : 'Nenhuma OS com previsão para ') + esc(nm) + '.</p>')
     + '</details></div>';
 }
 
@@ -616,9 +636,79 @@ function fpjTiles(){
   return '<div class="fpmG4 fpjG4">'
     + tile('Saldo hoje nas contas', esc(fpmBRL(hoje)), esc(fpjNomesOp()), '', FPJ_COR.saldo)
     + tile('Ponto mais baixo', esc(fpmBRL(pior.fim)), 'fim de ' + esc(fpmRot(pior.m)) + (pior.fim < 0 ? ', com tudo o que está lançado e projetado' : ': o saldo não fica negativo'), pior.fim < 0 ? 'fpmNeg' : 'fpmPos', pior.fim < 0 ? FPJ_COR.neg : FPM_COR.entrou)
-    + tile('O saldo aguenta', esc(folego), primNeg ? 'fica negativo em ' + esc(nm(primNeg.m)) + (primNeg0 && primNeg0.m < primNeg.m ? '; sem as OS, já em ' + esc(nm(primNeg0.m)) : '') : (primNeg0 ? 'mas sem as OS em execução fica negativo em ' + esc(nm(primNeg0.m)) : 'mesmo sem as OS em execução'), primNeg ? 'fpmNeg' : 'fpmPos')
-    + tile('Falta faturar', meta ? esc(fpmBRL(meta)) : 'nada', meta ? 'com vencimento até ' + esc(nm(pior.m)) + ', para fechar no zero (além das OS já contadas)' : 'o lançado e o projetado cobrem os 4 meses', meta ? 'fpmNeg' : 'fpmPos')
+    + tile('O saldo aguenta', esc(folego), primNeg ? 'fica negativo em ' + esc(nm(primNeg.m)) + (primNeg0 && primNeg0.m < primNeg.m ? '; ' + (fpjNova() ? 'só com o firme' : 'sem as OS') + ', já em ' + esc(nm(primNeg0.m)) : '') : (primNeg0 ? 'mas ' + (fpjNova() ? 'só com o firme (sem o A faturar)' : 'sem as OS em execução') + ' fica negativo em ' + esc(nm(primNeg0.m)) : (fpjNova() ? 'mesmo sem o A faturar' : 'mesmo sem as OS em execução')), primNeg ? 'fpmNeg' : 'fpmPos')
+    + tile('Falta faturar', meta ? esc(fpmBRL(meta)) : 'nada', meta ? 'com vencimento até ' + esc(nm(pior.m)) + ', para fechar no zero (além ' + (fpjNova() ? 'do A faturar já contado' : 'das OS já contadas') + ')' : 'o lançado e o projetado cobrem os 4 meses', meta ? 'fpmNeg' : 'fpmPos')
     + '</div>';
+}
+
+// ── FP6 (S245, issue 263, decisões 5 a 7 do Bruno, 27/11/2026) · o cartão da meta e a lista do "A faturar" ──
+// Cada OS aberta (fora a parada) e cada conta sem nota: quanto falta faturar, até quando (o fim do mês ou o dia limite
+// da nota do cliente; passado o dia, só no mês seguinte) e quanto disso cai em cada mês.
+function fpjFatItens(mes){
+  if (!fpjNova()) return [];
+  return [...fpmProjLista().filter(o => !o.parada), ...fpjContasFat()].map(o => {
+    const P = o.parcelas || [];
+    return { rot: o.conta ? (o.os_numero ? o.os_numero + ' · conta sem nota' : 'Conta sem nota') : o.numero, os_id: o.os_id, conta: !!o.conta,
+             cliente: o.cliente || '—', v: o.v, aprovado: Number(o.aprovado) || 0, lancado: Number(o.lancado) || 0,
+             ate: o.fatura_ate ? String(o.fatura_ate).slice(0, 10) : null, dl: o.dia_limite, prox: !!o.proximo_mes, cond: o.condicao || '30',
+             recebe: P.length ? String(P[0].recebe_em).slice(0, 10) : null, partes: P.length, descricao: o.descricao || '',
+             cai: mes ? P.filter(p => String(p.recebe_em).slice(0, 7) === mes).reduce((s, p) => s + (Number(p.valor) || 0), 0) : 0 };
+  }).filter(i => i.v > 0.009).sort((a, b) => b.v - a.v);
+}
+
+const fpjAteTxt = i => i.ate ? 'até ' + dataBR(i.ate).slice(0, 5) + (i.dl ? ' (dia limite ' + i.dl + ')' : '') : '—';
+
+function fpjMetaCard(){
+  if (!fpjNova()) return '';
+  const S = fpjSerie(), S0 = fpjSerieSemOS(), x = S[1], x0 = S0[1];
+  if (!x || !x0) return '';
+  const nm = FPM_NOMES[+x.m.slice(5, 7) - 1], nmA = FPM_NOMES[+FINPM.pm.mes_atual.slice(5, 7) - 1];
+  const I = fpjFatItens(x.m), C = I.filter(i => i.cai > 0.009);
+  const X = C.reduce((s, i) => s + i.cai, 0), meta = Math.max(0, -x0.fim), fat = Number(FINPM.proj.faturado_mes) || 0;
+  const prazos = C.map(i => i.ate).filter(d => d && d >= FINPM.pm.hoje).sort(), ate = prazos[0] || null;
+  const faltam = ate ? fpmDias(ate) : null, faltamTxt = faltam === null ? '' : faltam === 0 ? 'é hoje o último dia' : faltam === 1 ? 'falta 1 dia' : 'faltam ' + faltam + ' dias';
+  let cor, tit, txt;
+  if (x0.fim >= 0){
+    cor = 'ok'; tit = esc(nm.replace(/^./, c => c.toUpperCase())) + ' fecha no azul só com o firme';
+    txt = 'Só com o que já tem nota, ' + esc(nm) + ' termina com <b>' + esc(fpmBRL(x0.fim)) + '</b>. O A faturar (' + esc(fpmK(X)) + ') é folga.';
+  } else if (x.fim >= 0){
+    cor = 'warn'; tit = 'Meta para fechar no azul: faturar ' + esc(fpmBRL(meta)) + (ate ? ' até ' + esc(dataBR(ate).slice(0, 5)) : '');
+    txt = 'Só com o firme, ' + esc(nm) + ' fecha em <b class="fpmNeg">' + esc(fpmBRL(x0.fim)) + '</b>. Se faturar, fecha em <b class="fpmPos">+' + esc(BRL(x.fim)) + '</b>: faturando '
+      + esc(fpmBRL(X)) + (ate ? ' até ' + esc(dataBR(ate).slice(0, 5)) + ' (' + esc(faltamTxt) + ')' : '') + '.';
+  } else {
+    cor = 'crit'; tit = esc(nm.replace(/^./, c => c.toUpperCase())) + ' fecha no vermelho mesmo faturando tudo';
+    txt = 'Faturando todo o A faturar que cai em ' + esc(nm) + ' (' + esc(fpmBRL(X)) + (ate ? ' até ' + esc(dataBR(ate).slice(0, 5)) + ', ' + esc(faltamTxt) : '') + '), ' + esc(nm) + ' fecha em <b class="fpmNeg">'
+      + esc(fpmBRL(x.fim)) + '</b>. É preciso vender, cobrar ou rever as saídas.';
+  }
+  const B = fat + meta, pct = B > 0 ? Math.min(1, fat / B) : 1;
+  const barra = meta > 0.009 ? '<div class="fpjMetaBarra"><div class="fpmProxCab"><span>Faturado em ' + esc(nmA) + ': <b>' + esc(BRL(fat)) + '</b> de ' + esc(BRL(B)) + ' necessários</span><span>' + esc(fpmPct(pct)) + '</span></div>'
+      + '<div class="fpmProg" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(pct * 100) + '"><span style="width:' + (pct * 100).toFixed(1) + '%"></span></div></div>' : '';
+  const linha = i => '<tr><td>' + esc(i.rot) + '</td><td>' + esc(i.cliente) + '</td><td><b>' + esc(BRL(i.v)) + '</b>' + (i.partes > 1 ? ' <small>' + esc(i.cond) + ' dias</small>' : '') + '</td>'
+      + '<td>' + esc(fpjAteTxt(i)) + (i.prox ? ' <span class="chip" title="Passou do dia limite da nota deste mês">só em ' + esc(FPM_NOMES[+i.ate.slice(5, 7) - 1]) + '</span>' : '') + '</td>'
+      + '<td>' + (i.recebe ? esc(fpmMesCurto(i.recebe.slice(0, 7))) : '—') + '</td></tr>';
+  const lista = I.length ? '<details class="fpjDet fpjMetaLista"' + (cor !== 'ok' ? ' open' : '') + '><summary>O que falta faturar (' + I.length + '), da maior para a menor</summary>'
+      + '<div class="fpmRolar"><table class="fpmTabela"><tr><th>OS</th><th>Cliente</th><th>A faturar</th><th>Faturar</th><th>Recebe em</th></tr>' + I.slice(0, 12).map(linha).join('') + '</table></div>'
+      + (I.length > 12 ? '<p class="fpmPq" style="margin:4px 0 0">+ ' + (I.length - 12) + ' na tabela "A faturar", mais abaixo.</p>' : '') + '</details>'
+    : '<p class="fpmPq" style="margin:6px 0 0">Nada aberto para faturar.</p>';
+  return '<div class="painel fpmCard fpjMeta ' + cor + '" id="fpjMeta"><h3>' + tit + '</h3><p class="fpjMetaTxt">' + txt + '</p>' + barra + lista + '</div>';
+}
+
+function fpjFatSecao(){
+  const I = fpjFatItens(null), S = fpmProjSemData();
+  const linha = i => '<tr><td>' + esc(i.rot) + (i.conta && i.descricao ? '<small style="display:block;color:var(--ink-3)">' + esc(i.descricao) + '</small>' : '') + '</td><td>' + esc(i.cliente) + '</td>'
+    + '<td>' + (i.conta ? '—' : esc(BRL(i.aprovado))) + '</td><td>' + (i.conta ? '—' : i.lancado ? esc(BRL(i.lancado)) : '—') + '</td><td><b>' + esc(BRL(i.v)) + '</b></td>'
+    + '<td>' + esc(fpjAteTxt(i)) + (i.prox ? ' <span class="chip">mês seguinte</span>' : '') + '</td>'
+    + '<td>' + (i.recebe ? esc(fpmMesCurto(i.recebe.slice(0, 7))) + (i.partes > 1 ? ' <small>(' + esc(i.cond) + ')</small>' : '') : '—') + '</td></tr>';
+  return '<div class="painel fpmCard" id="fpjFatSecao"><h3>A faturar <small class="fpmHoje">· ' + esc(fpmK(fpmTot(I))) + '</small></h3>'
+    + '<p class="fpmPq">As OS abertas (pelo aprovado: a proposta, ou a medição fechada; menos o que já está no Contas a Receber ligado a ela) e as contas a receber ainda sem nota. '
+    + 'Conta como faturado até o fim deste mês; o cliente com <b>dia limite da nota</b> já passado fatura só no mês seguinte. O recebimento é pelo prazo do cliente (vazio = 30 dias), em '
+    + '<button class="fpmLk" type="button" data-ir="finprz">Prazos de Recebimento</button>.</p>'
+    + (I.length ? '<div class="fpmRolar"><table class="fpmTabela fpmProjTab"><tr><th>OS / conta</th><th>Cliente</th><th>Aprovado</th><th>Já lançado</th><th>A faturar</th><th>Faturar</th><th>Recebe em</th></tr>'
+        + I.map(linha).join('') + '<tr class="sel"><td colspan="4">Total que entra nas contas</td><td>' + esc(BRL(fpmTot(I))) + '</td><td colspan="2"></td></tr></table></div>'
+      : '<p class="nota" style="margin:6px 0 0">Nenhuma OS aberta nem conta sem nota para faturar.</p>')
+    + (S.length ? '<p class="fpmPq" style="margin:8px 0 0"><b>Paradas, fora das contas</b> (' + finPlural(S.length, 'OS', 'OS') + ', ' + esc(BRL(fpmTot(S))) + '; abertas há mais de ' + esc(String(FINPM.proj.parada_dias || 180)) + ' dias, sem prazo nem tarefa marcada): '
+        + S.map(o => esc(o.numero) + ' ' + esc(o.cliente || '') + ' ' + esc(fpmK(o.v))).join(' · ') + '. Marque a tarefa ou encerre a OS que não vai acontecer.</p>' : '')
+    + fpmProjAvisos() + '</div>';
 }
 
 function fpjGrafSaldo(){
@@ -647,8 +737,8 @@ function fpjGrafSaldo(){
     s += '<rect class="fpjHit" data-i="' + i + '" x="' + (x - w / 2) + '" y="' + pt + '" width="' + w + '" height="' + (ih + pb - 4) + '" fill="transparent" style="cursor:' + (p.m ? 'pointer' : 'default') + '"/>';
   });
   s += '</svg>';
-  el.innerHTML = s + '<div class="fpmLeg"><span><i class="ln" style="background:' + FPJ_COR.saldo + ';height:3px"></i>Com as OS em execução</span><span><i class="ln" style="background:' + FPJ_COR.txt2 + ';border-top:2px dashed ' + FPJ_COR.txt2 + ';height:0"></i>Sem as OS (se nada for faturado)</span><span><i style="background:' + FPJ_COR.neg + ';opacity:.25"></i>Abaixo de zero</span></div>';
-  fpjLiga(el, '.fpjHit', r => { const p = pts[+r.dataset.i]; return '<b>' + esc(p.m ? fpmRot(p.m) : 'Hoje') + '</b>' + fpjLin('Com as OS', esc(fpmBRL(p.fim))) + fpjLin('Sem as OS', esc(fpmBRL(p.fim0))); });
+  el.innerHTML = s + '<div class="fpmLeg"><span><i class="ln" style="background:' + FPJ_COR.saldo + ';height:3px"></i>' + esc(FPJ_ROT().com) + '</span><span><i class="ln" style="background:' + FPJ_COR.txt2 + ';border-top:2px dashed ' + FPJ_COR.txt2 + ';height:0"></i>' + esc(FPJ_ROT().sem) + '</span><span><i style="background:' + FPJ_COR.neg + ';opacity:.25"></i>Abaixo de zero</span></div>';
+  fpjLiga(el, '.fpjHit', r => { const p = pts[+r.dataset.i]; return '<b>' + esc(p.m ? fpmRot(p.m) : 'Hoje') + '</b>' + fpjLin(esc(FPJ_ROT().com), esc(fpmBRL(p.fim))) + fpjLin(esc(FPJ_ROT().semCurto), esc(fpmBRL(p.fim0))); });
   el.querySelectorAll('.fpjHit').forEach(r => r.addEventListener('click', () => { const p = pts[+r.dataset.i]; if (p.m){ fpmTipSai(); FINPM.pjMes = p.m; fcrDesenhar(); } }));
 }
 
@@ -657,8 +747,8 @@ function fpjGrafCascata(){
   const x = fpjSerie().find(s => s.m === FINPM.pjMes); if (!x) return;
   fpjCascata(el, [
     { rot: 'Começa com', rotCurto: 'Começa', v: x.inicio, tipo: 'tot' },
-    { rot: '+ A receber lançado', rotCurto: '+ Receber', v: x.rL, cor: FPJ_COR.lanc },
-    { rot: '+ OS em execução', rotCurto: '+ OS', v: x.os, cor: FPJ_COR.os, est: true },
+    { rot: '+ ' + FPJ_ROT().rec, rotCurto: '+ Receber', v: x.rL, cor: FPJ_COR.lanc },
+    { rot: '+ ' + FPJ_ROT().fat, rotCurto: FPJ_ROT().fatCurto, v: x.os, cor: FPJ_COR.os, est: true },
     { rot: '− A pagar lançado', rotCurto: '− Pagar', v: -x.pL, cor: FPJ_COR.pago },
     { rot: '− Recorrentes sem título', rotCurto: '− Recorrentes', v: -x.rec, cor: FPJ_COR.rec, est: true },
     { rot: '− Outras (média)', rotCurto: '− Outras', v: -x.out, cor: FPJ_COR.out, est: true },
@@ -686,9 +776,9 @@ function fpjGrafMeses(){
     s += '<rect class="fpjHit" data-i="' + i + '" x="' + (pl + bw * i) + '" y="' + pt + '" width="' + bw + '" height="' + (ih + pb - 4) + '" fill="transparent" style="cursor:pointer"/>';
   });
   s += '</svg>';
-  el.innerHTML = s + (bw < 120 ? '<div class="fpmPq" style="margin:2px 0 0">* mês corrente, daqui até o fim · toque num mês para ver os valores</div>' : '') + '<div class="fpmLeg"><span><i style="background:' + FPJ_COR.lanc + '"></i>A receber lançado</span><span><i class="fpjHachCss" style="background:' + FPJ_COR.os + '"></i>OS em execução</span>'
+  el.innerHTML = s + (bw < 120 ? '<div class="fpmPq" style="margin:2px 0 0">* mês corrente, daqui até o fim · toque num mês para ver os valores</div>' : '') + '<div class="fpmLeg"><span><i style="background:' + FPJ_COR.lanc + '"></i>' + esc(FPJ_ROT().rec) + '</span><span><i class="fpjHachCss" style="background:' + FPJ_COR.os + '"></i>' + esc(FPJ_ROT().fat) + '</span>'
     + '<span><i style="background:' + FPJ_COR.pago + '"></i>A pagar lançado</span><span><i class="fpjHachCss" style="background:' + FPJ_COR.rec + '"></i>Recorrentes sem título</span><span><i class="fpjHachCss" style="background:' + FPJ_COR.out + '"></i>Outras (média)</span><span><i class="fpjHachCss" style="background:' + FPJ_COR.prov + '"></i>Provisões</span></div>';
-  fpjLiga(el, '.fpjHit', r => { const x = S[+r.dataset.i]; return '<b>' + esc(fpmRot(x.m)) + '</b>' + fpjLin('A receber lançado', '+' + esc(fpjFmt(x.rL))) + fpjLin('OS em execução', '+' + esc(fpjFmt(x.os))) + fpjLin('A pagar lançado', '−' + esc(fpjFmt(x.pL))) + fpjLin('Recorrentes', '−' + esc(fpjFmt(x.rec))) + fpjLin('Outras', '−' + esc(fpjFmt(x.out))) + fpjLin('Provisões', '−' + esc(fpjFmt(x.prov))) + fpjLin('<b>Resultado</b>', '<b>' + esc(fpmBRL(x.rL + x.os - x.pL - x.rec - x.out - x.prov)) + '</b>'); });
+  fpjLiga(el, '.fpjHit', r => { const x = S[+r.dataset.i]; return '<b>' + esc(fpmRot(x.m)) + '</b>' + fpjLin(esc(FPJ_ROT().rec), '+' + esc(fpjFmt(x.rL))) + fpjLin(esc(FPJ_ROT().fat), '+' + esc(fpjFmt(x.os))) + fpjLin('A pagar lançado', '−' + esc(fpjFmt(x.pL))) + fpjLin('Recorrentes', '−' + esc(fpjFmt(x.rec))) + fpjLin('Outras', '−' + esc(fpjFmt(x.out))) + fpjLin('Provisões', '−' + esc(fpjFmt(x.prov))) + fpjLin('<b>Resultado</b>', '<b>' + esc(fpmBRL(x.rL + x.os - x.pL - x.rec - x.out - x.prov)) + '</b>'); });
   el.querySelectorAll('.fpjHit').forEach(r => r.addEventListener('click', () => { fpmTipSai(); FINPM.pjMes = S[+r.dataset.i].m; fcrDesenhar(); }));
 }
 
@@ -700,9 +790,9 @@ function fpjDias(m){
   const ev = {}; dias.forEach(k => ev[k] = { ent: 0, sai: 0, itens: [] });
   const poe = (k, v, rot, est) => { if (k < d0) k = d0; if (k > fim) k = fim; const e = ev[k]; if (!e) return; if (v > 0) e.ent += v; else e.sai += -v; e.itens.push({ v, rot, est }); };
   const ab = FINPM.pm.abertos || [], noMes = a => atual ? a.d <= fim : a.d.slice(0, 7) === m;
-  ab.filter(a => a.t === 'r' && noMes(a)).forEach(a => poe(a.d, Number(a.v) || 0, a.q + (a.d < d0 ? ' (vencido)' : '')));
+  ab.filter(a => fpjFirme(a) && noMes(a)).forEach(a => poe(a.d, Number(a.v) || 0, a.q + (a.d < d0 ? ' (vencido)' : '')));
   ab.filter(a => a.t === 'p' && !a.provisao && noMes(a)).forEach(a => poe(a.d, -(Number(a.v) || 0), a.q + (a.d < d0 ? ' (vencido)' : '')));
-  fpmProjMes(m).forEach(o => poe(String(o.recebe_em).slice(0, 10), o.v, o.numero + ' ' + (o.cliente || ''), true));
+  fpmProjMes(m).forEach(o => poe(String(o.recebe_em).slice(0, 10), o.v, (o.conta ? 'a faturar ' : o.numero + ' ') + (o.cliente || ''), true));
   const D = fpjDespesas(m);
   D.rec.forEach(r => poe(String(r.venc), -r.v, r.fornecedor + (r.venceu ? ' (venceu sem título)' : ''), true));
   if (x.prov > 0){ const P = FINPM.ciclo && FINPM.ciclo.provisao || {}; const dp = Math.min(Number(P.dia) || 30, +fim.slice(8)); poe(m + '-' + String(dp).padStart(2, '0'), -x.prov, 'Provisões → caixinhas', true); }
@@ -769,14 +859,14 @@ function fpjRecClientes(m){
   const atual = m === FINPM.pm.mes_atual, fim = fpmFimMes(m), ab = FINPM.pm.abertos || [];
   const C = {};
   const add = (q, k, v) => { if (!(v > 0.009)) return; C[q] = C[q] || { lanc: 0, os: 0 }; C[q][k] += v; };
-  ab.filter(a => a.t === 'r' && (atual ? a.d <= fim : a.d.slice(0, 7) === m)).forEach(a => add(a.q || '—', 'lanc', Number(a.v) || 0));
+  ab.filter(a => fpjFirme(a) && (atual ? a.d <= fim : a.d.slice(0, 7) === m)).forEach(a => add(a.q || '—', 'lanc', Number(a.v) || 0));
   fpmProjMes(m).forEach(o => add(o.cliente || '—', 'os', o.v));
   const L = Object.entries(C).map(([q, x]) => ({ q, ...x, tot: x.lanc + x.os })).sort((a, b) => b.tot - a.tot);
   const tot = L.reduce((s, x) => s + x.tot, 0), max = Math.max(1, ...L.map(x => x.tot));
   const top = L.slice(0, 8), resto = L.slice(8), top3 = L.slice(0, 3).reduce((s, x) => s + x.tot, 0);
-  return { html: top.map(x => fpjBarraH(x.q, [{ v: x.lanc, cor: FPJ_COR.lanc, rot: 'Lançado' }, { v: x.os, cor: FPJ_COR.os, est: true, rot: 'OS em execução' }], max, tot ? fpmPct(x.tot / tot) : '')).join('')
+  return { html: top.map(x => fpjBarraH(x.q, [{ v: x.lanc, cor: FPJ_COR.lanc, rot: 'Lançado' }, { v: x.os, cor: FPJ_COR.os, est: true, rot: FPJ_ROT().fat }], max, tot ? fpmPct(x.tot / tot) : '')).join('')
       + (resto.length ? fpjBarraH('Outros (' + resto.length + ')', [{ v: resto.reduce((s, x) => s + x.lanc, 0), cor: FPJ_COR.lanc, rot: 'Lançado' }, { v: resto.reduce((s, x) => s + x.os, 0), cor: FPJ_COR.os, est: true, rot: 'OS' }], max) : '')
-      + '<div class="fpmLeg" style="margin-top:6px"><span><i style="background:' + FPJ_COR.lanc + '"></i>Lançado</span><span><i class="fpjHachCss" style="background:' + FPJ_COR.os + '"></i>OS em execução</span></div>',
+      + '<div class="fpmLeg" style="margin-top:6px"><span><i style="background:' + FPJ_COR.lanc + '"></i>' + (fpjNova() ? 'A receber' : 'Lançado') + '</span><span><i class="fpjHachCss" style="background:' + FPJ_COR.os + '"></i>' + esc(FPJ_ROT().fat) + '</span></div>',
     tot, n: L.length, top3: tot ? top3 / tot : 0, top: L[0] };
 }
 
@@ -785,13 +875,15 @@ function fpjSinais(){
   const sinal = (grav, txt, ir, rot) => L.push({ grav, txt, ir, rot });
   const pior = S.reduce((a, x) => x.fim < a.fim ? x : a, S[0]), primNeg = S.find(x => x.fim < 0), primNeg0 = S0.find(x => x.fim < 0);
   if (primNeg) sinal('crit', 'O saldo fica negativo em <b>' + esc(nm(primNeg.m)) + '</b> (' + esc(fpmBRL(primNeg.fim)) + ')' + (pior.m !== primNeg.m ? ' e chega a ' + esc(fpmBRL(pior.fim)) + ' em ' + esc(nm(pior.m)) : '') + '. Para fechar no zero faltam <b>' + esc(fpmBRL(-pior.fim)) + '</b> de faturamento com vencimento até ' + esc(nm(pior.m)) + ', ou contas adiadas nesse valor.', 'fincr', null);
-  else if (primNeg0) sinal('warn', 'Com as OS em execução o saldo aguenta os 4 meses, mas <b>sem elas</b> fica negativo em ' + esc(nm(primNeg0.m)) + ' (' + esc(fpmBRL(primNeg0.fim)) + '). Faturar as OS no prazo é o que segura o caixa.', 'fincr', null);
-  else sinal('ok', 'O saldo não fica negativo nos 4 meses, com ou sem as OS em execução.', null, null);
+  else if (primNeg0) sinal('warn', fpjNova() ? 'Faturando o que está aberto o saldo aguenta os 4 meses, mas <b>só com o firme</b> fica negativo em ' + esc(nm(primNeg0.m)) + ' (' + esc(fpmBRL(primNeg0.fim)) + '). Faturar dentro do mês (e antes do dia limite de cada cliente) é o que segura o caixa.'
+                                  : 'Com as OS em execução o saldo aguenta os 4 meses, mas <b>sem elas</b> fica negativo em ' + esc(nm(primNeg0.m)) + ' (' + esc(fpmBRL(primNeg0.fim)) + '). Faturar as OS no prazo é o que segura o caixa.', 'fincr', null);
+  else sinal('ok', fpjNova() ? 'O saldo não fica negativo nos 4 meses, com ou sem o A faturar.' : 'O saldo não fica negativo nos 4 meses, com ou sem as OS em execução.', null, null);
   // depende das OS: quanto do que entra é projeção
   const totE = S.reduce((s, x) => s + x.rL + x.os, 0), totOS = S.reduce((s, x) => s + x.os, 0);
-  if (totE > 0 && totOS / totE >= 0.3) sinal('warn', esc(fpmPct(totOS / totE)) + ' do que deve entrar nos 4 meses (' + esc(fpmK(totOS)) + ') ainda é <b>OS em execução</b>, não título. Executar e faturar essas OS no prazo é o que decide os meses seguintes.', 'fincr', null);
+  if (totE > 0 && totOS / totE >= 0.3) sinal('warn', esc(fpmPct(totOS / totE)) + ' do que deve entrar nos 4 meses (' + esc(fpmK(totOS)) + ') ainda é <b>' + esc(FPJ_ROT().fatMin) + '</b>, ' + (fpjNova() ? 'sem nota' : 'não título') + '. Executar e faturar no prazo é o que decide os meses seguintes.', 'fincr', null);
   // OS sem previsão
-  const semD = fpmProjSemData(); if (semD.length) sinal('warn', finPlural(semD.length, 'OS sem previsão', 'OS sem previsão') + ' (' + esc(fpmK(fpmTot(semD))) + ') ficam <b>fora de todas as contas</b>' + (semD.some(o => o.parada) ? ', ' + finPlural(semD.filter(o => o.parada).length, 'delas parada', 'delas paradas') : '') + '. Ponha um prazo, marque a tarefa ou encerre a OS.', 'os', 'Ver as OS');
+  const semD = fpmProjSemData(); if (semD.length && fpjNova()) sinal('warn', finPlural(semD.length, 'OS parada', 'OS paradas') + ' (' + esc(fpmK(fpmTot(semD))) + ', abertas há mais de ' + esc(String(FINPM.proj.parada_dias || 180)) + ' dias, sem prazo nem tarefa marcada) ficam <b>fora do A faturar</b>. Marque a tarefa ou encerre a OS que não vai acontecer.', 'os', 'Ver as OS');
+  else if (semD.length) sinal('warn', finPlural(semD.length, 'OS sem previsão', 'OS sem previsão') + ' (' + esc(fpmK(fpmTot(semD))) + ') ficam <b>fora de todas as contas</b>' + (semD.some(o => o.parada) ? ', ' + finPlural(semD.filter(o => o.parada).length, 'delas parada', 'delas paradas') : '') + '. Ponha um prazo, marque a tarefa ou encerre a OS.', 'os', 'Ver as OS');
   // recorrências vencidas sem título no mês corrente
   const Dm = fpjDespesas(FINPM.pm.mes_atual), venc = Dm.rec.filter(r => r.venceu);
   if (venc.length) sinal('warn', finPlural(venc.length, 'recorrência já venceu', 'recorrências já venceram') + ' em ' + esc(nm(FINPM.pm.mes_atual)) + ' e não ' + (venc.length === 1 ? 'tem' : 'têm') + ' título (' + esc(fpmK(fpmTot(venc))) + '): ' + esc(venc.slice(0, 3).map(r => r.fornecedor.split(' ').slice(0, 2).join(' ')).join(', ')) + (venc.length > 3 ? '…' : '') + '. Foram pagas sem lançar, ou a recorrência acabou? Lance ou pause.', 'finrec', 'Recorrentes');
@@ -799,7 +891,7 @@ function fpjSinais(){
   const ab = FINPM.pm.abertos || [], vencR = ab.filter(a => a.t === 'r' && a.d < hoje && a.etapa !== 'a_faturar');
   if (vencR.length) sinal('warn', finPlural(vencR.length, 'título a receber vencido', 'títulos a receber vencidos') + ' (' + esc(fpmK(vencR.reduce((s, a) => s + (Number(a.v) || 0), 0))) + '): ' + esc(vencR.slice(0, 3).map(a => a.q.split(' ').slice(0, 2).join(' ')).join(', ')) + '. Cobrar: a projeção conta com esse dinheiro.', 'finre:vencidas', 'Contas a Receber');
   // concentração de clientes nos próximos 2 meses
-  const C = {}; S.slice(0, 2).forEach(x => { ab.filter(a => a.t === 'r' && (x.m === FINPM.pm.mes_atual ? a.d <= fpmFimMes(x.m) : a.d.slice(0, 7) === x.m)).forEach(a => C[a.q] = (C[a.q] || 0) + (Number(a.v) || 0)); fpmProjMes(x.m).forEach(o => C[o.cliente || '—'] = (C[o.cliente || '—'] || 0) + o.v); });
+  const C = {}; S.slice(0, 2).forEach(x => { ab.filter(a => fpjFirme(a) && (x.m === FINPM.pm.mes_atual ? a.d <= fpmFimMes(x.m) : a.d.slice(0, 7) === x.m)).forEach(a => C[a.q] = (C[a.q] || 0) + (Number(a.v) || 0)); fpmProjMes(x.m).forEach(o => C[o.cliente || '—'] = (C[o.cliente || '—'] || 0) + o.v); });
   const CL = Object.entries(C).sort((a, b) => b[1] - a[1]), totC = CL.reduce((s, c) => s + c[1], 0);
   if (CL.length && totC > 0 && CL[0][1] / totC >= 0.3) sinal('info', '<b>' + esc(CL[0][0]) + '</b> responde por ' + esc(fpmPct(CL[0][1] / totC)) + ' do que deve entrar até ' + esc(nm(S[1] ? S[1].m : S[0].m)) + ' (' + esc(fpmK(CL[0][1])) + '). Um atraso desse cliente muda tudo.', 'finre', 'Contas a Receber');
   // recorrências a confirmar
