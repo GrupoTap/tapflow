@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TapFin 38 · Financeiro</title>
+<title>TapFin 39 · Financeiro</title>
 <meta name="theme-color" content="#1B6FA9">
 <!-- o ícone da aba: o "E" da Engetap dentro do arquivo (SVG), aparece em qualquer pasta; o app instalado usa os PNG de field/icons/ -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22104%22 fill=%22%231B6FA9%22/%3E%3Cg transform=%22translate(0,512) scale(1,-1) translate(256,256.5) scale(1.3) translate(-256,-256.5)%22 fill=%22%23fff%22 stroke=%22%23fff%22 stroke-width=%2222%22 stroke-linejoin=%22round%22 stroke-linecap=%22round%22%3E%3Cpath d=%22M117 414 l-1 0 0 -121 0 -120 19 0 19 0 0 -37 0 -38 121 0 121 0 -45 45 -44 45 -69 0 -69 0 0 12 0 11 90 0 89 0 0 1 0 1 -44 44 -45 44 -45 0 -45 0 0 12 0 11 99 0 99 0 0 1 0 0 -45 45 -44 45 -81 0 -80 0 0 -1z m184 -44 l30 -29 0 -1 0 -1 -88 0 -89 0 0 -75 0 -76 -11 0 -12 0 0 105 0 106 1 0 0 1 70 0 69 0 30 -30z m-19 -113 l30 -29 0 -1 0 -1 -67 0 -67 0 0 30 0 30 1 0 0 1 37 0 36 0 30 -30z m47 -114 l30 -29 0 -1 0 0 -95 0 -95 0 0 30 0 30 65 0 66 0 29 -30z%22/%3E%3C/g%3E%3C/svg%3E">
@@ -1146,7 +1146,8 @@ const SUPABASE_ANON_KEY = _CFG.SUPABASE_ANON_KEY || '';
 const DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 // const APP_VERSION = 'F36';
 // const APP_VERSION = 'F37';
-const APP_VERSION = 'F38';   // TapFin 38 (S237): issue 265 — o leitor do CSV do Nubank entende \"- 479,96\" e \"13.113,09\" (eram pulados); sem banco novo
+const APP_VERSION = 'F39';   // TapFin 39 (S244): issue 268 — toda recorrência se exclui (as contas já geradas ficam em Contas a Pagar); banco 533
+// const APP_VERSION = 'F38';   // TapFin 38 (S237): issue 265 — o leitor do CSV do Nubank entende \"- 479,96\" e \"13.113,09\" (eram pulados); sem banco novo
 // const APP_VERSION = 'F35';   // TapFin 35 (S218): Rodada R21 — issue 115 parte 1 ("É de uma OS? Sim/Não" na conta a pagar, com a busca da OS; a lista "Contas de custo sem OS no mês"; a marca "Peças / material: só informa na OS" nas categorias; a tela Deslocamento: veículos, R$/km do mês e cidades; banco 530)
 // const APP_VERSION = 'F34';   // TapFin 34 (S217): Rodada R25 — issue 238 (a condição de pagamento na janela da nota, no Editar e na conta nova; 15/30/45/60 e 0/15/30 nos botões; o chip da condição em toda conta A faturar; banco 529)
 // const APP_VERSION = 'F33';   // TapFin 33 (S215): Rodada R24 — issue 232 (saiu o estilo sem uso; o estilo comum às quatro páginas vem do nucleo/telas.css T1; nada muda na tela) e 231 (as perguntas da abertura vão juntas)
@@ -3894,10 +3895,8 @@ const FIN_CFG = {
     },
     linha: (r, hoje, par) => finrecLinha(r, par),
     menu: r => [{ acao:'pausar', rot: r.ativa ? 'Pausar' : 'Reativar' }]
-      // F32 (issue 102): excluir só a que nunca gerou conta e não é de cartão (sem a atualização do banco, não aparece)
-      .concat(r.titulos == null ? [] : [{ sep: true }, r.titulos === 0 && !r.cartao
-        ? { acao:'excluir', rot:'Excluir', perigo:true }
-        : { acao:'excluir', rot:'Excluir', off: r.cartao ? 'Ligada a um cartão' : 'Já gerou conta: use Pausar ou “Até quando”' }]),
+      // F39 (issue 268, 533): toda recorrência se exclui; as contas já geradas ficam (sem a contagem da lista, não aparece)
+      .concat(r.titulos == null ? [] : [{ sep: true }, { acao:'excluir', rot:'Excluir', perigo:true }]),
     acao: (a, r) => finrecAcao(a, r)
   }
 };
@@ -6084,11 +6083,24 @@ function finrecLinha(r, par){
 async function finrecAcao(a, r){
   if (a === 'editar') return modalRecorrencia(r);
   if (a === 'excluir'){
+    // F39 (issue 268, R4): o N é a contagem da lista (titulos); as contas não mudam, só perdem a ligação
+    const n = Number(r.titulos) || 0;
+    const nome = '<b>' + esc(r.descricao || r.fornecedor_nome || 'esta recorrência') + '</b>';
     const ok = await confirmar('Excluir a recorrência',
-      '<p style="margin-top:0">Excluir <b>' + esc(r.descricao || r.fornecedor_nome || 'esta recorrência') + '</b>? Ela nunca gerou conta; some da lista e não volta.</p>',
+      (n > 0
+        ? '<p style="margin-top:0">' + nome + ': ' + (n === 1 ? 'a conta já gerada continua' : 'as ' + n + ' contas já geradas continuam')
+          + ' em Contas a Pagar, como estão (valor, vencimento, pagamento). Excluir a recorrência?</p>'
+        : '<p style="margin-top:0">Excluir ' + nome + '? Ela nunca gerou conta.</p>')
+      + (r.cartao ? '<p>Ela está ligada a um cartão: a fatura dele passa a ser só pela conferência da fatura (Cartões).</p>' : '')
+      + '<p style="margin-bottom:0">A recorrência some da lista e não volta. Para só parar de gerar, use “Pausar”.</p>',
       'Excluir', true);
     if (!ok) return;
-    try{ await rpc('tf_fin_recorrencia_excluir', { p_id: r.id }); toast('Recorrência excluída.', 'ok'); await finrecCarregar(); }
+    try{
+      const res = await rpc('tf_fin_recorrencia_excluir', { p_id: r.id });
+      const k = Number(res && res.titulos) || 0;
+      toast(k ? 'Recorrência excluída. ' + (k === 1 ? 'A conta continua' : 'As ' + k + ' contas continuam') + ' em Contas a Pagar.' : 'Recorrência excluída.', 'ok');
+      await finrecCarregar();
+    }
     catch(e){ toast(e.message, 'err'); }
     return;
   }
